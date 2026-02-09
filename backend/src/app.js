@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const authRoutes = require("./routes/auth");
 
 const app = express();
 
@@ -16,6 +17,9 @@ app.get("/", (req, res) => {
     version: "1.0.0"
   });
 });
+
+// Mount routes
+app.use("/api/auth", authRoutes);
 
 // 404 handler
 app.use((req, res) => {
