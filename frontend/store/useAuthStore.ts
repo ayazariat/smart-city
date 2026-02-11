@@ -3,6 +3,14 @@ import { persist } from "zustand/middleware";
 import { User, LoginData, RegisterData } from "@/types";
 import { authService } from "@/services/auth.service";
 
+interface LoginResponse {
+  message: string;
+  accessToken?: string;
+  refreshToken?: string;
+  token?: string;
+  user?: User;
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -10,6 +18,8 @@ interface AuthState {
   error: string | null;
   register: (data: RegisterData) => Promise<void>;
   login: (data: LoginData) => Promise<void>;
+  verifyMagicLink: (token: string, userId: string) => Promise<void>;
+  deletePendingRegistration: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   verifySession: () => Promise<boolean>;
   clearError: () => void;
@@ -26,12 +36,9 @@ export const useAuthStore = create<AuthState>()(
       register: async (data: RegisterData) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await authService.register(data);
-          set({
-            user: response.user,
-            token: response.token,
-            isLoading: false,
-          });
+          await authService.register(data);
+          // No user/token stored yet: account will be created after verification.
+          set({ isLoading: false });
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Registration failed",
@@ -53,6 +60,40 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Login failed",
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
+
+      verifyMagicLink: async (token: string, userId: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authService.verifyMagicLink(token, userId);
+          if (response.token && response.user) {
+            set({
+              user: response.user,
+              token: response.token,
+              isLoading: false,
+            });
+          }
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Verification failed",
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
+
+      deletePendingRegistration: async (email: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          await authService.deletePendingRegistration(email);
+          set({ isLoading: false });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Failed to delete pending registration",
             isLoading: false,
           });
           throw error;

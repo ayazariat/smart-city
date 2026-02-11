@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Sparkles } from "lucide-react";
+import { Mail, Lock, ShieldCheck, Sparkles } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
+import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
 
 /**
  * Login Page - Smart City Tunis
@@ -39,10 +40,23 @@ export default function LoginPage() {
     e.preventDefault();
     setLocalError("");
 
+    let captchaToken: string | undefined;
+    const recaptchaEnabled = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    if (recaptchaEnabled) {
+      // Get fresh reCAPTCHA token
+      const freshToken = await refreshRecaptchaToken();
+      if (!freshToken) {
+        setLocalError("Failed to complete security check. Please refresh and try again.");
+        return;
+      }
+      captchaToken = freshToken;
+    }
+
     try {
       await login({
         email: formData.email,
         password: formData.password,
+        captchaToken,
       });
       router.push("/dashboard");
     } catch (err) {
@@ -67,6 +81,10 @@ export default function LoginPage() {
             <p className="text-slate-600">
               Sign in to manage city services
             </p>
+            <div className="mt-3 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-white/60 border border-white/80 shadow-sm text-xs text-slate-600">
+              <ShieldCheck className="w-4 h-4 text-success-500" />
+              <span>Step 3 of 3 · Secure access with enhanced protection</span>
+            </div>
           </div>
 
           {/* Form Card */}
@@ -134,6 +152,10 @@ export default function LoginPage() {
                 >
                   Sign In
                 </Button>
+              </div>
+
+              <div className="animate-fadeIn delay-500">
+                <ReCaptchaBadge action="login" />
               </div>
             </form>
 

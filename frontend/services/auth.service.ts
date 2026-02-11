@@ -1,8 +1,14 @@
-import { LoginData, RegisterData, User } from "@/types";
+import {
+  LoginData,
+  RegisterData,
+  RequestVerificationPayload,
+  User,
+  VerifyCodePayload,
+} from "@/types";
 
 const API_URL = "http://localhost:5000/api/auth";
 
-interface AuthResponse {
+interface LoginResponse {
   message: string;
   token: string;
   user: User;
@@ -15,7 +21,8 @@ interface VerifyResponse {
 }
 
 export const authService = {
-  async register(data: RegisterData): Promise<AuthResponse> {
+  // Registration now only initializes a pending user; no token/user is returned yet.
+  async register(data: RegisterData): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/register`, {
       method: "POST",
       headers: {
@@ -32,7 +39,7 @@ export const authService = {
     return response.json();
   },
 
-  async login(data: LoginData): Promise<AuthResponse> {
+  async login(data: LoginData): Promise<LoginResponse> {
     const response = await fetch(`${API_URL}/login`, {
       method: "POST",
       headers: {
@@ -69,5 +76,74 @@ export const authService = {
     await fetch(`${API_URL}/logout`, {
       method: "POST",
     });
+  },
+
+  // Account verification flow (email or SMS) - backend routes must be implemented
+  async requestVerification(
+    data: RequestVerificationPayload
+  ): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/request-verification`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Verification request failed");
+    }
+
+    return response.json();
+  },
+
+  async verifyCode(data: VerifyCodePayload): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/verify-code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Code verification failed");
+    }
+
+    return response.json();
+  },
+
+  // Delete pending registration (for development)
+  async deletePendingRegistration(email: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/pending-registration`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to delete pending registration");
+    }
+
+    return response.json();
+  },
+
+  // Magic link verification
+  async verifyMagicLink(token: string, userId: string): Promise<LoginResponse> {
+    const response = await fetch(`${API_URL}/verify-magic-link?token=${token}&userId=${userId}`, {
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Magic link verification failed");
+    }
+
+    return response.json();
   },
 };

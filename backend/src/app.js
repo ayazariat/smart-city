@@ -2,6 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const authRoutes = require("./routes/auth");
+const citizenRoutes = require("./routes/citizen.routes");
+const agentRoutes = require("./routes/agent.routes");
+const managerRoutes = require("./routes/manager.routes");
+const adminRoutes = require("./routes/admin.routes");
 
 const app = express();
 
@@ -20,6 +24,10 @@ app.get("/", (req, res) => {
 
 // Mount routes
 app.use("/api/auth", authRoutes);
+app.use("/api/citizen", citizenRoutes);
+app.use("/api/agent", agentRoutes);
+app.use("/api/manager", managerRoutes);
+app.use("/api/admin", adminRoutes);
 
 // 404 handler
 app.use((req, res) => {

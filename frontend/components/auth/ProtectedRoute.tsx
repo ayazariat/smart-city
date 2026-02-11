@@ -6,9 +6,10 @@ import { useAuthStore } from "@/store/useAuthStore";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  allowedRoles?: string[];
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const router = useRouter();
   const { user, token, verifySession } = useAuthStore();
   const [isVerifying, setIsVerifying] = useState(true);
@@ -21,8 +22,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
-      // If user is already loaded, we're good
+      // If user is already loaded
       if (user) {
+        // Check role-based access
+        if (allowedRoles && !allowedRoles.includes(user.role)) {
+          router.push("/unauthorized");
+          return;
+        }
         setIsVerifying(false);
         return;
       }
@@ -34,11 +40,18 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         return;
       }
 
+      // Re-check user after verification
+      const { user: verifiedUser } = useAuthStore.getState();
+      if (verifiedUser && allowedRoles && !allowedRoles.includes(verifiedUser.role)) {
+        router.push("/unauthorized");
+        return;
+      }
+
       setIsVerifying(false);
     };
 
     checkAuth();
-  }, [token, user, router, verifySession]);
+  }, [token, user, router, verifySession, allowedRoles]);
 
   if (isVerifying) {
     return (
@@ -49,6 +62,25 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         </div>
       </div>
     );
+  }
+
+  return <>{children}</>;
+}
+
+// Role-based access control component
+export function RoleBasedAccess({
+  children,
+  allowedRoles,
+  fallback,
+}: {
+  children: React.ReactNode;
+  allowedRoles: string[];
+  fallback?: React.ReactNode;
+}) {
+  const { user } = useAuthStore();
+
+  if (!user || !allowedRoles.includes(user.role)) {
+    return <>{fallback || null}</>;
   }
 
   return <>{children}</>;

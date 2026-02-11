@@ -1,11 +1,11 @@
-const app = require('./app');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db');
-
 dotenv.config();
 
-// Connect to MongoDB
+const app = require('./app');
+const connectDB = require('./config/db');
+
 connectDB();
+require('./utils/mailer');
 
 const PORT = process.env.PORT || 5000;
 

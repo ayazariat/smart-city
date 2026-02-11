@@ -1,38 +1,81 @@
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+// Short-lived access token (used for API calls)
+const ACCESS_TOKEN_SECRET =
+  process.env.ACCESS_TOKEN_SECRET ||
+  process.env.JWT_SECRET || // fallback for legacy env name
+  "your-super-secret-access-key-change-in-production";
 
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const ACCESS_TOKEN_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN || "15m";
+
+// Long-lived refresh token (used only to get new access tokens)
+const REFRESH_TOKEN_SECRET =
+  process.env.REFRESH_TOKEN_SECRET ||
+  "your-super-secret-refresh-key-change-in-production";
+
+const REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || "7d";
 
 /**
- * Generate JWT token for a user
+ * Generate short-lived access token for a user
  * @param {Object} user - User object with id, email, role
- * @returns {string} JWT token
+ * @returns {string} JWT access token
  */
-const generateToken = (user) => {
+const generateAccessToken = (user) => {
   return jwt.sign(
     {
       id: user.id || user._id,
       email: user.email,
       role: user.role,
     },
-    JWT_SECRET,
+    ACCESS_TOKEN_SECRET,
     {
-      expiresIn: JWT_EXPIRES_IN,
+      expiresIn: ACCESS_TOKEN_EXPIRES_IN,
     }
   );
 };
 
 /**
- * Verify JWT token
+ * Generate refresh token for a user.
+ * Payload is intentionally minimal: only user id and role.
+ * This token is stored server-side (on the user) to allow rotation/blacklist.
+ */
+const generateRefreshToken = (user) => {
+  return jwt.sign(
+    {
+      id: user.id || user._id,
+      role: user.role,
+    },
+    REFRESH_TOKEN_SECRET,
+    {
+      expiresIn: REFRESH_TOKEN_EXPIRES_IN,
+    }
+  );
+};
+
+/**
+ * Verify access token
  * @param {string} token - JWT token to verify
  * @returns {Object|null} Decoded token payload or null if invalid
  */
-const verifyToken = (token) => {
+const verifyAccessToken = (token) => {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, ACCESS_TOKEN_SECRET);
   } catch (error) {
-    console.error("JWT verification failed:", error.message);
+    console.error("Access token verification failed:", error.message);
+    return null;
+  }
+};
+
+/**
+ * Verify refresh token
+ * @param {string} token - Refresh token to verify
+ * @returns {Object|null} Decoded token payload or null if invalid
+ */
+const verifyRefreshToken = (token) => {
+  try {
+    return jwt.verify(token, REFRESH_TOKEN_SECRET);
+  } catch (error) {
+    console.error("Refresh token verification failed:", error.message);
     return null;
   }
 };
@@ -50,8 +93,13 @@ const extractToken = (authHeader) => {
 };
 
 module.exports = {
-  generateToken,
-  verifyToken,
+  // New explicit helpers
+  generateAccessToken,
+  generateRefreshToken,
+  verifyAccessToken,
+  verifyRefreshToken,
   extractToken,
-  JWT_SECRET,
+  // Backwards-compatible exports (used in some older parts of the code)
+  generateToken: generateAccessToken,
+  verifyToken: verifyAccessToken,
 };

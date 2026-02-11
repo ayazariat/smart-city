@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, User, Phone, Sparkles } from "lucide-react";
+import { Mail, Lock, User, Phone, Sparkles, ShieldCheck } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
+import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
 
 /**
  * Registration Page - Smart City Tunis
@@ -16,19 +17,19 @@ import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
  */
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, isLoading, error } = useAuthStore();
+  const { register, isLoading, error, deletePendingRegistration } = useAuthStore();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
     password: "",
     confirmPassword: "",
     phone: "",
-    role: "CITIZEN",
   });
   const [localError, setLocalError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     setLocalError("");
@@ -53,16 +54,47 @@ export default function RegisterPage() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (formData.password.length < 6) {
-      errors.password = "Password must be at least 6 characters";
+    // Email format validation (strict)
+    const emailRegex = /^[^^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(formData.email)) {
+      errors.email = "Please enter a valid email address (e.g. name@example.com)";
+    }
+
+    // Strong password validation (mirror backend policy)
+    // - Min 12 chars
+    // - At least 1 lowercase, 1 uppercase, 1 digit, 1 special char
+    const passwordPolicyRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+
+    if (!passwordPolicyRegex.test(formData.password)) {
+      errors.password =
+        "Password must be at least 12 characters and include uppercase, lowercase, number, and special character.";
     }
 
     if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = "Passwords do not match";
     }
 
+    // Optional phone: validate international E.164 format if provided
+    if (formData.phone) {
+      const e164PhoneRegex = /^\+[1-9]\d{7,14}$/;
+      if (!e164PhoneRegex.test(formData.phone)) {
+        errors.phone = "Please use international format (e.g. +216XXXXXXXX).";
+      }
+    }
+
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  const handleDeletePending = async () => {
+    if (!formData.email) return;
+    try {
+      await deletePendingRegistration(formData.email);
+      setLocalError("Pending registration deleted. You can now register again.");
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "Failed to delete pending registration");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,16 +105,28 @@ export default function RegisterPage() {
       return;
     }
 
+    let captchaToken: string | undefined;
+    const recaptchaEnabled = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    if (recaptchaEnabled) {
+      // Get fresh reCAPTCHA token
+      const freshToken = await refreshRecaptchaToken();
+      if (!freshToken) {
+        setLocalError("Failed to complete security check. Please refresh and try again.");
+        return;
+      }
+      captchaToken = freshToken;
+    }
+
     try {
       await register({
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
         phone: formData.phone,
-        role: formData.role,
+        captchaToken,
       });
-      // Redirect to dashboard after successful registration
-      router.push("/dashboard");
+      // After registration, redirect to verification page
+      router.push(`/verify-account?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Registration failed");
     }
@@ -131,6 +175,10 @@ export default function RegisterPage() {
             <p className="text-slate-600">
               Join Smart City Tunis to manage and report urban services
             </p>
+            <div className="mt-3 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-white/60 border border-white/80 shadow-sm text-xs text-slate-600">
+              <ShieldCheck className="w-4 h-4 text-success-500" />
+              <span>Step 1 of 3 · Create your secure civic account</span>
+            </div>
           </div>
 
           {/* Form Card */}
@@ -139,6 +187,15 @@ export default function RegisterPage() {
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setLocalError("")}>
                   {error || localError}
+                  {error?.includes("pending registration") && (
+                    <button
+                      type="button"
+                      onClick={handleDeletePending}
+                      className="mt-2 text-sm underline hover:text-urgent-800"
+                    >
+                      Click here to delete the pending registration and try again
+                    </button>
+                  )}
                 </Alert>
               </div>
             )}
@@ -167,6 +224,7 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="your@email.com"
                     icon={<Mail size={18} />}
+                    error={fieldErrors.email}
                     required
                   />
                 </div>
@@ -182,26 +240,13 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="+216 XX XXX XXX"
                     icon={<Phone size={18} />}
+                    error={fieldErrors.phone}
                     helperText="Optional"
                   />
                 </div>
 
-                <div className="animate-slideInRight delay-400">
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    Role
-                  </label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg transition-all duration-300 focus:border-primary focus:ring-4 focus:ring-primary/20 focus:outline-none hover:border-slate-300 focus:shadow-lg focus:shadow-primary/5"
-                  >
-                    <option value="CITIZEN">Citizen</option>
-                    <option value="MUNICIPAL_AGENT">Municipal Agent</option>
-                    <option value="DEPARTMENT_MANAGER">Department Manager</option>
-                    <option value="ADMIN">Administrator</option>
-                  </select>
-                </div>
+                {/* Role is now fixed as CITIZEN on backend for public registration.
+                    We deliberately hide any role selection here to avoid confusion and abuse. */}
               </div>
 
               <div className="animate-slideInLeft delay-500">
@@ -247,6 +292,11 @@ export default function RegisterPage() {
                   error={fieldErrors.confirmPassword}
                   required
                 />
+              </div>
+
+              {/* Invisible reCAPTCHA v3 badge (UX-friendly) */}
+              <div className="animate-fadeIn delay-500">
+                <ReCaptchaBadge action="register" onTokenChange={setCaptchaToken} />
               </div>
 
               <div className="pt-2 animate-fadeIn delay-500">
