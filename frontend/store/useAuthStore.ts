@@ -22,6 +22,9 @@ interface AuthState {
   deletePendingRegistration: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   verifySession: () => Promise<boolean>;
+  fetchProfile: () => Promise<void>;
+  updateProfile: (data: { fullName?: string; phone?: string }) => Promise<void>;
+  changePassword: (data: { currentPassword: string; newPassword: string }) => Promise<void>;
   clearError: () => void;
 }
 
@@ -136,6 +139,49 @@ export const useAuthStore = create<AuthState>()(
 
       clearError: () => {
         set({ error: null });
+      },
+
+      fetchProfile: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const user = await authService.getProfile();
+          set({ user, isLoading: false });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Failed to fetch profile",
+            isLoading: false,
+          });
+        }
+      },
+
+      updateProfile: async (data: { fullName?: string; phone?: string }) => {
+        set({ isLoading: true, error: null });
+        try {
+          const user = await authService.updateProfile(data);
+          set({ user, isLoading: false });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Failed to update profile",
+            isLoading: false,
+          });
+          throw error;
+        }
+      },
+
+      changePassword: async (data: { currentPassword: string; newPassword: string }) => {
+        set({ isLoading: true, error: null });
+        try {
+          await authService.changePassword(data);
+          // Fetch updated profile to get the new passwordLastChanged date
+          const user = await authService.getProfile();
+          set({ user, isLoading: false });
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Failed to change password",
+            isLoading: false,
+          });
+          throw error;
+        }
       },
     }),
     {

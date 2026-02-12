@@ -12,7 +12,7 @@ import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
 
 /**
- * Registration Page - Smart City Tunis
+ * Registration Page - Smart City Tunisia
  * Modern interface with Civic Green palette and real-time validation
  */
 export default function RegisterPage() {

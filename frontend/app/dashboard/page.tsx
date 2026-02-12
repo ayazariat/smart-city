@@ -86,12 +86,15 @@ export default function DashboardPage() {
         {/* Main Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Profile Card */}
-          <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
+          <Link 
+            href="/profile"
+            className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-slate-100 hover:border-primary/20 group cursor-pointer"
+          >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                 <User className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900">My Profile</h3>
+              <h3 className="text-lg font-semibold text-slate-900 group-hover:text-primary transition-colors">My Profile</h3>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
@@ -107,7 +110,7 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
-          </div>
+          </Link>
 
           {/* Complaints Card */}
           <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">

@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     magicToken: { type: String }, // Magic link token
     magicTokenExpires: { type: Date }, // Magic link expiration
+    // Password reset fields
+    resetToken: { type: String }, // Password reset token
+    resetTokenExpires: { type: Date }, // Password reset token expiration
+    passwordLastChanged: { type: Date }, // Track when password was last changed
   },
   { timestamps: true }
 );

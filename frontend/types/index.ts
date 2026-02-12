@@ -4,6 +4,8 @@ export interface User {
   email: string;
   role: "CITIZEN" | "MUNICIPAL_AGENT" | "DEPARTMENT_MANAGER" | "ADMIN";
   phone?: string;
+  passwordLastChanged?: string;
+  createdAt?: string;
 }
 
 export interface RegisterData {

@@ -76,7 +76,7 @@ export default function LoginPage() {
               <Sparkles className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-slate-900 mb-2 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-primary-900">
-              Smart City Tunis
+              Smart City Tunisia
             </h1>
             <p className="text-slate-600">
               Sign in to manage city services
