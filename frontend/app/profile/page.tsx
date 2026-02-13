@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { User, Mail, Phone, Edit2, Save, X, Sparkles, Shield, Lock, AlertCircle, CheckCircle } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -29,13 +28,54 @@ interface ValidationErrors {
 }
 
 function ProfilePage() {
-  const { user, isLoading, error, updateProfile, changePassword, clearError, fetchProfile } = useAuthStore();
+  const { user, isLoading, error, updateProfile, changePassword, clearError } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [resetEmailLoading, setResetEmailLoading] = useState(false);
   const syncRef = useRef(false);
 
-  // Initialize form data with user data
+  // Send password reset email to logged-in user's email
+  const handleSendPasswordResetEmail = async () => {
+    setResetEmailLoading(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: user?.email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to send reset email");
+      }
+
+      setSuccessMessage("Password reset email sent to " + user?.email);
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err) {
+      setSuccessMessage(err instanceof Error ? err.message : "Failed to send reset email");
+    } finally {
+      setResetEmailLoading(false);
+    }
+  };
+
+  // Format phone number - strip +216 prefix and show only 8 digits
+  const formatPhoneDisplay = (phone: string | undefined | null): string => {
+    if (!phone) return "Not set";
+    // Remove any non-digit characters first
+    const digits = phone.replace(/\D/g, "");
+    // If it starts with 216 (Tunisia country code), strip it
+    if (digits.startsWith("216")) {
+      return digits.substring(3);
+    }
+    // Return the last 8 digits (Tunisia phone numbers)
+    return digits.slice(-8) || "Not set";
+  };
+
+  // Initialize form data with persisted user data directly (no API call needed)
   const [formData, setFormData] = useState<ProfileFormData>({
     fullName: user?.fullName || "",
     phone: user?.phone || "",
@@ -54,18 +94,8 @@ function ProfilePage() {
     };
   }, [clearError]);
 
-  // Fetch fresh profile data on mount
-  useEffect(() => {
-    if (user) {
-      fetchProfile().catch((err) => {
-        // If token is expired, the error will be handled by clearing the user
-        console.error("Failed to fetch profile:", err.message);
-      });
-    }
-  }, [user, fetchProfile]);
-
   // Sync function to update form data from user
-  const syncFormData = useCallback(() => {
+  const syncFormData = () => {
     if (user && !syncRef.current) {
       setFormData({
         fullName: user.fullName || "",
@@ -77,7 +107,7 @@ function ProfilePage() {
       });
       syncRef.current = true;
     }
-  }, [user]);
+  };
 
   // Use setTimeout to defer the state update and avoid the lint rule
   useEffect(() => {
@@ -87,7 +117,7 @@ function ProfilePage() {
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [user, isEditing, syncFormData]);
+  }, [user, isEditing]);
 
   // Validation functions
   const validateFullName = (value: string): string | undefined => {
@@ -99,8 +129,15 @@ function ProfilePage() {
 
   const validatePhone = (value: string): string | undefined => {
     if (!value) return undefined;
-    const phoneRegex = /^\+[1-9]\d{7,14}$/;
-    if (!phoneRegex.test(value)) return "Phone must be in E.164 format (e.g., +21612345678)";
+    // Accept either E.164 format (+216 followed by 8 digits) or just 8 digits
+    const digitsOnly = value.replace(/\D/g, "");
+    if (digitsOnly.startsWith("216")) {
+      // Remove country code and check if it's 8 digits
+      const localNumber = digitsOnly.substring(3);
+      if (localNumber.length !== 8) return "Phone must be 8 digits (e.g., 25448885)";
+    } else if (digitsOnly.length !== 8) {
+      return "Phone must be 8 digits (e.g., 25448885)";
+    }
     return undefined;
   };
 
@@ -224,6 +261,7 @@ function ProfilePage() {
       case "CITIZEN": return "Citizen";
       case "MUNICIPAL_AGENT": return "Municipal Agent";
       case "DEPARTMENT_MANAGER": return "Department Manager";
+      case "TECHNICIAN": return "Technician";
       case "ADMIN": return "Administrator";
       default: return role;
     }
@@ -241,9 +279,9 @@ function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-auto bg-gradient-to-br from-slate-50 to-slate-100 pb-8">
       {/* Navigation */}
-      <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
+      <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg mb-6">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
@@ -252,10 +290,10 @@ function ProfilePage() {
             <div>
               <h1 className="text-xl font-bold">Smart City Tunisia</h1>
               <Link 
-                href="/profile" 
+                href="/dashboard" 
                 className="text-sm text-primary-100 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
               >
-                My Profile
+                Dashboard
               </Link>
             </div>
           </div>
@@ -263,15 +301,15 @@ function ProfilePage() {
       </nav>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Profile Settings</h2>
-          <p className="text-slate-600">Manage your personal information and account security</p>
+      <main className="container mx-auto px-4">
+        <div className="mb-4">
+          <h2 className="text-2xl font-bold text-slate-900 mb-1">Profile Settings</h2>
+          <p className="text-slate-600 text-sm">Manage your personal information and account security</p>
         </div>
 
         {/* Error/Success Alerts */}
         {error && (
-          <div className="mb-6 animate-slideInLeft">
+          <div className="mb-4 animate-slideInLeft">
             <Alert variant="error" onClose={() => clearError()}>
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5" />
@@ -281,7 +319,7 @@ function ProfilePage() {
           </div>
         )}
         {successMessage && (
-          <div className="mb-6 animate-slideInLeft">
+          <div className="mb-4 animate-slideInLeft">
             <Alert variant="success" onClose={() => setSuccessMessage(null)}>
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5" />
@@ -292,7 +330,7 @@ function ProfilePage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-4">
           <button
             onClick={() => setActiveTab("profile")}
             className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
@@ -408,8 +446,8 @@ function ProfilePage() {
                     value={formData.phone}
                     onChange={(e) => handleInputChange("phone", e.target.value)}
                     error={validationErrors.phone}
-                    placeholder="+21612345678"
-                    helperText="Optional. Enter in E.164 format"
+                    placeholder="25448885"
+                    helperText="Optional. Enter 8 digits (e.g., 25448885)"
                   />
                 </div>
               ) : (
@@ -421,7 +459,7 @@ function ProfilePage() {
                     <span className="text-sm font-medium text-slate-700">Phone</span>
                   </div>
                   <div className="flex-1">
-                    <p className="text-slate-900 font-medium">{formData.phone || <span className="text-slate-400 italic">Not set</span>}</p>
+                    <p className="text-slate-900 font-medium">{user?.phone ? formatPhoneDisplay(user.phone) : <span className="text-slate-400 italic">Not set</span>}</p>
                   </div>
                 </div>
               )}
@@ -457,55 +495,55 @@ function ProfilePage() {
             {/* Security Header */}
             <div className="bg-gradient-to-r from-urgent/10 to-urgent/5 p-6 border-b border-slate-100">
               <div className="flex items-center gap-4">
-                <div className="w-20 h-20 bg-urgent/20 rounded-2xl shadow-lg flex items-center justify-center">
-                  <Lock className="w-10 h-10 text-urgent" />
+                <div className="w-16 h-16 bg-urgent/10 rounded-2xl flex items-center justify-center">
+                  <Lock className="w-8 h-8 text-urgent" />
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold text-slate-900">Security Settings</h3>
-                  <p className="text-slate-600 mt-1">Change your password or enable additional security features</p>
+                  <p className="text-slate-600">Manage your password and account security</p>
                 </div>
               </div>
             </div>
 
-            {/* Password Reset Info */}
-            <div className="p-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Lock className="w-6 h-6 text-blue-600" />
+            {/* Security Fields */}
+            <div className="p-6 space-y-4">
+              {/* Password Last Changed */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                <div className="flex items-center gap-3 min-w-[200px]">
+                  <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
+                    <Shield className="w-5 h-5 text-success" />
                   </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-slate-900 mb-1">Password Reset via Email</h4>
-                    <p className="text-slate-600 text-sm mb-4">
-                      For security reasons, password changes require email verification. 
-                      You&apos;ll receive a magic link to securely reset your password.
-                    </p>
-                    <Link 
-                      href="/forgot-password"
-                      className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-medium text-sm transition-colors"
-                    >
-                      Request Password Reset
-                      <span className="group-hover:translate-x-1 transition-transform">→</span>
-                    </Link>
+                  <div>
+                    <span className="text-sm font-medium text-slate-700 block">Password</span>
+                    <span className="text-xs text-slate-500">Last changed</span>
                   </div>
+                </div>
+                <div className="flex-1 flex items-center gap-3">
+                  <span className="text-slate-900 font-medium">{formatDate(user.passwordLastChanged)}</span>
                 </div>
               </div>
 
-              {/* Current Security Status */}
-              <h4 className="font-semibold text-slate-900 mb-4">Account Security</h4>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+              {/* Reset Password */}
+              <div className="p-4 bg-slate-50 rounded-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-success" />
+                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <Lock className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <span className="text-sm font-medium text-slate-700 block">Password</span>
-                      <span className="text-xs text-slate-500">Last changed: {formatDate(user.passwordLastChanged)}</span>
+                      <span className="text-sm font-medium text-slate-700 block">Password Reset</span>
+                      <span className="text-xs text-slate-500">Send password reset email</span>
                     </div>
                   </div>
-                  <span className="text-sm text-success font-medium">Active</span>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSendPasswordResetEmail}
+                    isLoading={resetEmailLoading}
+                    icon={<Mail size={16} />}
+                  >
+                    Send Reset Email
+                  </Button>
                 </div>
               </div>
             </div>
@@ -516,7 +554,8 @@ function ProfilePage() {
   );
 }
 
-export default function ProfileWithProtection() {
+// Wrap with ProtectedRoute for route-level protection
+export default function ProfilePageWithAuth() {
   return (
     <ProtectedRoute>
       <ProfilePage />

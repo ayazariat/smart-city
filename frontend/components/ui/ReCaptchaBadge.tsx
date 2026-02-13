@@ -42,8 +42,7 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
       setReady(true);
       setError(null);
       return token;
-    } catch (err) {
-      console.error("reCAPTCHA execution failed", err);
+    } catch (_err) {
       setError("reCAPTCHA failed");
       onTokenChange?.(null);
       return null;

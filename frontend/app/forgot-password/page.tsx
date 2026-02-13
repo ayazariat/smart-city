@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, Lock, Sparkles, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import { Mail, Sparkles, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -12,11 +12,12 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setIsLoading(true);
 
     try {
@@ -34,7 +35,7 @@ export default function ForgotPasswordPage() {
         throw new Error(data.message || "Failed to send reset link");
       }
 
-      setSuccess(true);
+      setSuccess("If an account exists with this email, a password reset link has been sent.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -57,24 +58,23 @@ export default function ForgotPasswordPage() {
                   Check Your Email
                 </h1>
                 <p className="text-slate-600">
-                  We've sent a password reset link to <br />
-                  <span className="font-semibold text-slate-900">{email}</span>
+                  {success}
                 </p>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
                 <p className="text-sm text-blue-800">
-                  <strong>Tip:</strong> Check your spam folder if you don't see the email within a few minutes.
+                  <strong>Tip:</strong> Check your spam folder if you don&apos;t see the email within a few minutes.
                 </p>
               </div>
 
               <div className="space-y-3">
                 <Link
                   href="/forgot-password"
-                  onClick={() => setSuccess(false)}
+                  onClick={() => { setSuccess(null); setError(null); }}
                   className="block w-full text-center text-primary hover:text-primary-700 font-medium transition-colors"
                 >
-                  Didn't receive the email? Try again
+                  Didn&apos;t receive the email? Try again
                 </Link>
                 <Link
                   href="/"
@@ -106,7 +106,7 @@ export default function ForgotPasswordPage() {
               Forgot Password?
             </h1>
             <p className="text-slate-600">
-              No worries! Enter your email and we'll send you a reset link.
+              No worries! Enter your email and we&apos;ll send you a reset link.
             </p>
           </div>
 

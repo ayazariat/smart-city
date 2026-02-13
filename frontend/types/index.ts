@@ -2,7 +2,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  role: "CITIZEN" | "MUNICIPAL_AGENT" | "DEPARTMENT_MANAGER" | "ADMIN";
+  role: "CITIZEN" | "MUNICIPAL_AGENT" | "DEPARTMENT_MANAGER" | "TECHNICIAN" | "ADMIN";
   phone?: string;
   passwordLastChanged?: string;
   createdAt?: string;

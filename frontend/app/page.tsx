@@ -27,7 +27,17 @@ export default function LoginPage() {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      router.push("/dashboard");
+      // Check for redirect parameter in URL
+      const params = new URLSearchParams(window.location.search);
+      const redirectParam = params.get("redirect");
+      if (redirectParam && !redirectParam.startsWith("/") && !redirectParam.startsWith("http")) {
+        // Safe internal redirect
+        router.push(redirectParam);
+      } else if (redirectParam) {
+        router.push("/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
     }
   }, [user, router]);
 

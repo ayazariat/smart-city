@@ -1,31 +1,73 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, FileText, Plus, Sparkles } from "lucide-react";
+import { LogOut, User, FileText, Plus, Sparkles, Shield } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
-/**
- * Dashboard Page - Smart City Tunis
- * Interface with Civic Green palette
- */
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, token, logout } = useAuthStore();
+  const searchParams = useSearchParams();
+  const { user, token, logout, fetchProfile, setUserAndTokens } = useAuthStore();
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  // Handle magic link verification callback
+  useEffect(() => {
+    const handleVerification = async () => {
+      const verified = searchParams.get("verified");
+      const urlToken = searchParams.get("token");
+      const urlRefreshToken = searchParams.get("refreshToken");
+
+      if (verified === "true" && urlToken && urlRefreshToken) {
+        setIsVerifying(true);
+        // Store tokens from magic link verification
+        setUserAndTokens({
+          user: null,
+          token: urlToken,
+          refreshToken: urlRefreshToken,
+        });
+
+        // Fetch user profile
+        try {
+          await fetchProfile();
+        } catch (error) {
+          console.error("Failed to fetch profile after verification:", error);
+        }
+
+        setIsVerifying(false);
+
+        // Clean up URL
+        router.replace("/dashboard");
+      }
+    };
+
+    handleVerification();
+  }, [searchParams, router, fetchProfile]);
 
   // Redirect if not logged in (client-side check)
   useEffect(() => {
-    if (!token) {
+    if (!token && !isVerifying) {
       router.push("/");
     }
-  }, [token, router]);
+  }, [token, isVerifying, router]);
 
   const handleLogout = async () => {
     await logout();
     router.push("/");
   };
+
+  if (isVerifying || (!user && token)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600">Verifying your account...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -37,6 +79,18 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  // Get role display name
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case "CITIZEN": return "Citizen";
+      case "MUNICIPAL_AGENT": return "Municipal Agent";
+      case "DEPARTMENT_MANAGER": return "Department Manager";
+      case "TECHNICIAN": return "Technician";
+      case "ADMIN": return "Administrator";
+      default: return role;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-secondary-100">
@@ -104,13 +158,32 @@ export default function DashboardPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-500">Role:</span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                  {user.role === "CITIZEN" ? "Citizen" : 
-                   user.role === "MUNICIPAL_AGENT" ? "Municipal Agent" :
-                   user.role === "DEPARTMENT_MANAGER" ? "Department Manager" : "Admin"}
+                  {getRoleDisplayName(user.role)}
                 </span>
               </div>
             </div>
           </Link>
+
+          {/* Admin Panel Card */}
+          {user.role === "ADMIN" && (
+            <Link 
+              href="/admin/users"
+              className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white cursor-pointer"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-semibold">Admin Panel</h3>
+              </div>
+              <p className="text-red-100 mb-4 text-sm">
+                Manage system users and permissions
+              </p>
+              <div className="flex items-center gap-2 text-sm font-medium text-white">
+                User Management →
+              </div>
+            </Link>
+          )}
 
           {/* Complaints Card */}
           <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">

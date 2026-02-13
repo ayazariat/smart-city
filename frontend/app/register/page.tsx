@@ -75,11 +75,14 @@ export default function RegisterPage() {
       errors.confirmPassword = "Passwords do not match";
     }
 
-    // Optional phone: validate international E.164 format if provided
+    // Optional phone: validate Tunisia format (8 digits) if provided
     if (formData.phone) {
-      const e164PhoneRegex = /^\+[1-9]\d{7,14}$/;
-      if (!e164PhoneRegex.test(formData.phone)) {
-        errors.phone = "Please use international format (e.g. +216XXXXXXXX).";
+      // Remove any non-digit characters
+      const digits = formData.phone.replace(/\D/g, "");
+      // Accept either 8 digits directly or +216 followed by 8 digits
+      const validFormat = /^(?:\+216)?[2-9]\d{7}$/;
+      if (!validFormat.test(digits) && !validFormat.test(formData.phone)) {
+        errors.phone = "Please enter a valid Tunisian phone number (8 digits, e.g., 20555555).";
       }
     }
 
@@ -117,12 +120,22 @@ export default function RegisterPage() {
       captchaToken = freshToken;
     }
 
+    // Phone transformation: normalize to E.164 format +216XXXXXXXX if needed
+    let phoneValue = formData.phone;
+    if (formData.phone) {
+      const digits = formData.phone.replace(/\D/g, "");
+      // If user entered 8 digits without country code, add +216
+      if (digits.length === 8 && !formData.phone.includes("+216")) {
+        phoneValue = "+216" + digits;
+      }
+    }
+
     try {
       await register({
         fullName: formData.fullName,
         email: formData.email,
         password: formData.password,
-        phone: formData.phone,
+        phone: phoneValue,
         captchaToken,
       });
       // After registration, redirect to verification page
@@ -238,10 +251,10 @@ export default function RegisterPage() {
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
-                    placeholder="+216 XX XXX XXX"
+                    placeholder="20XXXXXX (8 digits)"
                     icon={<Phone size={18} />}
                     error={fieldErrors.phone}
-                    helperText="Optional"
+                    helperText="Optional. Enter 8 digits (e.g., 20555555)"
                   />
                 </div>
 

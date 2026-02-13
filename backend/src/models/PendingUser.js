@@ -8,7 +8,7 @@ const pendingUserSchema = new mongoose.Schema(
     phone: String,
     role: {
       type: String,
-      enum: ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN"],
+      enum: ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN", "ADMIN"],
       default: "CITIZEN",
     },
     // Verification fields

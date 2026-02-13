@@ -6,9 +6,6 @@ interface RequestOptions extends RequestInit {
   requiresAuth?: boolean;
 }
 
-/**
- * API client that automatically includes JWT token in requests
- */
 export const apiClient = {
   async get<T = unknown>(
     endpoint: string,
@@ -51,12 +48,8 @@ export const apiClient = {
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { requiresAuth = true, headers = {}, ...rest } = options;
 
-    const authStore = useAuthStore.getState();
-    const token = authStore.token;
-
-    if (requiresAuth && !token) {
-      throw new Error("Authentication required");
-    }
+    const { token, refreshToken } = useAuthStore.getState();
+    if (requiresAuth && !token) throw new Error("Authentication required");
 
     const requestHeaders: HeadersInit = {
       "Content-Type": "application/json",
@@ -72,12 +65,42 @@ export const apiClient = {
       headers: requestHeaders,
     });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Request failed" }));
-      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+    if (response.status === 401 && refreshToken && requiresAuth) {
+      try {
+        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          if (data.token) {
+            useAuthStore.setState({ token: data.token });
+            (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${data.token}`;
+            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
+              ...rest,
+              headers: requestHeaders,
+            });
+
+            if (!retryResponse.ok) {
+              throw new Error("Request failed");
+            }
+
+            const text = await retryResponse.text();
+            return text ? (JSON.parse(text) as T) : ({} as T);
+          }
+        }
+      } catch {
+        useAuthStore.setState({ user: null, token: null, refreshToken: null });
+        throw new Error("Session expired. Please log in again.");
+      }
     }
 
-    // Handle empty responses
+    if (!response.ok) {
+      throw new Error("Request failed");
+    }
+
     const text = await response.text();
     return text ? (JSON.parse(text) as T) : ({} as T);
   },

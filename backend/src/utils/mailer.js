@@ -80,7 +80,34 @@ const sendPasswordResetEmail = async (to, userId, token, fullName) => {
   });
 };
 
+// Send login email reminder
+const sendLoginEmailReminder = async (to, fullName, email) => {
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Smart City Tunisia - Your login email",
+    text: `Hi ${fullName}, your login email is: ${email}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
+        </div>
+        <p>Hi <strong>${fullName}</strong>,</p>
+        <p>Your login email for Smart City Tunisia is:</p>
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
+          <strong style="font-size: 18px;">${email}</strong>
+        </div>
+        <p>Use this email address to log in to your account.</p>
+        <p style="color: #666; font-size: 12px;">
+          If you didn't request this, you can ignore this email.
+        </p>
+      </div>
+    `,
+  });
+};
+
 module.exports = {
   sendMagicLinkEmail,
   sendPasswordResetEmail,
+  sendLoginEmailReminder,
 };

@@ -14,6 +14,7 @@ interface LoginResponse {
 interface AuthState {
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
   isLoading: boolean;
   error: string | null;
   register: (data: RegisterData) => Promise<void>;
@@ -22,10 +23,12 @@ interface AuthState {
   deletePendingRegistration: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   verifySession: () => Promise<boolean>;
+  refreshAccessToken: () => Promise<boolean>;
   fetchProfile: () => Promise<void>;
   updateProfile: (data: { fullName?: string; phone?: string }) => Promise<void>;
   changePassword: (data: { currentPassword: string; newPassword: string }) => Promise<void>;
   clearError: () => void;
+  setUserAndTokens: (data: { user?: User | null; token?: string; refreshToken?: string }) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -33,6 +36,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
+      refreshToken: null,
       isLoading: false,
       error: null,
 
@@ -56,8 +60,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authService.login(data);
           set({
-            user: response.user,
-            token: response.token,
+            user: response.user || undefined,
+            token: response.token || response.accessToken || undefined,
+            refreshToken: response.refreshToken || undefined,
             isLoading: false,
           });
         } catch (error) {
@@ -109,36 +114,68 @@ export const useAuthStore = create<AuthState>()(
           if (token) {
             await authService.logout();
           }
-        } catch (error) {
-          console.error("Logout error:", error);
+        } catch {
         } finally {
-          set({ user: null, token: null, error: null });
+          set({ user: null, token: null, refreshToken: null, error: null });
         }
       },
 
       verifySession: async () => {
-        const { token } = get();
-        if (!token) {
-          return false;
-        }
-
-        try {
-          const response = await authService.verifyToken(token);
-          if (response.isAuthenticated && response.user) {
-            set({ user: response.user });
-            return true;
+        const { token, user } = get();
+        
+        // If we have a token but no user yet, try to get profile from API
+        if (token && !user) {
+          try {
+            const response = await authService.verifyToken(token);
+            if (response.isAuthenticated && response.user) {
+              set({ user: response.user });
+              return true;
+            }
+          } catch {
+            set({ user: null, token: null });
+            return false;
           }
-        } catch (error) {
-          console.error("Session verification failed:", error);
         }
-
-        // Token is invalid
+        
+        // If we have both token and user from persisted storage, session is valid
+        if (token && user) {
+          return true;
+        }
+        
+        // No token, session is invalid
         set({ user: null, token: null });
         return false;
       },
 
+      refreshAccessToken: async () => {
+        const { refreshToken } = get();
+        if (!refreshToken) {
+          return false;
+        }
+
+        try {
+          const response = await authService.refreshToken(refreshToken);
+          if (response.token) {
+            set({ token: response.token });
+            return true;
+          }
+          return false;
+        } catch {
+          set({ user: null, token: null, refreshToken: null });
+          return false;
+        }
+      },
+
       clearError: () => {
         set({ error: null });
+      },
+
+      setUserAndTokens: (data: { user?: User | null; token?: string; refreshToken?: string }) => {
+        set({
+          user: data.user ?? null,
+          token: data.token ?? null,
+          refreshToken: data.refreshToken ?? null,
+        });
       },
 
       fetchProfile: async () => {
@@ -172,10 +209,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           await authService.changePassword(data);
-          // Fetch updated profile to get the new passwordLastChanged date
-          const user = await authService.getProfile();
-          set({ user, isLoading: false });
+          // Password changed successfully, but token is now invalid
+          // Clear user and token so they need to log in again
+          set({ user: null, token: null, isLoading: false });
+          throw new Error("PASSWORD_CHANGED");
         } catch (error) {
+          if (error instanceof Error && error.message === "PASSWORD_CHANGED") {
+            throw error;
+          }
           set({
             error: error instanceof Error ? error.message : "Failed to change password",
             isLoading: false,
@@ -189,6 +230,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        refreshToken: state.refreshToken,
       }),
     }
   )
