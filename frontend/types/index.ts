@@ -38,3 +38,56 @@ export interface VerifyCodePayload {
   method: VerificationMethod;
   code: string;
 }
+
+// Complaint types
+export type ComplaintCategory = "ROAD" | "LIGHTING" | "WASTE" | "WATER" | "SAFETY" | "PUBLIC_PROPERTY" | "OTHER";
+export type ComplaintUrgency = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type ComplaintStatus = "SUBMITTED" | "VALIDATED" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "REJECTED";
+export type MediaType = "photo" | "video";
+
+export interface ComplaintLocation {
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  commune?: string;
+  governorate?: string;
+}
+
+export interface ComplaintMedia {
+  type: MediaType;
+  url: string;
+}
+
+export interface Complaint {
+  id: string;
+  title: string;
+  description: string;
+  category: ComplaintCategory;
+  status: ComplaintStatus;
+  priorityScore: number;
+  urgency: ComplaintUrgency;
+  location: ComplaintLocation;
+  media: ComplaintMedia[];
+  createdBy: string;
+  assignedDepartment?: {
+    _id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+  };
+  assignedTeam?: {
+    _id: string;
+    name: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateComplaintData {
+  title: string;
+  description: string;
+  category: ComplaintCategory;
+  urgency: ComplaintUrgency;
+  location?: ComplaintLocation;
+  media?: ComplaintMedia[];
+}

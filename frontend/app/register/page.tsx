@@ -186,16 +186,12 @@ export default function RegisterPage() {
               Create Account
             </h1>
             <p className="text-slate-600">
-              Join Smart City Tunis to manage and report urban services
+              Join Smart City Tunisia to manage and report urban services
             </p>
-            <div className="mt-3 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-white/60 border border-white/80 shadow-sm text-xs text-slate-600">
-              <ShieldCheck className="w-4 h-4 text-success-500" />
-              <span>Step 1 of 3 · Create your secure civic account</span>
-            </div>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 animate-scaleIn delay-200">
             {(error || localError) && (
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setLocalError("")}>

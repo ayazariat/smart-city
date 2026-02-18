@@ -2,7 +2,7 @@ import React, { InputHTMLAttributes, ReactNode, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   error?: string;
   icon?: ReactNode;
   helperText?: string;
@@ -20,10 +20,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
     return (
       <div className="w-full">
-        <label className="block text-sm font-medium text-slate-700 mb-1.5">
-          {label}
-          {props.required && <span className="text-urgent-500 ml-1">*</span>}
-        </label>
+        {label && (
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            {label}
+            {props.required && <span className="text-urgent-500 ml-1">*</span>}
+          </label>
+        )}
         <div className="relative">
           {icon && (
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors">

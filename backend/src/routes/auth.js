@@ -88,11 +88,8 @@ router.post("/register", async (req, res) => {
       verificationMethod: "email",
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const magicLink = `${frontendUrl}/verify-account?token=${magicToken}&userId=${normalizedEmail}`;
-
     try {
-      await sendMagicLinkEmail(normalizedEmail, magicLink, fullName);
+      await sendMagicLinkEmail(normalizedEmail, normalizedEmail, magicToken, fullName);
     } catch (emailError) {
       console.error("Failed to send magic link email:", emailError);
       return res.status(500).json({ message: "Failed to send verification email" });
@@ -130,13 +127,11 @@ router.post("/verify-code", async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired verification code" });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(user.password, salt);
-
+    // Password is already hashed from registration, use it directly
     await User.create({
       fullName: user.fullName,
       email: user.email,
-      password: hashedPassword,
+      password: user.password,
       phone: user.phone,
       isVerified: true,
     });
@@ -178,15 +173,25 @@ router.post("/login", async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
-    if (recaptchaSecret) {
-      const { "g-recaptcha-response": recaptchaResponse } = req.body;
-      if (!recaptchaResponse) {
-        return res.status(400).json({
-          message: "Password too weak. It must be at least 12 characters and include uppercase, lowercase, number, and special character.",
-        });
-      }
-    }
+    // Note: reCAPTCHA verification is optional for login
+    // Uncomment below to enable reCAPTCHA verification for login
+    // const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+    // if (recaptchaSecret) {
+    //   const { captchaToken } = req.body;
+    //   if (!captchaToken) {
+    //     return res.status(400).json({
+    //       message: "reCAPTCHA verification failed. Please complete the security check.",
+    //     });
+    //   }
+    //   try {
+    //     const data = await verifyRecaptcha(recaptchaSecret, captchaToken);
+    //     if (!data.success || data.score < 0.5) {
+    //       return res.status(400).json({ message: "reCAPTCHA verification failed" });
+    //     }
+    //   } catch {
+    //     return res.status(400).json({ message: "reCAPTCHA verification error" });
+    //   }
+    // }
 
     const user = await User.findOne({ email: normalizedEmail });
 
@@ -356,11 +361,8 @@ router.post("/request-verification", async (req, res) => {
       }
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const magicLink = `${frontendUrl}/verify-account?token=${magicToken}&userId=${normalizedEmail}`;
-
     try {
-      await sendMagicLinkEmail(normalizedEmail, magicLink, user.fullName);
+      await sendMagicLinkEmail(normalizedEmail, normalizedEmail, magicToken, user.fullName);
     } catch (emailError) {
       console.error("Failed to send magic link email:", emailError);
       return res.status(500).json({ message: "Failed to send verification email" });
@@ -394,13 +396,11 @@ router.get("/verify-magic-link", async (req, res) => {
         return res.status(400).json({ message: "Invalid or expired verification link" });
       }
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(pendingUser.password, salt);
-
+      // Password is already hashed from registration, use it directly
       user = await User.create({
         fullName: pendingUser.fullName,
         email: pendingUser.email,
-        password: hashedPassword,
+        password: pendingUser.password,
         phone: pendingUser.phone,
         isVerified: true,
       });
@@ -411,7 +411,18 @@ router.get("/verify-magic-link", async (req, res) => {
         return res.status(400).json({ message: "Invalid or expired verification link" });
       }
 
+      // Check if user needs to set password (admin-created user without password)
+      if (!user.password) {
+        // Return JSON with redirect URL instead of redirecting
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        return res.json({
+          needsPasswordSetup: true,
+          redirectUrl: `${frontendUrl}/reset-password?token=${token}&userId=${normalizedEmail}&isSetup=true`
+        });
+      }
+
       user.isVerified = true;
+      user.isActive = true; // Activate the account
       user.magicToken = null;
       user.magicTokenExpires = null;
       await user.save();
@@ -429,8 +440,19 @@ router.get("/verify-magic-link", async (req, res) => {
       userAgent: req.headers["user-agent"],
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/dashboard?verified=true&token=${accessToken}&refreshToken=${refreshToken}`);
+    // Return JSON instead of redirect to avoid CORS issues
+    res.json({
+      message: "Account verified successfully!",
+      verified: true,
+      token: accessToken,
+      refreshToken,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      }
+    });
   } catch (error) {
     console.error("Verify magic link error:", error);
     res.status(500).json({ message: "Verification failed" });
@@ -460,13 +482,11 @@ router.post("/verify-code", async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired verification code" });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(user.password, salt);
-
+    // Password is already hashed from registration, use it directly
     await User.create({
       fullName: user.fullName,
       email: user.email,
-      password: hashedPassword,
+      password: user.password,
       phone: user.phone,
       isVerified: true,
     });
@@ -740,23 +760,42 @@ router.post("/send-login-email", async (req, res) => {
 
 router.post("/reset-password", async (req, res) => {
   try {
-    const { userId, token, newPassword } = req.body;
+    const { userId, token, newPassword, isSetup } = req.body;
 
     if (!userId || !token || !newPassword) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(400).json({ message: "Invalid or expired reset token" });
-    }
+    let user;
+    
+    // Handle password setup (admin-created user without password)
+    if (isSetup === true || isSetup === "true") {
+      // For password setup, userId is the email
+      const normalizedEmail = userId.toLowerCase().trim();
+      user = await User.findOne({ email: normalizedEmail });
+      
+      if (!user) {
+        return res.status(400).json({ message: "Invalid setup link" });
+      }
 
-    if (user.resetToken !== token) {
-      return res.status(400).json({ message: "Invalid or expired reset token" });
-    }
+      // Verify magic token (not reset token)
+      if (user.magicToken !== token || Date.now() > user.magicTokenExpires) {
+        return res.status(400).json({ message: "Invalid or expired setup link" });
+      }
+    } else {
+      // Normal password reset flow
+      user = await User.findById(userId);
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
 
-    if (Date.now() > user.resetTokenExpires) {
-      return res.status(400).json({ message: "Reset token has expired" });
+      if (user.resetToken !== token) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      if (Date.now() > user.resetTokenExpires) {
+        return res.status(400).json({ message: "Reset token has expired" });
+      }
     }
 
     const passwordMinLength = 12;
@@ -766,20 +805,35 @@ router.post("/reset-password", async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
-    user.resetToken = null;
-    user.resetTokenExpires = null;
+    
+    // For password setup, verify and activate the user
+    if (isSetup === true || isSetup === "true") {
+      user.isVerified = true;
+      user.isActive = true;
+      user.magicToken = null;
+      user.magicTokenExpires = null;
+    } else {
+      // Normal reset flow
+      user.resetToken = null;
+      user.resetTokenExpires = null;
+    }
+    
     user.refreshToken = null;
     user.passwordLastChanged = new Date();
     await user.save();
 
     await AuditLog.create({
       userId: user._id,
-      action: "PASSWORD_RESET_COMPLETED",
+      action: isSetup === true || isSetup === "true" ? "PASSWORD_SETUP_COMPLETED" : "PASSWORD_RESET_COMPLETED",
       ip: req.ip,
       userAgent: req.headers["user-agent"],
     });
 
-    res.json({ message: "Password has been reset successfully. Please log in with your new password." });
+    if (isSetup === true || isSetup === "true") {
+      res.json({ message: "Password has been set successfully. You can now log in." });
+    } else {
+      res.json({ message: "Password has been reset successfully. Please log in with your new password." });
+    }
   } catch (error) {
     console.error("Reset password error:", error);
     res.status(500).json({ message: "Server error" });

@@ -17,14 +17,17 @@ import {
   RefreshCw,
   ArrowLeft,
   X,
+  LogOut,
+  MapPin,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { adminService, AdminUser, UserRole, UserStats } from "@/services/admin.service";
+import { adminService, AdminUser, UserRole, UserStats, GovernorateData } from "@/services/admin.service";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   CITIZEN: "Citizen",
   MUNICIPAL_AGENT: "Municipal Agent",
   DEPARTMENT_MANAGER: "Department Manager",
+  TECHNICIAN: "Technician",
   ADMIN: "Admin",
 };
 
@@ -32,8 +35,12 @@ const ROLE_COLORS: Record<UserRole, string> = {
   CITIZEN: "bg-blue-100 text-blue-700",
   MUNICIPAL_AGENT: "bg-attention/10 text-attention",
   DEPARTMENT_MANAGER: "bg-purple-100 text-purple-700",
+  TECHNICIAN: "bg-green-100 text-green-700",
   ADMIN: "bg-red-100 text-red-700",
 };
+
+// Roles that require municipality assignment
+const ROLES_REQUIRING_MUNICIPALITY: UserRole[] = ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"];
 
 /**
  * Admin User Management Page
@@ -64,28 +71,48 @@ export default function AdminUsersPage() {
   const [createForm, setCreateForm] = useState({
     fullName: "",
     email: "",
-    password: "",
     role: "CITIZEN" as UserRole,
     phone: "",
+    governorate: "",
+    municipality: "",
   });
+  const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
   const [editForm, setEditForm] = useState({
     fullName: "",
     phone: "",
     isActive: true,
     role: "CITIZEN" as UserRole,
+    governorate: "",
+    municipality: "",
   });
 
+  // Geography data
+  const [geography, setGeography] = useState<GovernorateData[]>([]);
+  const [municipalities, setMunicipalities] = useState<string[]>([]);
+  const [loadingGeography, setLoadingGeography] = useState(false);
+
   // Check admin access
+  const { hydrated } = useAuthStore();
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
   useEffect(() => {
+    // Wait for auth store to hydrate before checking access
+    if (!hydrated) return;
+
+    setIsAuthReady(true);
+
     if (!token) {
       router.push("/");
     } else if (user?.role !== "ADMIN") {
       router.push("/dashboard");
     }
-  }, [token, user, router]);
+  }, [token, user, router, hydrated]);
 
   // Fetch users
   const fetchUsers = useCallback(async () => {
+    // Wait for auth store to hydrate before fetching users
+    if (!hydrated || !isAuthReady) return;
+
     try {
       setLoading(true);
       setError(null);
@@ -98,11 +125,11 @@ export default function AdminUsersPage() {
       setTotal(response.pagination.total);
       setTotalPages(response.pagination.pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch users");
+      setError(err instanceof Error ? err.message : "Échec de chargement des utilisateurs");
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, hydrated, isAuthReady]);
 
   // Fetch stats
   const fetchStats = async () => {
@@ -114,30 +141,157 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Fetch geography data
+  const fetchGeography = async () => {
+    try {
+      setLoadingGeography(true);
+      const geoData = await adminService.getGeography();
+      setGeography(geoData);
+    } catch (_err) {
+      // Silently handle geography fetch error
+    } finally {
+      setLoadingGeography(false);
+    }
+  };
+
+  // Handle governorate change - update municipalities
+  const handleGovernorateChange = (governorate: string, formType: 'create' | 'edit') => {
+    const selectedGeo = geography.find(g => g.governorate === governorate);
+    setMunicipalities(selectedGeo?.municipalities || []);
+
+    if (formType === 'create') {
+      setCreateForm(prev => ({ ...prev, governorate, municipality: "" }));
+    } else {
+      setEditForm(prev => ({ ...prev, governorate, municipality: "" }));
+    }
+  };
+
+  // Check if role requires municipality
+  const requiresMunicipality = (role: UserRole) => ROLES_REQUIRING_MUNICIPALITY.includes(role);
+
+  // Validate form field
+  const validateField = (field: string, value: string): string => {
+    switch (field) {
+      case "fullName":
+        if (!value.trim()) return "Le nom complet est requis";
+        if (value.length < 2) return "Le nom doit contenir au moins 2 caractères";
+        return "";
+      case "email":
+        if (!value.trim()) return "L'email est requis";
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) return "Format d'email invalide";
+        return "";
+      case "phone":
+        if (value) {
+          const cleanPhone = value.replace(/[\s-]/g, "");
+          const phoneRegex = /^(\+216|216)?[2459]\d{7}$/;
+          if (!phoneRegex.test(cleanPhone)) return "Format invalide. Ex: +21629123456";
+        }
+        return "";
+      case "governorate":
+        if (requiresMunicipality(createForm.role) && !value) return "Le gouvernorat est requis";
+        return "";
+      case "municipality":
+        if (requiresMunicipality(createForm.role) && createForm.governorate && !value) return "La municipalité est requise";
+        return "";
+      default:
+        return "";
+    }
+  };
+
+  // Handle input change with validation
+  const handleCreateFormChange = (field: string, value: string) => {
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (createErrors[field]) {
+      setCreateErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
+
   useEffect(() => {
     if (user?.role === "ADMIN") {
       fetchUsers();
       fetchStats();
+      fetchGeography();
     }
   }, [user, fetchUsers]);
 
   // Handle create user
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate all fields
+    const errors: Record<string, string> = {};
+    errors.fullName = validateField("fullName", createForm.fullName);
+    errors.email = validateField("email", createForm.email);
+    errors.phone = validateField("phone", createForm.phone);
+    errors.governorate = validateField("governorate", createForm.governorate);
+    errors.municipality = validateField("municipality", createForm.municipality);
+
+    // Check if there are any errors
+    const hasErrors = Object.values(errors).some((error) => error !== "");
+    if (hasErrors) {
+      setCreateErrors(errors);
+      return;
+    }
+
     try {
       await adminService.createUser(createForm);
       setShowCreateModal(false);
       setCreateForm({
         fullName: "",
         email: "",
-        password: "",
         role: "CITIZEN",
         phone: "",
+        governorate: "",
+        municipality: "",
       });
+      setCreateErrors({});
+      setMunicipalities([]);
       fetchUsers();
       fetchStats();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create user");
+    } catch (err: unknown) {
+      // Normalise backend error message (apiClient may throw a string or an Error)
+      let message = "";
+      if (typeof err === "string") {
+        message = err;
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+
+      const safeMessage = message.toLowerCase();
+
+      // Email already exists -> show error next to email field, not as a global alert
+      if (
+        safeMessage.includes("email") &&
+        (safeMessage.includes("existe déjà") || safeMessage.includes("already exists"))
+      ) {
+        setCreateErrors((prev) => ({
+          ...prev,
+          email: "Un compte existe déjà avec cet email.",
+        }));
+        // Ne pas afficher un message d'erreur global dans ce cas
+        setError(null);
+        return;
+      }
+
+      // Full name already exists -> show error next to full name field
+      if (
+        safeMessage.includes("nom") &&
+        (safeMessage.includes("existe déjà") || safeMessage.includes("already exists"))
+      ) {
+        setCreateErrors((prev) => ({
+          ...prev,
+          fullName: "Un utilisateur existe déjà avec ce nom.",
+        }));
+        setError(null);
+        return;
+      }
+
+      // Generic, security-friendly message for all other errors
+      setError(
+        "Impossible de créer l'utilisateur pour le moment. Veuillez réessayer ou contacter un administrateur."
+      );
     }
   };
 
@@ -152,6 +306,8 @@ export default function AdminUsersPage() {
         fullName: editForm.fullName,
         phone: editForm.phone,
         isActive: editForm.isActive,
+        governorate: editForm.governorate,
+        municipality: editForm.municipality,
       });
 
       // Update role if changed
@@ -204,7 +360,16 @@ export default function AdminUsersPage() {
       phone: user.phone || "",
       isActive: user.isActive,
       role: user.role,
+      governorate: user.governorate || "",
+      municipality: user.municipality || "",
     });
+    // Set municipalities for existing governorate
+    if (user.governorate) {
+      const selectedGeo = geography.find(g => g.governorate === user.governorate);
+      setMunicipalities(selectedGeo?.municipalities || []);
+    } else {
+      setMunicipalities([]);
+    }
     setShowEditModal(true);
   };
 
@@ -228,7 +393,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary-100">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       {/* Navigation */}
       <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
         <div className="container mx-auto px-4 py-4">
@@ -248,16 +413,16 @@ export default function AdminUsersPage() {
             <div className="flex items-center gap-4">
               <Link
                 href="/dashboard"
-                className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-all"
+                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
               >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Back</span>
+                <ArrowLeft className="w-5 h-5" />
               </Link>
               <button
                 onClick={() => logout()}
-                className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-all"
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg backdrop-blur-sm"
               >
-                <span className="hidden sm:inline">Logout</span>
+                <LogOut className="w-5 h-5" />
+                <span className="hidden sm:inline font-medium">Logout</span>
               </button>
             </div>
           </div>
@@ -352,9 +517,10 @@ export default function AdminUsersPage() {
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">User</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden md:table-cell">Role</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Phone</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Status</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden md:table-cell">Rôle</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Municipalité</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Téléphone</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Statut</th>
                   <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">Actions</th>
                 </tr>
               </thead>
@@ -372,6 +538,17 @@ export default function AdminUsersPage() {
                         <Shield className="w-3 h-3 mr-1" />
                         {ROLE_LABELS[userItem.role]}
                       </span>
+                    </td>
+                    <td className="px-4 py-4 hidden lg:table-cell">
+                      {userItem.municipality && userItem.governorate ? (
+                        <div className="flex items-center gap-1 text-slate-600">
+                          <MapPin className="w-3 h-3" />
+                          <span>{userItem.municipality}</span>
+                          <span className="text-slate-400">({userItem.governorate})</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 hidden lg:table-cell text-slate-600">
                       {userItem.phone || "-"}
@@ -400,11 +577,10 @@ export default function AdminUsersPage() {
                         </button>
                         <button
                           onClick={() => handleToggleActive(userItem.id, !userItem.isActive)}
-                          className={`p-2 rounded-lg transition-colors ${
-                            userItem.isActive
-                              ? "text-attention hover:bg-attention/10"
-                              : "text-success hover:bg-success/10"
-                          }`}
+                          className={`p-2 rounded-lg transition-colors ${userItem.isActive
+                            ? "text-attention hover:bg-attention/10"
+                            : "text-success hover:bg-success/10"
+                            }`}
                           title={userItem.isActive ? "Deactivate user" : "Activate user"}
                         >
                           {userItem.isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -466,14 +642,16 @@ export default function AdminUsersPage() {
             </div>
             <form onSubmit={handleCreateUser} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nom complet *</label>
                 <input
                   type="text"
                   required
                   value={createForm.fullName}
-                  onChange={(e) => setCreateForm({ ...createForm, fullName: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  onChange={(e) => handleCreateFormChange("fullName", e.target.value)}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.fullName ? "border-red-500" : "border-slate-200"}`}
+                  placeholder="Entrez le nom complet"
                 />
+                {createErrors.fullName && <p className="text-red-500 text-xs mt-1">{createErrors.fullName}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
@@ -481,26 +659,26 @@ export default function AdminUsersPage() {
                   type="email"
                   required
                   value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  onChange={(e) => handleCreateFormChange("email", e.target.value)}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.email ? "border-red-500" : "border-slate-200"}`}
+                  placeholder="exemple@email.com"
                 />
+                {createErrors.email && <p className="text-red-500 text-xs mt-1">{createErrors.email}</p>}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password *</label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={createForm.password}
-                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-blue-700">
+                  Un lien d&apos;activation sera envoyé à l&apos;utilisateur par email pour définir son mot de passe.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                 <select
                   value={createForm.role}
-                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as UserRole })}
+                  onChange={(e) => {
+                    const newRole = e.target.value as UserRole;
+                    setCreateForm({ ...createForm, role: newRole, governorate: "", municipality: "" });
+                    setMunicipalities([]);
+                  }}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {Object.entries(ROLE_LABELS).map(([value, label]) => (
@@ -510,22 +688,77 @@ export default function AdminUsersPage() {
                   ))}
                 </select>
               </div>
+              {/* Governorate Selection - Only for roles requiring municipality */}
+              {requiresMunicipality(createForm.role) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Gouvernorat *
+                  </label>
+                  <select
+                    value={createForm.governorate}
+                    onChange={(e) => {
+                      handleCreateFormChange("governorate", e.target.value);
+                      handleGovernorateChange(e.target.value, 'create');
+                    }}
+                    disabled={loadingGeography}
+                    required
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-slate-100 ${createErrors.governorate ? "border-red-500" : "border-slate-200"}`}
+                  >
+                    <option value="">Sélectionner un gouvernorat</option>
+                    {geography.map((geo) => (
+                      <option key={geo.governorate} value={geo.governorate}>
+                        {geo.governorate}
+                      </option>
+                    ))}
+                  </select>
+                  {createErrors.governorate && <p className="text-red-500 text-xs mt-1">{createErrors.governorate}</p>}
+                </div>
+              )}
+              {/* Municipality Selection - Only for roles requiring municipality */}
+              {requiresMunicipality(createForm.role) && createForm.governorate && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Municipalité *
+                  </label>
+                  <select
+                    value={createForm.municipality}
+                    onChange={(e) => handleCreateFormChange("municipality", e.target.value)}
+                    required
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.municipality ? "border-red-500" : "border-slate-200"}`}
+                  >
+                    <option value="">Sélectionner une municipalité</option>
+                    {municipalities.map((mun) => (
+                      <option key={mun} value={mun}>
+                        {mun}
+                      </option>
+                    ))}
+                  </select>
+                  {createErrors.municipality && <p className="text-red-500 text-xs mt-1">{createErrors.municipality}</p>}
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone (optional)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Téléphone (optionnel)</label>
                 <input
                   type="tel"
                   value={createForm.phone}
-                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  onChange={(e) => handleCreateFormChange("phone", e.target.value)}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.phone ? "border-red-500" : "border-slate-200"}`}
+                  placeholder="+21629123456"
                 />
+                {createErrors.phone && <p className="text-red-500 text-xs mt-1">{createErrors.phone}</p>}
               </div>
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setCreateErrors({});
+                  }}
                   className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                 >
-                  Cancel
+                  Annuler
                 </button>
                 <button
                   type="submit"
@@ -576,7 +809,11 @@ export default function AdminUsersPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                 <select
                   value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
+                  onChange={(e) => {
+                    const newRole = e.target.value as UserRole;
+                    setEditForm({ ...editForm, role: newRole, governorate: "", municipality: "" });
+                    setMunicipalities([]);
+                  }}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {Object.entries(ROLE_LABELS).map(([value, label]) => (
@@ -586,6 +823,49 @@ export default function AdminUsersPage() {
                   ))}
                 </select>
               </div>
+              {/* Governorate Selection - Only for roles requiring municipality */}
+              {requiresMunicipality(editForm.role) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Gouvernorat
+                  </label>
+                  <select
+                    value={editForm.governorate}
+                    onChange={(e) => handleGovernorateChange(e.target.value, 'edit')}
+                    disabled={loadingGeography}
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-slate-100"
+                  >
+                    <option value="">Sélectionner un gouvernorat</option>
+                    {geography.map((geo) => (
+                      <option key={geo.governorate} value={geo.governorate}>
+                        {geo.governorate}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Municipality Selection - Only for roles requiring municipality */}
+              {requiresMunicipality(editForm.role) && editForm.governorate && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Municipalité
+                  </label>
+                  <select
+                    value={editForm.municipality}
+                    onChange={(e) => setEditForm({ ...editForm, municipality: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Sélectionner une municipalité</option>
+                    {municipalities.map((mun) => (
+                      <option key={mun} value={mun}>
+                        {mun}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
                 <input
@@ -601,22 +881,20 @@ export default function AdminUsersPage() {
                   <button
                     type="button"
                     onClick={() => setEditForm({ ...editForm, isActive: true })}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-colors ${
-                      editForm.isActive
-                        ? "bg-success/10 text-success border border-success/20"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-colors ${editForm.isActive
+                      ? "bg-success/10 text-success border border-success/20"
+                      : "bg-slate-100 text-slate-600"
+                      }`}
                   >
                     Active
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditForm({ ...editForm, isActive: false })}
-                    className={`flex-1 py-2.5 rounded-lg font-medium transition-colors ${
-                      !editForm.isActive
-                        ? "bg-red-50 text-red-600 border border-red-200"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
+                    className={`flex-1 py-2.5 rounded-lg font-medium transition-colors ${!editForm.isActive
+                      ? "bg-red-50 text-red-600 border border-red-200"
+                      : "bg-slate-100 text-slate-600"
+                      }`}
                   >
                     Inactive
                   </button>

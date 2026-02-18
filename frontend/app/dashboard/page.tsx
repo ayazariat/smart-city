@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, FileText, Plus, Sparkles, Shield } from "lucide-react";
+import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
@@ -93,32 +93,38 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-secondary-100">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       {/* Navigation */}
       <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
+              <Link
+                href="/"
+                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-xl font-bold">Smart City Tunis</h1>
+                <h1 className="text-xl font-bold">Smart City Tunisia</h1>
                 <p className="text-sm text-primary-100">Dashboard</p>
               </div>
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-lg">
-                <User className="w-4 h-4" />
-                <span className="text-sm">Welcome, {user.fullName}</span>
+              <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2.5 rounded-xl backdrop-blur-sm">
+                <User className="w-5 h-5" />
+                <span className="text-sm font-medium">Welcome, {user.fullName}</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-lg"
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg backdrop-blur-sm"
               >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Logout</span>
+                <LogOut className="w-5 h-5" />
+                <span className="hidden sm:inline font-medium">Logout</span>
               </button>
             </div>
           </div>
@@ -206,7 +212,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick Actions Card */}
-          <div className="bg-gradient-to-br from-primary to-primary-700 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 text-white">
+          <Link href="/complaints/new" className="bg-gradient-to-br from-primary to-primary-700 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 text-white cursor-pointer block">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                 <Plus className="w-6 h-6" />
@@ -220,7 +226,7 @@ export default function DashboardPage() {
               <Plus className="w-4 h-4" />
               New Complaint
             </button>
-          </div>
+          </Link>
         </div>
 
         {/* Statistics Section */}

@@ -6,7 +6,7 @@ const complaintSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: {
       type: String,
-      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "OTHER"],
+      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "OTHER"],
       default: "OTHER",
     },
     status: {
@@ -23,13 +23,25 @@ const complaintSchema = new mongoose.Schema(
       default: "SUBMITTED",
     },
     priorityScore: { type: Number, default: 0 },
+    urgency: {
+      type: String,
+      enum: ["LOW", "MEDIUM", "HIGH", "URGENT"],
+      default: "MEDIUM",
+    },
     location: {
       latitude: Number,
       longitude: Number,
       address: String,
+      commune: String,
+      governorate: String,
     },
-    photos: [String],
-    videos: [String],
+    media: [
+      {
+        type: { type: String, enum: ["photo", "video"] },
+        url: String,
+      },
+    ],
+    // Reference to the citizen who created the complaint
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     assignedDepartment: {
       type: mongoose.Schema.Types.ObjectId,
@@ -37,7 +49,7 @@ const complaintSchema = new mongoose.Schema(
     },
     assignedTeam: { type: mongoose.Schema.Types.ObjectId, ref: "RepairTeam" },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Complaint", complaintSchema);

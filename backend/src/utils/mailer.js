@@ -106,8 +106,41 @@ const sendLoginEmailReminder = async (to, fullName, email) => {
   });
 };
 
+// Send account invitation email (admin created user)
+const sendInvitationEmail = async (to, userId, token, fullName, role) => {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const invitationLink = `${frontendUrl}/verify-account?token=${token}&userId=${userId}`;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject: "Smart City Tunisia - Account Invitation",
+    text: `Hi ${fullName}, you've been invited to join Smart City Tunisia as ${role}. Click to activate your account: ${invitationLink} (expires in 24 hours)`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
+        </div>
+        <p>Hi <strong>${fullName}</strong>,</p>
+        <p>You've been invited to join Smart City Tunisia as <strong>${role}</strong>.</p>
+        <p>Click the button below to activate your account and set your password:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${invitationLink}" style="background: #2E7D32; color: white; padding: 15px 30px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+            Activate My Account
+          </a>
+        </div>
+        <p style="color: #666; font-size: 12px;">
+          This link expires in <strong>24 hours</strong>.<br/>
+          If you didn't expect this invitation, you can ignore this email.
+        </p>
+      </div>
+    `,
+  });
+};
+
 module.exports = {
   sendMagicLinkEmail,
   sendPasswordResetEmail,
   sendLoginEmailReminder,
+  sendInvitationEmail,
 };

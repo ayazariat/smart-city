@@ -17,6 +17,7 @@ interface AuthState {
   refreshToken: string | null;
   isLoading: boolean;
   error: string | null;
+  hydrated: boolean;
   register: (data: RegisterData) => Promise<void>;
   login: (data: LoginData) => Promise<void>;
   verifyMagicLink: (token: string, userId: string) => Promise<void>;
@@ -39,6 +40,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isLoading: false,
       error: null,
+      hydrated: false,
 
       register: async (data: RegisterData) => {
         set({ isLoading: true, error: null });
@@ -232,6 +234,12 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         refreshToken: state.refreshToken,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Mark as hydrated when storage is rehydrated
+        if (state) {
+          state.hydrated = true;
+        }
+      },
     }
   )
 );

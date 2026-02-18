@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Mail, ShieldCheck, Sparkles, CheckCircle, ArrowRight } from "lucide-react";
+import { Mail, ShieldCheck, Sparkles, CheckCircle, ArrowRight, ArrowLeft } from "lucide-react";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -33,13 +33,43 @@ function VerifyAccountContent() {
     setErrorMessage(null);
 
     try {
-      await verifyMagicLink(magicToken!, magicUserId!);
-      setIsVerified(true);
-      
-      // Redirect to login after success
-      setTimeout(() => {
-        router.push("/");
-      }, 2000);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/verify-magic-link?token=${magicToken}&userId=${magicUserId}`,
+        { method: 'GET' }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrorMessage(data.message || "La vérification a échoué.");
+        return;
+      }
+
+      // Check if user needs to set password (admin-created user)
+      if (data.needsPasswordSetup) {
+        // Redirect to password setup page
+        window.location.href = data.redirectUrl;
+        return;
+      }
+
+      // Store tokens and redirect to dashboard
+      if (data.token && data.refreshToken) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Redirect to dashboard
+        setIsVerified(true);
+        setTimeout(() => {
+          router.push("/dashboard?verified=true");
+        }, 1500);
+      } else {
+        // Fallback: redirect to login if no tokens
+        setIsVerified(true);
+        setTimeout(() => {
+          router.push("/?verified=true");
+        }, 2000);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -99,7 +129,7 @@ function VerifyAccountContent() {
                       href="/"
                       className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-semibold"
                     >
-                      <ArrowRight className="w-4 h-4" />
+                      <ArrowLeft className="w-4 h-4" />
                       Retour à la page de connexion
                     </Link>
                   </div>

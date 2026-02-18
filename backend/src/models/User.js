@@ -1,11 +1,39 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
+// Tunisia Governorates and Municipalities
+const TUNISIA_GOVERNORATES = [
+  "Ariana",
+  "Béja",
+  "Ben Arous",
+  "Bizerte",
+  "Gabès",
+  "Gafsa",
+  "Jendouba",
+  "Kairouan",
+  "Kasserine",
+  "Kébili",
+  "Le Kef",
+  "Mahdia",
+  "Manouba",
+  "Médenine",
+  "Monastir",
+  "Nabeul",
+  "Sfax",
+  "Sidi Bouzid",
+  "Siliana",
+  "Sousse",
+  "Tataouine",
+  "Tozeur",
+  "Tunis",
+  "Zaghouan",
+];
+
 const userSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
+    password: { type: String, required: false }, // Optional - set via magic link for admin-created users
     role: {
       type: String,
       enum: ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN", "ADMIN"],
@@ -13,6 +41,16 @@ const userSchema = new mongoose.Schema(
     },
     phone: String,
     isActive: { type: Boolean, default: true },
+    // Geographical assignment for agents, technicians, and managers
+    governorate: {
+      type: String,
+      enum: ["", ...TUNISIA_GOVERNORATES],
+      default: "",
+    },
+    municipality: {
+      type: String,
+      default: "",
+    },
     // Security-related fields
     refreshToken: { type: String }, // current valid refresh token (rotation)
     // MFA skeleton fields (to be used for agents/managers/admin)

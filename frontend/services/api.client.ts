@@ -84,6 +84,23 @@ export const apiClient = {
             });
 
             if (!retryResponse.ok) {
+              // Try to extract error message from response body
+              const text = await retryResponse.text();
+              if (text) {
+                try {
+                  const errorData = JSON.parse(text);
+                  if (errorData && errorData.message) {
+                    // Throw the error message to be caught below
+                    throw errorData.message;
+                  }
+                } catch (err) {
+                  // If err is a string (our message), throw it
+                  if (typeof err === "string") {
+                    throw new Error(err);
+                  }
+                  // Otherwise continue to throw generic error
+                }
+              }
               throw new Error("Request failed");
             }
 
@@ -98,6 +115,23 @@ export const apiClient = {
     }
 
     if (!response.ok) {
+      // Try to extract error message from response body
+      const text = await response.text();
+      if (text) {
+        try {
+          const errorData = JSON.parse(text);
+          if (errorData && errorData.message) {
+            // Throw the error message to be caught below
+            throw errorData.message;
+          }
+        } catch (err) {
+          // If err is a string (our message), throw it
+          if (typeof err === "string") {
+            throw new Error(err);
+          }
+          // Otherwise continue to throw generic error
+        }
+      }
       throw new Error("Request failed");
     }
 

@@ -93,7 +93,7 @@ export default function LoginPage() {
             </p>
             <div className="mt-3 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-white/60 border border-white/80 shadow-sm text-xs text-slate-600">
               <ShieldCheck className="w-4 h-4 text-success-500" />
-              <span>Step 3 of 3 · Secure access with enhanced protection</span>
+              <span>Secure access with enhanced protection</span>
             </div>
           </div>
 

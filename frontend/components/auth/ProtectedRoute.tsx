@@ -12,12 +12,17 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, token, refreshToken, verifySession, refreshAccessToken } = useAuthStore();
+  const { user, token, refreshToken, verifySession, refreshAccessToken, hydrated } = useAuthStore();
   const [isVerifying, setIsVerifying] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
+      // Wait for auth store to be hydrated from localStorage
+      if (!hydrated) {
+        return;
+      }
+
       // If no token at all, redirect to login
       if (!token) {
         router.push(`/?redirect=${encodeURIComponent(pathname)}`);
@@ -83,7 +88,31 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     // Small delay to allow zustand persistence to hydrate
     const timer = setTimeout(checkAuth, 50);
     return () => clearTimeout(timer);
-  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles]);
+  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles, hydrated]);
+
+  // Show loading while waiting for hydration
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading while waiting for hydration
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If not ready and no verification needed, show nothing to prevent flash
   if (!isReady && !isVerifying) {
