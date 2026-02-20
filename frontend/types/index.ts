@@ -15,6 +15,9 @@ export interface RegisterData {
   phone?: string;
   // Optional CAPTCHA token (e.g. reCAPTCHA v3)
   captchaToken?: string;
+  // Geographical assignment for citizens
+  governorate?: string;
+  municipality?: string;
 }
 
 export interface LoginData {
@@ -69,6 +72,8 @@ export interface Complaint {
   location: ComplaintLocation;
   media: ComplaintMedia[];
   createdBy: string;
+  isAnonymous?: boolean;
+  keywords?: string[];
   assignedDepartment?: {
     _id: string;
     name: string;
@@ -90,4 +95,6 @@ export interface CreateComplaintData {
   urgency: ComplaintUrgency;
   location?: ComplaintLocation;
   media?: ComplaintMedia[];
+  isAnonymous?: boolean;
+  ownerName?: string;
 }

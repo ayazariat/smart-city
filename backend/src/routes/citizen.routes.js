@@ -43,6 +43,8 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       urgency,
       location,
       media,
+      isAnonymous,
+      ownerName,
     } = req.body;
 
     // Validate required fields
@@ -114,7 +116,43 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
     // Calculate priority score
     const priorityScore = urgencyPriorityScore[urgency] || urgencyPriorityScore.MEDIUM;
 
-    // Create complaint
+    const extractKeywords = (text) => {
+      if (!text) return [];
+      const raw = text
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s]/g, " ");
+      const tokens = raw.split(/\s+/).filter((t) => t.length >= 3);
+      const stopwords = new Set([
+        "les",
+        "des",
+        "dans",
+        "avec",
+        "pour",
+        "sur",
+        "une",
+        "est",
+        "and",
+        "the",
+        "this",
+        "that",
+        "qui",
+        "que",
+      ]);
+      const counts = {};
+      for (const t of tokens) {
+        if (stopwords.has(t)) continue;
+        counts[t] = (counts[t] || 0) + 1;
+      }
+      return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([word]) => word);
+    };
+
+    const keywords = extractKeywords(description);
+
     const complaint = new Complaint({
       title: title.trim(),
       description: description.trim(),
@@ -123,6 +161,9 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       priorityScore,
       location: location || {},
       media: media || [],
+      isAnonymous: !!isAnonymous,
+      ownerName: !isAnonymous ? ownerName : undefined,
+      keywords,
       createdBy: req.user._id,
       assignedDepartment,
       status: "SUBMITTED",

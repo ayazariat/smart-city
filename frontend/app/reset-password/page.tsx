@@ -99,7 +99,7 @@ export default function ResetPasswordPage() {
                   <CheckCircle className="w-8 h-8 text-success" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {isSetup ? "Compte activé !" : "Mot de passe réinitialisé !"}
+                  {isSetup ? "Account activated!" : "Password reset!"}
                 </h1>
                 <p className="text-slate-600">
                   {isSetup 

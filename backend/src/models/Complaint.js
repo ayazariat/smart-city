@@ -35,13 +35,15 @@ const complaintSchema = new mongoose.Schema(
       commune: String,
       governorate: String,
     },
+    isAnonymous: { type: Boolean, default: false },
+    ownerName: { type: String },
+    keywords: [{ type: String }],
     media: [
       {
         type: { type: String, enum: ["photo", "video"] },
         url: String,
       },
     ],
-    // Reference to the citizen who created the complaint
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     assignedDepartment: {
       type: mongoose.Schema.Types.ObjectId,

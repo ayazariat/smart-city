@@ -209,6 +209,7 @@ export default function NewComplaintPage() {
   const [incidentDate, setIncidentDate] = useState(new Date().toISOString().split("T")[0]);
   const [incidentTime, setIncidentTime] = useState(new Date().toTimeString().slice(0, 5));
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [isAnonymous, setIsAnonymous] = useState(false);
 
   // Location state
@@ -301,12 +302,14 @@ export default function NewComplaintPage() {
         const { lat, lng } = e.latlng;
         marker.setLatLng([lat, lng]);
         setLocation({ latitude: lat, longitude: lng });
+        reverseGeocode(lat, lng);
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       marker.on("dragend", (e: any) => {
         const { lat, lng } = e.target.getLatLng();
         setLocation({ latitude: lat, longitude: lng });
+        reverseGeocode(lat, lng);
       });
     };
 
@@ -401,6 +404,33 @@ export default function NewComplaintPage() {
     setMedia(newMedia);
   };
 
+  const reverseGeocode = (lat: number, lon: number) => {
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        const addr = data.address || {};
+        const communeName =
+          addr.municipality ||
+          addr.village ||
+          addr.town ||
+          addr.city ||
+          addr.county ||
+          addr.suburb ||
+          null;
+        if (communeName) {
+          setDetectedCommune(communeName);
+          setCommune((prev) => prev || communeName);
+        }
+        const govName = addr.state || addr.region || addr.county || null;
+        if (govName) {
+          setGovernorate(govName);
+        }
+      })
+      .catch(() => {});
+  };
+
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       setLocationError("Geolocation not supported by your browser");
@@ -420,31 +450,7 @@ export default function NewComplaintPage() {
         setLocation(newLocation);
         setUseCurrentLocation(true);
         setLocationLoading(false);
-
-        fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${newLocation.latitude}&lon=${newLocation.longitude}&format=json&addressdetails=1`
-        )
-          .then((res) => res.json())
-          .then((data) => {
-            const addr = data.address || {};
-            const communeName =
-              addr.municipality ||
-              addr.village ||
-              addr.town ||
-              addr.city ||
-              addr.county ||
-              addr.suburb ||
-              null;
-            if (communeName) {
-              setDetectedCommune(communeName);
-              setCommune((prev) => prev || communeName);
-            }
-            const govName = addr.state || addr.region || addr.county || null;
-            if (govName) {
-              setGovernorate(govName);
-            }
-          })
-          .catch(() => {});
+        reverseGeocode(newLocation.latitude, newLocation.longitude);
       },
       (error) => {
         setLocationError("Unable to get your location. Please check permissions.");
@@ -457,6 +463,30 @@ export default function NewComplaintPage() {
     const lat = displayLocation.latitude;
     const lon = displayLocation.longitude;
     window.open(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`, "_blank");
+  };
+
+  const validatePhone = (phoneValue: string): boolean => {
+    if (!phoneValue.trim()) return true;
+    const cleanPhone = phoneValue.replace(/[\s-]/g, "");
+    const tunisianPhoneRegex = /^[2459]\d{7}$/;
+    if (!tunisianPhoneRegex.test(cleanPhone)) {
+      setPhoneError("Format invalide. Entrez 8 chiffres (ex: 98765432)");
+      return false;
+    }
+    setPhoneError(null);
+    return true;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/[^\d]/g, "");
+    if (value.length <= 8) {
+      setPhone(value);
+      if (value.length > 0) {
+        validatePhone(value);
+      } else {
+        setPhoneError(null);
+      }
+    }
   };
 
   const validateForm = (): boolean => {
@@ -474,6 +504,9 @@ export default function NewComplaintPage() {
     }
     if (media.length === 0) {
       setError("Please add at least one photo");
+      return false;
+    }
+    if (phone && !validatePhone(phone)) {
       return false;
     }
     return true;
@@ -501,6 +534,7 @@ export default function NewComplaintPage() {
           governorate: governorate.trim() || undefined,
         },
         media: media.length > 0 ? media : undefined,
+        isAnonymous,
       };
 
       if (phone && !isAnonymous) {
@@ -599,6 +633,7 @@ export default function NewComplaintPage() {
                 setDetectedCommune(null);
                 setGovernorate("");
                 setPhone("");
+                setPhoneError(null);
                 setIsAnonymous(false);
               }}
               variant="outline"
@@ -694,10 +729,18 @@ export default function NewComplaintPage() {
                   </span>
                   <span className="text-xs text-slate-400">Tunisia</span>
                 </div>
-                <div
-                  ref={mapContainerRef}
-                  className="w-full h-[220px] bg-slate-100"
-                />
+                <div className="relative">
+                  <div
+                    ref={mapContainerRef}
+                    className="w-full h-[220px] bg-slate-100 cursor-crosshair"
+                  />
+                  <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
+                    <p className="text-[10px] font-medium text-slate-600 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 text-primary" />
+                      Click on the map to set location
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -956,15 +999,30 @@ export default function NewComplaintPage() {
                 </span>
               </label>
               <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
+                  +216
+                </span>
                 <input
                   type="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+216 98 765 432"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
+                  onChange={handlePhoneChange}
+                  placeholder="98765432"
+                  maxLength={8}
+                  className={`w-full pl-14 pr-4 py-2.5 rounded-xl border transition-all bg-slate-50/50 ${
+                    phoneError
+                      ? "border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                      : "border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  }`}
                 />
               </div>
+              {phoneError && (
+                <p className="text-xs text-red-500 mt-1.5">{phoneError}</p>
+              )}
+              {!phoneError && phone.length > 0 && phone.length < 8 && (
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Format: 8 chiffres (ex: 98765432)
+                </p>
+              )}
             </div>
           </div>
 

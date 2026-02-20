@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, User, Phone, Sparkles, ShieldCheck } from "lucide-react";
+import { Mail, Lock, User, Phone, Sparkles, MapPin, Navigation } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
+import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
+import { getLocationWithDetails, LocationData } from "@/services/geo.service";
 
 /**
  * Registration Page - Smart City Tunisia
  * Modern interface with Civic Green palette and real-time validation
+ * Includes governorate and municipality autocomplete
  */
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,12 +27,22 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
     phone: "",
+    governorate: "",
+    municipality: "",
   });
   const [localError, setLocalError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState("");
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Get municipalities based on selected governorate
+  const municipalities = useMemo(() => {
+    if (!formData.governorate) return [];
+    return getMunicipalitiesByGovernorate(formData.governorate);
+  }, [formData.governorate]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     setLocalError("");
@@ -37,6 +50,11 @@ export default function RegisterPage() {
     // Clear error for modified field
     if (fieldErrors[name]) {
       setFieldErrors({ ...fieldErrors, [name]: "" });
+    }
+
+    // Clear municipality when governorate changes
+    if (name === "governorate") {
+      setFormData(prev => ({ ...prev, municipality: "" }));
     }
 
     // Real-time password match validation
@@ -54,6 +72,11 @@ export default function RegisterPage() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
+    // FullName validation - minimum 3 characters
+    if (!formData.fullName || formData.fullName.length < 3) {
+      errors.fullName = "Full name must be at least 3 characters";
+    }
+
     // Email format validation (strict)
     const emailRegex = /^[^^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(formData.email)) {
@@ -61,8 +84,6 @@ export default function RegisterPage() {
     }
 
     // Strong password validation (mirror backend policy)
-    // - Min 12 chars
-    // - At least 1 lowercase, 1 uppercase, 1 digit, 1 special char
     const passwordPolicyRegex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 
@@ -77,9 +98,7 @@ export default function RegisterPage() {
 
     // Optional phone: validate Tunisia format (8 digits) if provided
     if (formData.phone) {
-      // Remove any non-digit characters
       const digits = formData.phone.replace(/\D/g, "");
-      // Accept either 8 digits directly or +216 followed by 8 digits
       const validFormat = /^(?:\+216)?[2-9]\d{7}$/;
       if (!validFormat.test(digits) && !validFormat.test(formData.phone)) {
         errors.phone = "Please enter a valid Tunisian phone number (8 digits, e.g., 20555555).";
@@ -100,6 +119,29 @@ export default function RegisterPage() {
     }
   };
 
+  const handleUseMyLocation = async () => {
+    setLocationLoading(true);
+    setLocationError("");
+    
+    try {
+      const location: LocationData | null = await getLocationWithDetails();
+      
+      if (location) {
+        setFormData(prev => ({
+          ...prev,
+          governorate: location.governorate,
+          municipality: location.municipality,
+        }));
+      } else {
+        setLocationError("Could not determine your location in Tunisia. Please select manually.");
+      }
+    } catch (err) {
+      setLocationError(err instanceof Error ? err.message : "Failed to get location");
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError("");
@@ -111,7 +153,6 @@ export default function RegisterPage() {
     let captchaToken: string | undefined;
     const recaptchaEnabled = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
     if (recaptchaEnabled) {
-      // Get fresh reCAPTCHA token
       const freshToken = await refreshRecaptchaToken();
       if (!freshToken) {
         setLocalError("Failed to complete security check. Please refresh and try again.");
@@ -124,7 +165,6 @@ export default function RegisterPage() {
     let phoneValue = formData.phone;
     if (formData.phone) {
       const digits = formData.phone.replace(/\D/g, "");
-      // If user entered 8 digits without country code, add +216
       if (digits.length === 8 && !formData.phone.includes("+216")) {
         phoneValue = "+216" + digits;
       }
@@ -137,8 +177,9 @@ export default function RegisterPage() {
         password: formData.password,
         phone: phoneValue,
         captchaToken,
+        governorate: formData.governorate || undefined,
+        municipality: formData.municipality || undefined,
       });
-      // After registration, redirect to verification page
       router.push(`/verify-account?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Registration failed");
@@ -220,6 +261,7 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     placeholder="John Doe"
                     icon={<User size={18} />}
+                    error={fieldErrors.fullName}
                     required
                   />
                 </div>
@@ -239,6 +281,68 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              {/* Governorate and Municipality with Autocomplete */}
+              <div className="animate-slideInLeft delay-300">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-slate-700">
+                    <MapPin className="w-4 h-4 inline mr-1" />
+                    Location
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleUseMyLocation}
+                    disabled={locationLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Navigation className={`w-4 h-4 ${locationLoading ? 'animate-pulse' : ''}`} />
+                    {locationLoading ? 'Getting location...' : 'Use My Location'}
+                  </button>
+                </div>
+                
+                {locationError && (
+                  <p className="text-sm text-urgent-600 mb-2">{locationError}</p>
+                )}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="governorate"
+                      value={formData.governorate}
+                      onChange={handleChange}
+                      placeholder="Select or type governorate..."
+                      list="governorate-list"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
+                      autoComplete="off"
+                    />
+                    <datalist id="governorate-list">
+                      {TUNISIA_GEOGRAPHY.map((g) => (
+                        <option key={g.governorate} value={g.governorate} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="municipality"
+                      value={formData.municipality}
+                      onChange={handleChange}
+                      placeholder={formData.governorate ? "Select or type municipality..." : "Select governorate first"}
+                      list="municipality-list"
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
+                      autoComplete="off"
+                      disabled={!formData.governorate}
+                    />
+                    <datalist id="municipality-list">
+                      {municipalities.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="animate-slideInLeft delay-400">
                   <Input
@@ -253,9 +357,6 @@ export default function RegisterPage() {
                     helperText="Optional. Enter 8 digits (e.g., 20555555)"
                   />
                 </div>
-
-                {/* Role is now fixed as CITIZEN on backend for public registration.
-                    We deliberately hide any role selection here to avoid confusion and abuse. */}
               </div>
 
               <div className="animate-slideInLeft delay-500">

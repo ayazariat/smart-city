@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,7 +21,8 @@ import {
   MapPin,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { adminService, AdminUser, UserRole, UserStats, GovernorateData } from "@/services/admin.service";
+import { adminService, AdminUser, UserRole, UserStats } from "@/services/admin.service";
+import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   CITIZEN: "Citizen",
@@ -39,11 +40,11 @@ const ROLE_COLORS: Record<UserRole, string> = {
   ADMIN: "bg-red-100 text-red-700",
 };
 
-// Roles that require municipality assignment
-const ROLES_REQUIRING_MUNICIPALITY: UserRole[] = ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"];
+// Roles that can have municipality assignment
+const ROLES_REQUIRING_MUNICIPALITY: UserRole[] = ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"];
 
 /**
- * Admin User Management Page
+ * Admin User Management Page with Autocomplete
  */
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -86,17 +87,22 @@ export default function AdminUsersPage() {
     municipality: "",
   });
 
-  // Geography data
-  const [geography, setGeography] = useState<GovernorateData[]>([]);
-  const [municipalities, setMunicipalities] = useState<string[]>([]);
-  const [loadingGeography, setLoadingGeography] = useState(false);
+  // Geography data - using local TUNISIA_GEOGRAPHY for autocomplete
+  const municipalities = useMemo(() => {
+    if (!createForm.governorate) return [];
+    return getMunicipalitiesByGovernorate(createForm.governorate);
+  }, [createForm.governorate]);
+
+  const editMunicipalities = useMemo(() => {
+    if (!editForm.governorate) return [];
+    return getMunicipalitiesByGovernorate(editForm.governorate);
+  }, [editForm.governorate]);
 
   // Check admin access
   const { hydrated } = useAuthStore();
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    // Wait for auth store to hydrate before checking access
     if (!hydrated) return;
 
     setIsAuthReady(true);
@@ -110,7 +116,6 @@ export default function AdminUsersPage() {
 
   // Fetch users
   const fetchUsers = useCallback(async () => {
-    // Wait for auth store to hydrate before fetching users
     if (!hydrated || !isAuthReady) return;
 
     try {
@@ -125,7 +130,7 @@ export default function AdminUsersPage() {
       setTotal(response.pagination.total);
       setTotalPages(response.pagination.pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Échec de chargement des utilisateurs");
+      setError(err instanceof Error ? err.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
@@ -141,36 +146,19 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Fetch geography data
-  const fetchGeography = async () => {
-    try {
-      setLoadingGeography(true);
-      const geoData = await adminService.getGeography();
-      setGeography(geoData);
-    } catch (_err) {
-      // Silently handle geography fetch error
-    } finally {
-      setLoadingGeography(false);
+  useEffect(() => {
+    if (user?.role === "ADMIN") {
+      fetchUsers();
+      fetchStats();
     }
-  };
-
-  // Handle governorate change - update municipalities
-  const handleGovernorateChange = (governorate: string, formType: 'create' | 'edit') => {
-    const selectedGeo = geography.find(g => g.governorate === governorate);
-    setMunicipalities(selectedGeo?.municipalities || []);
-
-    if (formType === 'create') {
-      setCreateForm(prev => ({ ...prev, governorate, municipality: "" }));
-    } else {
-      setEditForm(prev => ({ ...prev, governorate, municipality: "" }));
-    }
-  };
+  }, [user, fetchUsers]);
 
   // Check if role requires municipality
   const requiresMunicipality = (role: UserRole) => ROLES_REQUIRING_MUNICIPALITY.includes(role);
 
   // Validate form field
-  const validateField = (field: string, value: string): string => {
+  const validateField = (field: string, value: string, formRole?: UserRole): string => {
+    const currentRole = formRole || createForm.role;
     switch (field) {
       case "fullName":
         if (!value.trim()) return "Le nom complet est requis";
@@ -189,10 +177,10 @@ export default function AdminUsersPage() {
         }
         return "";
       case "governorate":
-        if (requiresMunicipality(createForm.role) && !value) return "Le gouvernorat est requis";
+        if (requiresMunicipality(currentRole) && !value) return "Le gouvernorat est requis";
         return "";
       case "municipality":
-        if (requiresMunicipality(createForm.role) && createForm.governorate && !value) return "La municipalité est requise";
+        if (requiresMunicipality(currentRole) && value && !value) return "La municipalité est requise";
         return "";
       default:
         return "";
@@ -206,15 +194,11 @@ export default function AdminUsersPage() {
     if (createErrors[field]) {
       setCreateErrors((prev) => ({ ...prev, [field]: "" }));
     }
-  };
-
-  useEffect(() => {
-    if (user?.role === "ADMIN") {
-      fetchUsers();
-      fetchStats();
-      fetchGeography();
+    // Clear municipality when governorate changes
+    if (field === "governorate") {
+      setCreateForm(prev => ({ ...prev, municipality: "" }));
     }
-  }, [user, fetchUsers]);
+  };
 
   // Handle create user
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -228,7 +212,6 @@ export default function AdminUsersPage() {
     errors.governorate = validateField("governorate", createForm.governorate);
     errors.municipality = validateField("municipality", createForm.municipality);
 
-    // Check if there are any errors
     const hasErrors = Object.values(errors).some((error) => error !== "");
     if (hasErrors) {
       setCreateErrors(errors);
@@ -247,11 +230,9 @@ export default function AdminUsersPage() {
         municipality: "",
       });
       setCreateErrors({});
-      setMunicipalities([]);
       fetchUsers();
       fetchStats();
     } catch (err: unknown) {
-      // Normalise backend error message (apiClient may throw a string or an Error)
       let message = "";
       if (typeof err === "string") {
         message = err;
@@ -261,37 +242,25 @@ export default function AdminUsersPage() {
 
       const safeMessage = message.toLowerCase();
 
-      // Email already exists -> show error next to email field, not as a global alert
-      if (
-        safeMessage.includes("email") &&
-        (safeMessage.includes("existe déjà") || safeMessage.includes("already exists"))
-      ) {
+      if (safeMessage.includes("email") && (safeMessage.includes("existe déjà") || safeMessage.includes("already exists"))) {
         setCreateErrors((prev) => ({
           ...prev,
           email: "Un compte existe déjà avec cet email.",
         }));
-        // Ne pas afficher un message d'erreur global dans ce cas
         setError(null);
         return;
       }
 
-      // Full name already exists -> show error next to full name field
-      if (
-        safeMessage.includes("nom") &&
-        (safeMessage.includes("existe déjà") || safeMessage.includes("already exists"))
-      ) {
+      if (safeMessage.includes("nom") && (safeMessage.includes("existe déjà") || safeMessage.includes("already exists"))) {
         setCreateErrors((prev) => ({
           ...prev,
-          fullName: "Un utilisateur existe déjà avec ce nom.",
+          fullName: "A user with this name already exists.",
         }));
         setError(null);
         return;
       }
 
-      // Generic, security-friendly message for all other errors
-      setError(
-        "Impossible de créer l'utilisateur pour le moment. Veuillez réessayer ou contacter un administrateur."
-      );
+      setError("Unable to create user at the moment. Please try again or contact an administrator.");
     }
   };
 
@@ -301,7 +270,6 @@ export default function AdminUsersPage() {
     if (!selectedUser) return;
 
     try {
-      // Update basic info
       await adminService.updateUser(selectedUser.id, {
         fullName: editForm.fullName,
         phone: editForm.phone,
@@ -310,7 +278,6 @@ export default function AdminUsersPage() {
         municipality: editForm.municipality,
       });
 
-      // Update role if changed
       if (editForm.role !== selectedUser.role) {
         await adminService.updateUserRole(selectedUser.id, {
           role: editForm.role,
@@ -353,23 +320,16 @@ export default function AdminUsersPage() {
   };
 
   // Open edit modal
-  const openEditModal = (user: AdminUser) => {
-    setSelectedUser(user);
+  const openEditModal = (userItem: AdminUser) => {
+    setSelectedUser(userItem);
     setEditForm({
-      fullName: user.fullName,
-      phone: user.phone || "",
-      isActive: user.isActive,
-      role: user.role,
-      governorate: user.governorate || "",
-      municipality: user.municipality || "",
+      fullName: userItem.fullName,
+      phone: userItem.phone || "",
+      isActive: userItem.isActive,
+      role: userItem.role,
+      governorate: userItem.governorate || "",
+      municipality: userItem.municipality || "",
     });
-    // Set municipalities for existing governorate
-    if (user.governorate) {
-      const selectedGeo = geography.find(g => g.governorate === user.governorate);
-      setMunicipalities(selectedGeo?.municipalities || []);
-    } else {
-      setMunicipalities([]);
-    }
     setShowEditModal(true);
   };
 
@@ -510,17 +470,17 @@ export default function AdminUsersPage() {
           </div>
         </form>
 
-        {/* Users Table */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden">
+        {/* Users Table - Desktop View */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">User</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden md:table-cell">Rôle</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Municipalité</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Téléphone</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600 hidden lg:table-cell">Statut</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Role</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Location</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Phone</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Status</th>
                   <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">Actions</th>
                 </tr>
               </thead>
@@ -533,13 +493,13 @@ export default function AdminUsersPage() {
                         <div className="text-sm text-slate-500">{userItem.email}</div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 hidden md:table-cell">
+                    <td className="px-4 py-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
                         <Shield className="w-3 h-3 mr-1" />
                         {ROLE_LABELS[userItem.role]}
                       </span>
                     </td>
-                    <td className="px-4 py-4 hidden lg:table-cell">
+                    <td className="px-4 py-4">
                       {userItem.municipality && userItem.governorate ? (
                         <div className="flex items-center gap-1 text-slate-600">
                           <MapPin className="w-3 h-3" />
@@ -550,10 +510,10 @@ export default function AdminUsersPage() {
                         <span className="text-slate-400">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-4 hidden lg:table-cell text-slate-600">
+                    <td className="px-4 py-4 text-slate-600">
                       {userItem.phone || "-"}
                     </td>
-                    <td className="px-4 py-4 hidden lg:table-cell">
+                    <td className="px-4 py-4">
                       {userItem.isActive ? (
                         <span className="inline-flex items-center gap-1 text-success">
                           <CheckCircle className="w-4 h-4" />
@@ -625,6 +585,147 @@ export default function AdminUsersPage() {
             </div>
           )}
         </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4">
+          {users.map((userItem) => (
+            <div key={userItem.id} className="bg-white rounded-xl shadow-lg border border-slate-100 p-4">
+              {/* User Info Header */}
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <div className="font-semibold text-slate-900">{userItem.fullName}</div>
+                  <div className="text-sm text-slate-500">{userItem.email}</div>
+                </div>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
+                  <Shield className="w-3 h-3 mr-1" />
+                  {ROLE_LABELS[userItem.role]}
+                </span>
+              </div>
+
+              {/* Details Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* Location */}
+                <div>
+                  <div className="text-xs text-slate-400 mb-1">Location</div>
+                  <div className="flex items-center gap-1 text-sm text-slate-600">
+                    <MapPin className="w-3 h-3" />
+                    {userItem.municipality && userItem.governorate ? (
+                      <span>{userItem.municipality}, {userItem.governorate}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <div className="text-xs text-slate-400 mb-1">Phone</div>
+                  <div className="text-sm text-slate-600">
+                    {userItem.phone || "-"}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="col-span-2">
+                  <div className="text-xs text-slate-400 mb-1">Status</div>
+                  {userItem.isActive ? (
+                    <span className="inline-flex items-center gap-1 text-success text-sm">
+                      <CheckCircle className="w-4 h-4" />
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-slate-500 text-sm">
+                      <XCircle className="w-4 h-4" />
+                      Inactive
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => openEditModal(userItem)}
+                  className="flex-1 flex items-center justify-center gap-2 p-2 text-slate-600 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors text-sm font-medium"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleToggleActive(userItem.id, !userItem.isActive)}
+                  className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg transition-colors text-sm font-medium ${userItem.isActive
+                    ? "text-attention hover:bg-attention/10"
+                    : "text-success hover:bg-success/10"
+                    }`}
+                >
+                  {userItem.isActive ? (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      Deactivate
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Activate
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleDeleteUser(userItem.id)}
+                  className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Delete user"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Mobile Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-white rounded-xl shadow-lg border border-slate-100">
+              <div className="text-sm text-slate-600">
+                {((page - 1) * 10 + 1)}-{Math.min(page * 10, total)} of {total}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Empty State */}
+        {users.length === 0 && !loading && (
+          <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-8 text-center">
+            <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">No users found</h3>
+            <p className="text-slate-600 mb-4">
+              {search ? "Try adjusting your search criteria" : "Get started by adding a new user"}
+            </p>
+            {!search && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Add New User
+              </button>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Create User Modal */}
@@ -667,7 +768,7 @@ export default function AdminUsersPage() {
               </div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                 <p className="text-sm text-blue-700">
-                  Un lien d&apos;activation sera envoyé à l&apos;utilisateur par email pour définir son mot de passe.
+                  An activation link will be sent to the user by email to set their password.
                 </p>
               </div>
               <div>
@@ -677,7 +778,6 @@ export default function AdminUsersPage() {
                   onChange={(e) => {
                     const newRole = e.target.value as UserRole;
                     setCreateForm({ ...createForm, role: newRole, governorate: "", municipality: "" });
-                    setMunicipalities([]);
                   }}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 >
@@ -688,53 +788,51 @@ export default function AdminUsersPage() {
                   ))}
                 </select>
               </div>
-              {/* Governorate Selection - Only for roles requiring municipality */}
+              {/* Governorate with Autocomplete */}
               {requiresMunicipality(createForm.role) && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     <MapPin className="w-4 h-4 inline mr-1" />
                     Gouvernorat *
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="create-governorate-list"
                     value={createForm.governorate}
-                    onChange={(e) => {
-                      handleCreateFormChange("governorate", e.target.value);
-                      handleGovernorateChange(e.target.value, 'create');
-                    }}
-                    disabled={loadingGeography}
-                    required
-                    className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-slate-100 ${createErrors.governorate ? "border-red-500" : "border-slate-200"}`}
-                  >
-                    <option value="">Sélectionner un gouvernorat</option>
-                    {geography.map((geo) => (
-                      <option key={geo.governorate} value={geo.governorate}>
-                        {geo.governorate}
-                      </option>
+                    onChange={(e) => handleCreateFormChange("governorate", e.target.value)}
+                    placeholder="Type to search..."
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.governorate ? "border-red-500" : "border-slate-200"}`}
+                    autoComplete="off"
+                  />
+                  <datalist id="create-governorate-list">
+                    {TUNISIA_GEOGRAPHY.map((g) => (
+                      <option key={g.governorate} value={g.governorate} />
                     ))}
-                  </select>
+                  </datalist>
                   {createErrors.governorate && <p className="text-red-500 text-xs mt-1">{createErrors.governorate}</p>}
                 </div>
               )}
-              {/* Municipality Selection - Only for roles requiring municipality */}
+              {/* Municipality with Autocomplete */}
               {requiresMunicipality(createForm.role) && createForm.governorate && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     <MapPin className="w-4 h-4 inline mr-1" />
                     Municipalité *
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="create-municipality-list"
                     value={createForm.municipality}
                     onChange={(e) => handleCreateFormChange("municipality", e.target.value)}
-                    required
+                    placeholder="Type to search..."
                     className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.municipality ? "border-red-500" : "border-slate-200"}`}
-                  >
-                    <option value="">Sélectionner une municipalité</option>
+                    autoComplete="off"
+                  />
+                  <datalist id="create-municipality-list">
                     {municipalities.map((mun) => (
-                      <option key={mun} value={mun}>
-                        {mun}
-                      </option>
+                      <option key={mun} value={mun} />
                     ))}
-                  </select>
+                  </datalist>
                   {createErrors.municipality && <p className="text-red-500 text-xs mt-1">{createErrors.municipality}</p>}
                 </div>
               )}
@@ -812,7 +910,6 @@ export default function AdminUsersPage() {
                   onChange={(e) => {
                     const newRole = e.target.value as UserRole;
                     setEditForm({ ...editForm, role: newRole, governorate: "", municipality: "" });
-                    setMunicipalities([]);
                   }}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 >
@@ -823,47 +920,50 @@ export default function AdminUsersPage() {
                   ))}
                 </select>
               </div>
-              {/* Governorate Selection - Only for roles requiring municipality */}
+              {/* Governorate with Autocomplete */}
               {requiresMunicipality(editForm.role) && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     <MapPin className="w-4 h-4 inline mr-1" />
                     Gouvernorat
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="edit-governorate-list"
                     value={editForm.governorate}
-                    onChange={(e) => handleGovernorateChange(e.target.value, 'edit')}
-                    disabled={loadingGeography}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-slate-100"
-                  >
-                    <option value="">Sélectionner un gouvernorat</option>
-                    {geography.map((geo) => (
-                      <option key={geo.governorate} value={geo.governorate}>
-                        {geo.governorate}
-                      </option>
+                    onChange={(e) => setEditForm({ ...editForm, governorate: e.target.value, municipality: "" })}
+                    placeholder="Type to search..."
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    autoComplete="off"
+                  />
+                  <datalist id="edit-governorate-list">
+                    {TUNISIA_GEOGRAPHY.map((g) => (
+                      <option key={g.governorate} value={g.governorate} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
               )}
-              {/* Municipality Selection - Only for roles requiring municipality */}
+              {/* Municipality with Autocomplete */}
               {requiresMunicipality(editForm.role) && editForm.governorate && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     <MapPin className="w-4 h-4 inline mr-1" />
                     Municipalité
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="edit-municipality-list"
                     value={editForm.municipality}
                     onChange={(e) => setEditForm({ ...editForm, municipality: e.target.value })}
+                    placeholder="Type to search..."
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Sélectionner une municipalité</option>
-                    {municipalities.map((mun) => (
-                      <option key={mun} value={mun}>
-                        {mun}
-                      </option>
+                    autoComplete="off"
+                  />
+                  <datalist id="edit-municipality-list">
+                    {editMunicipalities.map((mun) => (
+                      <option key={mun} value={mun} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
               )}
               <div>
