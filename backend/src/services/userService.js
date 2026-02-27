@@ -119,9 +119,10 @@ class UserService {
     const query = {};
     
     if (search) {
+      const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
-        { fullName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { fullName: { $regex: safe, $options: 'i' } },
+        { email: { $regex: safe, $options: 'i' } },
       ];
     }
 

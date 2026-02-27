@@ -1,6 +1,7 @@
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
+const Department = require("../models/Department");
 
 class ComplaintController {
   // Create new complaint (citizen)
@@ -41,7 +42,7 @@ class ComplaintController {
         longitude: longitude || null,
         images: images || [],
         status: "PENDING",
-        citizen: userId,
+        createdBy: userId,
       });
 
       await complaint.save();
@@ -79,7 +80,7 @@ class ComplaintController {
       const status = req.query.status;
       const category = req.query.category;
 
-      const query = { citizen: userId };
+      const query = { createdBy: userId };
       
       if (status) {
         query.status = status;
@@ -116,7 +117,7 @@ class ComplaintController {
     }
   }
 
-  // Get single complaint by ID
+  // Get single complaint by ID (detail view for BL-16)
   async getComplaintById(req, res) {
     try {
       const { id } = req.params;
@@ -124,29 +125,119 @@ class ComplaintController {
       const userRole = req.user.role;
 
       const complaint = await Complaint.findById(id)
-        .populate("citizen", "fullName email phone")
-        .populate("assignedTo", "fullName email")
-        .populate("comments.author", "fullName");
+        .populate("createdBy", "fullName email phone")
+        .populate("assignedTeam", "fullName email")
+        .populate("assignedDepartment", "name")
+        .lean();
 
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
 
-      // Check access - only owner or admin/agent can view
-      const isOwner = complaint.citizen._id.toString() === userId;
+      // Check if user is owner - also check direct comparison
+      const citizenId = complaint.createdBy?._id?.toString() || complaint.createdBy?.toString();
+      const currentUserId = req.user.userId?.toString();
+      const isOwner = citizenId === currentUserId;
       const isAdminOrAgent = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
+      const isTechnician = userRole === "TECHNICIAN" && complaint.assignedTo?.toString() === currentUserId;
 
-      if (!isOwner && !isAdminOrAgent) {
+      // For CITIZEN role - can only see their own complaints
+      if (userRole === "CITIZEN" && !isOwner) {
+        return res.status(403).json({ success: false, message: "Access denied - You can only view your own complaints" });
+      }
+
+      // For MUNICIPAL_AGENT - check municipality access
+      if (userRole === "MUNICIPAL_AGENT") {
+        const user = await User.findById(userId)
+          .populate('municipality')
+          .select('municipality')
+          .lean();
+        
+        const userMunicipalityId = user?.municipality?._id?.toString();
+        const complaintMunicipalityId = complaint.municipality?._id?.toString();
+        
+        // Check if user has municipality assigned
+        if (userMunicipalityId && complaintMunicipalityId) {
+          if (userMunicipalityId !== complaintMunicipalityId) {
+            return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your municipality" });
+          }
+        } else if (userMunicipalityId && !complaintMunicipalityId) {
+          // User has municipality but complaint doesn't - check municipalityName for backward compatibility
+          const complaintMunicipalityName = complaint.municipalityName || complaint.location?.municipality;
+          const userMunicipality = user.municipality;
+          if (userMunicipality.name !== complaintMunicipalityName) {
+            return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your municipality" });
+          }
+        }
+      }
+
+      // For DEPARTMENT_MANAGER - check department access
+      if (userRole === "DEPARTMENT_MANAGER") {
+        const myDepartment = await Department.findOne({ 
+          responsable: userId 
+        }).select('_id').lean();
+        
+        if (myDepartment) {
+          const complaintDepartment = complaint.assignedDepartment?._id?.toString();
+          if (complaintDepartment !== myDepartment._id.toString()) {
+            return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your department" });
+          }
+        } else {
+          return res.status(403).json({ success: false, message: "No department assigned" });
+        }
+      }
+
+      // For non-admin/agent/technician roles - check ownership
+      if (!isOwner && !isAdminOrAgent && !isTechnician) {
         return res.status(403).json({ success: false, message: "Access denied" });
       }
 
+      // Format citizen info - hide email/phone if anonymous
+      let citizenInfo = null;
+      if (!complaint.isAnonymous && complaint.createdBy) {
+        const citizen = complaint.createdBy;
+        // Include contact info for: agents/managers/admin, OR the owner viewing their own complaint
+        const showContactInfo = isAdminOrAgent || isOwner;
+        citizenInfo = {
+          _id: citizen._id,
+          fullName: citizen.fullName,
+          ...(showContactInfo && { email: citizen.email, phone: citizen.phone })
+        };
+      }
+
+      // Format response for BL-16 complaint detail view
+      const response = {
+        _id: complaint._id,
+        title: complaint.title,
+        category: complaint.category,
+        description: complaint.description,
+        location: complaint.location,
+        media: complaint.media || [],
+        urgency: complaint.urgency || 3,
+        priorityScore: complaint.priorityScore || 0,
+        status: complaint.status,
+        createdAt: complaint.createdAt,
+        updatedAt: complaint.updatedAt,
+        isAnonymous: complaint.isAnonymous,
+        citizen: citizenInfo,
+        department: complaint.assignedDepartment,
+        assignedTo: complaint.assignedTo,
+        comments: complaint.comments,
+        rejectionReason: complaint.rejectionReason,
+        resolvedAt: complaint.resolvedAt,
+      };
+
       res.json({
         success: true,
-        data: complaint,
+        data: response,
       });
     } catch (error) {
       console.error("Error fetching complaint:", error);
-      res.status(500).json({ success: false, message: "Failed to fetch complaint" });
+      // Provide more specific error messages
+      if (error.name === "CastError") {
+        return res.status(400).json({ success: false, message: "Invalid complaint ID" });
+      }
+      res.status(500).json({ success: false, message: "Error loading complaint" });
     }
   }
 
@@ -163,15 +254,48 @@ class ComplaintController {
 
       const query = {};
 
+      // Role-based filtering
+      if (req.user.role === "DEPARTMENT_MANAGER") {
+        // Find the department this manager is responsible for
+        const myDepartment = await Department.findOne({ 
+          responsable: req.user.userId 
+        }).select('_id').lean();
+        
+        if (myDepartment) {
+          // Filter by assigned department AND only validated complaints
+          query.assignedDepartment = myDepartment._id;
+          query.status = { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
+        } else {
+          // Manager has no department assigned - return empty
+          query._id = null;
+        }
+      } else if (req.user.role === "MUNICIPAL_AGENT") {
+        // Municipal agents see all complaints in their municipality
+        const user = await User.findById(req.user.userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        
+        if (user?.municipality?._id) {
+          query.municipality = user.municipality._id;
+        } else if (user?.governorate) {
+          query.governorate = user.governorate;
+        }
+      } else if (req.user.role === "TECHNICIAN") {
+        // Technicians see only complaints assigned to them
+        query.assignedTo = req.user.userId;
+      }
+
       if (status) query.status = status;
       if (category) query.category = category;
-      if (governorate) query.governorate = governorate;
-      if (municipality) query.municipality = municipality;
+      if (governorate && req.user.role === "ADMIN") query.governorate = governorate; // Admin can filter by governorate
+      if (municipality && req.user.role === "ADMIN") query.municipality = municipality; // Admin can filter by municipality
       
       if (search) {
+        const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { title: { $regex: search, $options: "i" } },
-          { description: { $regex: search, $options: "i" } },
+          { title: { $regex: safe, $options: "i" } },
+          { description: { $regex: safe, $options: "i" } },
         ];
       }
 
@@ -179,8 +303,10 @@ class ComplaintController {
 
       const [complaints, total] = await Promise.all([
         Complaint.find(query)
-          .populate("citizen", "fullName email phone governorate municipality")
+          .populate("createdBy", "fullName email phone governorate municipality")
           .populate("assignedTo", "fullName email")
+          .populate("assignedTeam", "fullName email")
+          .populate("municipality", "name governorate")
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit),
@@ -205,14 +331,16 @@ class ComplaintController {
     }
   }
 
-  // Update complaint status (admin/agent)
+  // Update complaint status (with role-based permissions - BL-21)
   async updateStatus(req, res) {
     try {
       const { id } = req.params;
-      const { status, rejectionReason } = req.body;
+      const { status, rejectionReason, notes } = req.body;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
 
-      // Validate status
-      const validStatuses = ["PENDING", "IN_PROGRESS", "RESOLVED", "REJECTED"];
+      // Validate status using the new lifecycle
+      const validStatuses = ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED"];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ success: false, message: "Invalid status" });
       }
@@ -221,6 +349,30 @@ class ComplaintController {
 
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      // authorization: only ADMIN or scoped MUNICIPAL_AGENT/DEPARTMENT_MANAGER
+      if (userRole === "ADMIN") {
+        // allowed
+      } else if (userRole === "MUNICIPAL_AGENT") {
+        const user = await User.findById(userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        const userMunicipalityId = user?.municipality?._id?.toString();
+        const complaintMunicipalityId = complaint.municipality?._id?.toString();
+        if (userMunicipalityId) {
+          if (complaintMunicipalityId && userMunicipalityId !== complaintMunicipalityId) {
+            return res.status(403).json({ success: false, message: "Forbidden" });
+          }
+        }
+      } else if (userRole === "DEPARTMENT_MANAGER") {
+        const myDepartment = await Department.findOne({ responsable: userId }).select('_id').lean();
+        if (!myDepartment || complaint.assignedDepartment?.toString() !== myDepartment._id.toString()) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else {
+        return res.status(403).json({ success: false, message: "Forbidden" });
       }
 
       // Update status
@@ -239,7 +391,7 @@ class ComplaintController {
       // Notify citizen
       try {
         await Notification.create({
-          user: complaint.citizen,
+          user: complaint.createdBy,
           title: "Complaint Status Updated",
           message: `Your complaint "${complaint.title}" has been ${status.toLowerCase()}`,
           type: "COMPLAINT",
@@ -265,11 +417,35 @@ class ComplaintController {
     try {
       const { id } = req.params;
       const { assignedToId } = req.body;
+      const userRole = req.user.role;
+      const userId = req.user.userId;
 
       const complaint = await Complaint.findById(id);
 
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      // authorization same as updateStatus
+      if (userRole === "ADMIN") {
+        // ok
+      } else if (userRole === "MUNICIPAL_AGENT") {
+        const user = await User.findById(userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        const userMunicipalityId = user?.municipality?._id?.toString();
+        const complaintMunicipalityId = complaint.municipality?._id?.toString();
+        if (userMunicipalityId && complaintMunicipalityId && userMunicipalityId !== complaintMunicipalityId) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else if (userRole === "DEPARTMENT_MANAGER") {
+        const myDepartment = await Department.findOne({ responsable: userId }).select('_id').lean();
+        if (!myDepartment || complaint.assignedDepartment?.toString() !== myDepartment._id.toString()) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else {
+        return res.status(403).json({ success: false, message: "Forbidden" });
       }
 
       // Verify technician exists
@@ -279,7 +455,9 @@ class ComplaintController {
       }
 
       complaint.assignedTo = assignedToId;
-      complaint.status = "IN_PROGRESS";
+      if (complaint.status !== "RESOLVED") {
+        complaint.status = "IN_PROGRESS";
+      }
       await complaint.save();
 
       // Notify technician
@@ -306,12 +484,138 @@ class ComplaintController {
     }
   }
 
+  // Assign complaint to department
+  async assignDepartment(req, res) {
+    try {
+      const { id } = req.params;
+      const { departmentId } = req.body;
+      const userRole = req.user.role;
+      const userId = req.user.userId;
+
+      const complaint = await Complaint.findById(id);
+
+      if (!complaint) {
+        return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      // Authorization same as updateStatus
+      if (userRole === "ADMIN") {
+        // ok
+      } else if (userRole === "MUNICIPAL_AGENT") {
+        const user = await User.findById(userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        const userMunicipalityId = user?.municipality?._id?.toString();
+        const complaintMunicipalityId = complaint.municipality?._id?.toString();
+        if (userMunicipalityId && complaintMunicipalityId && userMunicipalityId !== complaintMunicipalityId) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else if (userRole === "DEPARTMENT_MANAGER") {
+        const myDepartment = await Department.findOne({ responsable: userId }).select('_id').lean();
+        if (!myDepartment || departmentId !== myDepartment._id.toString()) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+
+      // Verify department exists
+      const department = await Department.findById(departmentId);
+      if (!department) {
+        return res.status(400).json({ success: false, message: "Invalid department" });
+      }
+
+      complaint.assignedDepartment = departmentId;
+      // Auto-validate if not already validated
+      if (complaint.status === "SUBMITTED") {
+        complaint.status = "VALIDATED";
+      }
+      await complaint.save();
+
+      res.json({
+        success: true,
+        message: "Department assigned successfully",
+        data: complaint,
+      });
+    } catch (error) {
+      console.error("Error assigning department:", error);
+      res.status(500).json({ success: false, message: "Failed to assign department" });
+    }
+  }
+
+  // Update complaint priority/urgency
+  async updatePriority(req, res) {
+    try {
+      const { id } = req.params;
+      const { urgency, priorityScore } = req.body;
+      const userRole = req.user.role;
+      const userId = req.user.userId;
+
+      // Validate urgency
+      const validUrgencies = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+      if (urgency && !validUrgencies.includes(urgency)) {
+        return res.status(400).json({ success: false, message: "Invalid urgency level" });
+      }
+
+      const complaint = await Complaint.findById(id);
+
+      if (!complaint) {
+        return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      // Authorization same as updateStatus
+      if (userRole === "ADMIN") {
+        // ok
+      } else if (userRole === "MUNICIPAL_AGENT") {
+        const user = await User.findById(userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        const userMunicipalityId = user?.municipality?._id?.toString();
+        const complaintMunicipalityId = complaint.municipality?._id?.toString();
+        if (userMunicipalityId && complaintMunicipalityId && userMunicipalityId !== complaintMunicipalityId) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else if (userRole === "DEPARTMENT_MANAGER") {
+        const myDepartment = await Department.findOne({ responsable: userId }).select('_id').lean();
+        if (!myDepartment || complaint.assignedDepartment?.toString() !== myDepartment._id.toString()) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
+      } else {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+
+      if (urgency) {
+        complaint.urgency = urgency;
+      }
+      if (priorityScore !== undefined) {
+        complaint.priorityScore = priorityScore;
+      } else if (urgency) {
+        // Calculate priority score based on urgency
+        const priorityMap = { LOW: 1, MEDIUM: 5, HIGH: 8, URGENT: 10 };
+        complaint.priorityScore = priorityMap[urgency] || 5;
+      }
+      await complaint.save();
+
+      res.json({
+        success: true,
+        message: "Priority updated successfully",
+        data: complaint,
+      });
+    } catch (error) {
+      console.error("Error updating priority:", error);
+      res.status(500).json({ success: false, message: "Failed to update priority" });
+    }
+  }
+
   // Add comment to complaint
   async addComment(req, res) {
     try {
       const { id } = req.params;
       const { text } = req.body;
       const userId = req.user.userId;
+      const userRole = req.user.role;
 
       if (!text || text.trim().length === 0) {
         return res.status(400).json({ success: false, message: "Comment text is required" });
@@ -321,6 +625,14 @@ class ComplaintController {
 
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      // authorization: only owner or admin/agents or assigned technician
+      const isOwner = complaint.createdBy?.toString() === userId;
+      const isAdminOrAgent = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
+      const isTechnician = userRole === "TECHNICIAN" && complaint.assignedTo?.toString() === userId;
+      if (!isOwner && !isAdminOrAgent && !isTechnician) {
+        return res.status(403).json({ success: false, message: "Forbidden" });
       }
 
       complaint.comments.push({
@@ -353,10 +665,26 @@ class ComplaintController {
     try {
       const query = {};
 
-      // Agents/managers only see their governorate's complaints
-      if (req.user.role === "MUNICIPAL_AGENT" || req.user.role === "DEPARTMENT_MANAGER") {
-        const user = await User.findById(req.user.userId);
-        if (user.governorate) {
+      // Role-based filtering
+      if (req.user.role === "DEPARTMENT_MANAGER") {
+        // Find the department this manager is responsible for
+        const myDepartment = await Department.findOne({ 
+          responsable: req.user.userId 
+        }).select('_id').lean();
+        
+        if (myDepartment) {
+          query.assignedDepartment = myDepartment._id;
+        } else {
+          query._id = null;
+        }
+      } else if (req.user.role === "MUNICIPAL_AGENT") {
+        const user = await User.findById(req.user.userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        if (user?.municipality?._id) {
+          query.municipality = user.municipality._id;
+        } else if (user?.governorate) {
           query.governorate = user.governorate;
         }
       }
@@ -372,7 +700,7 @@ class ComplaintController {
           { $group: { _id: "$category", count: { $sum: 1 } } }
         ]),
         Complaint.aggregate([
-          { $match: { governorate: { $ne: "" } } },
+          { $match: { ...query, governorate: { $ne: "" } } },
           { $group: { _id: "$governorate", count: { $sum: 1 } } },
           { $sort: { count: -1 } }
         ]),
@@ -405,15 +733,44 @@ class ComplaintController {
   // Get available technicians (for assignment)
   async getTechnicians(req, res) {
     try {
-      const { governorate } = req.query;
+      const { governorate, department } = req.query;
 
       const query = { role: "TECHNICIAN", isActive: true };
-      if (governorate) {
+      
+      // Filter by department if provided (without using inheritance)
+      if (department) {
+        query.department = department;
+      }
+      
+      // Role-based filtering
+      if (req.user.role === "DEPARTMENT_MANAGER") {
+        // Get technicians in the manager's department
+        const myDepartment = await Department.findOne({ 
+          responsable: req.user.userId 
+        }).select('_id').lean();
+        
+        if (myDepartment) {
+          // Managers can only see technicians in their department
+          query.department = myDepartment._id;
+        }
+      } else if (req.user.role === "MUNICIPAL_AGENT") {
+        const user = await User.findById(req.user.userId)
+          .populate('municipality')
+          .select('municipality governorate')
+          .lean();
+        if (user?.municipality?._id) {
+          query.municipality = user.municipality._id;
+        } else if (user?.governorate) {
+          query.governorate = user.governorate;
+        }
+      } else if (governorate) {
         query.governorate = governorate;
       }
 
       const technicians = await User.find(query)
-        .select("fullName email governorate municipality");
+        .populate('department', 'name')
+        .populate('municipality', 'name governorate')
+        .select("fullName email governorate municipality department");
 
       res.json({
         success: true,

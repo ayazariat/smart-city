@@ -60,7 +60,7 @@ export const Alert: React.FC<AlertProps> = ({
           <button
             onClick={onClose}
             className="text-current opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
-            aria-label="Fermer"
+            aria-label="Close"
           >
             <XCircle size={18} />
           </button>

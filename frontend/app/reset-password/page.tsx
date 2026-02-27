@@ -99,12 +99,12 @@ export default function ResetPasswordPage() {
                   <CheckCircle className="w-8 h-8 text-success" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {isSetup ? "Account activated!" : "Password reset!"}
+                  {isSetup ? "Account Activated!" : "Password Reset!"}
                 </h1>
                 <p className="text-slate-600">
                   {isSetup 
-                    ? "Votre mot de passe a été défini avec succès. Vous pouvez maintenant vous connecter."
-                    : "Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter."}
+                    ? "Your password has been set successfully. You can now sign in."
+                    : "Your password has been reset successfully. You can now sign in."}
                 </p>
               </div>
 
@@ -114,7 +114,7 @@ export default function ResetPasswordPage() {
                 size="lg"
                 icon={<Sparkles className="w-5 h-5" />}
               >
-                Aller à la connexion
+                Go to Login
               </Button>
             </div>
           </div>
@@ -135,12 +135,12 @@ export default function ResetPasswordPage() {
                   <AlertCircle className="w-8 h-8 text-red-500" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {isSetup ? "Lien d'activation invalide" : "Lien de réinitialisation invalide"}
+                  {isSetup ? "Invalid Activation Link" : "Invalid Reset Link"}
                 </h1>
                 <p className="text-slate-600">
                   {isSetup 
-                    ? "Ce lien d'activation est invalide ou a expiré."
-                    : "Ce lien de réinitialisation est invalide ou a expiré. Veuillez en demander un nouveau."}
+                    ? "This activation link is invalid or has expired."
+                    : "This reset link is invalid or has expired. Please request a new one."}
                 </p>
               </div>
 
@@ -181,12 +181,12 @@ export default function ResetPasswordPage() {
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              {isSetup ? "Définir votre mot de passe" : "Nouveau mot de passe"}
+              {isSetup ? "Set Your Password" : "New Password"}
             </h1>
             <p className="text-slate-600">
               {isSetup 
-                ? "Créez un mot de passe sécurisé pour activer votre compte."
-                : "Votre mot de passe doit être différent des mots de passe utilisés précédemment."}
+                ? "Create a secure password to activate your account."
+                : "Your password must be different from previously used passwords."}
             </p>
           </div>
 
@@ -207,7 +207,7 @@ export default function ResetPasswordPage() {
               <div className="animate-slideInLeft delay-300">
                 <div className="relative">
                   <Input
-                    label={isSetup ? "Mot de passe" : "Nouveau mot de passe"}
+                    label={isSetup ? "Password" : "New Password"}
                     type={showPassword ? "text" : "password"}
                     name="password"
                     value={password}
@@ -218,7 +218,7 @@ export default function ResetPasswordPage() {
                       }
                     }}
                     error={validationErrors.password}
-                    placeholder="Entrer le mot de passe"
+                    placeholder="Enter password"
                     icon={<Lock size={18} />}
                     required
                   />
@@ -231,14 +231,14 @@ export default function ResetPasswordPage() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Doit contenir majuscules, minuscules, chiffres et caractères spéciaux
+                  Must contain uppercase, lowercase, numbers and special characters
                 </p>
               </div>
 
               <div className="animate-slideInLeft delay-400">
                 <div className="relative">
                   <Input
-                    label={isSetup ? "Confirmer le mot de passe" : "Confirmer le nouveau mot de passe"}
+                    label={isSetup ? "Confirm Password" : "Confirm New Password"}
                     type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
                     value={confirmPassword}
@@ -272,7 +272,7 @@ export default function ResetPasswordPage() {
                   className="group"
                   icon={<Lock className="w-5 h-5" />}
                 >
-                  {isSetup ? "Activer le compte" : "Réinitialiser le mot de passe"}
+                  {isSetup ? "Activate Account" : "Reset Password"}
                 </Button>
               </div>
             </form>
@@ -283,7 +283,7 @@ export default function ResetPasswordPage() {
                 className="flex items-center justify-center gap-2 text-slate-600 hover:text-slate-900 font-medium transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Retour à la connexion
+                Back to Login
               </Link>
             </div>
           </div>

@@ -41,7 +41,7 @@ class ComplaintRepository {
   }
 
   async update(id, updateData) {
-    return await Complaint.findByIdAndUpdate(id, updateData, { new: true });
+    return await Complaint.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: 'query' });
   }
 
   async delete(id) {

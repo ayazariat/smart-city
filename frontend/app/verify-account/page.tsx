@@ -33,8 +33,9 @@ function VerifyAccountContent() {
     setErrorMessage(null);
 
     try {
+      const params = new URLSearchParams({ token: magicToken!, userId: magicUserId! });
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/verify-magic-link?token=${magicToken}&userId=${magicUserId}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/verify-magic-link?${params.toString()}`,
         { method: 'GET' }
       );
 
@@ -130,7 +131,7 @@ function VerifyAccountContent() {
                       className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-semibold"
                     >
                       <ArrowLeft className="w-4 h-4" />
-                      Retour à la page de connexion
+                      Back to login
                     </Link>
                   </div>
                 </>
@@ -210,7 +211,7 @@ function VerifyAccountLoading() {
     <div className="min-h-screen flex items-center justify-center bg-secondary-100">
       <div className="flex flex-col items-center gap-3">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-slate-600">Chargement...</p>
+        <p className="text-slate-600">Loading...</p>
       </div>
     </div>
   );

@@ -69,7 +69,7 @@ export const TUNISIA_GEOGRAPHY: GovernorateData[] = [
   },
   {
     governorate: "Nabeul",
-    municipalities: ["Nabeul", "Hammamet", "Kelibia", "Menzel Temime", "Dar Chaâbane", "Beni Khiar", "Sousse", "Kairouan", "Sidi Thabet"]
+    municipalities: ["Nabeul", "Hammamet", "Kelibia", "Menzel Temime", "Dar Chaâbane", "Beni Khiar"]
   },
   {
     governorate: "Sfax",

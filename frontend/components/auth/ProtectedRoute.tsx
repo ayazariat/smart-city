@@ -88,7 +88,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     // Small delay to allow zustand persistence to hydrate
     const timer = setTimeout(checkAuth, 50);
     return () => clearTimeout(timer);
-  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles, hydrated]);
+  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles, hydrated, refreshToken]);
 
   // Show loading while waiting for hydration
   if (!hydrated) {
@@ -96,19 +96,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       <div className="min-h-screen flex items-center justify-center bg-secondary-100">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">Chargement...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading while waiting for hydration
-  if (!hydrated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">Chargement...</p>
+          <p className="text-slate-600">Verifying session...</p>
         </div>
       </div>
     );

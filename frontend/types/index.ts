@@ -6,6 +6,7 @@ export interface User {
   phone?: string;
   passwordLastChanged?: string;
   createdAt?: string;
+  department?: { _id: string; name: string } | null;
 }
 
 export interface RegisterData {
@@ -54,6 +55,7 @@ export interface ComplaintLocation {
   address?: string;
   commune?: string;
   governorate?: string;
+  municipality?: string;
 }
 
 export interface ComplaintMedia {
@@ -62,7 +64,8 @@ export interface ComplaintMedia {
 }
 
 export interface Complaint {
-  id: string;
+  _id?: string;
+  id?: string;
   title: string;
   description: string;
   category: ComplaintCategory;
@@ -70,10 +73,22 @@ export interface Complaint {
   priorityScore: number;
   urgency: ComplaintUrgency;
   location: ComplaintLocation;
+  municipality?: string;
   media: ComplaintMedia[];
-  createdBy: string;
+  createdBy: string | { _id: string; fullName: string; email: string; phone?: string };
+  citizen?: { _id: string; fullName: string; email: string; phone?: string } | null;
+  department?: { _id: string; name: string } | null;
+  assignedTo?: { _id: string; fullName: string; email: string };
+  comments?: Array<{
+    _id: string;
+    text: string;
+    author: { _id: string; fullName: string };
+    createdAt: string;
+  }>;
   isAnonymous?: boolean;
   keywords?: string[];
+  rejectionReason?: string;
+  resolvedAt?: string;
   assignedDepartment?: {
     _id: string;
     name: string;
@@ -97,4 +112,8 @@ export interface CreateComplaintData {
   media?: ComplaintMedia[];
   isAnonymous?: boolean;
   ownerName?: string;
-}
+  // optional contact phone; backend may ignore if not supported
+  phone?: string;
+  // combined incident datetime (ISO string)
+  incidentDateTime?: string;
+}  

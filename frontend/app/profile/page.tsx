@@ -287,6 +287,7 @@ function ProfilePage() {
             <div className="flex items-center gap-3">
               <Link
                 href="/dashboard"
+                aria-label="Back to dashboard"
                 className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
               >
                 <ArrowLeft className="w-5 h-5" />

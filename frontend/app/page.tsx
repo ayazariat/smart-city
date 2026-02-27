@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, ShieldCheck, Sparkles } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -17,12 +18,20 @@ import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptcha
  */
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isLoading, error, user } = useAuthStore();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [localError, setLocalError] = useState("");
+
+  // Check for expired session parameter
+  const expiredParam = searchParams?.get("expired");
+  const showExpiredMessage = expiredParam === "true";
+
+  // Combined error message
+  const displayError = localError || (showExpiredMessage ? "Your session has expired. Please log in again." : "");
 
   // Redirect if already logged in
   useEffect(() => {
@@ -99,10 +108,10 @@ export default function LoginPage() {
 
           {/* Form Card */}
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
-            {(error || localError) && (
+            {(error || displayError) && (
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setLocalError("")}>
-                  {error || localError}
+                  {error || displayError}
                 </Alert>
               </div>
             )}

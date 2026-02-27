@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -43,6 +43,9 @@ const ROLE_COLORS: Record<UserRole, string> = {
 // Roles that can have municipality assignment
 const ROLES_REQUIRING_MUNICIPALITY: UserRole[] = ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"];
 
+// Roles that can have department assignment
+const ROLES_REQUIRING_DEPARTMENT: UserRole[] = ["DEPARTMENT_MANAGER", "TECHNICIAN"];
+
 /**
  * Admin User Management Page with Autocomplete
  */
@@ -54,6 +57,7 @@ export default function AdminUsersPage() {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -63,9 +67,26 @@ export default function AdminUsersPage() {
   // Search
   const [search, setSearch] = useState("");
 
+  // Departments
+  const [departments, setDepartments] = useState<Array<{_id: string; name: string}>>([]);
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // track timeout IDs so we can clear on unmount
+  const timeoutsRef = useRef<number[]>([]);
+
+  const clearTimeouts = () => {
+    timeoutsRef.current.forEach((id) => clearTimeout(id));
+    timeoutsRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => {
+      clearTimeouts();
+    };
+  }, []);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
 
   // Form states
@@ -76,6 +97,7 @@ export default function AdminUsersPage() {
     phone: "",
     governorate: "",
     municipality: "",
+    department: "",
   });
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
   const [editForm, setEditForm] = useState({
@@ -85,6 +107,7 @@ export default function AdminUsersPage() {
     role: "CITIZEN" as UserRole,
     governorate: "",
     municipality: "",
+    department: "",
   });
 
   // Geography data - using local TUNISIA_GEOGRAPHY for autocomplete
@@ -146,15 +169,29 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Fetch departments
+  const fetchDepartments = async () => {
+    try {
+      const depts = await adminService.getDepartments();
+      setDepartments(depts);
+    } catch (_err) {
+      // Silently handle departments fetch error
+    }
+  };
+
   useEffect(() => {
     if (user?.role === "ADMIN") {
       fetchUsers();
       fetchStats();
+      fetchDepartments();
     }
   }, [user, fetchUsers]);
 
   // Check if role requires municipality
   const requiresMunicipality = (role: UserRole) => ROLES_REQUIRING_MUNICIPALITY.includes(role);
+
+  // Check if role requires department
+  const requiresDepartment = (role: UserRole) => ROLES_REQUIRING_DEPARTMENT.includes(role);
 
   // Validate form field
   const validateField = (field: string, value: string, formRole?: UserRole): string => {
@@ -177,10 +214,13 @@ export default function AdminUsersPage() {
         }
         return "";
       case "governorate":
-        if (requiresMunicipality(currentRole) && !value) return "Le gouvernorat est requis";
+        if (requiresMunicipality(currentRole) && !value) return "Governorate is required";
         return "";
       case "municipality":
-        if (requiresMunicipality(currentRole) && value && !value) return "La municipalité est requise";
+        if (requiresMunicipality(currentRole) && !value) return "Municipality is required";
+        return "";
+      case "department":
+        if (requiresDepartment(currentRole) && !value) return "Le département est requis";
         return "";
       default:
         return "";
@@ -198,6 +238,12 @@ export default function AdminUsersPage() {
     if (field === "governorate") {
       setCreateForm(prev => ({ ...prev, municipality: "" }));
     }
+    // Clear department when role changes to non-department role
+    if (field === "role") {
+      if (!ROLES_REQUIRING_DEPARTMENT.includes(value as UserRole)) {
+        setCreateForm(prev => ({ ...prev, department: "" }));
+      }
+    }
   };
 
   // Handle create user
@@ -211,6 +257,7 @@ export default function AdminUsersPage() {
     errors.phone = validateField("phone", createForm.phone);
     errors.governorate = validateField("governorate", createForm.governorate);
     errors.municipality = validateField("municipality", createForm.municipality);
+    errors.department = validateField("department", createForm.department);
 
     const hasErrors = Object.values(errors).some((error) => error !== "");
     if (hasErrors) {
@@ -219,7 +266,10 @@ export default function AdminUsersPage() {
     }
 
     try {
-      await adminService.createUser(createForm);
+      await adminService.createUser({
+        ...createForm,
+        department: createForm.department || undefined,
+      });
       setShowCreateModal(false);
       setCreateForm({
         fullName: "",
@@ -228,10 +278,15 @@ export default function AdminUsersPage() {
         phone: "",
         governorate: "",
         municipality: "",
+        department: "",
       });
       setCreateErrors({});
+      setSuccess("User created successfully!");
+      setError(null);
       fetchUsers();
       fetchStats();
+      // Auto-clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err: unknown) {
       let message = "";
       if (typeof err === "string") {
@@ -276,6 +331,7 @@ export default function AdminUsersPage() {
         isActive: editForm.isActive,
         governorate: editForm.governorate,
         municipality: editForm.municipality,
+        department: editForm.department || undefined,
       });
 
       if (editForm.role !== selectedUser.role) {
@@ -286,8 +342,12 @@ export default function AdminUsersPage() {
 
       setShowEditModal(false);
       setSelectedUser(null);
+      setSuccess("User updated successfully!");
+      setError(null);
       fetchUsers();
       fetchStats();
+      // Auto-clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update user");
     }
@@ -297,10 +357,15 @@ export default function AdminUsersPage() {
   const handleToggleActive = async (userId: string, isActive: boolean) => {
     try {
       await adminService.toggleUserActive(userId, isActive);
+      setSuccess(isActive ? "User activated successfully" : "User deactivated successfully");
+      setError(null);
       fetchUsers();
       fetchStats();
+      // Auto-clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update user status");
+      setSuccess(null);
     }
   };
 
@@ -312,8 +377,12 @@ export default function AdminUsersPage() {
 
     try {
       await adminService.deleteUser(userId);
+      setSuccess("User deleted successfully!");
+      setError(null);
       fetchUsers();
       fetchStats();
+      // Auto-clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete user");
     }
@@ -328,7 +397,8 @@ export default function AdminUsersPage() {
       isActive: userItem.isActive,
       role: userItem.role,
       governorate: userItem.governorate || "",
-      municipality: userItem.municipality || "",
+      municipality: typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name || "",
+      department: (userItem.department as any)?._id || (userItem.department as any)?.name || "",
     });
     setShowEditModal(true);
   };
@@ -423,7 +493,7 @@ export default function AdminUsersPage() {
             </div>
             <div className="bg-white rounded-xl shadow-lg p-4 border border-slate-100">
               <div className="text-2xl font-bold text-attention">
-                {stats.byRole.find((r) => r._id === "ADMIN")?.count || 0}
+                {Array.isArray(stats?.byRole) ? stats.byRole.find((r) => r._id === "ADMIN")?.count || 0 : 0}
               </div>
               <div className="text-sm text-slate-600">Administrators</div>
             </div>
@@ -434,6 +504,13 @@ export default function AdminUsersPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
             {error}
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
+            {success}
           </div>
         )}
 
@@ -478,7 +555,7 @@ export default function AdminUsersPage() {
                 <tr>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">User</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Role</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Location</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Municipality</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Phone</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Status</th>
                   <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">Actions</th>
@@ -500,10 +577,10 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      {userItem.municipality && userItem.governorate ? (
+                      {userItem.municipality ? (
                         <div className="flex items-center gap-1 text-slate-600">
                           <MapPin className="w-3 h-3" />
-                          <span>{userItem.municipality}</span>
+                          <span>{typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name}</span>
                           <span className="text-slate-400">({userItem.governorate})</span>
                         </div>
                       ) : (
@@ -604,13 +681,13 @@ export default function AdminUsersPage() {
 
               {/* Details Grid */}
               <div className="grid grid-cols-2 gap-3 mb-3">
-                {/* Location */}
+                {/* Municipality */}
                 <div>
-                  <div className="text-xs text-slate-400 mb-1">Location</div>
+                  <div className="text-xs text-slate-400 mb-1">Municipality</div>
                   <div className="flex items-center gap-1 text-sm text-slate-600">
                     <MapPin className="w-3 h-3" />
                     {userItem.municipality && userItem.governorate ? (
-                      <span>{userItem.municipality}, {userItem.governorate}</span>
+                      <span>{typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name}, {userItem.governorate}</span>
                     ) : (
                       <span className="text-slate-400">-</span>
                     )}
@@ -750,7 +827,7 @@ export default function AdminUsersPage() {
                   value={createForm.fullName}
                   onChange={(e) => handleCreateFormChange("fullName", e.target.value)}
                   className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.fullName ? "border-red-500" : "border-slate-200"}`}
-                  placeholder="Entrez le nom complet"
+                  placeholder="Enter full name"
                 />
                 {createErrors.fullName && <p className="text-red-500 text-xs mt-1">{createErrors.fullName}</p>}
               </div>
@@ -836,6 +913,28 @@ export default function AdminUsersPage() {
                   {createErrors.municipality && <p className="text-red-500 text-xs mt-1">{createErrors.municipality}</p>}
                 </div>
               )}
+              {/* Department - only for DEPARTMENT_MANAGER and TECHNICIAN */}
+              {requiresDepartment(createForm.role) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <Shield className="w-4 h-4 inline mr-1" />
+                    Département *
+                  </label>
+                  <select
+                    value={createForm.department}
+                    onChange={(e) => handleCreateFormChange("department", e.target.value)}
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.department ? "border-red-500" : "border-slate-200"}`}
+                  >
+                    <option value="">Select a department</option>
+                    {departments.map((dept) => (
+                      <option key={dept._id} value={dept._id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                  {createErrors.department && <p className="text-red-500 text-xs mt-1">{createErrors.department}</p>}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Téléphone (optionnel)</label>
                 <input
@@ -856,7 +955,7 @@ export default function AdminUsersPage() {
                   }}
                   className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
                 >
-                  Annuler
+                  Cancel
                 </button>
                 <button
                   type="submit"
@@ -964,6 +1063,27 @@ export default function AdminUsersPage() {
                       <option key={mun} value={mun} />
                     ))}
                   </datalist>
+                </div>
+              )}
+              {/* Department - only for DEPARTMENT_MANAGER and TECHNICIAN */}
+              {requiresDepartment(editForm.role) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <Shield className="w-4 h-4 inline mr-1" />
+                    Département
+                  </label>
+                  <select
+                    value={editForm.department}
+                    onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Select a department</option>
+                    {departments.map((dept) => (
+                      <option key={dept._id} value={dept._id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
               <div>

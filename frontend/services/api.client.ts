@@ -7,6 +7,20 @@ interface RequestOptions extends RequestInit {
 }
 
 export const apiClient = {
+  async extractErrorMessage(response: Response): Promise<string> {
+    const text = await response.text();
+    if (!text) return "Request failed";
+    try {
+      const errorData = JSON.parse(text);
+      if (errorData && errorData.message) {
+        return errorData.message;
+      }
+    } catch {
+      // ignore parse error
+    }
+    return "Request failed";
+  },
+
   async get<T = unknown>(
     endpoint: string,
     options?: RequestOptions
@@ -45,6 +59,18 @@ export const apiClient = {
     return apiClient.request<T>(endpoint, { ...options, method: "DELETE" });
   },
 
+  async patch<T = unknown>(
+    endpoint: string,
+    body?: unknown,
+    options?: RequestOptions
+  ): Promise<T> {
+    return apiClient.request<T>(endpoint, {
+      ...options,
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  },
+
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { requiresAuth = true, headers = {}, ...rest } = options;
 
@@ -60,14 +86,23 @@ export const apiClient = {
       (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...rest,
-      headers: requestHeaders,
-    });
+    const makeRequest = async (authToken?: string): Promise<Response> => {
+      const finalHeaders = { ...requestHeaders };
+      if (authToken) {
+        (finalHeaders as Record<string, string>)["Authorization"] = `Bearer ${authToken}`;
+      }
+      return fetch(`${API_BASE_URL}${endpoint}`, {
+        ...rest,
+        headers: finalHeaders,
+      });
+    };
 
-    if (response.status === 401 && refreshToken && requiresAuth) {
+    let response = await makeRequest(token || undefined);
+
+    // Handle 401 - try to refresh token
+    if (response.status === 401 && requiresAuth && refreshToken) {
       try {
-        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken }),
@@ -75,64 +110,32 @@ export const apiClient = {
 
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
-          if (data.token) {
-            useAuthStore.setState({ token: data.token });
-            (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${data.token}`;
-            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
-              ...rest,
-              headers: requestHeaders,
+          const newToken = data.accessToken || data.token;
+          if (newToken) {
+            useAuthStore.setState({ 
+              token: newToken, 
+              refreshToken: data.refreshToken || refreshToken 
             });
-
-            if (!retryResponse.ok) {
-              // Try to extract error message from response body
-              const text = await retryResponse.text();
-              if (text) {
-                try {
-                  const errorData = JSON.parse(text);
-                  if (errorData && errorData.message) {
-                    // Throw the error message to be caught below
-                    throw errorData.message;
-                  }
-                } catch (err) {
-                  // If err is a string (our message), throw it
-                  if (typeof err === "string") {
-                    throw new Error(err);
-                  }
-                  // Otherwise continue to throw generic error
-                }
-              }
-              throw new Error("Request failed");
-            }
-
-            const text = await retryResponse.text();
-            return text ? (JSON.parse(text) as T) : ({} as T);
+            response = await makeRequest(newToken);
           }
         }
       } catch {
-        useAuthStore.setState({ user: null, token: null, refreshToken: null });
-        throw new Error("Session expired. Please log in again.");
+        // Refresh failed, will fall through to error handling
       }
     }
 
-    if (!response.ok) {
-      // Try to extract error message from response body
-      const text = await response.text();
-      if (text) {
-        try {
-          const errorData = JSON.parse(text);
-          if (errorData && errorData.message) {
-            // Throw the error message to be caught below
-            throw errorData.message;
-          }
-        } catch (err) {
-          // If err is a string (our message), throw it
-          if (typeof err === "string") {
-            throw new Error(err);
-          }
-          // Otherwise continue to throw generic error
-        }
+    // If still 401 after refresh, clear auth and redirect to login
+    if (response.status === 401) {
+      useAuthStore.setState({ user: null, token: null, refreshToken: null });
+      if (typeof window !== 'undefined') {
+        window.location.href = '/?expired=true';
       }
-      throw new Error("Request failed");
+      throw new Error("Session expired. Please log in again.");
+    }
+
+    if (!response.ok) {
+      const message = await apiClient.extractErrorMessage(response);
+      throw new Error(message);
     }
 
     const text = await response.text();

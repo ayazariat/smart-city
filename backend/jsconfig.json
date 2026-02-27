@@ -13,6 +13,6 @@
       "*": ["*"]
     }
   },
-  "include": ["src/**/*", "tests/**/*"],
+  "include": ["src/**/*", "tests/**/*", "test-smtp.js"],
   "exclude": ["node_modules"]
 }

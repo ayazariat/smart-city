@@ -50,25 +50,17 @@ class ComplaintService {
 
   // Get all complaints (for admin/agent)
   async getAll(filters = {}, page = 1, limit = 10) {
+    // sanitize filters: only allow known keys
     const query = {};
-    
-    // Apply filters
-    if (filters.status) {
-      query.status = filters.status;
-    }
-    if (filters.category) {
-      query.category = filters.category;
-    }
-    if (filters.governorate) {
-      query.governorate = filters.governorate;
-    }
-    if (filters.municipality) {
-      query.municipality = filters.municipality;
+    const allowed = ['status','category','governorate','municipality'];
+    for (const key of allowed) {
+      if (filters[key] !== undefined) query[key] = filters[key];
     }
     if (filters.search) {
+      const safe = filters.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       query.$or = [
-        { title: { $regex: filters.search, $options: 'i' } },
-        { description: { $regex: filters.search, $options: 'i' } },
+        { title: { $regex: safe, $options: 'i' } },
+        { description: { $regex: safe, $options: 'i' } },
       ];
     }
 
@@ -138,7 +130,19 @@ class ComplaintService {
 
   // Get statistics
   async getStats(filters = {}) {
-    const query = filters;
+    // whitelist filter keys
+    const query = {};
+    const allowed = ['status','category','governorate','municipality'];
+    for (const key of allowed) {
+      if (filters[key] !== undefined) query[key] = filters[key];
+    }
+    if (filters.search) {
+      const safe = filters.search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.$or = [
+        { title: { $regex: safe, $options: 'i' } },
+        { description: { $regex: safe, $options: 'i' } },
+      ];
+    }
     
     const total = await Complaint.countDocuments(query);
     const pending = await Complaint.countDocuments({ ...query, status: 'PENDING' });

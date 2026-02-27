@@ -1,5 +1,7 @@
 const crypto = require("crypto");
 const User = require("../models/User");
+const Department = require("../models/Department");
+const Municipality = require("../models/Municipality");
 const { sendMagicLinkEmail } = require("../utils/mailer");
 
 // Tunisia Governorates and their municipalities
@@ -14,12 +16,12 @@ const TUNISIA_GEOGRAPHY = {
   Kairouan: ["Kairouan", "Kairouan Nord", "Kairouan Sud", "Oueslatia", "Bougarnane", "Sidi Jaber", "Haffouz", "Hajeb El Ayoun"],
   Kasserine: ["Kasserine", "Sbeitla", "Thala", "Feriana", "Fériana", "Sbiba", "Djedeliane", "Aïn Khoucha"],
   Kébili: ["Kébili", "Douz", "Kébili Nord", "Kébili Sud", "Razzeg", "Béchari", "El Golâa", "Souk Lahad"],
-  "Le Kef": ["Le Kef", "Sakiet Sidi Youssef", "Tajerouine", "Menzel Salem", "Bouchemma", "El Krib", "Dahmani", "Masks:oussal", "Bargou"],
+  "Le Kef": ["Le Kef", "Sakiet Sidi Youssef", "Tajerouine", "Menzel Salem", "Bouchemma", "El Krib", "Dahmani", "Makthar", "Bargou"],
   Mahdia: ["Mahdia", "Ksour Essef", "Melloulèche", "Ouedhref", "Sidi Alouane", "El Djem", "Chebba"],
   Manouba: ["Manouba", "Den Den", "Mornaguia", "Ouedhref", "Borj El Amri", "Jedaida", "Menzel Mahfoudh", "Tabarja"],
   Médenine: ["Médenine", "Djerba", "Midoun", "Houmt Souk", "Beni Khedache", "Zarzis", "Ben Gardane", "Ajim"],
   Monastir: ["Monastir", "Monastir Ville", "Skanès", "Ksar Hellal", "Moknine", "Bembla", "Beni Hassen"],
-  Nabeul: ["Nabeul", "Hammamet", "Kelibia", "Menzel Temime", "Dar Chaâbane", "Beni Khiar", "Sousse"],
+  Nabeul: ["Nabeul", "Hammamet", "Kelibia", "Menzel Temime", "Dar Chaâbane", "Beni Khiar"],
   Sfax: ["Sfax", "Sfax Ville", "Sfax Sud", "Sfax Nord", "Thyna", "Chihia", "Jedeni", "Menzel Chaker", "Agareb"],
   "Sidi Bouzid": ["Sidi Bouzid", "Menzel Bouzaiane", "Sidi Ali Ben Aoun", "Ouled Haffouz", "Melloulèche", "Bir El Hafey", "Sahline"],
   Siliana: ["Siliana", "Bousalem", "El Krib", "Bargou", "Kesra", "Makthar", "Bou Arada", "Sidi Morocco", "Gaâfour"],
@@ -36,19 +38,50 @@ const VALID_ROLES = ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNI
 /**
  * Helper function to format user response (excludes sensitive data)
  */
-const formatUserResponse = (user) => ({
-  id: user._id,
-  fullName: user.fullName,
-  email: user.email,
-  role: user.role,
-  phone: user.phone,
-  isActive: user.isActive,
-  isVerified: user.isVerified,
-  governorate: user.governorate,
-  municipality: user.municipality,
-  createdAt: user.createdAt,
-  updatedAt: user.updatedAt,
-});
+const formatUserResponse = async (user) => {
+  let department = null;
+  let municipality = null;
+  
+  // Populate department if exists
+  if (user.department) {
+    try {
+      const dept = await Department.findById(user.department).lean();
+      if (dept) {
+        department = { _id: dept._id.toString(), name: dept.name };
+      }
+    } catch (e) {
+      // Ignore populate errors
+    }
+  }
+  
+  // Populate municipality if exists
+  if (user.municipality) {
+    try {
+      const mun = await Municipality.findById(user.municipality).lean();
+      if (mun) {
+        municipality = { _id: mun._id.toString(), name: mun.name, governorate: mun.governorate };
+      }
+    } catch (e) {
+      // Ignore populate errors
+    }
+  }
+  
+  return {
+    id: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+    phone: user.phone,
+    isActive: user.isActive,
+    isVerified: user.isVerified,
+    governorate: user.governorate,
+    municipality: municipality || (user.municipalityName ? { name: user.municipalityName } : null),
+    municipalityName: user.municipalityName,
+    department: department,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+};
 
 class UserController {
   // Get all users (paginated)
@@ -65,9 +98,11 @@ class UserController {
       const searchQuery = {};
       
       if (search) {
+        // escape regex metacharacters to prevent ReDoS/injection
+        const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         searchQuery.$or = [
-          { fullName: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
+          { fullName: { $regex: safe, $options: "i" } },
+          { email: { $regex: safe, $options: "i" } },
         ];
       }
 
@@ -82,6 +117,8 @@ class UserController {
       const [users, total] = await Promise.all([
         User.find(searchQuery)
           .select("-password -refreshToken")
+          .populate('municipality', 'name governorate')
+          .populate('department', 'name')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit),
@@ -91,7 +128,7 @@ class UserController {
       res.json({
         success: true,
         data: {
-          users: users.map(formatUserResponse),
+          users: await Promise.all(users.map(formatUserResponse)),
           pagination: {
             page,
             limit,
@@ -110,15 +147,19 @@ class UserController {
   async getUserById(req, res) {
     try {
       const { id } = req.params;
-      const user = await User.findById(id).select("-password -refreshToken");
+      const user = await User.findById(id)
+        .select("-password -refreshToken")
+        .populate('municipality', 'name governorate')
+        .populate('department', 'name');
 
       if (!user) {
         return res.status(404).json({ success: false, message: "User not found" });
       }
 
+      const formattedUser = await formatUserResponse(user);
       res.json({
         success: true,
-        data: formatUserResponse(user),
+        data: formattedUser,
       });
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -129,7 +170,7 @@ class UserController {
   // Create new user (admin function)
   async createUser(req, res) {
     try {
-      const { fullName, email, role, phone, governorate, municipality } = req.body;
+      const { fullName, email, role, phone, governorate, municipality, municipalityId, department } = req.body;
 
       // Validate required fields
       if (!fullName || !email) {
@@ -170,6 +211,16 @@ class UserController {
         }
       }
 
+      // Validate department if provided
+      let departmentId = null;
+      if (department) {
+        const dept = await Department.findById(department);
+        if (!dept) {
+          return res.status(400).json({ success: false, message: "Invalid department" });
+        }
+        departmentId = department;
+      }
+
       // Generate magic token for password setup
       const magicToken = crypto.randomBytes(32).toString('hex');
       const magicTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -180,8 +231,10 @@ class UserController {
         email: normalizedEmail,
         phone: phone || null,
         role: userRole,
+        department: departmentId,
         governorate: governorate || "",
-        municipality: municipality || "",
+        municipality: municipalityId || null,
+        municipalityName: municipality || "",
         isVerified: true, // Admin-created users are verified by default
         magicToken,
         magicTokenExpires,
@@ -212,7 +265,7 @@ class UserController {
   async updateUser(req, res) {
     try {
       const { id } = req.params;
-      const { fullName, email, role, phone, governorate, municipality, isActive } = req.body;
+      const { fullName, email, role, phone, governorate, municipality, municipalityId, isActive, department } = req.body;
 
       const user = await User.findById(id);
 
@@ -245,6 +298,10 @@ class UserController {
       }
 
       if (role && VALID_ROLES.includes(role)) {
+        // only admins may change another user's role
+        if (req.user.role !== "ADMIN") {
+          return res.status(403).json({ success: false, message: "Not authorized to change role" });
+        }
         user.role = role;
       }
 
@@ -259,7 +316,11 @@ class UserController {
         user.governorate = governorate;
       }
 
-      if (municipality !== undefined) {
+      if (municipality !== undefined || municipalityId !== undefined) {
+        // if user provided municipality but no governorate available at all, reject
+        if (municipality && !governorate && !user.governorate) {
+          return res.status(400).json({ success: false, message: "Governorate required when specifying municipality" });
+        }
         if (governorate || user.governorate) {
           const gov = governorate || user.governorate;
           const municipalities = TUNISIA_GEOGRAPHY[gov] || [];
@@ -267,7 +328,26 @@ class UserController {
             return res.status(400).json({ success: false, message: "Invalid municipality for selected governorate" });
           }
         }
-        user.municipality = municipality;
+        // Use municipalityId if provided, otherwise keep the string for backward compatibility
+        if (municipalityId) {
+          user.municipality = municipalityId;
+          user.municipalityName = municipality || "";
+        } else if (municipality !== undefined) {
+          user.municipalityName = municipality;
+        }
+      }
+
+      // Handle department update
+      if (department !== undefined) {
+        if (department) {
+          const dept = await Department.findById(department);
+          if (!dept) {
+            return res.status(400).json({ success: false, message: "Invalid department" });
+          }
+          user.department = department;
+        } else {
+          user.department = null;
+        }
       }
 
       if (isActive !== undefined) {
@@ -320,7 +400,7 @@ class UserController {
     }
   }
 
-  // Toggle user active status
+  // Toggle user active status (original method)
   async toggleUserStatus(req, res) {
     try {
       const { id } = req.params;
@@ -353,6 +433,81 @@ class UserController {
     } catch (error) {
       console.error("Error toggling user status:", error);
       res.status(500).json({ success: false, message: "Failed to toggle user status" });
+    }
+  }
+
+  // Update user role (for /users/:id/role endpoint)
+  async updateUserRole(req, res) {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      if (!role || !VALID_ROLES.includes(role)) {
+        return res.status(400).json({ success: false, message: "Invalid role" });
+      }
+
+      // only admins can modify roles
+      if (req.user.role !== "ADMIN") {
+        return res.status(403).json({ success: false, message: "Not authorized to change roles" });
+      }
+
+      if (req.user.userId === id) {
+        return res.status(403).json({ success: false, message: "Cannot change your own role" });
+      }
+
+      const user = await User.findById(id);
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+
+      user.role = role;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: "User role updated successfully",
+        data: formatUserResponse(user),
+      });
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ success: false, message: "Failed to update user role" });
+    }
+  }
+
+  // Toggle user active (for /users/:id/active endpoint)
+  async toggleUserActive(req, res) {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+
+      // Prevent self-deactivation
+      if (id === req.user.userId) {
+        return res.status(400).json({ success: false, message: "Cannot change your own status" });
+      }
+
+      const user = await User.findById(id);
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+
+      // Prevent deactivation of admin users
+      if (user.role === "ADMIN" && isActive === false) {
+        return res.status(400).json({ success: false, message: "Cannot deactivate admin users" });
+      }
+
+      user.isActive = isActive;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: isActive ? "User activated successfully" : "User deactivated successfully",
+        data: formatUserResponse(user),
+      });
+    } catch (error) {
+      console.error("Error toggling user active status:", error);
+      res.status(500).json({ success: false, message: "Failed to toggle user active status" });
     }
   }
 
@@ -432,6 +587,29 @@ class UserController {
       res.status(500).json({ success: false, message: "Failed to fetch municipalities" });
     }
   }
+
+  // Get all departments
+  async getDepartments(req, res) {
+    try {
+      const departments = await Department.find().sort({ name: 1 });
+      res.json({
+        success: true,
+        data: departments.map(d => ({
+          _id: d._id,
+          name: d.name,
+          description: d.description,
+          email: d.email,
+          phone: d.phone,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching departments:", error);
+      res.status(500).json({ success: false, message: "Failed to fetch departments" });
+    }
+  }
 }
 
-module.exports = new UserController();
+const controllerInstance = new UserController();
+module.exports = controllerInstance;
+// expose geography map for other modules
+module.exports.TUNISIA_GEOGRAPHY = TUNISIA_GEOGRAPHY;

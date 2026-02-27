@@ -13,6 +13,8 @@ export interface LocationData {
   longitude: number;
 }
 
+import { TUNISIA_GEOGRAPHY } from "../data/tunisia-geography";
+
 // Tunisia governorates list for validation
 const TUNISIA_GOVERNORATES = [
   "Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", 
@@ -129,10 +131,14 @@ export async function getLocationWithDetails(): Promise<LocationData | null> {
     
     // If no governorate found, try to determine from municipality
     if (!governorate && municipality) {
-      // This is a best-effort guess based on known municipalities
-      for (const gov of TUNISIA_GOVERNORATES) {
-        // Check if municipality might belong to this governorate (simplified logic)
-        // In production, you'd have a complete mapping
+      // Best-effort guess based on our geography dataset
+      // We'll import the full mapping from tunisia-geography.ts
+      for (const g of TUNISIA_GEOGRAPHY) {
+        const matches = g.municipalities.map(m => m.toLowerCase());
+        if (matches.includes(municipality.toLowerCase())) {
+          governorate = g.governorate;
+          break;
+        }
       }
     }
     

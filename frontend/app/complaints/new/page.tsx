@@ -542,7 +542,8 @@ export default function NewComplaintPage() {
       }
 
       const result = await complaintService.submitComplaint(complaintData);
-      setComplaintId(result.complaint.id);
+      const complaintIdValue = result.complaint.id ?? result.complaint._id;
+      setComplaintId(complaintIdValue ?? null);
       setSuccess(true);
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : "Failed to submit complaint";

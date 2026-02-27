@@ -11,7 +11,9 @@ export interface AdminUser {
   isActive: boolean;
   isVerified: boolean;
   governorate?: string;
-  municipality?: string;
+  municipality?: string | { _id?: string; name: string; governorate?: string } | null;
+  municipalityName?: string;
+  department?: { _id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,6 +49,7 @@ export interface CreateUserData {
   phone?: string;
   governorate?: string;
   municipality?: string;
+  department?: string;
 }
 
 export interface UpdateUserData {
@@ -55,6 +58,7 @@ export interface UpdateUserData {
   isActive?: boolean;
   governorate?: string;
   municipality?: string;
+  department?: string;
 }
 
 export interface UpdateRoleData {
@@ -161,6 +165,14 @@ export const adminService = {
    */
   async getGeography(): Promise<GovernorateData[]> {
     const response = await apiClient.get<ApiResponse<GovernorateData[]>>("/admin/geography");
+    return response.data;
+  },
+
+  /**
+   * Get all departments
+   */
+  async getDepartments(): Promise<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>> {
+    const response = await apiClient.get<ApiResponse<any[]>>("/admin/departments");
     return response.data;
   },
 };

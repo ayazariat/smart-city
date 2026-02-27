@@ -92,6 +92,68 @@ export default function DashboardPage() {
     }
   };
 
+  // Get role-based dashboard configuration
+  const getDashboardConfig = () => {
+    switch (user.role) {
+      case "CITIZEN":
+        return {
+          link: "/my-complaints",
+          label: "My Complaints",
+          description: "View and manage your own complaints",
+          newComplaintLink: "/complaints/new",
+          newComplaintLabel: "New Complaint",
+          statsTitle: "My Complaints Statistics",
+        };
+      case "MUNICIPAL_AGENT":
+        return {
+          link: "/agent/complaints",
+          label: "My Actions",
+          description: "Handle assigned complaints",
+          newComplaintLink: "",
+          newComplaintLabel: "",
+          statsTitle: "Complaints Statistics",
+        };
+      case "DEPARTMENT_MANAGER":
+        return {
+          link: "/manager/pending",
+          label: "To Process",
+          description: "Review department complaints",
+          newComplaintLink: "",
+          newComplaintLabel: "",
+          statsTitle: "Department Complaints Statistics",
+        };
+      case "TECHNICIAN":
+        return {
+          link: "/agent/complaints",
+          label: "My Tasks",
+          description: "View your assigned repairs",
+          newComplaintLink: "",
+          newComplaintLabel: "",
+          statsTitle: "Repair Tasks Statistics",
+        };
+      case "ADMIN":
+        return {
+          link: "/admin/complaints",
+          label: "All Complaints",
+          description: "Full system access",
+          newComplaintLink: "",
+          newComplaintLabel: "",
+          statsTitle: "System Complaints Statistics",
+        };
+      default:
+        return {
+          link: "/my-complaints",
+          label: "My Complaints",
+          description: "View and manage your complaints",
+          newComplaintLink: "/complaints/new",
+          newComplaintLabel: "New Complaint",
+          statsTitle: "Complaints Statistics",
+        };
+    }
+  };
+
+  const dashboardConfig = getDashboardConfig();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       {/* Navigation */}
@@ -191,48 +253,47 @@ export default function DashboardPage() {
             </Link>
           )}
 
-          {/* Complaints Card */}
-          <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
+          {/* Complaints Card - Role-based */}
+          <Link href={dashboardConfig.link} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-attention/10 rounded-xl flex items-center justify-center">
                 <FileText className="w-6 h-6 text-attention" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-900">My Complaints</h3>
+              <h3 className="text-lg font-semibold text-slate-900">{dashboardConfig.label}</h3>
             </div>
             <p className="text-slate-600 mb-4 text-sm">
-              View and manage all your pending complaints
+              {dashboardConfig.description}
             </p>
-            <Link
-              href="/complaints"
-              className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-medium text-sm transition-colors group"
-            >
-              View complaints
+            <span className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-medium text-sm transition-colors group">
+              View
               <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </Link>
-          </div>
-
-          {/* Quick Actions Card */}
-          <Link href="/complaints/new" className="bg-gradient-to-br from-primary to-primary-700 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 text-white cursor-pointer block">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                <Plus className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-semibold">Quick Actions</h3>
-            </div>
-            <p className="text-primary-100 mb-4 text-sm">
-              Report a new issue in your city
-            </p>
-            <button className="w-full bg-white text-primary hover:bg-primary-50 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 hover:shadow-lg flex items-center justify-center gap-2">
-              <Plus className="w-4 h-4" />
-              New Complaint
-            </button>
+            </span>
           </Link>
+
+          {/* Quick Actions Card - Only for CITIZEN role */}
+          {user.role === "CITIZEN" && dashboardConfig.newComplaintLink && (
+            <Link href={dashboardConfig.newComplaintLink} className="group bg-gradient-to-br from-primary to-primary-700 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 text-white cursor-pointer block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-semibold">Quick Actions</h3>
+              </div>
+              <p className="text-primary-100 mb-4 text-sm">
+                Report a new issue in your city
+              </p>
+              <span className="w-full bg-white text-primary px-4 py-2.5 rounded-lg font-medium transition-all duration-200 group-hover:shadow-lg flex items-center justify-center gap-2">
+                <Plus className="w-4 h-4" />
+                {dashboardConfig.newComplaintLabel}
+              </span>
+            </Link>
+          )}
         </div>
 
         {/* Statistics Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
           <h3 className="text-lg font-semibold text-slate-900 mb-6">
-            My Complaints Statistics
+            {dashboardConfig.statsTitle}
           </h3>
           
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

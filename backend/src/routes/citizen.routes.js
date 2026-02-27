@@ -78,7 +78,8 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       return res.status(400).json({ message: "Invalid urgency level" });
     }
 
-    // Validate location if provided
+    // Validate location if provided and convert to GeoJSON point
+    let geoLocation = {};
     if (location) {
       if (location.latitude !== undefined) {
         if (typeof location.latitude !== "number" || location.latitude < -90 || location.latitude > 90) {
@@ -89,6 +90,19 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
         if (typeof location.longitude !== "number" || location.longitude < -180 || location.longitude > 180) {
           return res.status(400).json({ message: "Invalid longitude" });
         }
+      }
+      if (location.latitude !== undefined && location.longitude !== undefined) {
+        geoLocation = {
+          type: 'Point',
+          coordinates: [location.longitude, location.latitude],
+          address: location.address,
+          commune: location.commune,
+          governorate: location.governorate,
+          municipality: location.municipality,
+        };
+      } else {
+        // preserve other props if only partial
+        geoLocation = location;
       }
     }
 
@@ -159,12 +173,13 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       category: category || "OTHER",
       urgency: urgency || "MEDIUM",
       priorityScore,
-      location: location || {},
+      location: Object.keys(geoLocation).length ? geoLocation : {},
+      municipality: location?.municipality || location?.commune || "",
       media: media || [],
       isAnonymous: !!isAnonymous,
       ownerName: !isAnonymous ? ownerName : undefined,
       keywords,
-      createdBy: req.user._id,
+      createdBy: req.user.userId,
       assignedDepartment,
       status: "SUBMITTED",
     });
@@ -173,7 +188,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
 
     // Create audit log
     await AuditLog.create({
-      userId: req.user._id,
+      userId: req.user.userId,
       action: "COMPLAINT_CREATED",
       details: { complaintId: complaint._id, category: complaint.category },
       ip: req.ip,
@@ -206,7 +221,7 @@ router.get("/complaints", authenticate, authorize("CITIZEN"), async (req, res) =
     const { status, category, sort = "-createdAt", limit = 20, page = 1 } = req.query;
 
     // Build query
-    const query = { createdBy: req.user._id };
+    const query = { createdBy: req.user.userId };
     if (status) {
       query.status = status;
     }
@@ -246,7 +261,7 @@ router.get("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, re
   try {
     const complaint = await Complaint.findOne({
       _id: req.params.id,
-      createdBy: req.user._id,
+      createdBy: req.user.userId,
     })
       .populate("assignedDepartment", "name email phone")
       .populate("assignedTeam", "name members")

@@ -168,7 +168,7 @@ npm run format
 
 ## 🎨 UI Components
 
-Custom UI components are available in [`components/ui/`](frontend/components/ui/):
+Custom UI components are available in [`components/ui/`](./components/ui/):
 
 - `Alert` - Display messages (success, error, warning, info)
 - `Button` - Interactive buttons (primary, secondary, outline, ghost)
@@ -178,7 +178,7 @@ Custom UI components are available in [`components/ui/`](frontend/components/ui/
 
 ## 📡 API Integration
 
-The frontend communicates with the backend API using services in [`services/`](frontend/services/):
+The frontend communicates with the backend API using services in [`services/`](./services/):
 
 - `api.client.ts` - Base axios configuration with interceptors
 - `auth.service.ts` - Authentication (login, register, password reset)
@@ -238,8 +238,8 @@ NEXT_PUBLIC_RECAPTCHA_SITE_KEY=your_recaptcha_site_key
 - [TypeScript Documentation](https://www.typescriptlang.org/docs)
 - [Tailwind CSS Documentation](https://tailwindcss.com/docs)
 - [Zustand Documentation](https://docs.pmnd.rs/zustand)
-- [Theme Documentation](frontend/TUNIS_THEME.md)
-- [Dashboard Updates](frontend/DASHBOARD_UPDATE.md)
+- [Theme Documentation](./TUNIS_THEME.md)
+- [Dashboard Updates](./DASHBOARD_UPDATE.md)
 
 ## 📄 License
 

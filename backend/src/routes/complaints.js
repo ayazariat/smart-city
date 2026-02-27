@@ -11,6 +11,8 @@ router.use(authenticate);
 
 // Citizen routes - create and manage their own complaints
 router.post("/", complaintController.create);
+
+// My complaints routes - must come BEFORE /:id to avoid matching issues
 router.get("/my-complaints", complaintController.getMyComplaints);
 router.get("/my-complaints/:id", complaintController.getComplaintById);
 
@@ -20,6 +22,8 @@ router.get("/stats", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER")
 router.get("/technicians", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getTechnicians);
 router.patch("/:id/status", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updateStatus);
 router.patch("/:id/assign", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignComplaint);
+router.patch("/:id/department", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignDepartment);
+router.patch("/:id/priority", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updatePriority);
 
 // Common routes - both citizens and admin can access
 router.get("/:id", complaintController.getComplaintById);

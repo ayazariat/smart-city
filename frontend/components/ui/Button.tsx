@@ -59,7 +59,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {isLoading ? (
           <>
             <LoaderCircle size={18} className="animate-spin" />
-            <span>Chargement...</span>
+            <span>Loading...</span>
           </>
         ) : (
           <>

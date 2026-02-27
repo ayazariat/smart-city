@@ -11,11 +11,55 @@ const {
 const { sendMagicLinkEmail, sendPasswordResetEmail } = require("../utils/mailer");
 const { verifyRecaptcha } = require("../utils/recaptcha");
 
+// Simple reusable validators
+const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+function validatePasswordStrength(pwd) {
+  if (!pwd || typeof pwd !== "string") {
+    return "Password must be a string";
+  }
+  if (!passwordPolicyRegex.test(pwd)) {
+    return "Password must be at least 8 characters and include uppercase, lowercase, number and special character";
+  }
+  return null;
+}
+
+function validateFullName(name) {
+  if (!name || typeof name !== "string" || name.trim().length < 3) {
+    return "Full name must be at least 3 characters";
+  }
+  return null;
+}
+
+function validatePhone(phone) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("216")) {
+    const localNumber = digits.substring(3);
+    if (localNumber.length !== 8) {
+      return "Phone must be 8 digits after country code (e.g., +21625448885).";
+    }
+  } else if (digits.length !== 8) {
+    return "Invalid phone number. Use 8 digits (e.g., 25448885).";
+  }
+  return null;
+}
+
 class AuthController {
   // Register new user
   async register(req, res) {
     try {
       const { fullName, email, password, phone, captchaToken, governorate, municipality, latitude, longitude } = req.body;
+
+      // Basic presence/type validation before touching database
+      if (!fullName || typeof fullName !== 'string') {
+        return res.status(400).json({ message: "Full name is required" });
+      }
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({ message: "Password is required" });
+      }
 
       const normalizedEmail = email.toLowerCase().trim();
 
@@ -31,20 +75,32 @@ class AuthController {
         return res.status(400).json({ message: "A pending registration already exists for this email" });
       }
 
-      // Validate required fields
-      if (!fullName || !normalizedEmail || !password) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-
       // Validate fullName minimum 3 characters
-      if (fullName.length < 3) {
-        return res.status(400).json({ message: "Full name must be at least 3 characters" });
+      const fullNameError = validateFullName(fullName);
+      if (fullNameError) {
+        return res.status(400).json({ message: fullNameError });
       }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(normalizedEmail)) {
         return res.status(400).json({ message: "Invalid email format" });
+      }
+
+      // Validate phone number
+      const phoneError = validatePhone(phone);
+      if (phoneError) {
+        return res.status(400).json({ message: phoneError });
+      }
+
+      // Optional: verify governorate/municipality pair if both provided
+      if (municipality && governorate) {
+        // simple lookup using shared geography map if available
+        const geo = require("./userController").TUNISIA_GEOGRAPHY;
+        const govList = geo[governorate] || [];
+        if (!govList.includes(municipality)) {
+          return res.status(400).json({ message: "Invalid municipality for selected governorate" });
+        }
       }
 
       // Verify reCAPTCHA
@@ -148,7 +204,14 @@ class AuthController {
         return res.status(400).json({ message: "Verification method mismatch" });
       }
 
-      if (user.verificationToken !== code || Date.now() > user.verificationExpires) {
+      // constant-time comparison
+      const tokenBuf = Buffer.from(user.verificationToken || '', 'utf8');
+      const codeBuf = Buffer.from(code || '', 'utf8');
+      if (tokenBuf.length !== codeBuf.length) {
+        crypto.timingSafeEqual(tokenBuf, crypto.randomBytes(tokenBuf.length));
+        return res.status(400).json({ message: "Invalid or expired verification code" });
+      }
+      if (!crypto.timingSafeEqual(tokenBuf, codeBuf) || Date.now() > user.verificationExpires) {
         return res.status(400).json({ message: "Invalid or expired verification code" });
       }
 
@@ -176,17 +239,27 @@ class AuthController {
   // Delete pending registration
   async deletePendingRegistration(req, res) {
     try {
-      const { email } = req.body;
+      const { email, token } = req.body;
 
-      if (!email) {
-        return res.status(400).json({ message: "Email is required" });
+      if (!email || !token) {
+        return res.status(400).json({ message: "Email and token are required" });
+      }
+
+      // optional admin check
+      if (req.user && !req.user.isAdmin) {
+        return res.status(403).json({ message: "Forbidden" });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      const result = await PendingUser.deleteOne({ email: normalizedEmail });
+      const pending = await PendingUser.findOne({ email: normalizedEmail, verificationToken: token });
+      if (!pending) {
+        return res.status(400).json({ message: "Invalid email or token" });
+      }
 
-      if (result.deletedCount === 0) {
-        return res.status(404).json({ message: "No pending registration found" });
+      const result = await PendingUser.deleteOne({ email: normalizedEmail, verificationToken: token });
+
+      if (!result.deletedCount) {
+        return res.status(500).json({ message: "Failed to delete pending registration" });
       }
 
       res.json({ message: "Pending registration deleted successfully" });
@@ -213,7 +286,7 @@ class AuthController {
         return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
       }
 
-      const isMatch = await bcrypt.compare(password, user.password);
+      const isMatch = user.password ? await bcrypt.compare(password, user.password) : false;
       if (!isMatch) {
         await AuditLog.create({
           userId: user._id,
@@ -271,7 +344,19 @@ class AuthController {
       const decoded = verifyRefreshToken(refreshToken);
       const user = await User.findById(decoded.userId);
 
-      if (!user || user.refreshToken !== refreshToken) {
+      if (!user) {
+        return res.status(401).json({ message: "Invalid refresh token" });
+      }
+
+      // constant-time comparison to mitigate timing attacks
+      const stored = Buffer.from(user.refreshToken || '', 'utf8');
+      const incoming = Buffer.from(refreshToken || '', 'utf8');
+      if (stored.length !== incoming.length) {
+        // compare with dummy buffer to equalize timing
+        crypto.timingSafeEqual(stored, Buffer.alloc(stored.length));
+        return res.status(401).json({ message: "Invalid refresh token" });
+      }
+      if (!crypto.timingSafeEqual(stored, incoming)) {
         return res.status(401).json({ message: "Invalid refresh token" });
       }
 
@@ -341,10 +426,11 @@ class AuthController {
       try {
         await sendPasswordResetEmail(user.email, user.fullName, resetToken);
       } catch (emailError) {
-        console.error("Failed to send password reset email:", emailError);
-        return res.status(500).json({ message: "Failed to send password reset email" });
+        // log but do not expose to client
+        console.error("Failed to send password reset email for", user.email, "token", resetToken, emailError);
       }
 
+      // always report success
       res.json({ message: "If the email exists, a reset link has been sent" });
     } catch (error) {
       console.error("Forgot password error:", error);
@@ -359,6 +445,12 @@ class AuthController {
 
       if (!token || !password) {
         return res.status(400).json({ message: "Token and new password are required" });
+      }
+
+      // validate password strength
+      const pwdError = validatePasswordStrength(password);
+      if (pwdError) {
+        return res.status(400).json({ message: pwdError });
       }
 
       const user = await User.findOne({
@@ -424,8 +516,16 @@ class AuthController {
         return res.status(404).json({ message: "User not found" });
       }
 
-      if (fullName) user.fullName = fullName;
-      if (phone !== undefined) user.phone = phone;
+      if (fullName) {
+        const err = validateFullName(fullName);
+        if (err) return res.status(400).json({ message: err });
+        user.fullName = fullName;
+      }
+      if (phone !== undefined) {
+        const err = validatePhone(phone);
+        if (err) return res.status(400).json({ message: err });
+        user.phone = phone;
+      }
       if (governorate !== undefined) user.governorate = governorate;
       if (municipality !== undefined) user.municipality = municipality;
 
@@ -459,9 +559,15 @@ class AuthController {
       }
 
       // Verify current password
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      const isMatch = user.password ? await bcrypt.compare(currentPassword, user.password) : false;
       if (!isMatch) {
         return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Validate new password strength
+      const pwdError = validatePasswordStrength(newPassword);
+      if (pwdError) {
+        return res.status(400).json({ message: pwdError });
       }
 
       // Hash new password

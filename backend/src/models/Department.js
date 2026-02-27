@@ -6,6 +6,11 @@ const departmentSchema = new mongoose.Schema(
     description: String,
     email: String,
     phone: String,
+    // Manager responsible for this department
+    responsable: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'User'
+    }
   },
   { timestamps: true },
 );
