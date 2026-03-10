@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:smart_city_app/config/api_config.dart';
-import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/screens/login_screen.dart';
-import 'package:smart_city_app/screens/register_screen.dart';
 import 'package:smart_city_app/screens/home_screen.dart';
 import 'package:smart_city_app/services/api_client.dart';
 

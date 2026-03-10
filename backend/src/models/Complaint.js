@@ -19,6 +19,7 @@ const complaintSchema = new mongoose.Schema(
         "RESOLVED",
         "CLOSED",
         "REJECTED",
+        "ARCHIVED",
       ],
       default: "SUBMITTED",
     },
@@ -26,7 +27,7 @@ const complaintSchema = new mongoose.Schema(
     statusHistory: [{
       status: {
         type: String,
-        enum: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED"],
+        enum: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED", "ARCHIVED"],
         required: true
       },
       updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -57,12 +58,46 @@ const complaintSchema = new mongoose.Schema(
     isAnonymous: { type: Boolean, default: false },
     ownerName: { type: String },
     keywords: [{ type: String }],
+    // SLA tracking (deadline + system flags)
+    slaDeadline: { type: Date },
+    slaAlertSent: { type: Boolean, default: false },
+    slaOverdueAt: { type: Date },
+    // AI enrichment (can be populated asynchronously)
+    aiData: {
+      predictedCategory: { type: String },
+      categoryConfidence: { type: Number },
+      keywords: [{ type: String }],
+      locationKeywords: [{ type: String }],
+      urgencyKeywords: [{ type: String }],
+      similarityHash: { type: String },
+      processedAt: { type: Date },
+      model: { type: String },
+    },
     rejectionReason: String,
+    resolutionNotes: String,
     resolvedAt: Date,
     media: [
       {
         type: { type: String, enum: ["photo", "video"] },
         url: String,
+      },
+    ],
+    // Photos taken by technician before starting work
+    beforePhotos: [
+      {
+        type: { type: String, enum: ["photo", "video"] },
+        url: String,
+        takenAt: { type: Date, default: Date.now },
+        takenBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      },
+    ],
+    // Photos taken by technician after completing work
+    afterPhotos: [
+      {
+        type: { type: String, enum: ["photo", "video"] },
+        url: String,
+        takenAt: { type: Date, default: Date.now },
+        takenBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       },
     ],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -72,6 +107,12 @@ const complaintSchema = new mongoose.Schema(
     },
     assignedTeam: { type: mongoose.Schema.Types.ObjectId, ref: "RepairTeam" },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    comments: [{
+      text: String,
+      author: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      isInternal: { type: Boolean, default: false },
+      createdAt: { type: Date, default: Date.now }
+    }],
     municipality: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Municipality',
@@ -81,6 +122,10 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Archiving
+    isArchived: { type: Boolean, default: false },
+    archivedAt: { type: Date },
+    archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
@@ -92,7 +137,8 @@ complaintSchema.statics.VALID_TRANSITIONS = {
   ASSIGNED: ['IN_PROGRESS'],
   IN_PROGRESS: ['RESOLVED'],
   RESOLVED: ['CLOSED'],
-  CLOSED: [],
+  CLOSED: ['ARCHIVED'],
+  ARCHIVED: [],
   REJECTED: []
 };
 
@@ -133,15 +179,17 @@ complaintSchema.methods.updateStatus = function(newStatus, userId, notes = '') {
   return this.save();
 };
 
-// Pre-save hook to initialize status history
-complaintSchema.pre('save', function(next) {
+// Pre-save hook to initialize timestamps
+complaintSchema.pre('save', async function() {
+  // Note: statusHistory.updatedBy should be set in the route/controller when status changes
+  // The pre-save hook cannot access the user ID from the request
   if (this.isNew && this.status === 'SUBMITTED') {
     this.statusHistory = [{
       status: 'SUBMITTED',
       updatedAt: new Date()
+      // updatedBy will be set when complaint is created
     }];
   }
-  next();
 });
 
 // Indexes for performance
@@ -154,5 +202,6 @@ complaintSchema.index({ status: 1 });
 complaintSchema.index({ category: 1 });
 complaintSchema.index({ createdAt: -1 });
 complaintSchema.index({ location: "2dsphere" });
+complaintSchema.index({ isArchived: 1 });
 
 module.exports = mongoose.model("Complaint", complaintSchema);

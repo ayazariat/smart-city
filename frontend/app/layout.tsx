@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Smart City Tunis",
-  description: "Système de gestion urbaine pour Smart City Tunis",
+  title: "Smart City Tunisia",
+  description: "Urban management system for Smart City Tunisia",
 };
 
 export default function RootLayout({
@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
+    <html lang="en">
       <body className={inter.variable}>{children}</body>
     </html>
   );

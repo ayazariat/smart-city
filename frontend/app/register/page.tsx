@@ -281,7 +281,7 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              {/* Governorate and Municipality with Autocomplete */}
+              {/* Governorate and Commune with Autocomplete */}
               <div className="animate-slideInLeft delay-300">
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-slate-700">
@@ -328,7 +328,7 @@ export default function RegisterPage() {
                       name="municipality"
                       value={formData.municipality}
                       onChange={handleChange}
-                      placeholder={formData.governorate ? "Select or type municipality..." : "Select governorate first"}
+                      placeholder={formData.governorate ? "Select or type commune..." : "Select governorate first"}
                       list="municipality-list"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
                       autoComplete="off"

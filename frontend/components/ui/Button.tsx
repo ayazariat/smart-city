@@ -2,7 +2,7 @@ import React, { ButtonHTMLAttributes, ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
   icon?: ReactNode;
@@ -28,10 +28,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-300 focus:outline-none focus:ring-4 disabled:cursor-not-allowed active:scale-95 relative overflow-hidden';
     
     const variants = {
-      primary: 'bg-primary text-white hover:bg-primary-700 hover:shadow-lg hover:shadow-primary/25 focus:ring-primary/20 disabled:bg-primary/50 shadow-md hover:-translate-y-0.5',
+      primary:   'bg-primary text-white hover:bg-primary-700 hover:shadow-lg hover:shadow-primary/25 focus:ring-primary/20 disabled:bg-primary/50 shadow-md hover:-translate-y-0.5',
       secondary: 'bg-secondary-400 text-slate-700 hover:bg-secondary-500 hover:shadow-lg hover:shadow-secondary-300/25 focus:ring-secondary-400/20 disabled:bg-secondary-200 shadow-md hover:-translate-y-0.5',
-      outline: 'border-2 border-primary text-primary hover:bg-primary/5 hover:border-primary-700 focus:ring-primary/20 disabled:border-primary/50 disabled:text-primary/50 hover:shadow-md',
-      ghost: 'text-primary hover:bg-primary/10 focus:ring-primary/20 disabled:text-primary/50 hover:shadow-sm'
+      outline:   'border-2 border-primary text-primary hover:bg-primary/5 hover:border-primary-700 focus:ring-primary/20 disabled:border-primary/50 disabled:text-primary/50 hover:shadow-md',
+      ghost:     'text-primary hover:bg-primary/10 focus:ring-primary/20 disabled:text-primary/50 hover:shadow-sm',
+      danger:    'bg-urgent text-white hover:bg-urgent-600 hover:shadow-lg hover:shadow-urgent/25 focus:ring-urgent/20 disabled:bg-urgent/50 shadow-md hover:-translate-y-0.5',
     };
 
     const sizes = {

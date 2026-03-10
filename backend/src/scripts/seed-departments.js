@@ -35,14 +35,46 @@ const TUNISIA_GEOGRAPHY = {
 };
 
 const DEPARTMENTS = [
-  { name: "Voirie et Infrastructure", description: "Entretien des routes et trottoirs" },
-  { name: "Eclairage Public", description: "Maintenance de l'eclairage public" },
-  { name: "Proprete et Environnement", description: "Collecte des dechets" },
-  { name: "Espaces Verts", description: "Entretien des parcs" },
-  { name: "Eau et Assainissement", description: "Gestion des canalisations" },
-  { name: "Urbanisme", description: "Controle des permis" },
-  { name: "Circulation", description: "Gestion des feux" },
-  { name: "Services Administratifs", description: "Traitement des reclamations" }
+  { 
+    name: "Roads & Infrastructure", 
+    description: "Roads, sidewalks, and infrastructure maintenance",
+    categories: ["ROAD"]
+  },
+  { 
+    name: "Public Lighting", 
+    description: "Streetlights and public area electrical maintenance",
+    categories: ["LIGHTING"]
+  },
+  { 
+    name: "Waste Management", 
+    description: "Garbage collection and street cleaning",
+    categories: ["WASTE"]
+  },
+  { 
+    name: "Parks & Green Spaces", 
+    description: "Parks, trees, and green space maintenance",
+    categories: ["GREEN_SPACE"]
+  },
+  { 
+    name: "Water & Sanitation", 
+    description: "Water leaks, sewage, and local flooding",
+    categories: ["WATER"]
+  },
+  { 
+    name: "Traffic & Road Signage", 
+    description: "Traffic lights, road signs, and markings",
+    categories: ["TRAFFIC"]
+  },
+  { 
+    name: "Urban Planning", 
+    description: "Illegal construction, public space permits",
+    categories: ["URBAN_PLANNING", "PUBLIC_PROPERTY"]
+  },
+  { 
+    name: "Public Equipment", 
+    description: "Benches, bus stops, playground equipment",
+    categories: ["EQUIPMENT"]
+  }
 ];
 
 async function seedDatabase() {

@@ -39,6 +39,12 @@ const userSchema = new mongoose.Schema(
       enum: ["CITIZEN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN", "ADMIN"],
       default: "CITIZEN",
     },
+    // User status for verification workflow
+    status: {
+      type: String,
+      enum: ["PENDING_VERIFICATION", "ACTIVE", "INACTIVE", "SUSPENDED"],
+      default: "ACTIVE",
+    },
     phone: String,
     isActive: { type: Boolean, default: true },
     // Department assignment for technicians and managers

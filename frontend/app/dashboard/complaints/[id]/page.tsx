@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { 
-  MapPin, 
-  Image as ImageIcon, 
-  Video, 
   Clock, 
   User, 
   AlertTriangle,
@@ -24,8 +20,10 @@ import {
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService } from "@/services/complaint.service";
+import { adminService } from "@/services/admin.service";
+import { managerService } from "@/services/manager.service";
 import { useAuthStore } from "@/store/useAuthStore";
-import { Button } from "@/components/ui";
+import { Button, PageHeader } from "@/components/ui";
 
 // Category labels
 const categoryLabels: Record<string, string> = {
@@ -39,6 +37,20 @@ const categoryLabels: Record<string, string> = {
   BUILDING: "Buildings",
   NOISE: "Noise",
   OTHER: "Other",
+};
+
+// Category to department name mapping for suggestions
+const categoryToDepartmentMap: Record<string, string[]> = {
+  ROAD: ["Roads", "Infrastructure", "Public Works"],
+  LIGHTING: ["Lighting", "Electricity", "Infrastructure"],
+  WASTE: ["Waste", "Sanitation", "Environment"],
+  WATER: ["Water", "Hydraulics", "Infrastructure"],
+  SAFETY: ["Safety", "Security", "Civil Protection"],
+  PUBLIC_PROPERTY: ["Public Property", "Infrastructure"],
+  GREEN_SPACE: ["Green Spaces", "Environment", "Parks"],
+  BUILDING: ["Urban Planning", "Buildings", "Infrastructure"],
+  NOISE: ["Environment", "Sanitation"],
+  OTHER: ["General", "Infrastructure"],
 };
 
 // Status labels (as per BL-16 specifications)
@@ -72,7 +84,13 @@ export default function ComplaintDetailPage() {
   const [mediaErrors, setMediaErrors] = useState<Record<number, boolean>>({});
   const [actionLoading, setActionLoading] = useState(false);
   const [actionModal, setActionModal] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>>([]);
+  const [technicians, setTechnicians] = useState<Array<{_id: string; fullName: string; email?: string}>>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("");
+  const [suggestedDepartment, setSuggestedDepartment] = useState<string>("");
+  const [selectedTechnician, setSelectedTechnician] = useState<string>("");
   const [selectedUrgency, setSelectedUrgency] = useState<string>("");
+  const [selectedPriorityScore, setSelectedPriorityScore] = useState<string>("");
   const [rejectionReason, setRejectionReason] = useState<string>("");
 
   useEffect(() => {
@@ -107,6 +125,33 @@ export default function ComplaintDetailPage() {
       fetchComplaintDetail();
     }
   }, [complaintId]);
+
+  // Fetch departments when opening department modal
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      if (actionModal === "department") {
+        try {
+          const deptData = await adminService.getDepartments();
+          setDepartments(deptData);
+        } catch (error) {
+          console.error("Error fetching departments:", error);
+        }
+      }
+      
+      // Fetch technicians for manager
+      if (actionModal === "technician") {
+        try {
+          const techData = await managerService.getTechnicians();
+          if (techData.data) {
+            setTechnicians(techData.data);
+          }
+        } catch (error) {
+          console.error("Error fetching technicians:", error);
+        }
+      }
+    };
+    fetchDepartments();
+  }, [actionModal]);
 
   const getComplaintIdDisplay = (id: string) => {
     return `RC-${id.slice(-6)}`;
@@ -143,26 +188,88 @@ export default function ComplaintDetailPage() {
       }
     } catch (err) {
       console.error("Error updating status:", err);
+      // Show error message to user but don't throw
     } finally {
       setActionLoading(false);
     }
   };
 
   const handlePriorityUpdate = async () => {
-    if (!complaint || !selectedUrgency) return;
+    if (!complaint || (!selectedUrgency && !selectedPriorityScore)) return;
     setActionLoading(true);
     try {
-      const response = await complaintService.updateComplaintPriority(
+      let response;
+      if (selectedUrgency && selectedPriorityScore) {
+        response = await complaintService.updateComplaintPriority(
+          complaint._id || complaint.id || "",
+          selectedUrgency,
+          parseInt(selectedPriorityScore)
+        );
+      } else if (selectedUrgency) {
+        response = await complaintService.updateComplaintPriority(
+          complaint._id || complaint.id || "",
+          selectedUrgency
+        );
+      } else if (selectedPriorityScore) {
+        response = await complaintService.updateComplaintPriority(
+          complaint._id || complaint.id || "",
+          complaint.urgency,
+          parseInt(selectedPriorityScore)
+        );
+      }
+      
+      if (response && response.success) {
+        setComplaint(response.data);
+        setActionModal(null);
+        setSelectedUrgency("");
+        setSelectedPriorityScore("");
+      }
+    } catch (err) {
+      console.error("Error updating priority:", err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDepartmentUpdate = async () => {
+    if (!complaint || !selectedDepartment) return;
+    setActionLoading(true);
+    try {
+      const response = await complaintService.updateComplaintDepartment(
         complaint._id || complaint.id || "",
-        selectedUrgency
+        selectedDepartment
       );
       if (response.success) {
         setComplaint(response.data);
         setActionModal(null);
-        setSelectedUrgency("");
+        setSelectedDepartment("");
       }
     } catch (err) {
-      console.error("Error updating priority:", err);
+      console.error("Error updating department:", err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleTechnicianUpdate = async () => {
+    if (!complaint || !selectedTechnician) return;
+    setActionLoading(true);
+    try {
+      const response = await managerService.assignTechnician(
+        complaint._id || complaint.id || "",
+        selectedTechnician
+      );
+      if (response.success) {
+        // Refresh complaint details
+        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
+        if (detailResponse.success) {
+          setComplaint(detailResponse.data);
+        }
+        setActionModal(null);
+        setSelectedTechnician("");
+      }
+    } catch (err) {
+      console.error("Error assigning technician:", err);
     } finally {
       setActionLoading(false);
     }
@@ -172,6 +279,10 @@ export default function ComplaintDetailPage() {
     user?.role === "MUNICIPAL_AGENT" ||
     user?.role === "DEPARTMENT_MANAGER" ||
     user?.role === "ADMIN";
+
+  // Check if current user is a technician assigned to this complaint
+  const isAssignedTechnician = user?.role === "TECHNICIAN" && 
+    complaint?.assignedTo?._id === user?.id;
 
   // Check if current user is the owner of the complaint
   const isOwner = (() => {
@@ -185,7 +296,7 @@ export default function ComplaintDetailPage() {
   // Show contact info for agents/managers OR the owner
   const canViewContact = isAgentOrManager || isOwner;
 
-  const hasLocation = complaint?.location?.latitude && complaint?.location?.longitude;
+  const hasLocation = complaint?.location?.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2;
 
   if (loading) {
     return (
@@ -207,9 +318,9 @@ export default function ComplaintDetailPage() {
           </div>
           <Button
             variant="primary"
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.back()}
           >
-            Back to Dashboard
+            Back
           </Button>
         </div>
       </div>
@@ -228,36 +339,18 @@ export default function ComplaintDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200" role="banner">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<ArrowLeft className="w-4 h-4" />}
-                onClick={() => router.push("/dashboard")}
-              >
-                Back
-              </Button>
-              <div className="h-6 w-px bg-slate-300" aria-hidden="true"></div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                Complaint {getComplaintIdDisplay(complaint._id || complaint.id || "")}
-              </h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <span 
-                className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass} flex items-center gap-2`}
-                aria-label={`Status: ${status.label}`}
-              >
-                <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
-                {status.label}
-              </span>
-            </div>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        title={`Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
+        backHref="/dashboard/complaints"
+        rightContent={
+          <span 
+            className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
+            aria-label={`Status: ${status.label}`}
+          >
+            {status.label}
+          </span>
+        }
+      />
 
       <main className="max-w-6xl mx-auto px-4 py-6" role="main">
         <div className="grid lg:grid-cols-3 gap-6">
@@ -283,7 +376,7 @@ export default function ComplaintDetailPage() {
                       {[1, 2, 3, 4, 5].map((level) => (
                         <div
                           key={level}
-                          className={`w-4 h-4 rounded-full transition-all ${
+                          className={`w-8 h-2 rounded-sm transition-all ${
                             level <= getUrgencyValue(complaint.urgency)
                               ? "bg-gradient-to-r from-orange-400 to-red-500 shadow-sm"
                               : "bg-slate-200"
@@ -295,7 +388,7 @@ export default function ComplaintDetailPage() {
                       {getUrgencyValue(complaint.urgency)}
                     </span>
                     <span className="text-sm text-slate-500">
-                      ({urgencyLabels[complaint.urgency as string] || "Moyenne"})
+                      ({urgencyLabels[complaint.urgency as string] || "Medium"})
                     </span>
                   </div>
                 </div>
@@ -370,9 +463,9 @@ export default function ComplaintDetailPage() {
                 </div>
               ) : (
                 <div className="h-64 bg-gray-100 rounded-lg overflow-hidden">
-                  {complaint.location && complaint.location.latitude && complaint.location.longitude && (
+                  {complaint.location && complaint.location.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2 && (
                     <iframe
-                      title={`Carte de la réclamation à ${complaint.location.address || 'cette position'}`}
+                      title={`Map of complaint at ${complaint.location.address || 'this location'}`}
                       width="100%"
                       height="100%"
                       style={{ border: 0 }}
@@ -380,41 +473,49 @@ export default function ComplaintDetailPage() {
                       allowFullScreen
                       aria-hidden="true"
                       src={`https://www.openstreetmap.org/export/embed.html?bbox=${
-                        complaint.location.longitude - 0.01
-                      }%2C${complaint.location.latitude - 0.01}%2C${
-                        complaint.location.longitude + 0.01
-                      }%2C${complaint.location.latitude + 0.01}&layer=mapnik&marker=${
-                        complaint.location.latitude
-                      }%2C${complaint.location.longitude}`}
+                        complaint.location.coordinates[0] - 0.01
+                      }%2C${complaint.location.coordinates[1] - 0.01}%2C${
+                        complaint.location.coordinates[0] + 0.01
+                      }%2C${complaint.location.coordinates[1] + 0.01}&layer=mapnik&marker=${
+                        complaint.location.coordinates[1]
+                      }%2C${complaint.location.coordinates[0]}`}
                     ></iframe>
                   )}
                 </div>
               )}
-              {complaint.location?.address && (
-                <p className="mt-2 text-sm text-gray-600">
-                  📍 {complaint.location.address}
-                  {complaint.location?.commune && `, ${complaint.location.commune}`}
-                  {complaint.location?.governorate && `, ${complaint.location.governorate}`}
-                </p>
+              {complaint.location?.address && complaint.location?.coordinates && complaint.location.coordinates.length >= 2 && (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${complaint.location.coordinates[1]},${complaint.location.coordinates[0]}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-primary hover:text-primary-700 font-medium mt-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  🏛️ {complaint.location?.commune}{complaint.location?.commune && complaint.location?.governorate && ` (Gouvernorat ${complaint.location.governorate})`} 📍 {complaint.location.address}
+                  <span className="text-xs bg-primary/10 px-2 py-1 rounded">Open in Maps</span>
+                </a>
               )}
             </section>
 
             {/* Media */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="media-title">
               <h2 id="media-title" className="text-lg font-semibold text-gray-900 mb-4">
-                Media ({complaint.media?.length || 0})
+                Photos ({complaint.media?.length || 0})
               </h2>
               {!complaint.media || complaint.media.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
                   <svg className="w-12 h-12 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <p>No media provided</p>
+                  <p>No photos provided</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {complaint.media.map((item, index) => (
-                    <div key={index} className="relative">
+                    <div key={`media-${index}`} className="relative group">
                       {mediaErrors[index] ? (
                         <div className="w-full h-32 bg-gray-200 rounded-lg flex items-center justify-center">
                           <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -426,21 +527,122 @@ export default function ComplaintDetailPage() {
                           src={item.url}
                           controls
                           className="w-full h-32 object-cover rounded-lg"
-                          aria-label={`Vidéo ${index + 1}`}
+                          aria-label={`Video ${index + 1}`}
                         />
                       ) : (
-                        <img
-                          src={item.url}
-                          alt={`Photo ${index + 1} de la réclamation`}
-                          className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition"
-                          onError={() => handleMediaError(index)}
-                        />
+                        <a 
+                          href={item.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="block w-full"
+                        >
+                          <img
+                            src={item.url}
+                            alt={`Photo ${index + 1} of the complaint`}
+                            className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition opacity-100"
+                            onError={() => handleMediaError(index)}
+                            crossOrigin="anonymous"
+                          />
+                        </a>
                       )}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors rounded-lg" />
                     </div>
                   ))}
                 </div>
               )}
             </section>
+
+            {/* Before Photos (Technician) */}
+            {complaint.beforePhotos && complaint.beforePhotos.length > 0 && (
+              <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500" aria-labelledby="before-photos-title">
+                <h2 id="before-photos-title" className="text-lg font-semibold text-gray-900 mb-4">
+                  Before Work Photos ({complaint.beforePhotos.length})
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {complaint.beforePhotos.map((item, index) => (
+                    <div key={`before-${index}`} className="relative group">
+                      {item.type === "video" ? (
+                        <video
+                          src={item.url}
+                          controls
+                          className="w-full h-32 object-cover rounded-lg"
+                          aria-label={`Video before work ${index + 1}`}
+                        />
+                      ) : (
+                        <a 
+                          href={item.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="block w-full"
+                        >
+                          <img
+                            src={item.url}
+                            alt={`Photo before work ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition opacity-100"
+                          />
+                        </a>
+                      )}
+                      {item.takenAt && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(item.takenAt).toLocaleDateString("fr-FR", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* After Photos (Technician) */}
+            {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
+              <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500" aria-labelledby="after-photos-title">
+                <h2 id="after-photos-title" className="text-lg font-semibold text-gray-900 mb-4">
+                  After Work Photos ({complaint.afterPhotos.length})
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {complaint.afterPhotos.map((item, index) => (
+                    <div key={`after-${index}`} className="relative group">
+                      {item.type === "video" ? (
+                        <video
+                          src={item.url}
+                          controls
+                          className="w-full h-32 object-cover rounded-lg"
+                          aria-label={`Video after work ${index + 1}`}
+                        />
+                      ) : (
+                        <a 
+                          href={item.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="block w-full"
+                        >
+                          <img
+                            src={item.url}
+                            alt={`Photo after work ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition opacity-100"
+                          />
+                        </a>
+                      )}
+                      {item.takenAt && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(item.takenAt).toLocaleDateString("fr-FR", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Comments/History */}
             {complaint.comments && complaint.comments.length > 0 && (
@@ -484,36 +686,46 @@ export default function ComplaintDetailPage() {
               {complaint.isAnonymous ? (
                 <p className="text-slate-500 italic flex items-center gap-2">
                   <User className="w-4 h-4" />
-                  Anonymous Citizen
+                  Anonymous
                 </p>
-              ) : complaint.citizen ? (
-                <div className="space-y-3">
-                  <p className="font-semibold text-slate-900 flex items-center gap-2">
-                    <User className="w-4 h-4 text-slate-400" />
-                    {complaint.citizen.fullName}
-                  </p>
-                  {complaint.citizen.email && canViewContact && (
-                    <p className="text-sm text-slate-500 flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
-                      {complaint.citizen.email}
+              ) : (() => {
+                // DTO from BL‑16 exposes `createdBy` with safe contact fields,
+                // older shape may still use `citizen`.
+                const citizen = (complaint as any).citizen ?? complaint.createdBy;
+                if (!citizen) {
+                  return <p className="text-slate-500">Information not available</p>;
+                }
+
+                const email = (citizen as any).email as string | undefined;
+                const phone = (citizen as any).phone as string | undefined;
+
+                return (
+                  <div className="space-y-3">
+                    <p className="font-semibold text-slate-900 flex items-center gap-2">
+                      <User className="w-4 h-4 text-slate-400" />
+                      {(citizen as any).fullName}
                     </p>
-                  )}
-                  {complaint.citizen.phone && canViewContact && (
-                    <p className="text-sm text-slate-500 flex items-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      {complaint.citizen.phone}
-                    </p>
-                  )}
-                  {!canViewContact && (complaint.citizen.email || complaint.citizen.phone) && (
-                    <p className="text-sm text-slate-400 flex items-center gap-2">
-                      <Shield className="w-4 h-4" />
-                      Contact hidden
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-slate-500">Information not available</p>
-              )}
+                    {email && canViewContact && (
+                      <p className="text-sm text-slate-500 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        {email}
+                      </p>
+                    )}
+                    {phone && canViewContact && (
+                      <p className="text-sm text-slate-500 flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        {phone}
+                      </p>
+                    )}
+                    {!canViewContact && (email || phone) && (
+                      <p className="text-sm text-slate-400 flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Contact hidden
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </section>
 
             {/* Department Info */}
@@ -625,38 +837,168 @@ export default function ComplaintDetailPage() {
                   Actions
                 </h2>
                 <div className="space-y-3">
+                  {/* SUBMITTED - Agent can Validate/Reject, Admin can Validate */}
                   {complaint.status === "SUBMITTED" && (
                     <>
-                      <Button
-                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                        icon={<CheckCircle2 className="w-4 h-4" />}
-                        onClick={() => setActionModal("validate")}
-                      >
-                        Valider la réclamation
-                      </Button>
-                      <Button
-                        className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
-                        icon={<X className="w-4 h-4" />}
-                        onClick={() => setActionModal("reject")}
-                      >
-                        Rejeter la réclamation
-                      </Button>
+                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                        <>
+                          <Button
+                            className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                            icon={<CheckCircle2 className="w-4 h-4" />}
+                            onClick={() => setActionModal("validate")}
+                          >
+                            Validate Complaint
+                          </Button>
+                          <Button
+                            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+                            icon={<X className="w-4 h-4" />}
+                            onClick={() => setActionModal("reject")}
+                          >
+                            Reject Complaint
+                          </Button>
+                        </>
+                      )}
                     </>
                   )}
-                  <Button
-                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                    icon={<Building2 className="w-4 h-4" />}
-                    onClick={() => setActionModal("department")}
-                  >
-                    Assigner un département
-                  </Button>
-                  <Button
-                    className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                    icon={<AlertTriangle className="w-4 h-4" />}
-                    onClick={() => setActionModal("priority")}
-                  >
-                    Modifier la priorité
-                  </Button>
+
+                  {/* VALIDATED - Agent assigns Department, Manager can set Priority, Admin can do everything */}
+                  {complaint.status === "VALIDATED" && (
+                    <>
+                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                        <Button
+                          className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                          icon={<Building2 className="w-4 h-4" />}
+                          onClick={() => setActionModal("department")}
+                        >
+                          Assign to Department
+                        </Button>
+                      )}
+                      {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                        <Button
+                          className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                          icon={<AlertTriangle className="w-4 h-4" />}
+                          onClick={() => setActionModal("priority")}
+                        >
+                          Set Priority
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  {/* ASSIGNED - Manager assigns Technician, Manager/Admin can supervise */}
+                  {complaint.status === "ASSIGNED" && (
+                    <>
+                      {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && !complaint.assignedTo && (
+                        <Button
+                          className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
+                          icon={<UserCog className="w-4 h-4" />}
+                          onClick={() => setActionModal("technician")}
+                        >
+                          Assign to Repair Team
+                        </Button>
+                      )}
+                      {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm text-blue-800 font-medium">Supervising</p>
+                          <p className="text-xs text-blue-600">Monitoring complaint progress</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* IN_PROGRESS - Manager checks SLA, Admin monitors globally */}
+                  {(complaint.status === "IN_PROGRESS" || complaint.status === "ASSIGNED") && (
+                    <>
+                      {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                        <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                          <p className="text-sm text-orange-800 font-medium">SLA Monitoring</p>
+                          <p className="text-xs text-orange-600">Checking service level agreement compliance</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* RESOLVED - Agent/Manager/Admin can Close */}
+                  {complaint.status === "RESOLVED" && (
+                    <>
+                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                        <Button
+                          className="w-full bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700"
+                          icon={<CheckCircle2 className="w-4 h-4" />}
+                          onClick={() => handleStatusUpdate("CLOSED")}
+                        >
+                          Close Complaint
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  {/* CLOSED - Manager sees Stats, Admin sees Reports */}
+                  {complaint.status === "CLOSED" && (
+                    <>
+                      {user?.role === "DEPARTMENT_MANAGER" && (
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-sm text-green-800 font-medium">Department Statistics</p>
+                          <p className="text-xs text-green-600">View performance metrics</p>
+                        </div>
+                      )}
+                      {user?.role === "ADMIN" && (
+                        <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                          <p className="text-sm text-purple-800 font-medium">Reports</p>
+                          <p className="text-xs text-purple-600">Generate global reports</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* REJECTED - All roles can see archived */}
+                  {complaint.status === "REJECTED" && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-sm text-gray-600 font-medium">Archived</p>
+                      <p className="text-xs text-gray-500">This complaint has been rejected</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Actions for Technician */}
+            {isAssignedTechnician && (
+              <section className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-indigo-200" aria-labelledby="tech-actions-title">
+                <h2 id="tech-actions-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <UserCog className="w-5 h-5 text-indigo-600" />
+                  Technician Actions
+                </h2>
+                <div className="space-y-3">
+                  {/* ASSIGNED - Technician can Start */}
+                  {complaint.status === "ASSIGNED" && (
+                    <Button
+                      className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
+                      icon={<CheckCircle2 className="w-4 h-4" />}
+                      onClick={() => handleStatusUpdate("IN_PROGRESS")}
+                    >
+                      Start Work
+                    </Button>
+                  )}
+
+                  {/* IN_PROGRESS - Technician can Resolve */}
+                  {complaint.status === "IN_PROGRESS" && (
+                    <Button
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                      icon={<CheckCircle2 className="w-4 h-4" />}
+                      onClick={() => handleStatusUpdate("RESOLVED")}
+                    >
+                      Mark as Resolved
+                    </Button>
+                  )}
+
+                  {/* RESOLVED/CLOSED - Technician can see archived */}
+                  {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-sm text-gray-600 font-medium">Archived</p>
+                      <p className="text-xs text-gray-500">This complaint has been completed</p>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -669,16 +1011,17 @@ export default function ComplaintDetailPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">
-              {actionModal === "validate" && "Valider la réclamation"}
-              {actionModal === "reject" && "Rejeter la réclamation"}
-              {actionModal === "department" && "Assigner un département"}
-              {actionModal === "priority" && "Modifier la priorité"}
+              {actionModal === "validate" && "Validate Complaint"}
+              {actionModal === "reject" && "Reject Complaint"}
+              {actionModal === "department" && "Assign to Department"}
+              {actionModal === "priority" && "Update Priority"}
+              {actionModal === "technician" && "Assign to Repair Team"}
             </h3>
             
             {actionModal === "validate" && (
               <div className="space-y-4">
                 <p className="text-slate-600">
-                  Voulez-vous valider cette réclamation ? Elle sera envoyée au département approprié.
+                  Do you want to validate this complaint? It will be sent to the appropriate department.
                 </p>
                 <div className="flex gap-3">
                   <Button
@@ -686,14 +1029,14 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Annuler
+                    Cancel
                   </Button>
                   <Button
                     className="flex-1 bg-green-600 hover:bg-green-700"
                     onClick={() => handleStatusUpdate("VALIDATED")}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Valider"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Validate"}
                   </Button>
                 </div>
               </div>
@@ -703,14 +1046,14 @@ export default function ComplaintDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Motif du rejet
+                    Rejection Reason
                   </label>
                   <textarea
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     rows={3}
-                    placeholder="Expliquez pourquoi cette réclamation est rejetée..."
+                    placeholder="Explain why this complaint is being rejected..."
                   />
                 </div>
                 <div className="flex gap-3">
@@ -719,14 +1062,14 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Annuler
+                    Cancel
                   </Button>
                   <Button
                     className="flex-1 bg-red-600 hover:bg-red-700"
                     onClick={() => handleStatusUpdate("REJECTED")}
                     disabled={actionLoading || !rejectionReason.trim()}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Rejeter"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject"}
                   </Button>
                 </div>
               </div>
@@ -736,19 +1079,34 @@ export default function ComplaintDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Niveau de priorité
+                    Priority Level
                   </label>
                   <select
                     value={selectedUrgency}
                     onChange={(e) => setSelectedUrgency(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   >
-                    <option value="">Sélectionner...</option>
-                    <option value="LOW">Basse</option>
-                    <option value="MEDIUM">Moyenne</option>
-                    <option value="HIGH">Haute</option>
-                    <option value="URGENT">Urgente</option>
+                    <option value="">Select...</option>
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Priority Score (1-10)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={selectedPriorityScore}
+                    onChange={(e) => setSelectedPriorityScore(e.target.value)}
+                    placeholder={complaint.priorityScore?.toString() || "Enter score"}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Current score: {complaint.priorityScore || 0}</p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -756,14 +1114,14 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Annuler
+                    Cancel
                   </Button>
                   <Button
                     className="flex-1 bg-purple-600 hover:bg-purple-700"
                     onClick={handlePriorityUpdate}
-                    disabled={actionLoading || !selectedUrgency}
+                    disabled={actionLoading || (!selectedUrgency && !selectedPriorityScore)}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Mettre à jour"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update"}
                   </Button>
                 </div>
               </div>
@@ -771,16 +1129,126 @@ export default function ComplaintDetailPage() {
 
             {actionModal === "department" && (
               <div className="space-y-4">
-                <p className="text-slate-600">
-                  La fonctionnalité d'assignation de département sera bientôt disponible.
-                </p>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setActionModal(null)}
-                >
-                  Fermer
-                </Button>
+                {/* Department Suggestion based on Category - Clickable */}
+                {complaint.category && !complaint.department && (() => {
+                  const suggestedNames = categoryToDepartmentMap[complaint.category] || [];
+                  const matchingDepts = departments.filter(dept => 
+                    suggestedNames.some(name => dept.name.toLowerCase().includes(name.toLowerCase()))
+                  );
+                  return matchingDepts.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-blue-800 font-medium">
+                        💡 Suggested department based on category &quot;{categoryLabels[complaint.category] || complaint.category}&quot;:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {matchingDepts.map(dept => (
+                          <button
+                            key={dept._id}
+                            onClick={() => {
+                              setSelectedDepartment(dept._id);
+                            }}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                              selectedDepartment === dept._id 
+                                ? 'bg-primary text-white' 
+                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            }`}
+                          >
+                            {dept.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Select Department
+                  </label>
+                  <select
+                    value={selectedDepartment}
+                    onChange={(e) => setSelectedDepartment(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  >
+                    <option value="">Choose a department...</option>
+                    {departments.map((dept) => (
+                      <option key={dept._id} value={dept._id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                  {departments.length === 0 && (
+                    <p className="text-sm text-slate-500 mt-2">No departments available</p>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setActionModal(null);
+                      setSelectedDepartment("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    onClick={handleDepartmentUpdate}
+                    disabled={actionLoading || !selectedDepartment}
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {actionModal === "technician" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Select Technician
+                  </label>
+                  {technicians.length === 0 ? (
+                    <div className="text-center py-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-amber-800 font-medium">No technicians available</p>
+                      <p className="text-sm text-amber-600 mt-1">
+                        There are no technicians assigned to this department yet.
+                      </p>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedTechnician}
+                      onChange={(e) => setSelectedTechnician(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    >
+                      <option value="">Choose a technician...</option>
+                      {technicians.map((tech) => (
+                        <option key={tech._id} value={tech._id}>
+                          {tech.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setActionModal(null);
+                      setSelectedTechnician("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                    onClick={handleTechnicianUpdate}
+                    disabled={actionLoading || !selectedTechnician}
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

@@ -28,12 +28,88 @@ import {
   ShieldAlert,
   Building2,
   Tag,
+  LogOut,
+  FileText,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { ComplaintCategory, ComplaintUrgency, ComplaintMedia, CreateComplaintData } from "@/types";
-import { complaintService } from "@/services/complaint.service";
+import { complaintService, uploadMedia } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
+
+function getRoleDisplayName(role: string): string {
+  switch (role) {
+    case "CITIZEN": return "Citizen";
+    case "MUNICIPAL_AGENT": return "Municipal Agent";
+    case "DEPARTMENT_MANAGER": return "Department Manager";
+    case "TECHNICIAN": return "Technician";
+    case "ADMIN": return "Administrator";
+    default: return role;
+  }
+}
+
+function Sidebar({
+  user,
+  onLogout,
+}: {
+  user: { fullName: string; role: string };
+  onLogout: () => Promise<void>;
+}) {
+  return (
+    <aside className="sidebar">
+      <div className="sb-logo">
+        <div className="sb-icon">
+          <Sparkles className="w-5 h-5 text-[var(--green)]" />
+        </div>
+        <div>
+          <div className="sb-name">Smart City{`\n`}Tunisia</div>
+          <div className="sb-sub">Citizen Portal</div>
+        </div>
+      </div>
+      <div className="sb-user">
+        <Link href="/profile" className="sb-user-link">
+          <div className="sb-avt">{user.fullName.charAt(0).toUpperCase()}</div>
+          <div className="sb-uname">{user.fullName}</div>
+          <span className="sb-urole">{getRoleDisplayName(user.role)}</span>
+        </Link>
+      </div>
+      <div className="sb-nav">
+        <div className="sb-section">Navigation</div>
+        <Link href="/dashboard" className="sb-item">
+          <span className="sb-ic">
+            <FileText className="w-4 h-4" />
+          </span>
+          Dashboard
+        </Link>
+        <Link href="/my-complaints" className="sb-item">
+          <span className="sb-ic">
+            <FileText className="w-4 h-4" />
+          </span>
+          My Complaints
+        </Link>
+        <button className="sb-item active" type="button">
+          <span className="sb-ic">
+            <Plus className="w-4 h-4" />
+          </span>
+          Report Issue
+        </button>
+        <Link href="/archive" className="sb-item">
+          <span className="sb-ic">
+            <FileText className="w-4 h-4" />
+          </span>
+          Archives
+        </Link>
+      </div>
+      <div className="sb-footer">
+        <button className="sb-logout" type="button" onClick={onLogout}>
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
 
 type CategoryConfig = {
   value: ComplaintCategory;
@@ -188,7 +264,7 @@ export default function NewComplaintPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const leafletMarkerRef = useRef<any>(null);
   
-  const { user, token, isLoading: authLoading, hydrated } = useAuthStore();
+  const { user, token, isLoading: authLoading, hydrated, logout } = useAuthStore();
 
   // Form state
   const [title, setTitle] = useState("");
@@ -199,6 +275,8 @@ export default function NewComplaintPage() {
   const [urgencySlider, setUrgencySlider] = useState(2);
   const [address, setAddress] = useState("");
   const [media, setMedia] = useState<ComplaintMedia[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -213,7 +291,7 @@ export default function NewComplaintPage() {
   const [isAnonymous, setIsAnonymous] = useState(false);
 
   // Location state
-  const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [locationMode, setLocationMode] = useState<'manual' | 'gps' | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -302,6 +380,10 @@ export default function NewComplaintPage() {
         const { lat, lng } = e.latlng;
         marker.setLatLng([lat, lng]);
         setLocation({ latitude: lat, longitude: lng });
+        setLocationMode('manual');
+        setDetectedCommune(null);
+        setCommune("");
+        setGovernorate("");
         reverseGeocode(lat, lng);
       });
 
@@ -309,6 +391,10 @@ export default function NewComplaintPage() {
       marker.on("dragend", (e: any) => {
         const { lat, lng } = e.target.getLatLng();
         setLocation({ latitude: lat, longitude: lng });
+        setLocationMode('manual');
+        setDetectedCommune(null);
+        setCommune("");
+        setGovernorate("");
         reverseGeocode(lat, lng);
       });
     };
@@ -357,7 +443,7 @@ export default function NewComplaintPage() {
     leafletMarkerRef.current.setLatLng([latitude, longitude]);
   }, [location]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
@@ -366,14 +452,15 @@ export default function NewComplaintPage() {
       return;
     }
 
-    const newMedia: ComplaintMedia[] = [];
+    const fileArray = Array.from(files).slice(0, 5 - media.length);
     const maxSize = 10 * 1024 * 1024;
-    const remainingSlots = 5 - media.length;
 
-    Array.from(files).slice(0, remainingSlots).forEach((file) => {
+    // Validate files first
+    const validFiles: File[] = [];
+    for (const file of fileArray) {
       if (file.size > maxSize) {
         setError(`File ${file.name} is too large. Max 10MB.`);
-        return;
+        continue;
       }
 
       const isImage = file.type.startsWith("image/");
@@ -381,19 +468,48 @@ export default function NewComplaintPage() {
 
       if (!isImage && !isVideo) {
         setError(`File ${file.name} must be an image or video.`);
-        return;
+        continue;
       }
 
-      const url = URL.createObjectURL(file);
-      newMedia.push({
-        type: isImage ? "photo" : "video",
-        url,
-      });
-    });
+      validFiles.push(file);
+    }
 
-    setMedia([...media, ...newMedia]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    if (validFiles.length === 0) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setError(null);
+
+    try {
+      // Upload to Cloudinary
+      const result = await uploadMedia(validFiles);
+
+      if (result.success && result.data) {
+        setMedia([...media, ...result.data]);
+      } else {
+        setError(result.message || 'Failed to upload files');
+        // Fallback to local URLs if upload fails
+        const newMedia: ComplaintMedia[] = validFiles.map((file) => ({
+          type: file.type.startsWith('image/') ? 'photo' : 'video',
+          url: URL.createObjectURL(file),
+        }));
+        setMedia([...media, ...newMedia]);
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError('Failed to upload files. Using local preview instead.');
+      // Fallback to local URLs
+      const newMedia: ComplaintMedia[] = validFiles.map((file) => ({
+        type: file.type.startsWith('image/') ? 'photo' : 'video',
+        url: URL.createObjectURL(file),
+      }));
+      setMedia([...media, ...newMedia]);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(100);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -440,6 +556,8 @@ export default function NewComplaintPage() {
     setLocationLoading(true);
     setLocationError(null);
     setDetectedCommune(null);
+    setCommune("");
+    setGovernorate("");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -448,7 +566,7 @@ export default function NewComplaintPage() {
           longitude: position.coords.longitude,
         };
         setLocation(newLocation);
-        setUseCurrentLocation(true);
+        setLocationMode('gps');
         setLocationLoading(false);
         reverseGeocode(newLocation.latitude, newLocation.longitude);
       },
@@ -546,6 +664,7 @@ export default function NewComplaintPage() {
       setComplaintId(complaintIdValue ?? null);
       setSuccess(true);
     } catch (err) {
+      console.error("Complaint submission error:", err);
       const rawMessage = err instanceof Error ? err.message : "Failed to submit complaint";
       const normalized = rawMessage.toLowerCase();
 
@@ -559,8 +678,10 @@ export default function NewComplaintPage() {
       ) {
         setError("Your session has expired. Please sign in again to submit a complaint.");
         setTimeout(() => router.push("/"), 2500);
+      } else if (normalized.includes("403") || normalized.includes("access denied")) {
+        setError("You don't have permission to submit complaints. Your account may not be a citizen account. Please contact support.");
       } else {
-        setError("We couldn't submit your complaint right now. Please try again in a moment.");
+        setError(`We couldn't submit your complaint right now. Please try again in a moment. Error: ${rawMessage}`);
       }
     } finally {
       setIsSubmitting(false);
@@ -570,11 +691,8 @@ export default function NewComplaintPage() {
   // Loading state - wait for auth to hydrate
   if (authLoading || !hydrated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">Loading...</p>
-        </div>
+      <div className="loading-screen">
+        <div className="loading-spinner"></div>
       </div>
     );
   }
@@ -582,13 +700,13 @@ export default function NewComplaintPage() {
   // Not authenticated
   if (authError || !token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-red-500" />
+      <div className="loading-screen">
+        <div className="card" style={{ maxWidth: 400, textAlign: "center" }}>
+          <div className="sb-icon" style={{ margin: "0 auto 16px", background: "var(--red)" }}>
+            <Shield className="w-5 h-5 text-white" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Authentication Required</h2>
-          <p className="text-slate-600 mb-6">Please log in to submit a complaint.</p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Authentication Required</h2>
+          <p style={{ color: "var(--txt2)", marginBottom: 24 }}>Please log in to submit a complaint.</p>
           <Link href="/">
             <Button>Sign In</Button>
           </Link>
@@ -630,6 +748,7 @@ export default function NewComplaintPage() {
                 setAddress("");
                 setMedia([]);
                 setLocation(null);
+                setLocationMode(null);
                 setCommune("");
                 setDetectedCommune(null);
                 setGovernorate("");
@@ -649,34 +768,22 @@ export default function NewComplaintPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-xl">
-        <div className="container mx-auto max-w-3xl px-4 py-6">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold">Report an Issue</h1>
-              <p className="text-primary-200 text-sm">
-                Help improve your city - Your voice matters!
-              </p>
-            </div>
-            <div className="hidden sm:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full">
-              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                <span className="text-sm font-bold">{(user?.fullName || "U")[0].toUpperCase()}</span>
-              </div>
-              <span className="text-sm font-medium">{user?.fullName || "User"}</span>
-            </div>
+    <div className="app">
+      <Sidebar user={user || { fullName: "User", role: "CITIZEN" }} onLogout={logout} />
+      <div className="main">
+        <div className="topbar">
+          <div>
+            <div className="topbar-title">Report an Issue</div>
+            <div className="topbar-sub">Help improve your city</div>
+          </div>
+          <div className="topbar-right">
+            <span className="badge" style={{ background: "var(--accentbg)", color: "var(--green)" }}>
+              New Complaint
+            </span>
           </div>
         </div>
-      </div>
 
-      <div className="container mx-auto max-w-3xl px-4 py-8">
+        <main className="page">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Error Alert */}
           {error && (
@@ -686,16 +793,16 @@ export default function NewComplaintPage() {
           )}
 
           {/* Location with Map */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
+          <div className="card">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 text-slate-700">
+              <div className="flex items-center gap-2" style={{ color: "var(--txt)" }}>
                 <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-600 rounded-xl flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-white" />
                 </div>
                 <div>
                   <span className="font-semibold">Location</span>
                   {location && (
-                    <span className="text-xs text-success-600 ml-2">(Detected)</span>
+                    <span className="text-xs" style={{ color: "var(--green)", marginLeft: 8 }}>(Detected)</span>
                   )}
                 </div>
               </div>
@@ -754,7 +861,7 @@ export default function NewComplaintPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Commune / municipality</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Municipality</label>
                 <input
                   type="text"
                   value={commune}
@@ -769,27 +876,28 @@ export default function NewComplaintPage() {
             <div className="flex gap-3">
               <Button
                 type="button"
-                variant={location ? "primary" : "outline"}
+                variant={locationMode === 'gps' ? "primary" : "outline"}
                 onClick={handleGetLocation}
                 disabled={locationLoading}
                 className="flex-1"
               >
                 {locationLoading ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : location ? (
+                ) : locationMode === 'gps' ? (
                   <CheckCircle className="w-4 h-4 mr-2" />
                 ) : (
                   <MapPin className="w-4 h-4 mr-2" />
                 )}
-                {locationLoading ? "Detecting..." : location ? "Location Set" : "Use My GPS"}
+                {locationLoading ? "Detecting..." : locationMode === 'gps' ? "GPS Location" : "Use My GPS"}
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant={locationMode === 'manual' ? "primary" : "outline"}
                 onClick={() => setShowMap(!showMap)}
-                className="px-4"
+                className="flex-1"
               >
-                {showMap ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                {showMap ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
+                {showMap ? "Hide Map" : "Select on Map"}
               </Button>
             </div>
 
@@ -1136,7 +1244,8 @@ export default function NewComplaintPage() {
             </Button>
           </div>
         </form>
-      </div>
+        </main>
+        </div>
     </div>
   );
 }

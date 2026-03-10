@@ -1,6 +1,6 @@
 import { useAuthStore } from "@/store/useAuthStore";
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 interface RequestOptions extends RequestInit {
   requiresAuth?: boolean;
@@ -14,6 +14,9 @@ export const apiClient = {
       const errorData = JSON.parse(text);
       if (errorData && errorData.message) {
         return errorData.message;
+      }
+      if (errorData && errorData.error) {
+        return errorData.error;
       }
     } catch {
       // ignore parse error
@@ -124,6 +127,11 @@ export const apiClient = {
       }
     }
 
+    // Handle 403 Forbidden - Access denied
+    if (response.status === 403) {
+      throw new Error('Access denied');
+    }
+
     // If still 401 after refresh, clear auth and redirect to login
     if (response.status === 401) {
       useAuthStore.setState({ user: null, token: null, refreshToken: null });
@@ -135,7 +143,7 @@ export const apiClient = {
 
     if (!response.ok) {
       const message = await apiClient.extractErrorMessage(response);
-      throw new Error(message);
+      throw new Error(message || "Request failed");
     }
 
     const text = await response.text();

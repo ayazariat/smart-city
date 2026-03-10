@@ -1,5 +1,5 @@
-/// Tunisia Governorates and Municipalities Data
-/// This data is used for autocomplete in registration and complaint forms
+// Tunisia Governorates and Municipalities Data
+// This data is used for autocomplete in registration and complaint forms
 
 class GovernorateData {
   final String name;

@@ -105,17 +105,19 @@ class AuthController {
 
       // Verify reCAPTCHA
       const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
-      if (recaptchaSecret) {
+      // Only enforce reCAPTCHA if properly configured (secret key exists and is valid)
+      if (recaptchaSecret && recaptchaSecret.length > 10) {
         if (!captchaToken) {
           return res.status(400).json({ message: "Captcha verification is required." });
         }
-
         try {
           const data = await verifyRecaptcha(recaptchaSecret, captchaToken);
           if (!data.success || data.score < 0.5) {
+            console.error("reCAPTCHA verification failed:", data);
             return res.status(400).json({ message: "Captcha verification failed" });
           }
-        } catch {
+        } catch (err) {
+          console.error("reCAPTCHA verification error:", err.message);
           return res.status(400).json({ message: "Captcha verification error" });
         }
       }
@@ -286,6 +288,14 @@ class AuthController {
         return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
       }
 
+      // Check for PENDING_VERIFICATION status (for technicians, managers, agents created by admin)
+      if (user.status === "PENDING_VERIFICATION") {
+        return res.status(403).json({ 
+          message: "Your account requires verification. Please check your email to verify your account.",
+          needsVerification: true 
+        });
+      }
+
       const isMatch = user.password ? await bcrypt.compare(password, user.password) : false;
       if (!isMatch) {
         await AuditLog.create({
@@ -324,11 +334,64 @@ class AuthController {
           phone: user.phone,
           governorate: user.governorate,
           municipality: user.municipality,
+          municipalityName: user.municipalityName,
+          department: user.department,
         },
       });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ message: "Server error during login" });
+    }
+  }
+
+  // Verify magic token and set password (for admin-created users)
+  async verifyMagicToken(req, res) {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token and password are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Find user with this magic token
+      const user = await User.findOne({ magicToken: token });
+
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired token" });
+      }
+
+      // Check if token is expired
+      if (user.magicTokenExpires && user.magicTokenExpires < Date.now()) {
+        return res.status(400).json({ message: "Token has expired. Please request a new invitation." });
+      }
+
+      // Check if already verified
+      if (user.status === "ACTIVE" && user.isVerified) {
+        return res.status(400).json({ message: "Account is already verified" });
+      }
+
+      // Hash password and update user
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      user.password = hashedPassword;
+      user.isVerified = true;
+      user.status = "ACTIVE";
+      user.magicToken = null;
+      user.magicTokenExpires = null;
+      await user.save();
+
+      res.json({
+        success: true,
+        message: "Account verified successfully. You can now log in.",
+      });
+    } catch (error) {
+      console.error("Verify magic token error:", error);
+      res.status(500).json({ message: "Server error" });
     }
   }
 
@@ -482,7 +545,10 @@ class AuthController {
   // Get current user
   async getCurrentUser(req, res) {
     try {
-      const user = await User.findById(req.user.userId).select("-password -refreshToken");
+      const user = await User.findById(req.user.userId)
+        .select("-password -refreshToken")
+        .populate("municipality", "name")
+        .populate("department", "name");
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -496,6 +562,8 @@ class AuthController {
         phone: user.phone,
         governorate: user.governorate,
         municipality: user.municipality,
+        municipalityName: user.municipalityName,
+        department: user.department,
         isVerified: user.isVerified,
         isActive: user.isActive,
         createdAt: user.createdAt,

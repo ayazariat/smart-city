@@ -242,7 +242,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 // Governorate dropdown
                 DropdownButtonFormField<String>(
-                  value: _selectedGovernorate,
+                  initialValue: _selectedGovernorate,
                   decoration: const InputDecoration(
                     labelText: 'Governorate',
                     prefixIcon: Icon(Icons.location_on_outlined),
@@ -263,7 +263,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Municipality dropdown
                 if (_municipalities.isNotEmpty)
                   DropdownButtonFormField<String>(
-                    value: _selectedMunicipality,
+                    initialValue: _selectedMunicipality,
                     decoration: const InputDecoration(
                       labelText: 'Municipality',
                       prefixIcon: Icon(Icons.location_city_outlined),

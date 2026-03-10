@@ -42,7 +42,10 @@ class _LoginScreenState extends State<LoginScreen> {
         'password': _passwordController.text,
       });
 
-      await _apiClient.setTokens(response['token'], response['refreshToken']);
+      await _apiClient.setTokens(
+        response['accessToken'],
+        response['refreshToken'],
+      );
 
       if (mounted) {
         widget.onLoginSuccess();

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/main.dart';
 import 'package:smart_city_app/screens/complaints_screen.dart';
 import 'package:smart_city_app/screens/profile_screen.dart';
@@ -15,7 +14,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  final ApiClient _apiClient = ApiClient();
 
   void _onItemTapped(int index) {
     setState(() {

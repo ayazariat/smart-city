@@ -6,6 +6,7 @@ const commentSchema = new mongoose.Schema(
     author: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     complaint: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint" },
     moderated: { type: Boolean, default: false },
+    isInternal: { type: Boolean, default: false }, // Internal notes only visible to staff
   },
   { timestamps: true },
 );

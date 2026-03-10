@@ -10,6 +10,9 @@ router.post("/register", authController.register);
 // Verify registration code
 router.post("/verify-code", authController.verifyCode);
 
+// Verify magic link token (for admin-created technicians/managers/agents)
+router.post("/verify-magic-token", authController.verifyMagicToken);
+
 // Delete pending registration
 router.delete("/pending-registration", authController.deletePendingRegistration);
 

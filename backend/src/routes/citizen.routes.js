@@ -1,3 +1,4 @@
+
 const express = require("express");
 const router = express.Router();
 const { authenticate, authorize } = require("../middleware/auth");
@@ -9,13 +10,17 @@ const AuditLog = require("../models/AuditLog");
 
 // Category to department mapping
 const categoryToDepartment = {
-  ROAD: "Roads",
-  LIGHTING: "Lighting",
+  ROAD: "Roads & Infrastructure",
+  LIGHTING: "Public Lighting",
   WASTE: "Waste Management",
-  WATER: "Water",
-  SAFETY: "Public Safety",
-  PUBLIC_PROPERTY: "Public Property",
-  OTHER: "General",
+  WATER: "Water & Sanitation",
+  SAFETY: "Public Equipment",
+  PUBLIC_PROPERTY: "Urban Planning",
+  GREEN_SPACE: "Parks & Green Spaces",
+  TRAFFIC: "Traffic & Road Signage",
+  URBAN_PLANNING: "Urban Planning",
+  EQUIPMENT: "Public Equipment",
+  OTHER: "Services Administratifs",
 };
 
 // Priority scores based on urgency
@@ -113,6 +118,8 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
         if (!item.type || !validMediaTypes.includes(item.type)) {
           return res.status(400).json({ message: "Invalid media type" });
         }
+        // Accept any string URL for now (including blob URLs and data URLs)
+        // In production, this should validate proper URLs
         if (!item.url || typeof item.url !== "string") {
           return res.status(400).json({ message: "Invalid media URL" });
         }
@@ -174,7 +181,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       urgency: urgency || "MEDIUM",
       priorityScore,
       location: Object.keys(geoLocation).length ? geoLocation : {},
-      municipality: location?.municipality || location?.commune || "",
+      municipalityName: location?.municipality || location?.commune || "",
       media: media || [],
       isAnonymous: !!isAnonymous,
       ownerName: !isAnonymous ? ownerName : undefined,
@@ -265,19 +272,108 @@ router.get("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, re
     })
       .populate("assignedDepartment", "name email phone")
       .populate("assignedTeam", "name members")
-      .populate("createdBy", "fullName email phone");
+      .populate("createdBy", "fullName email phone")
+      .populate("municipality", "name governorate")
+      .populate("assignedTo", "fullName email");
 
     if (!complaint) {
       return res.status(404).json({ message: "Complaint not found" });
     }
 
+    // Add municipality to location if present
+    const response = complaint.toObject();
+    if (complaint.municipality) {
+      response.location = response.location || {};
+      response.location.municipality = complaint.municipality.name;
+      response.location.governorate = complaint.municipality.governorate;
+    }
+
     res.json({
       message: "Complaint retrieved successfully",
-      complaint,
+      complaint: response,
     });
   } catch (error) {
     console.error("Get complaint error:", error);
     res.status(500).json({ message: "Failed to retrieve complaint" });
+  }
+});
+
+// PUT /api/citizen/complaints/:id - Update citizen's own complaint (only if SUBMITTED)
+router.put("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, res) => {
+  try {
+    const { title, description, category, urgency, location, media } = req.body;
+
+    // Find complaint and verify ownership
+    const complaint = await Complaint.findOne({
+      _id: req.params.id,
+      createdBy: req.user.userId,
+    });
+
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    // Only allow editing if status is SUBMITTED
+    if (complaint.status !== "SUBMITTED") {
+      return res.status(403).json({ 
+        message: "Cannot edit complaint. It has already been processed." 
+      });
+    }
+
+    // Update fields if provided
+    if (title) complaint.title = title;
+    if (description) complaint.description = description;
+    if (category) complaint.category = category;
+    if (urgency) complaint.urgency = urgency;
+    if (location) {
+      if (location.latitude) complaint.location.latitude = location.latitude;
+      if (location.longitude) complaint.location.longitude = location.longitude;
+      if (location.address) complaint.location.address = location.address;
+      if (location.commune) complaint.location.commune = location.commune;
+      if (location.governorate) complaint.location.governorate = location.governorate;
+    }
+    if (media) complaint.media = media;
+
+    await complaint.save();
+
+    res.json({
+      message: "Complaint updated successfully",
+      complaint,
+    });
+  } catch (error) {
+    console.error("Update complaint error:", error);
+    res.status(500).json({ message: "Failed to update complaint" });
+  }
+});
+
+// DELETE /api/citizen/complaints/:id - Delete citizen's own complaint (only if SUBMITTED)
+router.delete("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, res) => {
+  try {
+    // Find complaint and verify ownership
+    const complaint = await Complaint.findOne({
+      _id: req.params.id,
+      createdBy: req.user.userId,
+    });
+
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    // Only allow deletion if status is SUBMITTED
+    if (complaint.status !== "SUBMITTED") {
+      return res.status(403).json({ 
+        message: "Cannot delete complaint. It has already been processed." 
+      });
+    }
+
+    await Complaint.findByIdAndDelete(req.params.id);
+
+    res.json({
+      message: "Complaint deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete complaint error:", error);
+    res.status(500).json({ message: "Failed to delete complaint" });
   }
 });
 

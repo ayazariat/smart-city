@@ -63,7 +63,7 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
     }
   }
 
-  IconData _getCategoryIcon(String category) {
+  IconData _getCategoryIcon(String? category) {
     switch (category?.toLowerCase()) {
       case 'road':
         return Icons.add_road;
@@ -408,7 +408,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
 
               // Category
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: const InputDecoration(
                   labelText: 'Category',
                   prefixIcon: Icon(Icons.category),
@@ -471,7 +471,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
 
               // Governorate
               DropdownButtonFormField<String>(
-                value: _selectedGovernorate,
+                initialValue: _selectedGovernorate,
                 decoration: const InputDecoration(
                   labelText: 'Governorate',
                   prefixIcon: Icon(Icons.location_city),

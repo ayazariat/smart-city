@@ -132,14 +132,14 @@ class ApiClient {
 
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/auth/refresh'),
+        Uri.parse('$baseUrl/auth/refresh-token'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': _refreshToken}),
       );
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        await setTokens(body['token'], body['refreshToken']);
+        await setTokens(body['accessToken'], body['refreshToken']);
         // Retry original request
         return null; // Caller should retry
       } else {

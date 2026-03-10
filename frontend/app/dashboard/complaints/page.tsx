@@ -3,107 +3,123 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { 
-  FileText, 
-  Search, 
-  Filter, 
-  MapPin, 
-  Clock, 
-  ArrowLeft,
-  User,
-  Building2,
-  AlertCircle,
-  Camera
-} from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { complaintService } from "@/services/complaint.service";
 import { Complaint } from "@/types";
+import { categoryLabels } from "@/lib/complaints";
+import {
+  FilterBar,
+  LoadingSpinner,
+  EmptyState,
+  ComplaintCard,
+} from "@/components/ui";
+import { Sparkles, LogOut, FileText } from "lucide-react";
 
-// Status config
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED: { label: "SUBMITTED", bgClass: "bg-yellow-100", textClass: "text-yellow-800" },
-  VALIDATED: { label: "VALIDATED", bgClass: "bg-blue-100", textClass: "text-blue-800" },
-  ASSIGNED: { label: "ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
-  IN_PROGRESS: { label: "IN PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
-  RESOLVED: { label: "RESOLVED", bgClass: "bg-green-100", textClass: "text-green-800" },
-  CLOSED: { label: "CLOSED", bgClass: "bg-gray-100", textClass: "text-gray-800" },
-  REJECTED: { label: "REJECTED", bgClass: "bg-red-100", textClass: "text-red-800" },
-};
+const ALLOWED_ROLES = ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN", "TECHNICIAN"] as const;
 
-// Category labels
-const categoryLabels: Record<string, string> = {
-  ROAD: "Roads",
-  LIGHTING: "Lighting",
-  WASTE: "Waste",
-  WATER: "Water",
-  SAFETY: "Safety",
-  PUBLIC_PROPERTY: "Public Property",
-  GREEN_SPACE: "Green Spaces",
-  BUILDING: "Buildings",
-  NOISE: "Noise",
-  OTHER: "Other",
-};
+// Simple role label helper
+function getRoleDisplayName(role: string): string {
+  switch (role) {
+    case "CITIZEN": return "Citizen";
+    case "MUNICIPAL_AGENT": return "Municipal Agent";
+    case "DEPARTMENT_MANAGER": return "Department Manager";
+    case "TECHNICIAN": return "Technician";
+    case "ADMIN": return "Administrator";
+    default: return role;
+  }
+}
+
+// Reuse the SmartCity sidebar for dashboard area
+function Sidebar({
+  user,
+  onLogout,
+}: {
+  user: { fullName: string; role: string };
+  onLogout: () => Promise<void>;
+}) {
+  return (
+    <aside className="sidebar">
+      <div className="sb-logo">
+        <div className="sb-icon">
+          <Sparkles className="w-5 h-5 text-[var(--green)]" />
+        </div>
+        <div>
+          <div className="sb-name">Smart City{`\n`}Tunisia</div>
+          <div className="sb-sub">Urban Services</div>
+        </div>
+      </div>
+
+      <div className="sb-user">
+        <Link href="/profile" className="sb-user-link">
+          <div className="sb-avt">
+            {user.fullName.charAt(0).toUpperCase()}
+          </div>
+          <div className="sb-uname">{user.fullName}</div>
+          <span className="sb-urole">{getRoleDisplayName(user.role)}</span>
+        </Link>
+      </div>
+
+      <div className="sb-nav">
+        <div className="sb-section">Navigation</div>
+        <Link href="/dashboard" className="sb-item">
+          <span className="sb-ic">
+            <FileText className="w-4 h-4" />
+          </span>
+          Dashboard
+        </Link>
+        <button className="sb-item active" type="button">
+          <span className="sb-ic">
+            <FileText className="w-4 h-4" />
+          </span>
+          Complaints
+        </button>
+        <Link href="/archive" className="sb-item">
+          <span className="sb-ic">
+            <FileText className="w-4 h-4" />
+          </span>
+          Archives
+        </Link>
+      </div>
+
+      <div className="sb-footer">
+        <button className="sb-logout" type="button" onClick={onLogout}>
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
 
 export default function DashboardComplaintsPage() {
   const router = useRouter();
-  const { user, token } = useAuthStore();
+  const { user, token, hydrated, logout } = useAuthStore();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [view, setView] = useState<"list" | "map" | "split">("list");
 
-  // Check if user has access (only for agent, manager, admin)
+  // Guard: redirect if not authorised
   useEffect(() => {
-    console.log("Token:", token ? "present" : "missing");
-    console.log("User:", user);
-    
-    if (!token) {
-      console.log("No token, redirecting to /");
-      router.push("/");
-      return;
-    }
-    
-    // Only allow agents, managers, and admins
-    if (user && !["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN", "TECHNICIAN"].includes(user.role)) {
-      console.log("User role not allowed, redirecting to /dashboard");
+    if (!hydrated) return;
+    if (!token) { router.push("/"); return; }
+    if (user && !ALLOWED_ROLES.includes(user.role as typeof ALLOWED_ROLES[number])) {
       router.push("/dashboard");
-    } else if (user) {
-      console.log("User role allowed:", user.role);
     }
-  }, [token, user, router]);
+  }, [token, user, router, hydrated]);
 
   useEffect(() => {
     const fetchComplaints = async () => {
-      if (!token || !user) {
-        return;
-      }
-      
-      // Only allow agents, managers, and admins
-      const userRole = user.role;
-      
-      if (!["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN", "TECHNICIAN"].includes(userRole)) {
-        return;
-      }
-      
+      if (!hydrated || !token || !user) return;
+      if (!ALLOWED_ROLES.includes(user.role as typeof ALLOWED_ROLES[number])) return;
+
       try {
         setLoading(true);
-        setError(null);
-        
-        // For non-citizens, fetch all complaints
-        const response = await complaintService.getAllComplaints({
-          page: 1,
-          limit: 50,
-        });
-        
-        if (response.data && response.data.complaints) {
-          setComplaints(response.data.complaints);
-        } else {
-          setComplaints([]);
-        }
-      } catch (err: unknown) {
+        const response = await complaintService.getAllComplaints({ page: 1, limit: 50 });
+        setComplaints(response.data?.complaints ?? []);
+      } catch (err) {
         console.error("Error fetching complaints:", err);
-        // Silently fail - just show empty list
         setComplaints([]);
       } finally {
         setLoading(false);
@@ -111,222 +127,109 @@ export default function DashboardComplaintsPage() {
     };
 
     fetchComplaints();
-  }, [token, user]);
+  }, [token, user, hydrated]);
 
-  const filteredComplaints = complaints.filter((complaint) => {
-    const matchesSearch = !searchTerm || 
-      complaint.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      categoryLabels[complaint.category]?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      complaint._id?.includes(searchTerm);
-    return matchesSearch;
+  const filteredComplaints = complaints.filter((c) => {
+    // Apply status filter
+    if (statusFilter && c.status !== statusFilter) return false;
+    
+    // Apply search filter
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      c.description?.toLowerCase().includes(q) ||
+      categoryLabels[c.category]?.toLowerCase().includes(q) ||
+      c._id?.includes(searchTerm)
+    );
   });
 
-  const getComplaintIdDisplay = (id: string) => {
-    return `RC-${id.slice(-6)}`;
+  if (!hydrated) return <LoadingSpinner fullScreen />;
+  if (!user) return null;
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
   };
 
-  if (!user) {
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/dashboard"
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all duration-200 flex items-center gap-1 text-slate-600 hover:text-slate-900"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                Complaint Management
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
-                {filteredComplaints.length} complaints
-              </span>
+    <div className="app">
+      <Sidebar user={user} onLogout={handleLogout} />
+      <div className="main">
+        <div className="topbar">
+          <div>
+            <div className="topbar-title">Complaints</div>
+            <div className="topbar-sub">
+              {getRoleDisplayName(user.role)} · Management view
             </div>
           </div>
+          <div className="topbar-right">
+            <div className="vtoggle">
+              <button
+                className={`vt ${view === "list" ? "on" : ""}`}
+                onClick={() => setView("list")}
+              >
+                List
+              </button>
+              <button
+                className={`vt ${view === "map" ? "on" : ""}`}
+                onClick={() => setView("map")}
+              >
+                Map
+              </button>
+              <button
+                className={`vt ${view === "split" ? "on" : ""}`}
+                onClick={() => setView("split")}
+              >
+                Split
+              </button>
+            </div>
+            <span className="badge" style={{ background: "var(--bg3)", color: "var(--txt2)" }}>
+              {filteredComplaints.length} complaints
+            </span>
+          </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-lg p-4 mb-6 border border-slate-100">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by description, category or ID..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        <main className="page">
+          <div className="card" style={{ marginBottom: 12 }}>
+            <FilterBar
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              statusFilter={statusFilter}
+              onStatusChange={setStatusFilter}
+              searchPlaceholder="Search by description, category or ID…"
+              count={filteredComplaints.length}
+            />
+          </div>
+
+          {loading && <LoadingSpinner />}
+
+          {!loading && (
+            filteredComplaints.length === 0 ? (
+              <EmptyState
+                message={
+                  searchTerm || statusFilter
+                    ? "Try adjusting your search or filters."
+                    : "No complaints have been submitted yet."
+                }
               />
-            </div>
-            
-            {/* Status Filter */}
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-              >
-                <option value="">All Statuses</option>
-                <option value="SUBMITTED">Submitted</option>
-                <option value="VALIDATED">Validated</option>
-                <option value="ASSIGNED">Assigned</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RESOLVED">Resolved</option>
-                <option value="CLOSED">Closed</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Error Message - Hidden for silent failure */}
-        {/* error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            {error}
-          </div>
-        )} */}
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        )}
-
-        {/* Complaints List */}
-        {!loading && (
-          <div className="grid gap-4">
-            {filteredComplaints.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-slate-100">
-                <FileText className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                  No complaints found
-                </h3>
-                <p className="text-slate-500">
-                  {searchTerm || statusFilter 
-                    ? "Try modifying your search filters"
-                    : "No complaints have been submitted yet"}
-                </p>
-              </div>
             ) : (
-              filteredComplaints.map((complaint) => {
-                const status = statusConfig[complaint.status] || {
-                  label: complaint.status,
-                  bgClass: "bg-gray-100",
-                  textClass: "text-gray-800",
-                };
-
-                return (
-                  <Link
-                    key={complaint._id || complaint.id}
-                    href={`/dashboard/complaints/${complaint._id || complaint.id}`}
-                    className="block bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-slate-100 hover:border-primary/20 group"
-                  >
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="text-sm font-mono text-slate-500">
-                              {getComplaintIdDisplay(complaint._id || complaint.id || "")}
-                            </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${status.bgClass} ${status.textClass}`}>
-                              {status.label}
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                              {categoryLabels[complaint.category] || complaint.category}
-                            </span>
-                          </div>
-                          
-                          <p className="text-slate-900 line-clamp-2 mb-3">
-                            {complaint.description}
-                          </p>
-                          
-                          <div className="flex items-center gap-4 text-sm text-slate-500">
-                            {complaint.location?.address && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" />
-                                {complaint.location.address}
-                              </span>
-                            )}
-                            {complaint.citizen && (
-                              <span className="flex items-center gap-1">
-                                <User className="w-4 h-4" />
-                                {complaint.citizen.fullName}
-                              </span>
-                            )}
-                            {complaint.department && (
-                              <span className="flex items-center gap-1">
-                                <Building2 className="w-4 h-4" />
-                                {complaint.department.name}
-                              </span>
-                            )}
-                          </div>
-                          {/* Media thumbnails */}
-                          {complaint.media && complaint.media.length > 0 && (
-                            <div className="flex items-center gap-2 mt-3">
-                              <Camera className="w-4 h-4 text-slate-400" />
-                              <div className="flex gap-1">
-                                {complaint.media.slice(0, 3).map((item, idx) => (
-                                  <div key={idx} className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-                                    {item.type === 'photo' || !item.type ? (
-                                      <img 
-                                        src={item.url} 
-                                        alt={`Media ${idx + 1}`}
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      <video src={item.url} className="w-full h-full object-cover" />
-                                    )}
-                                    {idx === 2 && complaint.media.length > 3 && (
-                                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                        <span className="text-white text-xs font-medium">+{complaint.media.length - 3}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="flex items-center gap-1 text-xs text-slate-500">
-                            <Clock className="w-3 h-3" />
-                            {new Date(complaint.createdAt).toLocaleDateString("en-US", {
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </span>
-                          <div className="group-hover:translate-x-1 transition-transform text-primary">
-                            →
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })
-            )}
-          </div>
-        )}
-      </main>
+              <div className="card" style={{ padding: 16 }}>
+                <div className="grid gap-4">
+                  {filteredComplaints.map((complaint) => (
+                    <ComplaintCard
+                      key={complaint._id || complaint.id}
+                      complaint={complaint}
+                      href={`/dashboard/complaints/${complaint._id || complaint.id}`}
+                      showCitizen
+                      showDepartment
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          )}
+        </main>
+      </div>
     </div>
   );
 }

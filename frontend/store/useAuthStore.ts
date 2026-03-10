@@ -234,10 +234,13 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         refreshToken: state.refreshToken,
       }),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => (state, error) => {
         // Mark as hydrated when storage is rehydrated
-        if (state) {
-          state.hydrated = true;
+        if (!error && state) {
+          // Use setTimeout to ensure this runs after the store is initialized
+          setTimeout(() => {
+            useAuthStore.setState({ hydrated: true });
+          }, 0);
         }
       },
     }

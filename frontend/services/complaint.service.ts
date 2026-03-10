@@ -1,5 +1,42 @@
-import { Complaint, CreateComplaintData } from "@/types";
+import { Complaint, CreateComplaintData, ComplaintCategory, ComplaintUrgency, ComplaintLocation, ComplaintMedia, Comment } from "@/types";
 import { apiClient } from "./api.client";
+
+/**
+ * Upload media files to Cloudinary
+ */
+export const uploadMedia = async (
+  files: File[]
+): Promise<{ success: boolean; data?: ComplaintMedia[]; message?: string }> => {
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('media', file);
+  });
+
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/upload`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: formData,
+      }
+    );
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      return { success: false, message: result.message || 'Upload failed' };
+    }
+
+    return { success: true, data: result.data };
+  } catch (error) {
+    console.error('Upload error:', error);
+    return { success: false, message: 'Failed to upload files' };
+  }
+};
 
 /**
  * Submit a new complaint (authenticated citizen)
@@ -60,6 +97,32 @@ export const getComplaintById = async (
 };
 
 /**
+ * Update citizen's own complaint (only if SUBMITTED status)
+ */
+export const updateComplaint = async (
+  id: string,
+  data: Partial<{
+    title: string;
+    description: string;
+    category: ComplaintCategory;
+    urgency: ComplaintUrgency;
+    location: ComplaintLocation;
+    media: ComplaintMedia[];
+  }>
+): Promise<{ message: string; complaint: Complaint }> => {
+  return apiClient.put<{ message: string; complaint: Complaint }>(`/citizen/complaints/${id}`, data);
+};
+
+/**
+ * Delete citizen's own complaint (only if SUBMITTED status)
+ */
+export const deleteComplaint = async (
+  id: string
+): Promise<{ message: string }> => {
+  return apiClient.delete<{ message: string }>(`/citizen/complaints/${id}`);
+};
+
+/**
  * Get complaint detail for agent/manager (BL-16)
  * Returns full complaint details including media, location, and reporter info
  */
@@ -80,6 +143,7 @@ export const getAllComplaints = async (params?: {
   search?: string;
   page?: number;
   limit?: number;
+  includeArchived?: boolean;
 }): Promise<{
   success: boolean;
   data: {
@@ -100,6 +164,7 @@ export const getAllComplaints = async (params?: {
   if (params?.search) searchParams.set("search", params.search);
   if (params?.page) searchParams.set("page", params.page.toString());
   if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.includeArchived) searchParams.set("includeArchived", "true");
 
   const queryString = searchParams.toString();
   const endpoint = `/complaints${queryString ? `?${queryString}` : ""}`;
@@ -172,14 +237,71 @@ export const updateComplaintPriority = async (
   );
 };
 
+/**
+ * Add a comment/note to a complaint
+ * isInternal: true for internal notes (staff only)
+ */
+export const addComplaintComment = async (
+  id: string,
+  text: string,
+  isInternal: boolean = false
+): Promise<{ success: boolean; data: Comment; message?: string }> => {
+  return apiClient.post<{ success: boolean; data: Comment; message?: string }>(
+    `/complaints/${id}/comments`,
+    { text, isInternal }
+  );
+};
+
+/**
+ * Citizen confirms resolution (changes RESOLVED to CLOSED)
+ */
+export const confirmResolution = async (
+  id: string
+): Promise<{ success: boolean; data: Complaint; message?: string }> => {
+  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
+    `/complaints/${id}/status`,
+    { status: "CLOSED" }
+  );
+};
+
+/**
+ * Archive a complaint (admin only)
+ */
+export const archiveComplaint = async (
+  id: string
+): Promise<{ success: boolean; data: Complaint; message?: string }> => {
+  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
+    `/complaints/${id}/archive`,
+    {}
+  );
+};
+
+/**
+ * Unarchive a complaint (admin only)
+ */
+export const unarchiveComplaint = async (
+  id: string
+): Promise<{ success: boolean; data: Complaint; message?: string }> => {
+  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
+    `/complaints/${id}/unarchive`,
+    {}
+  );
+};
+
 export const complaintService = {
   submitComplaint,
   getMyComplaints,
   getComplaintById,
+  updateComplaint,
+  deleteComplaint,
   getComplaintDetail,
   getAllComplaints,
   updateComplaintStatus,
   assignComplaint,
   updateComplaintDepartment,
   updateComplaintPriority,
+  addComplaintComment,
+  confirmResolution,
+  archiveComplaint,
+  unarchiveComplaint,
 };

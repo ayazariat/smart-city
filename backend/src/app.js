@@ -5,17 +5,19 @@ const authRoutes = require("./routes/auth");
 const citizenRoutes = require("./routes/citizen.routes");
 const agentRoutes = require("./routes/agent.routes");
 const managerRoutes = require("./routes/manager.routes");
+const technicianRoutes = require("./routes/technician.routes");
 const adminRoutes = require("./routes/admin.routes");
 const complaintRoutes = require("./routes/complaints");
+const uploadRoutes = require("./routes/upload");
 
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
 // Routes
@@ -31,8 +33,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/citizen", citizenRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/manager", managerRoutes);
+app.use("/api/technician", technicianRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/complaints", complaintRoutes);
+app.use("/api/upload", uploadRoutes);
 
 // 404 handler
 app.use((req, res) => {

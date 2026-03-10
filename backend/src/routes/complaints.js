@@ -24,6 +24,8 @@ router.patch("/:id/status", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MA
 router.patch("/:id/assign", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignComplaint);
 router.patch("/:id/department", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignDepartment);
 router.patch("/:id/priority", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updatePriority);
+router.patch("/:id/archive", authorize("ADMIN"), complaintController.archiveComplaint);
+router.patch("/:id/unarchive", authorize("ADMIN"), complaintController.unarchiveComplaint);
 
 // Common routes - both citizens and admin can access
 router.get("/:id", complaintController.getComplaintById);

@@ -6,6 +6,11 @@ const departmentSchema = new mongoose.Schema(
     description: String,
     email: String,
     phone: String,
+    // Categories this department handles
+    categories: [{
+      type: String,
+      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "TRAFFIC", "URBAN_PLANNING", "EQUIPMENT"]
+    }],
     // Manager responsible for this department
     responsable: { 
       type: mongoose.Schema.Types.ObjectId, 

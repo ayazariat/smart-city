@@ -49,7 +49,7 @@ const formatUserResponse = async (user) => {
       if (dept) {
         department = { _id: dept._id.toString(), name: dept.name };
       }
-    } catch (e) {
+    } catch {
       // Ignore populate errors
     }
   }
@@ -61,7 +61,7 @@ const formatUserResponse = async (user) => {
       if (mun) {
         municipality = { _id: mun._id.toString(), name: mun.name, governorate: mun.governorate };
       }
-    } catch (e) {
+    } catch {
       // Ignore populate errors
     }
   }
@@ -226,16 +226,21 @@ class UserController {
       const magicTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
 
       // Create user without password (will be set via magic link)
+      // Non-CITIZEN roles require verification before login
+      const requiresVerification = ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"].includes(userRole);
+      const userStatus = requiresVerification ? "PENDING_VERIFICATION" : "ACTIVE";
+      
       const user = new User({
         fullName,
         email: normalizedEmail,
         phone: phone || null,
         role: userRole,
+        status: userStatus,  // TECHNICIAN/MANAGER/AGENT need verification first
         department: departmentId,
         governorate: governorate || "",
         municipality: municipalityId || null,
         municipalityName: municipality || "",
-        isVerified: true, // Admin-created users are verified by default
+        isVerified: !requiresVerification,  // Non-CITIZEN roles start unverified
         magicToken,
         magicTokenExpires,
       });
@@ -244,7 +249,7 @@ class UserController {
 
       // Send invitation email with magic link
       try {
-        await sendMagicLinkEmail(user.email, user.email, magicToken, fullName);
+        await sendMagicLinkEmail(user.email, user._id.toString(), magicToken, fullName);
       } catch (emailError) {
         console.error("Failed to send invitation email:", emailError);
         // Don't fail the request if email fails
@@ -516,9 +521,16 @@ class UserController {
     try {
       const totalUsers = await User.countDocuments();
       const activeUsers = await User.countDocuments({ isActive: true });
+      const inactiveUsers = await User.countDocuments({ isActive: false });
       const verifiedUsers = await User.countDocuments({ isVerified: true });
 
       const usersByRole = await User.aggregate([
+        { $group: { _id: "$role", count: { $sum: 1 } } }
+      ]);
+
+      // Also get active/inactive counts per role
+      const activeByRole = await User.aggregate([
+        { $match: { isActive: true } },
         { $group: { _id: "$role", count: { $sum: 1 } } }
       ]);
 
@@ -533,16 +545,25 @@ class UserController {
         .sort({ createdAt: -1 })
         .limit(5);
 
+      // Format byRole as array with active/inactive breakdown
+      const byRoleArray = usersByRole.map(role => {
+        const activeCount = activeByRole.find(ar => ar._id === role._id)?.count || 0;
+        return {
+          _id: role._id,
+          count: role.count,
+          active: activeCount,
+          inactive: role.count - activeCount
+        };
+      });
+
       res.json({
         success: true,
         data: {
           total: totalUsers,
           active: activeUsers,
+          inactive: inactiveUsers,
           verified: verifiedUsers,
-          byRole: usersByRole.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-          }, {}),
+          byRole: byRoleArray,
           byGovernorate: usersByGovernorate.reduce((acc, item) => {
             acc[item._id] = item.count;
             return acc;
@@ -600,6 +621,7 @@ class UserController {
           description: d.description,
           email: d.email,
           phone: d.phone,
+          categories: d.categories || [],
         })),
       });
     } catch (error) {

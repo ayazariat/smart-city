@@ -1,4 +1,4 @@
-/// API Configuration for Smart City Tunisia Mobile App
+// API Configuration for Smart City Tunisia Mobile App
 
 class ApiConfig {
   // Base URL for the API - change this to your production URL

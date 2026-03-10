@@ -3,78 +3,65 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { 
-  FileText, 
-  Search, 
-  Filter, 
-  MapPin, 
-  Clock, 
-  ArrowLeft,
-  User,
-  Building2,
-  AlertCircle,
-  Camera
+import {
+  FileText,
+  CheckCircle,
+  XCircle,
+  Building,
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { complaintService } from "@/services/complaint.service";
+import { agentService } from "@/services/agent.service";
 import { Complaint } from "@/types";
-
-// Status config
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED: { label: "SUBMITTED", bgClass: "bg-yellow-100", textClass: "text-yellow-800" },
-  VALIDATED: { label: "VALIDATED", bgClass: "bg-blue-100", textClass: "text-blue-800" },
-  ASSIGNED: { label: "ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
-  IN_PROGRESS: { label: "IN PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
-  RESOLVED: { label: "RESOLVED", bgClass: "bg-green-100", textClass: "text-green-800" },
-  CLOSED: { label: "CLOSED", bgClass: "bg-gray-100", textClass: "text-gray-800" },
-  REJECTED: { label: "REJECTED", bgClass: "bg-red-100", textClass: "text-red-800" },
-};
-
-// Category labels
-const categoryLabels: Record<string, string> = {
-  ROAD: "Roads",
-  LIGHTING: "Lighting",
-  WASTE: "Waste",
-  WATER: "Water",
-  SAFETY: "Safety",
-  PUBLIC_PROPERTY: "Public Property",
-  GREEN_SPACE: "Green Spaces",
-  BUILDING: "Buildings",
-  NOISE: "Noise",
-  OTHER: "Other",
-};
+import { categoryLabels } from "@/lib/complaints";
+import {
+  PageHeader,
+  FilterBar,
+  LoadingSpinner,
+  EmptyState,
+  ComplaintCard,
+  Modal,
+  Button,
+} from "@/components/ui";
 
 export default function AgentComplaintsPage() {
   const router = useRouter();
   const { user, token } = useAuthStore();
+
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [departments, setDepartments] = useState<Array<{ _id: string; name: string }>>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Reject modal state
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  // Assign modal state
+  const [assignTarget, setAssignTarget] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState("");
 
   useEffect(() => {
-    if (!token) {
-      router.push("/");
-    }
+    if (!token) router.push("/");
   }, [token, router]);
 
+  const refreshComplaints = async () => {
+    const response = await agentService.getAgentComplaints({ status: statusFilter || undefined });
+    if (response.data) setComplaints(response.data.complaints);
+  };
+
   useEffect(() => {
-    const fetchComplaints = async () => {
+    const fetch = async () => {
       if (!token || !user || user.role !== "MUNICIPAL_AGENT") return;
-      
       try {
         setLoading(true);
-        
-        // Get all complaints with VALIDATED or ASSIGNED status
-        const response = await complaintService.getAllComplaints({
+        const response = await agentService.getAgentComplaints({
           page: 1,
           limit: 50,
           status: statusFilter || undefined,
         });
-        
-        if (response.data && response.data.complaints) {
-          setComplaints(response.data.complaints);
-        }
+        if (response.data?.complaints) setComplaints(response.data.complaints);
       } catch (err) {
         console.error("Error fetching complaints:", err);
         setComplaints([]);
@@ -82,211 +69,242 @@ export default function AgentComplaintsPage() {
         setLoading(false);
       }
     };
-
-    fetchComplaints();
+    fetch();
   }, [token, user, statusFilter]);
 
-  const filteredComplaints = complaints.filter((complaint) => {
-    const matchesSearch = !searchTerm || 
-      complaint.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      categoryLabels[complaint.category]?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
-  });
+  useEffect(() => {
+    const fetchDepts = async () => {
+      if (!token || !user || user.role !== "MUNICIPAL_AGENT") return;
+      try {
+        const response = await agentService.getAgentDepartments();
+        if (response.data) setDepartments(response.data);
+      } catch (err) {
+        console.error("Error fetching departments:", err);
+      }
+    };
+    fetchDepts();
+  }, [token, user]);
 
-  const getComplaintIdDisplay = (id: string) => {
-    return `RC-${id.slice(-6)}`;
+  const handleValidate = async (complaintId: string) => {
+    setActionLoading(complaintId);
+    try {
+      await agentService.validateComplaint(complaintId);
+      await refreshComplaints();
+    } catch (err) {
+      console.error("Error validating:", err);
+      alert("Failed to validate complaint");
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  if (!user || user.role !== "MUNICIPAL_AGENT") {
-    return null;
-  }
+  const handleReject = async () => {
+    if (!rejectTarget || !rejectReason) return;
+    setActionLoading(rejectTarget);
+    try {
+      await agentService.rejectComplaint(rejectTarget, rejectReason);
+      setRejectTarget(null);
+      setRejectReason("");
+      await refreshComplaints();
+    } catch (err) {
+      console.error("Error rejecting:", err);
+      alert("Failed to reject complaint");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!assignTarget || !selectedDepartment) return;
+    setActionLoading(assignTarget);
+    try {
+      await agentService.assignComplaintToDepartment(assignTarget, selectedDepartment);
+      setAssignTarget(null);
+      setSelectedDepartment("");
+      await refreshComplaints();
+    } catch (err) {
+      console.error("Error assigning:", err);
+      alert("Failed to assign complaint");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const filteredComplaints = complaints.filter((c) => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      c.description?.toLowerCase().includes(q) ||
+      categoryLabels[c.category]?.toLowerCase().includes(q)
+    );
+  });
+
+  if (!user || user.role !== "MUNICIPAL_AGENT") return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href="/dashboard"
-                className="p-2 hover:bg-slate-100 rounded-xl transition-all duration-200 flex items-center gap-1 text-slate-600 hover:text-slate-900"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                My Actions
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
-                {filteredComplaints.length} complaints
-              </span>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+      <PageHeader
+        title="Agent Dashboard"
+        backHref="/dashboard"
+        rightContent={
+          <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
+            {filteredComplaints.length} complaints
+          </span>
+        }
+      />
+
+      {/* ── Reject Modal ── */}
+      <Modal
+        isOpen={rejectTarget !== null}
+        onClose={() => { setRejectTarget(null); setRejectReason(""); }}
+        title="Reject Complaint"
+        description="Please provide a reason for rejecting this complaint."
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setRejectTarget(null); setRejectReason(""); }}
+              disabled={actionLoading !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleReject}
+              isLoading={actionLoading !== null}
+              disabled={!rejectReason || actionLoading !== null}
+            >
+              Reject
+            </Button>
+          </>
+        }
+      >
+        <textarea
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+          rows={3}
+          placeholder="Enter rejection reason…"
+        />
+      </Modal>
+
+      {/* ── Assign Modal ── */}
+      <Modal
+        isOpen={assignTarget !== null}
+        onClose={() => { setAssignTarget(null); setSelectedDepartment(""); }}
+        title="Assign to Department"
+        description="Select the department that will handle this complaint."
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setAssignTarget(null); setSelectedDepartment(""); }}
+              disabled={actionLoading !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleAssign}
+              isLoading={actionLoading !== null}
+              disabled={!selectedDepartment || actionLoading !== null}
+            >
+              Assign
+            </Button>
+          </>
+        }
+      >
+        <select
+          value={selectedDepartment}
+          onChange={(e) => setSelectedDepartment(e.target.value)}
+          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+        >
+          <option value="">Select department…</option>
+          {departments.map((dept) => (
+            <option key={dept._id} value={dept._id}>{dept.name}</option>
+          ))}
+        </select>
+      </Modal>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Filters */}
-        <div className="bg-white rounded-2xl shadow-lg p-4 mb-6 border border-slate-100">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by description or category..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-              >
-                <option value="">All Statuses</option>
-                <option value="SUBMITTED">Submitted</option>
-                <option value="VALIDATED">Validated</option>
-                <option value="ASSIGNED">Assigned</option>
-                <option value="IN_PROGRESS">In Progress</option>
-                <option value="RESOLVED">Resolved</option>
-                <option value="CLOSED">Closed</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        <FilterBar
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          count={filteredComplaints.length}
+        />
 
-        {/* Loading */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        )}
+        {loading && <LoadingSpinner />}
 
-        {/* Complaints List */}
         {!loading && (
-          <div className="grid gap-4">
-            {filteredComplaints.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-slate-100">
-                <FileText className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                  No complaints found
-                </h3>
-                <p className="text-slate-500">
-                  {searchTerm || statusFilter 
-                    ? "Try modifying your search filters"
-                    : "No complaints assigned to you yet"}
-                </p>
-              </div>
-            ) : (
-              filteredComplaints.map((complaint) => {
-                const status = statusConfig[complaint.status] || {
-                  label: complaint.status,
-                  bgClass: "bg-gray-100",
-                  textClass: "text-gray-800",
-                };
+          filteredComplaints.length === 0 ? (
+            <EmptyState
+              message={
+                searchTerm || statusFilter
+                  ? "Try adjusting your search or filters."
+                  : "No complaints assigned to you yet."
+              }
+            />
+          ) : (
+            <div className="grid gap-4">
+              {filteredComplaints.map((complaint) => {
+                const id = complaint._id || complaint.id || "";
 
                 return (
-                  <Link
-                    key={complaint._id || complaint.id}
-                    href={`/dashboard/complaints/${complaint._id || complaint.id}`}
-                    className="block bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-slate-100 hover:border-primary/20 group"
-                  >
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="text-sm font-mono text-slate-500">
-                              {getComplaintIdDisplay(complaint._id || complaint.id || "")}
-                            </span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${status.bgClass} ${status.textClass}`}>
-                              {status.label}
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                              {categoryLabels[complaint.category] || complaint.category}
-                            </span>
-                          </div>
-                          
-                          <p className="text-slate-900 line-clamp-2 mb-3">
-                            {complaint.description}
-                          </p>
-                          
-                          <div className="flex items-center gap-4 text-sm text-slate-500">
-                            {complaint.location?.address && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" />
-                                {complaint.location.address}
-                              </span>
-                            )}
-                            {complaint.citizen && (
-                              <span className="flex items-center gap-1">
-                                <User className="w-4 h-4" />
-                                {complaint.citizen.fullName}
-                              </span>
-                            )}
-                            {complaint.department && (
-                              <span className="flex items-center gap-1">
-                                <Building2 className="w-4 h-4" />
-                                {complaint.department.name}
-                              </span>
-                            )}
-                          </div>
-                          {/* Media thumbnails */}
-                          {complaint.media && complaint.media.length > 0 && (
-                            <div className="flex items-center gap-2 mt-3">
-                              <Camera className="w-4 h-4 text-slate-400" />
-                              <div className="flex gap-1">
-                                {complaint.media.slice(0, 3).map((item, idx) => (
-                                  <div key={idx} className="relative w-12 h-12 rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
-                                    {item.type === 'photo' || !item.type ? (
-                                      <img 
-                                        src={item.url} 
-                                        alt={`Media ${idx + 1}`}
-                                        className="w-full h-full object-cover"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      <video src={item.url} className="w-full h-full object-cover" />
-                                    )}
-                                    {idx === 2 && complaint.media.length > 3 && (
-                                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                        <span className="text-white text-xs font-medium">+{complaint.media.length - 3}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="flex items-center gap-1 text-xs text-slate-500">
-                            <Clock className="w-3 h-3" />
-                            {new Date(complaint.createdAt).toLocaleDateString("en-US", {
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </span>
-                          <div className="group-hover:translate-x-1 transition-transform text-primary">
-                            →
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
+                  <ComplaintCard
+                    key={id}
+                    complaint={complaint}
+                    showCitizen
+                    showDepartment
+                    actions={
+                      complaint.status === "SUBMITTED" ? (
+                        <>
+                          <button
+                            onClick={() => handleValidate(id)}
+                            disabled={actionLoading === id}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            {actionLoading === id ? "Validating…" : "Validate"}
+                          </button>
+                          <button
+                            onClick={() => setRejectTarget(id)}
+                            disabled={actionLoading === id}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-urgent text-white rounded-xl hover:bg-urgent-600 transition-colors text-sm font-medium disabled:opacity-50"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Reject
+                          </button>
+                        </>
+                      ) : complaint.status === "VALIDATED" ? (
+                        <button
+                          onClick={() => setAssignTarget(id)}
+                          disabled={actionLoading === id}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-700 transition-colors text-sm font-medium disabled:opacity-50"
+                        >
+                          <Building className="w-4 h-4" />
+                          Assign to Department
+                        </button>
+                      ) : (
+                        <Link
+                          href={`/dashboard/complaints/${id}`}
+                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors text-sm font-medium"
+                        >
+                          <FileText className="w-4 h-4" />
+                          View Details
+                        </Link>
+                      )
+                    }
+                  />
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )
         )}
       </main>
     </div>
