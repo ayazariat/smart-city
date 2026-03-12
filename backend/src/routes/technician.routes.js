@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const { authenticate, authorize } = require("../middleware/auth");
 const Complaint = require("../models/Complaint");
-const User = require("../models/User");
 const RepairTeam = require("../models/RepairTeam");
 
 // All technician routes require authentication and TECHNICIAN role
@@ -92,14 +91,6 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
     }
 
-    // Validate department access - technician can only work on complaints in their department
-    const technician = await User.findById(req.user.userId).select('department');
-    if (technician?.department && complaint.assignedDepartment) {
-      if (complaint.assignedDepartment.toString() !== technician.department.toString()) {
-        return res.status(403).json({ success: false, message: "Complaint not in your department" });
-      }
-    }
-
     // Only ASSIGNED complaints can be started
     if (complaint.status !== "ASSIGNED") {
       return res.status(400).json({ 
@@ -136,14 +127,6 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
     // Check if complaint is assigned to this technician
     if (complaint.assignedTo?.toString() !== req.user.userId) {
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
-    }
-
-    // Validate department access
-    const technician = await User.findById(req.user.userId).select('department');
-    if (technician?.department && complaint.assignedDepartment) {
-      if (complaint.assignedDepartment.toString() !== technician.department.toString()) {
-        return res.status(403).json({ success: false, message: "Complaint not in your department" });
-      }
     }
 
     // Only IN_PROGRESS complaints can be completed
@@ -208,14 +191,6 @@ router.post("/complaints/:id/before-photo", authenticate, authorize("TECHNICIAN"
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
     }
 
-    // Validate department access
-    const technician = await User.findById(req.user.userId).select('department');
-    if (technician?.department && complaint.assignedDepartment) {
-      if (complaint.assignedDepartment.toString() !== technician.department.toString()) {
-        return res.status(403).json({ success: false, message: "Complaint not in your department" });
-      }
-    }
-
     // Only ASSIGNED or IN_PROGRESS complaints can have photos added
     if (!["ASSIGNED", "IN_PROGRESS"].includes(complaint.status)) {
       return res.status(400).json({ 
@@ -265,14 +240,6 @@ router.post("/complaints/:id/after-photo", authenticate, authorize("TECHNICIAN")
     // Check if complaint is assigned to this technician
     if (complaint.assignedTo?.toString() !== req.user.userId) {
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
-    }
-
-    // Validate department access
-    const technician = await User.findById(req.user.userId).select('department');
-    if (technician?.department && complaint.assignedDepartment) {
-      if (complaint.assignedDepartment.toString() !== technician.department.toString()) {
-        return res.status(403).json({ success: false, message: "Complaint not in your department" });
-      }
     }
 
     // Only IN_PROGRESS complaints can have after photos added

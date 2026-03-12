@@ -2,20 +2,11 @@ const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// Configure Cloudinary - require credentials in production
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-const apiKey = process.env.CLOUDINARY_API_KEY;
-const apiSecret = process.env.CLOUDINARY_API_SECRET;
-
-if (!cloudName || !apiKey || !apiSecret) {
-  console.warn('⚠️  Cloudinary credentials not configured. Media upload will not work.');
-  console.warn('   Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET');
-}
-
+// Configure Cloudinary
 cloudinary.config({
-  cloud_name: cloudName || 'demo',
-  api_key: apiKey || 'demo',
-  api_secret: apiSecret || 'demo',
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'demo',
+  api_key: process.env.CLOUDINARY_API_KEY || 'demo',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'demo',
 });
 
 // Create Cloudinary storage engine

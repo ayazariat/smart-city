@@ -26,13 +26,6 @@ export default function LoginPage() {
   });
   const [localError, setLocalError] = useState("");
 
-  // Check for expired session parameter
-  const expiredParam = searchParams?.get("expired");
-  const showExpiredMessage = expiredParam === "true";
-
-  // Combined error message
-  const displayError = localError || (showExpiredMessage ? "Your session has expired. Please log in again." : error || "");
-
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
@@ -102,16 +95,16 @@ export default function LoginPage() {
             </p>
             <div className="mt-3 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-white/60 border border-white/80 shadow-sm text-xs text-slate-600">
               <ShieldCheck className="w-4 h-4 text-success-500" />
-              <span>Secure access for Tunisian citizens</span>
+              <span>Secure access with enhanced protection</span>
             </div>
           </div>
 
           {/* Form Card */}
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
-            {displayError && (
+            {error && (
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setLocalError("")}>
-                  {displayError}
+                  {error}
                 </Alert>
               </div>
             )}

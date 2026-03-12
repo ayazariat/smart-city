@@ -3,16 +3,23 @@ const nodemailer = require("nodemailer");
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT),
-  secure: process.env.SMTP_SECURE === "true" || false,
+  secure: process.env.SMTP_SECURE === "true",
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  tls: {
+    rejectUnauthorized: false,
+  },
 });
 
-transporter.verify((error) => {
-  if (error) console.error("[mailer] SMTP Error:", error);
-  else console.log("[mailer] SMTP Ready ✅");
+// Verify SMTP connection on startup
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("[mailer] SMTP Error:", error.message);
+  } else {
+    console.log("[mailer] SMTP Ready ✅");
+  }
 });
 
 const from = process.env.MAIL_FROM || process.env.SMTP_USER;
@@ -109,13 +116,13 @@ const sendLoginEmailReminder = async (to, fullName, email) => {
 // Send account invitation email (admin created user)
 const sendInvitationEmail = async (to, userId, token, fullName, role) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-  const invitationLink = `${frontendUrl}/verify-account?token=${token}&userId=${userId}`;
+  const invitationLink = `${frontendUrl}/set-password?token=${token}&email=${to}`;
 
   await transporter.sendMail({
     from,
     to,
     subject: "Smart City Tunisia - Account Invitation",
-    text: `Hi ${fullName}, you've been invited to join Smart City Tunisia as ${role}. Click to activate your account: ${invitationLink} (expires in 24 hours)`,
+    text: `Hi ${fullName}, you've been invited to join Smart City Tunisia as ${role}. Click to set your password and activate your account: ${invitationLink} (expires in 24 hours)`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
@@ -123,10 +130,10 @@ const sendInvitationEmail = async (to, userId, token, fullName, role) => {
         </div>
         <p>Hi <strong>${fullName}</strong>,</p>
         <p>You've been invited to join Smart City Tunisia as <strong>${role}</strong>.</p>
-        <p>Click the button below to activate your account and set your password:</p>
+        <p>Click the button below to set your password and activate your account:</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${invitationLink}" style="background: #2E7D32; color: white; padding: 15px 30px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-            Activate My Account
+            Set Password & Activate Account
           </a>
         </div>
         <p style="color: #666; font-size: 12px;">

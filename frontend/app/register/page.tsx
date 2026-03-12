@@ -83,25 +83,20 @@ export default function RegisterPage() {
       errors.email = "Please enter a valid email address (e.g. name@example.com)";
     }
 
-    // Strong password validation (mirror backend policy)
-    const passwordPolicyRegex =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
-
-    if (!passwordPolicyRegex.test(formData.password)) {
-      errors.password =
-        "Password must be at least 12 characters and include uppercase, lowercase, number, and special character.";
+    // Password validation: min 8 characters
+    if (formData.password.length < 8) {
+      errors.password = "Password must be at least 8 characters.";
     }
 
     if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = "Passwords do not match";
     }
 
-    // Optional phone: validate Tunisia format (8 digits) if provided
+    // Optional phone: validate Tunisia format (+216XXXXXXXX) if provided
     if (formData.phone) {
-      const digits = formData.phone.replace(/\D/g, "");
-      const validFormat = /^(?:\+216)?[2-9]\d{7}$/;
-      if (!validFormat.test(digits) && !validFormat.test(formData.phone)) {
-        errors.phone = "Please enter a valid Tunisian phone number (8 digits, e.g., 20555555).";
+      const tunisianPhoneRegex = /^\+216[0-9]{8}$/;
+      if (!tunisianPhoneRegex.test(formData.phone)) {
+        errors.phone = "Please enter a valid Tunisian phone number (+216XXXXXXXX)";
       }
     }
 

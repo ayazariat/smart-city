@@ -226,21 +226,16 @@ class UserController {
       const magicTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
 
       // Create user without password (will be set via magic link)
-      // Non-CITIZEN roles require verification before login
-      const requiresVerification = ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"].includes(userRole);
-      const userStatus = requiresVerification ? "PENDING_VERIFICATION" : "ACTIVE";
-      
       const user = new User({
         fullName,
         email: normalizedEmail,
         phone: phone || null,
         role: userRole,
-        status: userStatus,  // TECHNICIAN/MANAGER/AGENT need verification first
         department: departmentId,
         governorate: governorate || "",
         municipality: municipalityId || null,
         municipalityName: municipality || "",
-        isVerified: !requiresVerification,  // Non-CITIZEN roles start unverified
+        isVerified: true, // Admin-created users are verified by default
         magicToken,
         magicTokenExpires,
       });

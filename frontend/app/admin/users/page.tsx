@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  ArrowLeft,
   X,
   LogOut,
   MapPin,
@@ -396,8 +397,8 @@ export default function AdminUsersPage() {
       isActive: userItem.isActive,
       role: userItem.role,
       governorate: userItem.governorate || "",
-      municipality: typeof userItem.municipality === 'string' ? userItem.municipality : userItem.municipality?.name || "",
-      department: userItem.department?._id || userItem.department?.name || "",
+      municipality: typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name || "",
+      department: (userItem.department as any)?._id || (userItem.department as any)?.name || "",
     });
     setShowEditModal(true);
   };
@@ -409,352 +410,400 @@ export default function AdminUsersPage() {
     fetchUsers();
   };
 
-  return (
-    <>
-      <div className="app">
-      {/* Reuse dashboard shell: left sidebar + main area */}
-      <div className="sidebar">
-        <div className="sb-logo">
-          <div className="sb-icon">
-            <Users className="w-5 h-5 text-[var(--green)]" />
-          </div>
-          <div>
-            <div className="sb-name">Smart City{`\n`}Tunisia</div>
-            <div className="sb-sub">Admin Panel</div>
-          </div>
-        </div>
-        <div className="sb-user">
-          <div className="sb-avt">{user?.fullName?.charAt(0).toUpperCase() || "A"}</div>
-          <div className="sb-uname">{user?.fullName || "Admin"}</div>
-          <span className="sb-urole">Administrator</span>
-        </div>
-        <div className="sb-nav">
-          <div className="sb-section">Navigation</div>
-          <Link href="/dashboard" className="sb-item">
-            <span className="sb-ic">
-              <Users className="w-4 h-4" />
-            </span>
-            Dashboard
-          </Link>
-          <Link href="/admin/complaints" className="sb-item">
-            <span className="sb-ic">
-              <Users className="w-4 h-4" />
-            </span>
-            Complaints
-          </Link>
-          <button className="sb-item active" type="button">
-            <span className="sb-ic">
-              <Users className="w-4 h-4" />
-            </span>
-            Users
-          </button>
-          <Link href="/archive" className="sb-item">
-            <span className="sb-ic">
-              <Users className="w-4 h-4" />
-            </span>
-            Archives
-          </Link>
-        </div>
-        <div className="sb-footer">
-          <button
-            className="sb-logout"
-            type="button"
-            onClick={() => {
-              logout();
-              router.push("/");
-            }}
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </button>
+  // Loading state
+  if (loading && users.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600">Loading users...</p>
         </div>
       </div>
+    );
+  }
 
-      <div className="main">
-        {/* Topbar consistent with SmartCity design system */}
-        <div className="topbar">
-          <div>
-            <div className="topbar-title">User Management</div>
-            <div className="topbar-sub">Manage system users and permissions</div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+      {/* Navigation */}
+      <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold">User Management</h1>
+                  <p className="text-sm text-primary-100">Admin Panel</p>
+                </div>
+              </Link>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <button
+                onClick={() => logout()}
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg backdrop-blur-sm"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="hidden sm:inline font-medium">Logout</span>
+              </button>
+            </div>
           </div>
-          <div className="topbar-right">
+        </div>
+      </nav>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900">User Management</h2>
+            <p className="text-slate-600">Manage system users and their permissions</p>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-all hover:shadow-lg"
+          >
+            <Plus className="w-4 h-4" />
+            Add New User
+          </button>
+        </div>
+
+        {/* Stats Cards */}
+        {stats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-slate-100">
+              <div className="text-2xl font-bold text-primary">{stats.total}</div>
+              <div className="text-sm text-slate-600">Total Users</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-slate-100">
+              <div className="text-2xl font-bold text-success">{stats.active}</div>
+              <div className="text-sm text-slate-600">Active Users</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-slate-100">
+              <div className="text-2xl font-bold text-slate-500">{stats.inactive}</div>
+              <div className="text-sm text-slate-600">Inactive Users</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-lg p-4 border border-slate-100">
+              <div className="text-2xl font-bold text-attention">
+                {Array.isArray(stats?.byRole) ? stats.byRole.find((r) => r._id === "ADMIN")?.count || 0 : 0}
+              </div>
+              <div className="text-sm text-slate-600">Administrators</div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
+        {/* Success Message */}
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
+            {success}
+          </div>
+        )}
+
+        {/* Search Bar */}
+        <form onSubmit={handleSearch} className="mb-6">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search users by name or email..."
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
+            </div>
+            <button
+              type="submit"
+              className="bg-primary text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-all"
+            >
+              Search
+            </button>
             <button
               type="button"
-              className="tb-btn primary"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                setSearch("");
+                setPage(1);
+                fetchUsers();
+              }}
+              className="bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-300 transition-all"
             >
-              <Plus className="w-4 h-4" />
-              Add User
+              <RefreshCw className="w-4 h-4" />
             </button>
           </div>
+        </form>
+
+        {/* Users Table - Desktop View */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden hidden md:block">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">User</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Role</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Commune</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Phone</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Status</th>
+                  <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {users.map((userItem) => (
+                  <tr key={userItem.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-4">
+                      <div>
+                        <div className="font-medium text-slate-900">{userItem.fullName}</div>
+                        <div className="text-sm text-slate-500">{userItem.email}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
+                        <Shield className="w-3 h-3 mr-1" />
+                        {ROLE_LABELS[userItem.role]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      {userItem.municipality ? (
+                        <div className="flex items-center gap-1 text-slate-600">
+                          <MapPin className="w-3 h-3" />
+                          <span>{typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name}</span>
+                          <span className="text-slate-400">({userItem.governorate})</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-slate-600">
+                      {userItem.phone || "-"}
+                    </td>
+                    <td className="px-4 py-4">
+                      {userItem.isActive ? (
+                        <span className="inline-flex items-center gap-1 text-success">
+                          <CheckCircle className="w-4 h-4" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-slate-500">
+                          <XCircle className="w-4 h-4" />
+                          Inactive
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => openEditModal(userItem)}
+                          className="p-2 text-slate-600 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                          title="Edit user"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(userItem.id, !userItem.isActive)}
+                          className={`p-2 rounded-lg transition-colors ${userItem.isActive
+                            ? "text-attention hover:bg-attention/10"
+                            : "text-success hover:bg-success/10"
+                            }`}
+                          title={userItem.isActive ? "Deactivate user" : "Activate user"}
+                        >
+                          {userItem.isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(userItem.id)}
+                          className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete user"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+              <div className="text-sm text-slate-600">
+                Showing {(page - 1) * 10 + 1} to {Math.min(page * 10, total)} of {total} users
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Main content styled like SmartCity cards/tables */}
-        <main className="page">
-          {/* Stats Cards */}
-          {stats && (
-            <div className="grid4" style={{ marginBottom: 18 }}>
-              <div className="stat-card au" style={{ borderTopColor: "var(--blue)" }}>
-                <div className="stat-n" style={{ color: "var(--blue)" }}>{stats.total}</div>
-                <div className="stat-l">Total Users</div>
-              </div>
-              <div className="stat-card au" style={{ borderTopColor: "var(--green3)" }}>
-                <div className="stat-n" style={{ color: "var(--green3)" }}>{stats.active}</div>
-                <div className="stat-l">Active</div>
-              </div>
-              <div className="stat-card au" style={{ borderTopColor: "var(--orange)" }}>
-                <div className="stat-n" style={{ color: "var(--orange)" }}>{stats.inactive}</div>
-                <div className="stat-l">Inactive</div>
-              </div>
-              <div className="stat-card au" style={{ borderTopColor: "var(--red)" }}>
-                <div className="stat-n" style={{ color: "var(--red)" }}>
-                  {Array.isArray(stats?.byRole)
-                    ? stats.byRole.find((r) => r._id === "ADMIN")?.count || 0
-                    : 0}
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-4">
+          {users.map((userItem) => (
+            <div key={userItem.id} className="bg-white rounded-xl shadow-lg border border-slate-100 p-4">
+              {/* User Info Header */}
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <div className="font-semibold text-slate-900">{userItem.fullName}</div>
+                  <div className="text-sm text-slate-500">{userItem.email}</div>
                 </div>
-                <div className="stat-l">Administrators</div>
-              </div>
-            </div>
-          )}
-
-          {/* Error / success alerts */}
-          {error && (
-            <div
-              className="alert"
-              style={{
-                background: "var(--redbg)",
-                borderColor: "var(--redbdr)",
-                marginBottom: 16,
-              }}
-            >
-              <div className="alert-icon" style={{ background: "var(--red)", color: "#fff" }}>
-                !
-              </div>
-              <div style={{ fontSize: 12, color: "var(--red)" }}>{error}</div>
-            </div>
-          )}
-          {success && (
-            <div
-              className="alert"
-              style={{
-                background: "var(--accentbg)",
-                borderColor: "var(--accentbdr)",
-                marginBottom: 16,
-              }}
-            >
-              <div className="alert-icon" style={{ background: "var(--accent)", color: "var(--green)" }}>
-                ✓
-              </div>
-              <div style={{ fontSize: 12, color: "var(--green3)" }}>{success}</div>
-            </div>
-          )}
-
-          {/* Search */}
-          <form onSubmit={handleSearch} style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div className="search-wrap">
-                <span className="search-ic">
-                  <Search className="w-4 h-4 text-[var(--txt4)]" />
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
+                  <Shield className="w-3 h-3 mr-1" />
+                  {ROLE_LABELS[userItem.role]}
                 </span>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="search-inp"
-                  placeholder="Search users by name or email..."
-                />
               </div>
-              <button type="submit" className="btn primary sm" style={{ whiteSpace: "nowrap" }}>
-                Search
-              </button>
-              <button
-                type="button"
-                className="btn secondary sm"
-                onClick={() => {
-                  setSearch("");
-                  setPage(1);
-                  fetchUsers();
-                }}
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </div>
-          </form>
 
-          {/* Users table in SmartCity style */}
-          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table className="utbl">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Municipality</th>
-                    <th>Phone</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((userItem) => (
-                    <tr key={userItem.id}>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div
-                            className="avatar-sm"
-                            style={{
-                              background: "var(--bg3)",
-                              color: "var(--green3)",
-                            }}
-                          >
-                            {userItem.fullName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: 13 }}>{userItem.fullName}</div>
-                            <div style={{ fontSize: 11, color: "var(--txt3)" }}>{userItem.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span
-                          className="badge"
-                          style={{
-                            background: "var(--purbg)",
-                            color: "var(--purple)",
-                            borderColor: "var(--purbdr)",
-                          }}
-                        >
-                          {ROLE_LABELS[userItem.role]}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 12, color: "var(--txt2)" }}>
-                        {userItem.municipality ? (
-                          <span>
-                            {typeof userItem.municipality === "string"
-                              ? userItem.municipality
-                              : userItem.municipality?.name}
-                            {userItem.governorate ? `, ${userItem.governorate}` : ""}
-                          </span>
-                        ) : (
-                          <span style={{ color: "var(--txt4)" }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ fontSize: 12, color: "var(--txt2)" }}>
-                        {userItem.phone || "—"}
-                      </td>
-                      <td>
-                        {userItem.isActive ? (
-                          <span
-                            className="badge"
-                            style={{
-                              background: "var(--accentbg)",
-                              color: "var(--green3)",
-                              borderColor: "var(--accentbdr)",
-                            }}
-                          >
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Active
-                          </span>
-                        ) : (
-                          <span
-                            className="badge"
-                            style={{
-                              background: "var(--bg3)",
-                              color: "var(--txt3)",
-                              borderColor: "var(--bdr)",
-                            }}
-                          >
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button
-                            type="button"
-                            className="btn secondary sm btn icon-only"
-                            onClick={() => openEditModal(userItem)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn warn sm btn icon-only"
-                            onClick={() =>
-                              handleToggleActive(userItem.id, !userItem.isActive)
-                            }
-                          >
-                            {userItem.isActive ? (
-                              <XCircle className="w-4 h-4" />
-                            ) : (
-                              <CheckCircle className="w-4 h-4" />
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn danger sm btn icon-only"
-                            onClick={() => handleDeleteUser(userItem.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {users.length === 0 && !loading && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: 24, textAlign: "center" }}>
-                        <div style={{ fontSize: 13, color: "var(--txt3)" }}>
-                          No users found.
-                        </div>
-                      </td>
-                    </tr>
+              {/* Details Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* Commune */}
+                <div>
+                  <div className="text-xs text-slate-400 mb-1">Commune</div>
+                  <div className="flex items-center gap-1 text-sm text-slate-600">
+                    <MapPin className="w-3 h-3" />
+                    {userItem.municipality && userItem.governorate ? (
+                      <span>{typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name}, {userItem.governorate}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <div className="text-xs text-slate-400 mb-1">Phone</div>
+                  <div className="text-sm text-slate-600">
+                    {userItem.phone || "-"}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="col-span-2">
+                  <div className="text-xs text-slate-400 mb-1">Status</div>
+                  {userItem.isActive ? (
+                    <span className="inline-flex items-center gap-1 text-success text-sm">
+                      <CheckCircle className="w-4 h-4" />
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-slate-500 text-sm">
+                      <XCircle className="w-4 h-4" />
+                      Inactive
+                    </span>
                   )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination row */}
-            {totalPages > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 14px",
-                  borderTop: "1px solid var(--bdr)",
-                  fontSize: 11,
-                  color: "var(--txt3)",
-                }}
-              >
-                <span>
-                  Showing {(page - 1) * 10 + 1}–{Math.min(page * 10, total)} of {total}
-                </span>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button
-                    type="button"
-                    disabled={page === 1}
-                    className="btn secondary sm btn icon-only"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={page === totalPages}
-                    className="btn secondary sm btn icon-only"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
                 </div>
               </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => openEditModal(userItem)}
+                  className="flex-1 flex items-center justify-center gap-2 p-2 text-slate-600 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors text-sm font-medium"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleToggleActive(userItem.id, !userItem.isActive)}
+                  className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg transition-colors text-sm font-medium ${userItem.isActive
+                    ? "text-attention hover:bg-attention/10"
+                    : "text-success hover:bg-success/10"
+                    }`}
+                >
+                  {userItem.isActive ? (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      Deactivate
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Activate
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => handleDeleteUser(userItem.id)}
+                  className="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Delete user"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Mobile Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-white rounded-xl shadow-lg border border-slate-100">
+              <div className="text-sm text-slate-600">
+                {((page - 1) * 10 + 1)}-{Math.min(page * 10, total)} of {total}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Empty State */}
+        {users.length === 0 && !loading && (
+          <div className="bg-white rounded-xl shadow-lg border border-slate-100 p-8 text-center">
+            <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">No users found</h3>
+            <p className="text-slate-600 mb-4">
+              {search ? "Try adjusting your search criteria" : "Get started by adding a new user"}
+            </p>
+            {!search && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Add New User
+              </button>
             )}
           </div>
-        </main>
-      </div>
-      </div>
+        )}
+      </main>
 
       {/* Create User Modal */}
       {showCreateModal && (
@@ -952,7 +1001,7 @@ export default function AdminUsersPage() {
                 <input
                   type="email"
                   disabled
-                  value={selectedUser?.email || ""}
+                  value={selectedUser.email}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
                 />
               </div>
@@ -1093,6 +1142,6 @@ export default function AdminUsersPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

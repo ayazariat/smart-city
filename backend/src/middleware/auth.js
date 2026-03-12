@@ -2,11 +2,16 @@ const { verifyToken, extractToken } = require("../utils/jwt");
 
 /**
  * Authentication middleware
- * Verifies JWT token from Authorization header
+ * Verifies JWT token from Authorization header or cookie
  */
 const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = extractToken(authHeader);
+  // Try to get token from Authorization header first
+  let token = extractToken(req.headers.authorization);
+  
+  // If no header token, try to get from cookie
+  if (!token && req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken;
+  }
 
   if (!token) {
     return res.status(401).json({ message: "Authentication required" });

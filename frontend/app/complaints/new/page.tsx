@@ -28,88 +28,12 @@ import {
   ShieldAlert,
   Building2,
   Tag,
-  LogOut,
-  FileText,
-  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { ComplaintCategory, ComplaintUrgency, ComplaintMedia, CreateComplaintData } from "@/types";
-import { complaintService, uploadMedia } from "@/services/complaint.service";
+import { complaintService, uploadMedia, predictCategory } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
-
-function getRoleDisplayName(role: string): string {
-  switch (role) {
-    case "CITIZEN": return "Citizen";
-    case "MUNICIPAL_AGENT": return "Municipal Agent";
-    case "DEPARTMENT_MANAGER": return "Department Manager";
-    case "TECHNICIAN": return "Technician";
-    case "ADMIN": return "Administrator";
-    default: return role;
-  }
-}
-
-function Sidebar({
-  user,
-  onLogout,
-}: {
-  user: { fullName: string; role: string };
-  onLogout: () => Promise<void>;
-}) {
-  return (
-    <aside className="sidebar">
-      <div className="sb-logo">
-        <div className="sb-icon">
-          <Sparkles className="w-5 h-5 text-[var(--green)]" />
-        </div>
-        <div>
-          <div className="sb-name">Smart City{`\n`}Tunisia</div>
-          <div className="sb-sub">Citizen Portal</div>
-        </div>
-      </div>
-      <div className="sb-user">
-        <Link href="/profile" className="sb-user-link">
-          <div className="sb-avt">{user.fullName.charAt(0).toUpperCase()}</div>
-          <div className="sb-uname">{user.fullName}</div>
-          <span className="sb-urole">{getRoleDisplayName(user.role)}</span>
-        </Link>
-      </div>
-      <div className="sb-nav">
-        <div className="sb-section">Navigation</div>
-        <Link href="/dashboard" className="sb-item">
-          <span className="sb-ic">
-            <FileText className="w-4 h-4" />
-          </span>
-          Dashboard
-        </Link>
-        <Link href="/my-complaints" className="sb-item">
-          <span className="sb-ic">
-            <FileText className="w-4 h-4" />
-          </span>
-          My Complaints
-        </Link>
-        <button className="sb-item active" type="button">
-          <span className="sb-ic">
-            <Plus className="w-4 h-4" />
-          </span>
-          Report Issue
-        </button>
-        <Link href="/archive" className="sb-item">
-          <span className="sb-ic">
-            <FileText className="w-4 h-4" />
-          </span>
-          Archives
-        </Link>
-      </div>
-      <div className="sb-footer">
-        <button className="sb-logout" type="button" onClick={onLogout}>
-          <LogOut className="w-4 h-4" />
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </aside>
-  );
-}
 
 type CategoryConfig = {
   value: ComplaintCategory;
@@ -264,7 +188,7 @@ export default function NewComplaintPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const leafletMarkerRef = useRef<any>(null);
   
-  const { user, token, isLoading: authLoading, hydrated, logout } = useAuthStore();
+  const { user, token, isLoading: authLoading, hydrated } = useAuthStore();
 
   // Form state
   const [title, setTitle] = useState("");
@@ -329,15 +253,36 @@ export default function NewComplaintPage() {
       return;
     }
 
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       setIsAiSuggesting(true);
-      const detected = detectCategory(title, description);
-      setAiSuggestedCategory(detected);
-      setIsAiSuggesting(false);
-    }, 600);
+      try {
+        // Use AI prediction
+        const text = `${title} ${description}`;
+        const result = await predictCategory(text);
+        
+        if (result && result.confidence > 0.6) {
+          setAiSuggestedCategory(result.predicted as ComplaintCategory);
+          // Auto-select if confidence > 85%
+          if (result.confidence > 0.85 && !category) {
+            setCategory(result.predicted as ComplaintCategory);
+          }
+        } else {
+          // Fallback to keyword detection
+          const detected = detectCategory(title, description);
+          setAiSuggestedCategory(detected);
+        }
+      } catch (err) {
+        // Fallback to keyword detection on error
+        console.error("AI prediction failed, using keyword detection:", err);
+        const detected = detectCategory(title, description);
+        setAiSuggestedCategory(detected);
+      } finally {
+        setIsAiSuggesting(false);
+      }
+    }, 1500); // 1.5s debounce for AI
 
     return () => clearTimeout(timer);
-  }, [title, description]);
+  }, [title, description, category]);
 
   useEffect(() => {
     if (!category && aiSuggestedCategory) {
@@ -561,18 +506,44 @@ export default function NewComplaintPage() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
         const newLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
+          latitude: lat,
+          longitude: lng,
         };
         setLocation(newLocation);
         setLocationMode('gps');
         setLocationLoading(false);
-        reverseGeocode(newLocation.latitude, newLocation.longitude);
+        
+        // Reverse geocode to fill address
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=fr`)
+          .then(r => r.json())
+          .then(data => {
+            const addr = data.address || {};
+            const fullAddress = data.display_name || '';
+            setAddress(fullAddress);
+            setGovernorate(addr.state || addr.region || addr.county || governorate);
+            setCommune(addr.city || addr.town || addr.municipality || commune);
+          })
+          .catch(() => {});
       },
       (error) => {
-        setLocationError("Unable to get your location. Please check permissions.");
+        let errorMessage = "Unable to get your location.";
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMessage = "GPS access denied. Please allow location access in your browser settings.";
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          errorMessage = "Location information unavailable.";
+        } else if (error.code === error.TIMEOUT) {
+          errorMessage = "Location request timed out.";
+        }
+        setLocationError(errorMessage);
         setLocationLoading(false);
+      },
+      {
+        enableHighAccuracy: true,   // ← THIS IS THE KEY FIX - use GPS not network
+        timeout: 10000,
+        maximumAge: 0               // ← never use cached position
       }
     );
   };
@@ -691,8 +662,11 @@ export default function NewComplaintPage() {
   // Loading state - wait for auth to hydrate
   if (authLoading || !hydrated) {
     return (
-      <div className="loading-screen">
-        <div className="loading-spinner"></div>
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
       </div>
     );
   }
@@ -700,13 +674,13 @@ export default function NewComplaintPage() {
   // Not authenticated
   if (authError || !token) {
     return (
-      <div className="loading-screen">
-        <div className="card" style={{ maxWidth: 400, textAlign: "center" }}>
-          <div className="sb-icon" style={{ margin: "0 auto 16px", background: "var(--red)" }}>
-            <Shield className="w-5 h-5 text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-8 h-8 text-red-500" />
           </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Authentication Required</h2>
-          <p style={{ color: "var(--txt2)", marginBottom: 24 }}>Please log in to submit a complaint.</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Authentication Required</h2>
+          <p className="text-slate-600 mb-6">Please log in to submit a complaint.</p>
           <Link href="/">
             <Button>Sign In</Button>
           </Link>
@@ -768,22 +742,34 @@ export default function NewComplaintPage() {
   }
 
   return (
-    <div className="app">
-      <Sidebar user={user || { fullName: "User", role: "CITIZEN" }} onLogout={logout} />
-      <div className="main">
-        <div className="topbar">
-          <div>
-            <div className="topbar-title">Report an Issue</div>
-            <div className="topbar-sub">Help improve your city</div>
-          </div>
-          <div className="topbar-right">
-            <span className="badge" style={{ background: "var(--accentbg)", color: "var(--green)" }}>
-              New Complaint
-            </span>
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-xl">
+        <div className="container mx-auto max-w-3xl px-4 py-6">
+          <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard"
+              className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold">Report an Issue</h1>
+              <p className="text-primary-200 text-sm">
+                Help improve your city - Your voice matters!
+              </p>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full">
+              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+                <span className="text-sm font-bold">{(user?.fullName || "U")[0].toUpperCase()}</span>
+              </div>
+              <span className="text-sm font-medium">{user?.fullName || "User"}</span>
+            </div>
           </div>
         </div>
+      </div>
 
-        <main className="page">
+      <div className="container mx-auto max-w-3xl px-4 py-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Error Alert */}
           {error && (
@@ -793,16 +779,16 @@ export default function NewComplaintPage() {
           )}
 
           {/* Location with Map */}
-          <div className="card">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2" style={{ color: "var(--txt)" }}>
+              <div className="flex items-center gap-2 text-slate-700">
                 <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-600 rounded-xl flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-white" />
                 </div>
                 <div>
                   <span className="font-semibold">Location</span>
                   {location && (
-                    <span className="text-xs" style={{ color: "var(--green)", marginLeft: 8 }}>(Detected)</span>
+                    <span className="text-xs text-success-600 ml-2">(Detected)</span>
                   )}
                 </div>
               </div>
@@ -1244,8 +1230,7 @@ export default function NewComplaintPage() {
             </Button>
           </div>
         </form>
-        </main>
-        </div>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { User, Mail, Phone, Edit2, Save, X, Sparkles, Shield, Lock, AlertCircle, CheckCircle, ArrowLeft } from "lucide-react";
+import { User, Mail, Phone, Edit2, Save, X, Sparkles, Shield, Lock, AlertCircle, CheckCircle, ArrowLeft, MapPin, Building2 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Input } from "@/components/ui/Input";
@@ -469,6 +469,55 @@ function ProfilePage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-slate-900 font-medium">{user?.phone ? formatPhoneDisplay(user.phone) : <span className="text-slate-400 italic">Not set</span>}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Municipality */}
+              {(user.role === "CITIZEN" || user.role === "MUNICIPAL_AGENT" || user.role === "ADMIN" || user.role === "DEPARTMENT_MANAGER") && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-3 min-w-[140px]">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Municipality</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-900 font-medium">
+                      {user.municipalityName || (user.municipality && typeof user.municipality === 'object' ? user.municipality.name : <span className="text-slate-400 italic">Not set</span>)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Governorate */}
+              {(user.role === "CITIZEN" || user.role === "MUNICIPAL_AGENT" || user.role === "ADMIN" || user.role === "DEPARTMENT_MANAGER") && user.governorate && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-3 min-w-[140px]">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Governorate</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-900 font-medium">{user.governorate}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Department (for MANAGER and TECHNICIAN) */}
+              {(user.role === "DEPARTMENT_MANAGER" || user.role === "TECHNICIAN") && user.department && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-3 min-w-[140px]">
+                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Department</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-900 font-medium">
+                      {typeof user.department === 'object' ? user.department.name : user.department}
+                    </p>
                   </div>
                 </div>
               )}

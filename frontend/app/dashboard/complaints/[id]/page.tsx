@@ -19,7 +19,7 @@ import {
   X
 } from "lucide-react";
 import { Complaint } from "@/types";
-import { complaintService } from "@/services/complaint.service";
+import { complaintService, processComplaintMedia } from "@/services/complaint.service";
 import { adminService } from "@/services/admin.service";
 import { managerService } from "@/services/manager.service";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -102,7 +102,10 @@ export default function ComplaintDetailPage() {
         const response = await complaintService.getComplaintDetail(complaintId);
 
         if (response.success) {
-          setComplaint(response.data);
+          // Process media URLs to ensure they are full URLs
+          const processedComplaint = processComplaintMedia(response.data);
+          console.log("Complaint loaded with media:", processedComplaint.media);
+          setComplaint(processedComplaint);
         } else {
           setError("Complaint not found");
         }
@@ -686,46 +689,36 @@ export default function ComplaintDetailPage() {
               {complaint.isAnonymous ? (
                 <p className="text-slate-500 italic flex items-center gap-2">
                   <User className="w-4 h-4" />
-                  Anonymous
+                  Anonymous Citizen
                 </p>
-              ) : (() => {
-                // DTO from BL‑16 exposes `createdBy` with safe contact fields,
-                // older shape may still use `citizen`.
-                const citizen = (complaint as any).citizen ?? complaint.createdBy;
-                if (!citizen) {
-                  return <p className="text-slate-500">Information not available</p>;
-                }
-
-                const email = (citizen as any).email as string | undefined;
-                const phone = (citizen as any).phone as string | undefined;
-
-                return (
-                  <div className="space-y-3">
-                    <p className="font-semibold text-slate-900 flex items-center gap-2">
-                      <User className="w-4 h-4 text-slate-400" />
-                      {(citizen as any).fullName}
+              ) : complaint.citizen ? (
+                <div className="space-y-3">
+                  <p className="font-semibold text-slate-900 flex items-center gap-2">
+                    <User className="w-4 h-4 text-slate-400" />
+                    {complaint.citizen.fullName}
+                  </p>
+                  {complaint.citizen.email && canViewContact && (
+                    <p className="text-sm text-slate-500 flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      {complaint.citizen.email}
                     </p>
-                    {email && canViewContact && (
-                      <p className="text-sm text-slate-500 flex items-center gap-2">
-                        <Mail className="w-4 h-4" />
-                        {email}
-                      </p>
-                    )}
-                    {phone && canViewContact && (
-                      <p className="text-sm text-slate-500 flex items-center gap-2">
-                        <Phone className="w-4 h-4" />
-                        {phone}
-                      </p>
-                    )}
-                    {!canViewContact && (email || phone) && (
-                      <p className="text-sm text-slate-400 flex items-center gap-2">
-                        <Shield className="w-4 h-4" />
-                        Contact hidden
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
+                  )}
+                  {complaint.citizen.phone && canViewContact && (
+                    <p className="text-sm text-slate-500 flex items-center gap-2">
+                      <Phone className="w-4 h-4" />
+                      {complaint.citizen.phone}
+                    </p>
+                  )}
+                  {!canViewContact && (complaint.citizen.email || complaint.citizen.phone) && (
+                    <p className="text-sm text-slate-400 flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      Contact hidden
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500">Information not available</p>
+              )}
             </section>
 
             {/* Department Info */}

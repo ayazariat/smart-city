@@ -1,226 +1,213 @@
-'use client';
+/**
+ * SLA Countdown Hook
+ * 
+ * Provides live countdown to SLA deadline:
+ * - setInterval(1000) updates every second
+ * - Format: "2j 14h 30m"
+ * - OVERDUE → red + shake animation
+ * - AT_RISK → orange + pulse (< 6h)
+ * - ON_TRACK → green
+ */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from "react";
 
-export type SLAStatus = 'ON_TRACK' | 'AT_RISK' | 'OVERDUE';
+export type SLAStatus = "ON_TRACK" | "AT_RISK" | "OVERDUE";
 
-export interface SLATimeInfo {
-  remaining: number; // seconds remaining
+export interface SLARemaining {
+  days: number;
   hours: number;
   minutes: number;
   seconds: number;
-  formatted: string;
+  totalHours: number;
   status: SLAStatus;
-  percentage: number; // 0-100, percentage of time used
+  formatted: string;
+  percentage: number; // 0-100, how much time is left
 }
 
-// SLA deadlines in hours by urgency level (as per task requirements)
-const SLA_DEADLINES: Record<string, number> = {
-  CRITICAL: 8,     // 8 hours
-  HIGH: 48,         // 48 hours (2 days)
-  MEDIUM: 168,     // 168 hours (7 days)
-  LOW: 336,        // 336 hours (14 days)
-};
-
-// Default fallback
-const DEFAULT_SLA = 168; // 7 days
-
-// Parse deadline from ISO string or calculate from creation date + SLA
-function getDeadlineTimestamp(deadline: string | null | undefined, createdAt: string, urgency: string): number {
-  if (deadline) {
-    return new Date(deadline).getTime();
-  }
-  
-  // Calculate from creation date + SLA
-  const slaHours = SLA_DEADLINES[urgency] || DEFAULT_SLA;
-  const createdDate = new Date(createdAt).getTime();
-  return createdDate + slaHours * 60 * 60 * 1000;
+/**
+ * Calculate SLA status based on remaining hours
+ */
+function calculateStatus(remainingHours: number): SLAStatus {
+  if (remainingHours <= 0) return "OVERDUE";
+  if (remainingHours < 6) return "AT_RISK";
+  return "ON_TRACK";
 }
 
-// Format seconds to human readable string
-function formatTime(seconds: number): string {
-  if (seconds <= 0) return 'Overdue';
+/**
+ * Format remaining time as string
+ */
+function formatRemaining(remaining: SLARemaining): string {
+  const parts: string[] = [];
   
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  
-  if (hours > 24) {
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-    return `${days}d ${remainingHours}h`;
+  if (remaining.days > 0) {
+    parts.push(`${remaining.days}j`);
   }
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
+  if (remaining.hours > 0 || remaining.days > 0) {
+    parts.push(`${remaining.hours}h`);
   }
+  parts.push(`${remaining.minutes}m`);
   
-  if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  }
-  
-  return `${secs}s`;
+  return parts.join(" ");
 }
 
-// Determine SLA status based on remaining time
-function getStatus(remaining: number, totalSeconds: number): SLAStatus {
-  if (remaining <= 0) return 'OVERDUE';
-  
-  // AT_RISK if less than 25% of time remaining
-  const percentage = (remaining / totalSeconds) * 100;
-  if (percentage <= 25) return 'AT_RISK';
-  
-  return 'ON_TRACK';
-}
+/**
+ * Hook for SLA countdown
+ * 
+ * @param deadline - ISO date string or Date of the SLA deadline
+ * @param totalHours - Total SLA hours (to calculate percentage)
+ */
+export function useSLA(deadline: string | Date | null, totalHours?: number) {
+  const [remaining, setRemaining] = useState<SLARemaining | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-// Hook for single complaint SLA
-export function useSLA(deadline: string | null | undefined, createdAt: string, urgency: string) {
-  const [now, setNow] = useState(() => Date.now());
-  
-  // Update every second
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
+  const calculateRemaining = useCallback(() => {
+    if (!deadline) {
+      setRemaining(null);
+      return;
+    }
+
+    const deadlineTime = typeof deadline === "string" 
+      ? new Date(deadline).getTime() 
+      : deadline.getTime();
     
-    return () => clearInterval(interval);
-  }, []);
-  
-  const slaInfo = useMemo((): SLATimeInfo => {
-    const deadlineTimestamp = getDeadlineTimestamp(deadline, createdAt, urgency);
-    const totalSeconds = Math.max(1, Math.floor((deadlineTimestamp - new Date(createdAt).getTime()) / 1000));
-    const remainingMs = deadlineTimestamp - now;
-    const remaining = Math.floor(remainingMs / 1000);
+    const now = Date.now();
+    const diffMs = deadlineTime - now;
     
-    const hours = Math.max(0, Math.floor(remaining / 3600));
-    const minutes = Math.max(0, Math.floor((remaining % 3600) / 60));
-    const seconds = Math.max(0, remaining % 60);
-    
-    const status = getStatus(remaining, totalSeconds);
-    
-    // Calculate percentage used (inverse of remaining)
-    const percentage = remaining > 0 
-      ? Math.min(100, Math.max(0, ((totalSeconds - remaining) / totalSeconds) * 100))
+    // If totalHours provided, calculate percentage
+    const totalMs = totalHours ? totalHours * 60 * 60 * 1000 : null;
+    const percentage = totalMs 
+      ? Math.max(0, Math.min(100, (diffMs / totalMs) * 100))
       : 100;
-    
-    return {
-      remaining,
+
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const totalRemainingHours = diffSeconds / 3600;
+
+    const days = Math.floor(diffSeconds / 86400);
+    const hours = Math.floor((diffSeconds % 86400) / 3600);
+    const minutes = Math.floor((diffSeconds % 3600) / 60);
+    const seconds = diffSeconds % 60;
+
+    const status = calculateStatus(totalRemainingHours);
+    const formatted = formatRemaining({ days, hours, minutes, seconds, totalHours: totalRemainingHours, status, percentage, formatted: "" });
+
+    setRemaining({
+      days,
       hours,
       minutes,
       seconds,
-      formatted: formatTime(remaining),
+      totalHours: totalRemainingHours,
       status,
+      formatted,
       percentage,
-    };
-  }, [deadline, createdAt, urgency, now]);
-  
-  return slaInfo;
-}
+    });
+  }, [deadline, totalHours]);
 
-// Hook for multiple complaints SLA (for dashboard)
-export function useBulkSLA(complaints: Array<{
-  deadline?: string | null;
-  createdAt: string;
-  urgency: string;
-  status?: string;
-}>) {
-  const [now, setNow] = useState(() => Date.now());
-  
-  // Update every second
+  // Calculate on mount and set up interval
   useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
-  
-  const slaInfos = useMemo(() => {
-    return complaints.map((complaint) => {
-      // Skip if already resolved/closed
-      if (complaint.status === 'RESOLVED' || complaint.status === 'CLOSED') {
-        return {
-          id: complaint.createdAt,
-          remaining: 0,
-          hours: 0,
-          minutes: 0,
-          seconds: 0,
-          formatted: 'Completed',
-          status: 'ON_TRACK' as SLAStatus,
-          percentage: 100,
-        };
+    if (!deadline) return;
+
+    // Initial calculation
+    calculateRemaining();
+
+    // Update every second
+    intervalRef.current = setInterval(calculateRemaining, 1000);
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-      
-      const deadlineTimestamp = getDeadlineTimestamp(complaint.deadline, complaint.createdAt, complaint.urgency);
-      const totalSeconds = Math.max(1, Math.floor((deadlineTimestamp - new Date(complaint.createdAt).getTime()) / 1000));
-      const remainingMs = deadlineTimestamp - now;
-      const remaining = Math.floor(remainingMs / 1000);
-      
-      const hours = Math.max(0, Math.floor(remaining / 3600));
-      const minutes = Math.max(0, Math.floor((remaining % 3600) / 60));
-      const seconds = Math.max(0, remaining % 60);
-      
-      const status = getStatus(remaining, totalSeconds);
-      
-      const percentage = remaining > 0 
-        ? Math.min(100, Math.max(0, ((totalSeconds - remaining) / totalSeconds) * 100))
-        : 100;
-      
+    };
+  }, [deadline, calculateRemaining]);
+
+  // Update formatted string when values change
+  useEffect(() => {
+    if (!remaining) return;
+
+    const formatted = formatRemaining(remaining);
+    setRemaining((prev) => prev ? { ...prev, formatted } : null);
+  }, [remaining?.days, remaining?.hours, remaining?.minutes]);
+
+  return remaining;
+}
+
+/**
+ * Hook for SLA status color class
+ */
+export function useSLAStatusColor(status: SLAStatus | undefined): {
+  colorClass: string;
+  animationClass: string;
+  bgClass: string;
+} {
+  if (!status) {
+    return {
+      colorClass: "text-gray-500",
+      animationClass: "",
+      bgClass: "bg-gray-100",
+    };
+  }
+
+  switch (status) {
+    case "OVERDUE":
       return {
-        id: complaint.createdAt,
-        remaining,
-        hours,
-        minutes,
-        seconds,
-        formatted: formatTime(remaining),
-        status,
-        percentage,
+        colorClass: "text-red-600",
+        animationClass: "animate-shake",
+        bgClass: "bg-red-100",
       };
-    });
-  }, [complaints, now]);
-  
-  // Count stats
-  const stats = useMemo(() => {
-    let onTrack = 0;
-    let atRisk = 0;
-    let overdue = 0;
-    
-    slaInfos.forEach((info) => {
-      if (info.status === 'ON_TRACK') onTrack++;
-      else if (info.status === 'AT_RISK') atRisk++;
-      else overdue++;
-    });
-    
-    return { onTrack, atRisk, overdue, total: complaints.length };
-  }, [slaInfos, complaints.length]);
-  
-  return { slaInfos, stats };
-}
-
-// Get color class for SLA status
-export function getSLAColorClass(status: SLAStatus): string {
-  switch (status) {
-    case 'ON_TRACK':
-      return 'var(--green)';
-    case 'AT_RISK':
-      return 'var(--orange)';
-    case 'OVERDUE':
-      return 'var(--red)';
+    case "AT_RISK":
+      return {
+        colorClass: "text-orange-600",
+        animationClass: "animate-pulse",
+        bgClass: "bg-orange-100",
+      };
+    case "ON_TRACK":
     default:
-      return 'var(--txt3)';
+      return {
+        colorClass: "text-green-600",
+        animationClass: "",
+        bgClass: "bg-green-100",
+      };
   }
 }
 
-// Get background color for SLA status
-export function getSLABgClass(status: SLAStatus): string {
-  switch (status) {
-    case 'ON_TRACK':
-      return 'var(--accentbg)';
-    case 'AT_RISK':
-      return 'var(--orgbg)';
-    case 'OVERDUE':
-      return 'var(--redbg)';
-    default:
-      return 'var(--bg3)';
-  }
+/**
+ * Hook to get SLA deadline from a complaint
+ */
+export function useComplaintSLA(complaint: {
+  slaDeadline?: string | Date | null;
+  createdAt?: string | Date;
+  urgency?: string;
+} | null) {
+  // Calculate SLA based on urgency if no deadline provided
+  const getDeadline = useCallback(() => {
+    if (complaint?.slaDeadline) {
+      return complaint.slaDeadline;
+    }
+
+    if (!complaint?.createdAt || !complaint?.urgency) {
+      return null;
+    }
+
+    // Calculate deadline based on urgency
+    const urgencyHours: Record<string, number> = {
+      URGENT: 8,
+      HIGH: 48,
+      MEDIUM: 168,    // 7 days
+      LOW: 336,       // 14 days
+    };
+
+    const hours = urgencyHours[complaint.urgency] || 168;
+    const createdAt = new Date(complaint.createdAt).getTime();
+    const deadline = new Date(createdAt + hours * 60 * 60 * 1000);
+
+    return deadline.toISOString();
+  }, [complaint]);
+
+  const deadline = getDeadline();
+  const totalHours = complaint?.urgency 
+    ? { URGENT: 8, HIGH: 48, MEDIUM: 168, LOW: 336 }[complaint.urgency] || 168
+    : undefined;
+
+  return useSLA(deadline, totalHours);
 }

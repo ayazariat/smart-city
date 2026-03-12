@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const cookieParser = require("cookie-parser");
 const authRoutes = require("./routes/auth");
 const citizenRoutes = require("./routes/citizen.routes");
 const agentRoutes = require("./routes/agent.routes");
@@ -9,14 +10,16 @@ const technicianRoutes = require("./routes/technician.routes");
 const adminRoutes = require("./routes/admin.routes");
 const complaintRoutes = require("./routes/complaints");
 const uploadRoutes = require("./routes/upload");
+const notificationRoutes = require("./routes/notifications.routes");
 
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  origin: ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
@@ -37,6 +40,7 @@ app.use("/api/technician", technicianRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/notifications", notificationRoutes.router);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,66 +1,104 @@
-const MILLI_PER_HOUR = 3_600_000;
+/**
+ * SLA Calculator - Calculate deadlines and status based on complaint urgency
+ * 
+ * SLA Times:
+ * - CRITICAL: 8 hours
+ * - HIGH: 48 hours  
+ * - MEDIUM: 168 hours (7 days)
+ * - LOW: 336 hours (14 days)
+ */
 
-// Urgency is mapped to 1–4 in the original spec, but in this codebase we
-// already use string levels: LOW, MEDIUM, HIGH, URGENT.
-// We keep a simple matrix that can be tuned later.
-const SLA_MATRIX = {
-  URGENT: {
-    SAFETY: 8,
-    WATER: 8,
-    ROAD: 12,
-    LIGHTING: 24,
-    WASTE: 48,
-    PUBLIC_PROPERTY: 48,
-    OTHER: 72,
-  },
-  HIGH: {
-    SAFETY: 24,
-    WATER: 24,
-    ROAD: 48,
-    LIGHTING: 72,
-    WASTE: 120,
-    PUBLIC_PROPERTY: 120,
-    OTHER: 168,
-  },
-  MEDIUM: {
-    SAFETY: 72,
-    WATER: 72,
-    ROAD: 120,
-    LIGHTING: 168,
-    WASTE: 240,
-    PUBLIC_PROPERTY: 240,
-    OTHER: 336,
-  },
-  LOW: {
-    SAFETY: 168,
-    WATER: 168,
-    ROAD: 240,
-    LIGHTING: 336,
-    WASTE: 480,
-    PUBLIC_PROPERTY: 480,
-    OTHER: 672,
-  },
+const SLA_TIMES = {
+  CRITICAL: 8,      // 8 hours
+  HIGH: 48,        // 48 hours
+  MEDIUM: 168,     // 168 hours (7 days)
+  LOW: 336,        // 336 hours (14 days)
+  DEFAULT: 168     // Default to medium
 };
 
-function calculate(urgency, category) {
-  const urgencyKey = urgency || "MEDIUM";
-  const catKey = category || "OTHER";
-  const hours =
-    (SLA_MATRIX[urgencyKey] &&
-      SLA_MATRIX[urgencyKey][catKey]) ||
-    168;
-  return new Date(Date.now() + hours * MILLI_PER_HOUR);
-}
+/**
+ * Get SLA time in hours for a given urgency level
+ * @param {string} urgency - URGENT, HIGH, MEDIUM, LOW
+ * @returns {number} - Hours allowed
+ */
+const getSlaTime = (urgency) => {
+  return SLA_TIMES[urgency?.toUpperCase()] || SLA_TIMES.DEFAULT;
+};
 
-function getStatus(slaDeadline) {
-  if (!slaDeadline) return null;
-  const deadline = new Date(slaDeadline);
-  const diff = deadline.getTime() - Date.now();
+/**
+ * Calculate SLA deadline from creation date
+ * @param {Date|string} createdAt - Complaint creation date
+ * @param {string} urgency - Complaint urgency level
+ * @returns {Date} - Deadline date
+ */
+const calculateDeadline = (createdAt, urgency) => {
+  const created = new Date(createdAt);
+  const hours = getSlaTime(urgency);
+  const deadline = new Date(created.getTime() + hours * 60 * 60 * 1000);
+  return deadline;
+};
 
-  if (diff > 6 * MILLI_PER_HOUR) return "ON_TRACK";
-  if (diff > 0) return "AT_RISK";
-  return "OVERDUE";
-}
+/**
+ * Get SLA status based on deadline
+ * @param {Date|string} deadline - SLA deadline
+ * @returns {object} - { status, remainingHours, isOverdue, isAtRisk }
+ */
+const getStatus = (deadline) => {
+  const now = new Date();
+  const deadlineDate = new Date(deadline);
+  
+  const diffMs = deadlineDate - now;
+  const diffHours = diffMs / (1000 * 60 * 60);
+  
+  let status = 'ON_TRACK';
+  let isOverdue = false;
+  let isAtRisk = false;
+  
+  if (diffMs < 0) {
+    // Overdue
+    status = 'OVERDUE';
+    isOverdue = true;
+  } else if (diffHours < 6) {
+    // Less than 6 hours remaining - at risk
+    status = 'AT_RISK';
+    isAtRisk = true;
+  }
+  
+  return {
+    status,
+    remainingHours: Math.max(0, diffHours),
+    isOverdue,
+    isAtRisk,
+    deadline: deadlineDate
+  };
+};
 
-module.exports = { calculate, getStatus };
+/**
+ * Format remaining time for display
+ * @param {number} hours - Remaining hours
+ * @returns {string} - Formatted string like "2d 14h 30m"
+ */
+const formatRemainingTime = (hours) => {
+  if (hours < 0) {
+    return 'OVERDUE';
+  }
+  
+  const days = Math.floor(hours / 24);
+  const remainingHours = Math.floor(hours % 24);
+  const minutes = Math.floor((hours % 1) * 60);
+  
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (remainingHours > 0) parts.push(`${remainingHours}h`);
+  if (minutes > 0 && days === 0) parts.push(`${minutes}m`);
+  
+  return parts.length > 0 ? parts.join(' ') : '< 1m';
+};
 
+module.exports = {
+  getSlaTime,
+  calculateDeadline,
+  getStatus,
+  formatRemainingTime,
+  SLA_TIMES
+};

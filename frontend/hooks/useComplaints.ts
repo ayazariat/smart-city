@@ -1,276 +1,359 @@
-'use client';
+/**
+ * Role-based Complaints Hook
+ * 
+ * Provides complaint fetching based on user role:
+ * - CITIZEN → /citizen/complaints (own only)
+ * - AGENT → /agent/complaints (municipality)
+ * - MANAGER → /manager/complaints (dept + municipality)
+ * - TECHNICIAN → /technician/tasks (assigned only)
+ * - ADMIN → /complaints (all)
+ */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/services/api.client';
-import { Complaint, CreateComplaintData } from '@/types';
+import { useState, useEffect, useCallback } from "react";
+import { useAuthStore } from "@/store/useAuthStore";
+import { clientGet, clientPost, clientPut, clientDelete } from "@/lib/api";
+import { Complaint, CreateComplaintData } from "@/types";
 
-// Query keys
-export const complaintKeys = {
-  all: ['complaints'] as const,
-  lists: () => [...complaintKeys.all, 'list'] as const,
-  list: (filters: Record<string, unknown>) => [...complaintKeys.lists(), filters] as const,
-  details: () => [...complaintKeys.all, 'detail'] as const,
-  detail: (id: string) => [...complaintKeys.details(), id] as const,
-  my: () => [...complaintKeys.all, 'my'] as const,
-  archived: () => [...complaintKeys.all, 'archived'] as const,
-  stats: () => [...complaintKeys.all, 'stats'] as const,
-};
+// User role types
+type UserRole = "CITIZEN" | "MUNICIPAL_AGENT" | "DEPARTMENT_MANAGER" | "TECHNICIAN" | "ADMIN";
 
-// API functions
-const complaintApi = {
-  // Get all complaints (admin/agent/manager)
-  getComplaints: async (params?: {
-    status?: string;
-    category?: string;
-    page?: number;
-    limit?: number;
-    search?: string;
-  }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.category) searchParams.set('category', params.category);
-    if (params?.page) searchParams.set('page', params.page.toString());
-    if (params?.limit) searchParams.set('limit', params.limit.toString());
-    if (params?.search) searchParams.set('search', params.search);
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
-    const queryString = searchParams.toString();
-    return apiClient.get<{
-      message: string;
-      complaints: Complaint[];
-      pagination: { total: number; page: number; limit: number; pages: number };
-    }>(`/admin/complaints${queryString ? `?${queryString}` : ''}`);
-  },
+interface ComplaintsFilters {
+  status?: string;
+  category?: string;
+  search?: string;
+  urgency?: string;
+  page?: number;
+  limit?: number;
+}
 
-  // Get my complaints (citizen)
-  getMyComplaints: async (params?: {
-    status?: string;
-    category?: string;
-    page?: number;
-    limit?: number;
-  }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.category) searchParams.set('category', params.category);
-    if (params?.page) searchParams.set('page', params.page.toString());
-    if (params?.limit) searchParams.set('limit', params.limit.toString());
+interface UseComplaintsOptions {
+  autoFetch?: boolean;
+}
 
-    const queryString = searchParams.toString();
-    return apiClient.get<{
-      message: string;
-      complaints: Complaint[];
-      pagination: { total: number; page: number; limit: number; pages: number };
-    }>(`/citizen/complaints${queryString ? `?${queryString}` : ''}`);
-  },
+/**
+ * Get the appropriate API endpoint based on user role
+ */
+function getEndpointByRole(role: UserRole | undefined): string {
+  switch (role) {
+    case "CITIZEN":
+      return "/citizen/complaints";
+    case "MUNICIPAL_AGENT":
+      return "/agent/complaints";
+    case "DEPARTMENT_MANAGER":
+      return "/manager/complaints";
+    case "TECHNICIAN":
+      return "/technician/tasks";
+    case "ADMIN":
+      return "/complaints";
+    default:
+      return "/citizen/complaints";
+  }
+}
 
-  // Get single complaint
-  getComplaint: async (id: string) => {
-    return apiClient.get<{ message: string; complaint: Complaint }>(`/complaints/${id}`);
-  },
+/**
+ * Hook for fetching complaints based on user role
+ */
+export function useComplaints(options: UseComplaintsOptions = {}) {
+  const { autoFetch = true } = options;
+  const { user } = useAuthStore();
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
 
-  // Get archived complaints (admin)
-  getArchivedComplaints: async (params?: {
-    status?: string;
-    search?: string;
-    page?: number;
-    limit?: number;
-  }) => {
-    const searchParams = new URLSearchParams();
-    if (params?.status) searchParams.set('status', params.status);
-    if (params?.search) searchParams.set('search', params.search);
-    if (params?.page) searchParams.set('page', params.page.toString());
-    if (params?.limit) searchParams.set('limit', params.limit.toString());
+  const role = user?.role as UserRole | undefined;
 
-    const queryString = searchParams.toString();
-    return apiClient.get<{
-      message: string;
-      complaints: Complaint[];
-      pagination: { total: number; page: number; limit: number; pages: number };
-    }>(`/complaints/archived${queryString ? `?${queryString}` : ''}`);
-  },
+  const fetchComplaints = useCallback(async (filters: ComplaintsFilters = {}) => {
+    if (!role) return;
 
-  // Get dashboard stats
-  getStats: async () => {
-    return apiClient.get<{
-      message: string;
-      stats: {
-        total: number;
-        pending: number;
-        inProgress: number;
-        resolved: number;
-        closed: number;
-      };
-    }>('/admin/stats');
-  },
+    setLoading(true);
+    setError(null);
 
-  // Create complaint
-  createComplaint: async (data: CreateComplaintData) => {
-    return apiClient.post<{ message: string; complaint: Complaint }>('/citizen/complaints', data);
-  },
+    try {
+      const endpoint = getEndpointByRole(role);
+      const params = new URLSearchParams();
+      
+      if (filters.page) params.append("page", filters.page.toString());
+      if (filters.limit) params.append("limit", filters.limit.toString());
+      if (filters.status) params.append("status", filters.status);
+      if (filters.category) params.append("category", filters.category);
+      if (filters.urgency) params.append("urgency", filters.urgency);
+      if (filters.search) params.append("search", filters.search);
 
-  // Update complaint status (agent/manager)
-  updateStatus: async ({ id, status, notes }: { id: string; status: string; notes?: string }) => {
-    return apiClient.put<{ message: string; complaint: Complaint }>(`/agent/complaints/${id}/status`, {
-      status,
-      notes,
-    });
-  },
+      const queryString = params.toString();
+      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
 
-  // Assign complaint (manager)
-  assignComplaint: async ({ id, departmentId, technicianId }: { id: string; departmentId?: string; technicianId?: string }) => {
-    return apiClient.put<{ message: string; complaint: Complaint }>(`/manager/complaints/${id}/assign`, {
-      departmentId,
-      technicianId,
-    });
-  },
+      const response = await clientGet<PaginatedResponse<Complaint>>(url);
 
-  // Archive complaint (admin)
-  archiveComplaint: async (id: string) => {
-    return apiClient.put<{ message: string }>(`/admin/complaints/${id}/archive`);
-  },
+      setComplaints(response.data || []);
+      setPagination({
+        page: response.page || 1,
+        limit: response.limit || 10,
+        total: response.total || 0,
+        totalPages: response.totalPages || 0,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch complaints");
+    } finally {
+      setLoading(false);
+    }
+  }, [role]);
+
+  // Initial fetch
+  useEffect(() => {
+    if (autoFetch && role) {
+      fetchComplaints();
+    }
+  }, [autoFetch, role, fetchComplaints]);
+
+  // Create complaint (citizen only)
+  const createComplaint = async (data: CreateComplaintData): Promise<Complaint> => {
+    const response = await clientPost<Complaint>("/citizen/complaints", data);
+    await fetchComplaints(); // Refresh list
+    return response;
+  };
+
+  // Update complaint (citizen - before validation)
+  const updateComplaint = async (id: string, data: Partial<CreateComplaintData>): Promise<Complaint> => {
+    const response = await clientPut<Complaint>(`/citizen/complaints/${id}`, data);
+    await fetchComplaints(); // Refresh list
+    return response;
+  };
+
+  // Delete complaint (citizen - before validation)
+  const deleteComplaint = async (id: string): Promise<void> => {
+    await clientDelete(`/citizen/complaints/${id}`);
+    await fetchComplaints(); // Refresh list
+  };
+
+  // Confirm complaint (Me Too +3 score)
+  const confirmComplaint = async (id: string): Promise<void> => {
+    await clientPost(`/complaints/${id}/confirm`);
+    await fetchComplaints(); // Refresh list
+  };
+
+  // Search complaints (debounced 400ms)
+  const searchComplaints = useCallback(
+    (query: string) => {
+      const timeoutId = setTimeout(() => {
+        fetchComplaints({ search: query });
+      }, 400);
+      return () => clearTimeout(timeoutId);
+    },
+    [fetchComplaints]
+  );
+
+  return {
+    complaints,
+    loading,
+    error,
+    pagination,
+    fetchComplaints,
+    createComplaint,
+    updateComplaint,
+    deleteComplaint,
+    confirmComplaint,
+    searchComplaints,
+    role,
+  };
+}
+
+/**
+ * Hook for fetching a single complaint detail
+ */
+export function useComplaintDetail(complaintId: string | null) {
+  const [complaint, setComplaint] = useState<Complaint | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!complaintId) return;
+
+    const fetchComplaint = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await clientGet<Complaint>(`/complaints/${complaintId}`);
+        setComplaint(response);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch complaint");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchComplaint();
+  }, [complaintId]);
+
+  return { complaint, loading, error };
+}
+
+/**
+ * Hook for complaint internal notes
+ */
+export function useComplaintNotes(complaintId: string | null) {
+  const [notes, setNotes] = useState<Array<{
+    _id: string;
+    content: string;
+    type: "NOTE" | "BLOCAGE";
+    author: { _id: string; fullName: string };
+    createdAt: string;
+  }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchNotes = useCallback(async () => {
+    if (!complaintId) return;
+
+    try {
+      const response = await clientGet<typeof notes>(`/complaints/${complaintId}/notes`);
+      setNotes(response);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch notes");
+    }
+  }, [complaintId]);
+
+  // Fetch notes every 30 seconds
+  useEffect(() => {
+    if (!complaintId) return;
+
+    fetchNotes();
+    const interval = setInterval(fetchNotes, 30000);
+
+    return () => clearInterval(interval);
+  }, [complaintId, fetchNotes]);
+
+  // Add note
+  const addNote = async (content: string, type: "NOTE" | "BLOCAGE" = "NOTE") => {
+    if (!complaintId) return;
+
+    await clientPost(`/complaints/${complaintId}/notes`, { content, type });
+    await fetchNotes();
+  };
+
+  return { notes, loading, error, addNote, refetch: fetchNotes };
+}
+
+/**
+ * Hook for archived complaints (admin only)
+ */
+export function useArchivedComplaints() {
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
+
+  const fetchArchived = async (filters: ComplaintsFilters = {}) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+      if (filters.page) params.append("page", filters.page.toString());
+      if (filters.limit) params.append("limit", filters.limit.toString());
+      if (filters.status) params.append("status", filters.status);
+      if (filters.search) params.append("search", filters.search);
+
+      const queryString = params.toString();
+      const url = `/complaints/archived${queryString ? `?${queryString}` : ""}`;
+
+      const response = await clientGet<PaginatedResponse<Complaint>>(url);
+
+      setComplaints(response.data || []);
+      setPagination({
+        page: response.page || 1,
+        limit: response.limit || 10,
+        total: response.total || 0,
+        totalPages: response.totalPages || 0,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch archived complaints");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Unarchive complaint (admin)
-  unarchiveComplaint: async (id: string) => {
-    return apiClient.put<{ message: string }>(`/admin/complaints/${id}/unarchive`);
-  },
+  const unarchiveComplaint = async (id: string): Promise<void> => {
+    await clientPut(`/admin/complaints/${id}/unarchive`);
+    await fetchArchived();
+  };
 
-  // Delete complaint
-  deleteComplaint: async (id: string) => {
-    return apiClient.delete<{ message: string }>(`/complaints/${id}`);
-  },
-};
-
-// Hooks
-
-// Get all complaints (admin view)
-export function useComplaints(params?: {
-  status?: string;
-  category?: string;
-  page?: number;
-  limit?: number;
-  search?: string;
-}) {
-  return useQuery({
-    queryKey: complaintKeys.list(params || {}),
-    queryFn: () => complaintApi.getComplaints(params),
-  });
+  return {
+    complaints,
+    loading,
+    error,
+    pagination,
+    fetchArchived,
+    unarchiveComplaint,
+  };
 }
 
-// Get my complaints (citizen view)
-export function useMyComplaints(params?: {
-  status?: string;
-  category?: string;
-  page?: number;
-  limit?: number;
-}) {
-  return useQuery({
-    queryKey: complaintKeys.my(),
-    queryFn: () => complaintApi.getMyComplaints(params),
-  });
-}
+/**
+ * Hook for complaint statistics
+ */
+export function useComplaintStats() {
+  const [stats, setStats] = useState<{
+    byStatus: Record<string, number>;
+    byCategory: Record<string, number>;
+    monthly: Array<{ month: string; count: number }>;
+    sla: { overdue: number; atRisk: number };
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-// Get single complaint
-export function useComplaint(id: string) {
-  return useQuery({
-    queryKey: complaintKeys.detail(id),
-    queryFn: () => complaintApi.getComplaint(id),
-    enabled: !!id,
-  });
-}
+  const { user } = useAuthStore();
+  const role = user?.role as UserRole | undefined;
 
-// Get archived complaints
-export function useArchivedComplaints(params?: {
-  status?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
-}) {
-  return useQuery({
-    queryKey: complaintKeys.archived(),
-    queryFn: () => complaintApi.getArchivedComplaints(params),
-  });
-}
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-// Get dashboard stats
-export function useStats() {
-  return useQuery({
-    queryKey: complaintKeys.stats(),
-    queryFn: () => complaintApi.getStats(),
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
-}
+    try {
+      const [statusResponse, categoryResponse, monthlyResponse, slaResponse] = await Promise.all([
+        clientGet<Record<string, number>>("/stats/complaints"),
+        clientGet<Record<string, number>>("/stats/complaints?by=category"),
+        clientGet<Array<{ month: string; count: number }>>("/stats/monthly"),
+        clientGet<{ overdue: number; atRisk: number }>("/stats/sla"),
+      ]);
 
-// Create complaint mutation
-export function useCreateComplaint() {
-  const queryClient = useQueryClient();
+      setStats({
+        byStatus: statusResponse,
+        byCategory: categoryResponse,
+        monthly: monthlyResponse,
+        sla: slaResponse,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch statistics");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  return useMutation({
-    mutationFn: (data: CreateComplaintData) => complaintApi.createComplaint(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: complaintKeys.all });
-    },
-  });
-}
+  useEffect(() => {
+    if (role && ["ADMIN", "DEPARTMENT_MANAGER", "MUNICIPAL_AGENT", "TECHNICIAN"].includes(role)) {
+      fetchStats();
+    }
+  }, [role, fetchStats]);
 
-// Update complaint status mutation
-export function useUpdateStatus() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) =>
-      complaintApi.updateStatus({ id, status, notes }),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: complaintKeys.all });
-      queryClient.invalidateQueries({ queryKey: complaintKeys.detail(variables.id) });
-    },
-  });
-}
-
-// Assign complaint mutation
-export function useAssignComplaint() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, departmentId, technicianId }: { id: string; departmentId?: string; technicianId?: string }) =>
-      complaintApi.assignComplaint({ id, departmentId, technicianId }),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: complaintKeys.all });
-      queryClient.invalidateQueries({ queryKey: complaintKeys.detail(variables.id) });
-    },
-  });
-}
-
-// Archive complaint mutation
-export function useArchiveComplaint() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: string) => complaintApi.archiveComplaint(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: complaintKeys.all });
-    },
-  });
-}
-
-// Unarchive complaint mutation
-export function useUnarchiveComplaint() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: string) => complaintApi.unarchiveComplaint(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: complaintKeys.archived() });
-    },
-  });
-}
-
-// Delete complaint mutation
-export function useDeleteComplaint() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (id: string) => complaintApi.deleteComplaint(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: complaintKeys.all });
-    },
-  });
+  return { stats, loading, error, refetch: fetchStats };
 }

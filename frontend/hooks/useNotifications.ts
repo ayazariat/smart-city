@@ -1,218 +1,102 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { io, Socket } from 'socket.io-client';
-import { apiClient } from '@/services/api.client';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useState, useEffect, useCallback } from "react";
+import { notificationService } from "@/services/notification.service";
+import { Notification } from "@/types";
 
-export interface Notification {
-  _id: string;
-  userId: string;
-  type: 'validated' | 'assigned' | 'in_progress' | 'resolved' | 'sla_at_risk' | 'rejected';
-  title: string;
-  message: string;
-  complaintId?: string;
-  read: boolean;
-  createdAt: string;
+interface UseNotificationsReturn {
+  notifications: Notification[];
+  unreadCount: number;
+  loading: boolean;
+  error: string | null;
+  fetchNotifications: () => Promise<void>;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
 }
 
-// Query keys
-export const notificationKeys = {
-  all: ['notifications'] as const,
-  list: () => [...notificationKeys.all, 'list'] as const,
-  unread: () => [...notificationKeys.all, 'unread'] as const,
-};
+export function useNotifications(): UseNotificationsReturn {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-// API functions
-const notificationApi = {
-  getNotifications: async () => {
-    return apiClient.get<{ message: string; notifications: Notification[] }>('/notifications');
-  },
-
-  getUnreadCount: async () => {
-    return apiClient.get<{ message: string; count: number }>('/notifications/unread-count');
-  },
-
-  markAsRead: async (id: string) => {
-    return apiClient.put<{ message: string }>(`/notifications/${id}/read`);
-  },
-
-  markAllAsRead: async () => {
-    return apiClient.put<{ message: string }>('/notifications/read-all');
-  },
-
-  deleteNotification: async (id: string) => {
-    return apiClient.delete<{ message: string }>(`/notifications/${id}`);
-  },
-};
-
-// Hook
-export function useNotifications() {
-  const { user, token } = useAuthStore();
-  const queryClient = useQueryClient();
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
-  const userIdRef = useRef<string | undefined>(user?.id);
-  const tokenRef = useRef<string | undefined>(token);
-
-  // Keep refs updated
-  useEffect(() => {
-    userIdRef.current = user?.id;
-    tokenRef.current = token;
-  }, [user?.id, token]);
-
-  // Fetch notifications (REST fallback)
-  const {
-    data: notificationsData,
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: notificationKeys.list(),
-    queryFn: () => notificationApi.getNotifications(),
-    enabled: !!token,
-    refetchInterval: 60000, // Poll every 60 seconds as fallback
-  });
-
-  // Fetch unread count
-  const { data: unreadCountData } = useQuery({
-    queryKey: notificationKeys.unread(),
-    queryFn: () => notificationApi.getUnreadCount(),
-    enabled: !!token,
-    refetchInterval: 30000, // Check every 30 seconds
-  });
-
-  // Mark as read mutation
-  const markAsReadMutation = useMutation({
-    mutationFn: (id: string) => notificationApi.markAsRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
-    },
-  });
-
-  // Mark all as read mutation
-  const markAllAsReadMutation = useMutation({
-    mutationFn: () => notificationApi.markAllAsRead(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: notificationKeys.all });
-    },
-  });
-
-  // Connect to Socket.io
-  useEffect(() => {
-    if (!userIdRef.current || !tokenRef.current) return;
-
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-
-    // Create socket connection
-    const newSocket = io(socketUrl, {
-      auth: {
-        token: tokenRef.current,
-      },
-      transports: ['websocket', 'polling'],
-    });
-
-    socketRef.current = newSocket;
-
-    // Connection events
-    newSocket.on('connect', () => {
-      console.log('Socket connected');
-      setIsConnected(true);
-
-      // Join user room
-      if (userIdRef.current) {
-        newSocket.emit('join', `user:${userIdRef.current}`);
-      }
-    });
-
-    newSocket.on('disconnect', () => {
-      console.log('Socket disconnected');
-      setIsConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-      setIsConnected(false);
-    });
-
-    // Listen for notifications
-    newSocket.on('notification', (notification: Notification) => {
-      console.log('Received notification:', notification);
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
       
-      // Show toast notification
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'granted') {
-          new Notification(notification.title, {
-            body: notification.message,
-            icon: '/favicon.ico',
-          });
-        }
+      // Fetch count and notifications in parallel
+      const [countResult, notificationsResult] = await Promise.all([
+        notificationService.getNotificationCount(),
+        notificationService.getNotifications(),
+      ]);
+
+      if (countResult.success) {
+        setUnreadCount(countResult.count || 0);
       }
 
-      // Update query cache
-      queryClient.setQueryData<{ message: string; notifications: Notification[] }>(
-        notificationKeys.list(),
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            notifications: [notification, ...old.notifications],
-          };
-        }
-      );
-
-      // Invalidate unread count
-      queryClient.invalidateQueries({ queryKey: notificationKeys.unread() });
-    });
-
-    // Cleanup on unmount
-    return () => {
-      newSocket.disconnect();
-      socketRef.current = null;
-    };
-  }, [queryClient]);
-
-  // Update socket state after connection
-  useEffect(() => {
-    if (socketRef.current && !socket) {
-      setSocket(socketRef.current);
-    }
-  }, [socket]);
-
-  // Request notification permission
-  const requestNotificationPermission = useCallback(async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        await Notification.requestPermission();
+      if (notificationsResult.success) {
+        setNotifications(notificationsResult.data || []);
+      } else {
+        setError(notificationsResult.message || "Failed to fetch notifications");
       }
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+      setError("Failed to fetch notifications");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // Handlers
-  const handleMarkAsRead = useCallback((id: string) => {
-    markAsReadMutation.mutate(id);
-  }, [markAsReadMutation]);
+  const markAsRead = useCallback(async (id: string) => {
+    try {
+      const result = await notificationService.markNotificationAsRead(id);
+      if (result.success) {
+        // Update local state
+        setNotifications((prev) =>
+          prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error("Error marking notification as read:", err);
+    }
+  }, []);
 
-  const handleMarkAllAsRead = useCallback(() => {
-    markAllAsReadMutation.mutate();
-  }, [markAllAsReadMutation]);
+  const markAllAsRead = useCallback(async () => {
+    try {
+      const result = await notificationService.markAllNotificationsAsRead();
+      if (result.success) {
+        // Update local state
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setUnreadCount(0);
+      }
+    } catch (err) {
+      console.error("Error marking all notifications as read:", err);
+    }
+  }, []);
 
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // Initial fetch
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  // Poll for new notifications every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
 
   return {
-    notifications: notificationsData?.notifications || [],
-    unreadCount: unreadCountData?.count || 0,
-    isLoading,
+    notifications,
+    unreadCount,
+    loading,
     error,
-    isConnected,
-    socket,
-    requestNotificationPermission,
-    markAsRead: handleMarkAsRead,
-    markAllAsRead: handleMarkAllAsRead,
-    refresh: handleRefresh,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
   };
 }

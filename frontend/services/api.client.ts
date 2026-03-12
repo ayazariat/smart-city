@@ -8,6 +8,13 @@ interface RequestOptions extends RequestInit {
 
 export const apiClient = {
   async extractErrorMessage(response: Response): Promise<string> {
+    const contentType = response.headers.get("content-type") || "";
+    
+    // If response is HTML (like a 404 error page), return a generic message
+    if (contentType.includes("text/html") || response.status === 404) {
+      return `Request failed with status ${response.status}`;
+    }
+    
     const text = await response.text();
     if (!text) return "Request failed";
     try {
@@ -19,7 +26,8 @@ export const apiClient = {
         return errorData.error;
       }
     } catch {
-      // ignore parse error
+      // If not JSON, return the text if it's not empty
+      if (text) return text;
     }
     return "Request failed";
   },
@@ -96,6 +104,7 @@ export const apiClient = {
       }
       return fetch(`${API_BASE_URL}${endpoint}`, {
         ...rest,
+        credentials: "include",
         headers: finalHeaders,
       });
     };
@@ -129,7 +138,8 @@ export const apiClient = {
 
     // Handle 403 Forbidden - Access denied
     if (response.status === 403) {
-      throw new Error('Access denied');
+      // Don't throw for 403, just return empty data
+      return {} as T;
     }
 
     // If still 401 after refresh, clear auth and redirect to login
@@ -147,6 +157,14 @@ export const apiClient = {
     }
 
     const text = await response.text();
+    
+    // Check if response is JSON
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json") && text) {
+      // If not JSON, return the text as is (for HTML or other responses)
+      return text as unknown as T;
+    }
+    
     return text ? (JSON.parse(text) as T) : ({} as T);
   },
 };

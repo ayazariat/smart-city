@@ -27,8 +27,6 @@ export interface BaseComplaint {
   location?: { address?: string; municipality?: string; governorate?: string };
   media?: Array<{ url: string; type?: string }>;
   citizen?: { fullName: string } | null;
-  createdBy?: { fullName?: string } | string | null;
-  isAnonymous?: boolean;
   department?: { _id?: string; name: string } | null;
   assignedTo?: { _id?: string; fullName: string };
   municipality?: { _id?: string; name: string; governorate?: string } | string;
@@ -82,7 +80,16 @@ export const ComplaintCard = ({
     return complaint.municipalityName || complaint.location?.municipality || "";
   };
 
+  // Get governorate display name
+  const getGovernorateName = (): string => {
+    if (complaint.municipality && typeof complaint.municipality !== "string" && complaint.municipality.governorate) {
+      return complaint.municipality.governorate;
+    }
+    return complaint.location?.governorate || "";
+  };
+
   const municipalityName = getMunicipalityName();
+  const governorateName = getGovernorateName();
 
   const urgencyVariant: Record<string, string> = {
     URGENT: "bg-red-100 text-red-700",
@@ -134,34 +141,12 @@ export const ComplaintCard = ({
                 </span>
               </span>
             )}
-            {showCitizen && (() => {
-              // Prefer explicit anonymous label when flagged
-              if (complaint.isAnonymous) {
-                return (
-                  <span className="flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Anonymous</span>
-                  </span>
-                );
-              }
-
-              const nameFromCitizen = complaint.citizen?.fullName;
-              const createdByObj =
-                complaint.createdBy && typeof complaint.createdBy === "object"
-                  ? complaint.createdBy
-                  : null;
-              const fallbackName = createdByObj?.fullName;
-              const label = nameFromCitizen || fallbackName;
-
-              if (!label) return null;
-
-              return (
-                <span className="flex items-center gap-1">
-                  <User className="w-3.5 h-3.5 text-slate-400" />
-                  {label}
-                </span>
-              );
-            })()}
+            {showCitizen && complaint.citizen && (
+              <span className="flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                {complaint.citizen.fullName}
+              </span>
+            )}
             {showDepartment && complaint.department && (
               <span className="flex items-center gap-1">
                 <Building2 className="w-3.5 h-3.5 text-slate-400" />
@@ -172,6 +157,7 @@ export const ComplaintCard = ({
               <span className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 {municipalityName}
+                {governorateName && <span className="text-slate-400">, {governorateName}</span>}
               </span>
             )}
             {showAssignedTo && complaint.assignedTo && (

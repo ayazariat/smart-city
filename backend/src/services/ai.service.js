@@ -1,189 +1,157 @@
 /**
- * AI Service - Connects to Python microservices for AI features
+ * AI Service - Bridge between backend and Python AI services
  * 
+ * This service calls the Python AI microservices for:
  * - Category prediction
  * - Keyword extraction
  * - SLA calculation
- * 
- * All calls are non-blocking (setImmediate) to avoid blocking HTTP responses
  */
 
 const axios = require('axios');
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-
-// Category predictor endpoint
-const CATEGORY_ENDPOINT = `${AI_SERVICE_URL}/ai/predict-category`;
-// Keyword extractor endpoint  
-const KEYWORD_ENDPOINT = `${AI_SERVICE_URL}/ai/extract-keywords`;
-// SLA calculator endpoint
-const SLA_ENDPOINT = `${AI_SERVICE_URL}/ai/calculate-sla`;
+// Service URLs (configure via environment variables)
+const CATEGORY_SERVICE_URL = process.env.CATEGORY_SERVICE_URL || 'http://localhost:8001';
+const KEYWORD_SERVICE_URL = process.env.KEYWORD_SERVICE_URL || 'http://localhost:8002';
+const SLA_SERVICE_URL = process.env.SLA_SERVICE_URL || 'http://localhost:8003';
 
 /**
- * Predict category using AI
- * @param {string} title - Complaint title
+ * Predict category from complaint text
  * @param {string} description - Complaint description
  * @returns {Promise<{predicted: string, confidence: number, alternatives: string[], reasoning: string}>}
  */
-async function predictCategory(title, description) {
+async function predictCategory(description) {
   try {
-    const response = await axios.post(CATEGORY_ENDPOINT, {
-      title,
-      description
+    const response = await axios.post(`${CATEGORY_SERVICE_URL}/predict-category`, {
+      text: description
     }, {
-      timeout: 10000 // 10 second timeout
+      timeout: 10000
     });
     return response.data;
   } catch (error) {
-    console.error('AI Category Prediction Error:', error.message);
-    // Return fallback
+    console.error('[AI Service] Category prediction error:', error.message);
+    // Always fallback on error - never block HTTP
     return {
       predicted: 'AUTRE',
       confidence: 0,
       alternatives: [],
-      reasoning: 'AI service unavailable. Please select category manually.'
+      reasoning: 'Service unavailable, defaulting to AUTRE category'
     };
   }
 }
 
 /**
- * Extract keywords using AI
- * @param {string} title - Complaint title
+ * Extract keywords from complaint text
  * @param {string} description - Complaint description
- * @param {string} category - Category
- * @param {string} municipality - Municipality name
  * @returns {Promise<{keywords: string[], locationKeywords: string[], urgencyKeywords: string[], similarityHash: string}>}
  */
-async function extractKeywords(title, description, category = 'AUTRE', municipality = '') {
+async function extractKeywords(description) {
   try {
-    const response = await axios.post(KEYWORD_ENDPOINT, {
-      title,
-      description,
-      category,
-      municipality
+    const response = await axios.post(`${KEYWORD_SERVICE_URL}/extract-keywords`, {
+      text: description
     }, {
       timeout: 10000
     });
     return response.data;
   } catch (error) {
-    console.error('AI Keyword Extraction Error:', error.message);
-    // Return fallback
+    console.error('[AI Service] Keyword extraction error:', error.message);
+    // Return empty keywords on error - never block HTTP
     return {
       keywords: [],
       locationKeywords: [],
       urgencyKeywords: [],
-      similarityHash: '000000000000'
+      similarityHash: ''
     };
   }
 }
 
 /**
- * Calculate SLA using AI
+ * Calculate SLA deadline based on category and urgency
+ * @param {string} category - Complaint category
  * @param {string} urgency - Urgency level (CRITICAL, HIGH, MEDIUM, LOW)
- * @param {string} category - Category
- * @param {string} createdAt - ISO format creation date (optional)
- * @returns {Promise<{deadline: string, status: string, remaining_hours: number, total_hours: number}>}
+ * @param {Date} createdAt - Complaint creation date
+ * @returns {Promise<{deadline: Date, status: string, remaining_h: number}>}
  */
-async function calculateSLA(urgency, category, createdAt = null) {
+async function calculateSLA(category, urgency, createdAt) {
   try {
-    const response = await axios.post(SLA_ENDPOINT, {
-      urgency,
+    const response = await axios.post(`${SLA_SERVICE_URL}/calculate-sla`, {
       category,
-      created_at: createdAt
+      urgency,
+      createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt
     }, {
       timeout: 10000
     });
     return response.data;
   } catch (error) {
-    console.error('AI SLA Calculation Error:', error.message);
-    // Return fallback (7 days default)
-    const now = new Date();
-    const deadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    console.error('[AI Service] SLA calculation error:', error.message);
+    // Default SLA on error - 7 days for MEDIUM
+    const defaultDeadline = new Date();
+    defaultDeadline.setDate(defaultDeadline.getDate() + 7);
     return {
-      deadline: deadline.toISOString(),
-      status: 'ON_TRACK',
-      remaining_hours: 168,
-      total_hours: 168
+      deadline: defaultDeadline,
+      status: 'UNKNOWN',
+      remaining_h: 168
     };
   }
 }
 
 /**
- * Process new complaint - extract keywords asynchronously
- * This is called after complaint is created
- * 
- * @param {Object} complaint - The created complaint object
- * @param {Object} ComplaintModel - Mongoose model for updating
+ * Process new complaint with AI services
+ * Called after complaint is created
+ * @param {Object} complaint - Complaint object
  */
-async function processNewComplaint(complaint, ComplaintModel) {
-  // Non-blocking call
+async function processNewComplaint(complaint) {
+  // Run async - don't block the HTTP response
   setImmediate(async () => {
     try {
-      console.log(`[AI] Processing new complaint ${complaint._id}`);
+      // Extract keywords in background
+      const keywords = await extractKeywords(complaint.description || '');
       
-      const municipalityName = complaint.municipality?.name || 
-                              (typeof complaint.municipality === 'string' ? complaint.municipality : '');
-      
-      // Extract keywords
-      const keywordsResult = await extractKeywords(
-        complaint.title,
-        complaint.description,
-        complaint.category,
-        municipalityName
-      );
-      
-      // Update complaint with extracted keywords
-      await ComplaintModel.findByIdAndUpdate(complaint._id, {
-        $set: {
-          keywords: keywordsResult.keywords,
-          aiData: {
-            locationKeywords: keywordsResult.locationKeywords,
-            urgencyKeywords: keywordsResult.urgencyKeywords,
-            similarityHash: keywordsResult.similarityHash,
-            keywordExtractedAt: new Date()
+      // Update complaint with keywords if needed
+      if (keywords.keywords && keywords.keywords.length > 0) {
+        const Complaint = require('../models/Complaint');
+        await Complaint.findByIdAndUpdate(complaint._id, {
+          $set: {
+            'aiData.keywords': keywords.keywords,
+            'aiData.locationKeywords': keywords.locationKeywords,
+            'aiData.urgencyKeywords': keywords.urgencyKeywords,
+            'aiData.similarityHash': keywords.similarityHash
           }
-        }
-      });
-      
-      console.log(`[AI] Keywords extracted for complaint ${complaint._id}`);
+        });
+        console.log(`[AI Service] Keywords extracted for complaint ${complaint._id}`);
+      }
     } catch (error) {
-      console.error(`[AI] Error processing complaint ${complaint._id}:`, error.message);
+      console.error('[AI Service] Error processing new complaint:', error.message);
+      // Never throw - this runs in background
     }
   });
 }
 
 /**
- * Process assigned complaint - calculate SLA asynchronously
- * This is called after complaint is assigned to a department/technician
- * 
- * @param {Object} complaint - The assigned complaint object
- * @param {Object} ComplaintModel - Mongoose model for updating
+ * Recalculate SLA after department assignment
+ * Called after complaint is assigned to a department
+ * @param {Object} complaint - Complaint object
  */
-async function processAssignedComplaint(complaint, ComplaintModel) {
-  // Non-blocking call
+async function recalculateSLA(complaint) {
+  // Run async - don't block the HTTP response
   setImmediate(async () => {
     try {
-      console.log(`[AI] Processing SLA for complaint ${complaint._id}`);
-      
-      // Calculate SLA
-      const slaResult = await calculateSLA(
-        complaint.urgency,
+      const sla = await calculateSLA(
         complaint.category,
+        complaint.urgency,
         complaint.createdAt
       );
       
       // Update complaint with SLA deadline
-      await ComplaintModel.findByIdAndUpdate(complaint._id, {
+      const Complaint = require('../models/Complaint');
+      await Complaint.findByIdAndUpdate(complaint._id, {
         $set: {
-          slaDeadline: slaResult.deadline,
-          slaStatus: slaResult.status,
-          slaCalculatedAt: new Date()
+          slaDeadline: sla.deadline
         }
       });
-      
-      console.log(`[AI] SLA calculated for complaint ${complaint._id}: ${slaResult.status}`);
+      console.log(`[AI Service] SLA calculated for complaint ${complaint._id}: ${sla.status}`);
     } catch (error) {
-      console.error(`[AI] Error calculating SLA for complaint ${complaint._id}:`, error.message);
+      console.error('[AI Service] Error calculating SLA:', error.message);
+      // Never throw - this runs in background
     }
   });
 }
@@ -193,5 +161,5 @@ module.exports = {
   extractKeywords,
   calculateSLA,
   processNewComplaint,
-  processAssignedComplaint
+  recalculateSLA
 };

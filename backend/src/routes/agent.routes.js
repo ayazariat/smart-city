@@ -45,10 +45,9 @@ router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req
     if (status) {
       if (status === "ALL") {
         // Show all statuses
-      } else if (status.includes(",")) {
-        // Handle comma-separated status values (e.g., "SUBMITTED,VALIDATED,ASSIGNED")
-        const statusList = status.split(",");
-        query.status = { $in: statusList };
+      } else if (status === "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED") {
+        // Show all relevant statuses for agent
+        query.status = { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
       } else {
         query.status = status;
       }

@@ -1,6 +1,79 @@
 import { Complaint, CreateComplaintData, ComplaintCategory, ComplaintUrgency, ComplaintLocation, ComplaintMedia, Comment } from "@/types";
 import { apiClient } from "./api.client";
 
+// Cloudinary base URL for media files - used for prepending to relative paths
+// This should be configured in your .env.local
+// Example: NEXT_PUBLIC_CLOUDINARY_BASE_URL=https://res.cloudinary.com/your-cloud-name/image/upload
+const getCloudinaryBaseUrl = (): string => {
+  // Try environment variable first
+  const envUrl = process.env.NEXT_PUBLIC_CLOUDINARY_BASE_URL;
+  if (envUrl) return envUrl;
+  
+  // Default - will be replaced with actual uploaded URL
+  return "";
+};
+
+/**
+ * Helper function to get full Cloudinary URL
+ * If the URL is already a full URL (starts with http), return as-is
+ * Otherwise, check if it's a Cloudinary public ID and construct the URL
+ */
+export function getFullMediaUrl(url: string | undefined): string {
+  if (!url) return "";
+  
+  // If already a full URL, return as-is
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  
+  // If it's a relative path (starts with /), return as-is
+  // The backend should return full URLs after upload
+  if (url.startsWith("/")) {
+    // Could prepend API base URL if needed
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    return `${apiUrl}${url}`;
+  }
+  
+  // If it's a Cloudinary public ID (no slashes), construct URL
+  // This assumes the backend stores just the public ID
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "demo";
+  return `https://res.cloudinary.com/${cloudName}/image/upload/${url}`;
+}
+
+/**
+ * Process complaint data to fix media URLs
+ * This ensures all media URLs are full URLs
+ */
+export function processComplaintMedia(complaint: Complaint): Complaint {
+  if (!complaint) return complaint;
+  
+  // Process media array
+  if (complaint.media) {
+    complaint.media = complaint.media.map(item => ({
+      ...item,
+      url: getFullMediaUrl(item.url)
+    }));
+  }
+  
+  // Process before photos
+  if (complaint.beforePhotos) {
+    complaint.beforePhotos = complaint.beforePhotos.map(photo => ({
+      ...photo,
+      url: getFullMediaUrl(photo.url)
+    }));
+  }
+  
+  // Process after photos
+  if (complaint.afterPhotos) {
+    complaint.afterPhotos = complaint.afterPhotos.map(photo => ({
+      ...photo,
+      url: getFullMediaUrl(photo.url)
+    }));
+  }
+  
+  return complaint;
+}
+
 /**
  * Upload media files to Cloudinary
  */
@@ -13,15 +86,12 @@ export const uploadMedia = async (
   });
 
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     const response = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/upload`,
       {
         method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
         body: formData,
+        credentials: 'include',
       }
     );
 
@@ -288,6 +358,102 @@ export const unarchiveComplaint = async (
   );
 };
 
+/**
+ * Get archived complaints (admin view)
+ */
+export const getArchivedComplaints = async (params?: {
+  filter?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{
+  success: boolean;
+  complaints: Complaint[];
+  total: number;
+  page: number;
+  pages: number;
+}> => {
+  const searchParams = new URLSearchParams();
+  if (params?.filter) searchParams.set('filter', params.filter);
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
+
+  const queryString = searchParams.toString();
+  const endpoint = `/complaints/archived${queryString ? `?${queryString}` : ''}`;
+
+  return apiClient.get<{
+    success: boolean;
+    complaints: Complaint[];
+    total: number;
+    page: number;
+    pages: number;
+  }>(endpoint);
+};
+
+/**
+ * Predict category using AI
+ */
+export const predictCategory = async (text: string): Promise<{
+  predicted: string;
+  confidence: number;
+  alternatives: string[];
+  reasoning: string;
+}> => {
+  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+  
+  const response = await fetch(`${aiUrl}/ai/predict-category`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    // Fallback on error
+    return {
+      predicted: "AUTRE",
+      confidence: 0,
+      alternatives: [],
+      reasoning: "AI service unavailable",
+    };
+  }
+
+  return response.json();
+};
+
+/**
+ * Extract keywords using AI
+ */
+export const extractKeywords = async (text: string): Promise<{
+  keywords: string[];
+  locationKeywords: string[];
+  urgencyKeywords: string[];
+  similarityHash: string;
+}> => {
+  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+  
+  const response = await fetch(`${aiUrl}/ai/extract-keywords`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!response.ok) {
+    return {
+      keywords: [],
+      locationKeywords: [],
+      urgencyKeywords: [],
+      similarityHash: "",
+    };
+  }
+
+  return response.json();
+};
+
 export const complaintService = {
   submitComplaint,
   getMyComplaints,
@@ -304,4 +470,9 @@ export const complaintService = {
   confirmResolution,
   archiveComplaint,
   unarchiveComplaint,
+  getArchivedComplaints,
+  getFullMediaUrl,
+  processComplaintMedia,
+  predictCategory,
+  extractKeywords,
 };

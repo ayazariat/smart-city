@@ -81,16 +81,12 @@ export interface ComplaintWorkPhoto {
 export interface Complaint {
   _id?: string;
   id?: string;
-  complaintId?: string;
   title: string;
   description: string;
   category: ComplaintCategory;
   status: ComplaintStatus;
   priorityScore: number;
-  // In list views we still use `urgency`,
-  // detail DTO may expose `urgencyLevel`
   urgency: ComplaintUrgency;
-  urgencyLevel?: ComplaintUrgency;
   location: ComplaintLocation;
   municipality?: { _id?: string; name: string; governorate?: string } | string;
   municipalityName?: string;
@@ -99,10 +95,8 @@ export interface Complaint {
   beforePhotos?: ComplaintWorkPhoto[];
   // Photos taken by technician after completing work
   afterPhotos?: ComplaintWorkPhoto[];
-  // In base collection documents this is usually the citizen ObjectId,
-  // in the BL‑16 detail DTO it is a trimmed citizen object.
-  createdBy: string | { _id: string; fullName: string; email?: string; phone?: string } | null;
-  citizen?: { _id: string; fullName: string; email?: string; phone?: string } | null;
+  createdBy: string | { _id: string; fullName: string; email: string; phone?: string };
+  citizen?: { _id: string; fullName: string; email: string; phone?: string } | null;
   department?: { _id: string; name: string } | null;
   assignedTo?: { _id: string; fullName: string; email: string };
   comments?: Array<{
@@ -125,23 +119,6 @@ export interface Complaint {
   rejectionReason?: string;
   resolvedAt?: string;
   resolutionNotes?: string;
-  // BL‑16 enriched detail fields (optional on list views)
-  slaDeadline?: string | null;
-  slaStatus?: "ON_TRACK" | "AT_RISK" | "OVERDUE" | null;
-  history?: Array<{
-    status: string;
-    changedBy?: { fullName: string } | null;
-    date: string;
-    comment?: string | null;
-  }>;
-  internalNotes?: Array<{
-    content: string;
-    author: { _id: string; fullName: string } | null;
-    date: string;
-    type: "NOTE";
-  }>;
-  photos?: string[];
-  proofPhotos?: string[];
   assignedDepartment?: {
     _id: string;
     name: string;
@@ -153,9 +130,6 @@ export interface Complaint {
     _id: string;
     name: string;
   };
-  departmentId?: string | { _id: string; name: string } | null;
-  repairTeamId?: string | { _id: string; name: string } | null;
-  assignedTechnicians?: { _id: string; fullName: string }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -180,5 +154,16 @@ export interface Comment {
   text: string;
   author: { _id: string; fullName: string };
   isInternal?: boolean;
+  createdAt: string;
+}
+
+export interface Notification {
+  _id: string;
+  user: string | { _id: string; fullName: string };
+  type: "VALIDATED" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "REJECTED" | "SLA_ALERT" | "COMMENT" | "CONFIRMATION";
+  title: string;
+  message: string;
+  complaint?: { _id: string; title: string };
+  isRead: boolean;
   createdAt: string;
 }  

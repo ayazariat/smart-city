@@ -58,21 +58,6 @@ const complaintSchema = new mongoose.Schema(
     isAnonymous: { type: Boolean, default: false },
     ownerName: { type: String },
     keywords: [{ type: String }],
-    // SLA tracking (deadline + system flags)
-    slaDeadline: { type: Date },
-    slaAlertSent: { type: Boolean, default: false },
-    slaOverdueAt: { type: Date },
-    // AI enrichment (can be populated asynchronously)
-    aiData: {
-      predictedCategory: { type: String },
-      categoryConfidence: { type: Number },
-      keywords: [{ type: String }],
-      locationKeywords: [{ type: String }],
-      urgencyKeywords: [{ type: String }],
-      similarityHash: { type: String },
-      processedAt: { type: Date },
-      model: { type: String },
-    },
     rejectionReason: String,
     resolutionNotes: String,
     resolvedAt: Date,
@@ -122,7 +107,6 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    // Archiving
     isArchived: { type: Boolean, default: false },
     archivedAt: { type: Date },
     archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -179,15 +163,12 @@ complaintSchema.methods.updateStatus = function(newStatus, userId, notes = '') {
   return this.save();
 };
 
-// Pre-save hook to initialize timestamps
+// Pre-save hook to initialize status history
 complaintSchema.pre('save', async function() {
-  // Note: statusHistory.updatedBy should be set in the route/controller when status changes
-  // The pre-save hook cannot access the user ID from the request
   if (this.isNew && this.status === 'SUBMITTED') {
     this.statusHistory = [{
       status: 'SUBMITTED',
       updatedAt: new Date()
-      // updatedBy will be set when complaint is created
     }];
   }
 });
