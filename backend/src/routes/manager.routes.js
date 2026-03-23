@@ -5,6 +5,7 @@ const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const RepairTeam = require("../models/RepairTeam");
 const Department = require("../models/Department");
+const notificationService = require("../services/notification.service");
 
 // All manager routes require authentication and DEPARTMENT_MANAGER role
 
@@ -90,7 +91,7 @@ router.get("/complaints", authenticate, authorize("DEPARTMENT_MANAGER"), async (
 });
 
 // PUT /api/manager/complaints/:id/assign-technician - Assign complaint to a technician
-router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTMENT_MANAGER"), async (req, res) => {
+router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), async (req, res) => {
   try {
     const { technicianId } = req.body;
     
@@ -104,23 +105,34 @@ router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTM
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check if complaint is assigned to manager's department
-    const department = await getManagerDepartment(req.user.userId);
-    const departmentId = department?._id;
+    // Verify technician exists
+    const technician = await User.findOne({ _id: technicianId, role: "TECHNICIAN" });
     
-    if (departmentId && complaint.assignedDepartment?.toString() !== departmentId.toString()) {
-      return res.status(403).json({ success: false, message: "Complaint not in your department" });
-    }
-
-    // Verify technician exists and belongs to this department
-    const technician = await User.findOne({ _id: technicianId, department: departmentId, role: "TECHNICIAN" });
     if (!technician) {
-      return res.status(404).json({ success: false, message: "Technician not found in your department" });
+      return res.status(404).json({ success: false, message: "Technician not found" });
     }
 
     complaint.assignedTo = technicianId;
     complaint.status = "ASSIGNED";
     await complaint.save();
+
+    // Notify the technician about the new task
+    await notificationService.sendNotification(null, technicianId, {
+      type: "assigned",
+      title: "New Task Assigned",
+      message: `A new task "${complaint.title || 'Unknown'}" has been assigned to you.`,
+      complaintId: complaint._id,
+    });
+
+    // Also notify the citizen
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "assigned",
+        title: "Complaint Assigned",
+        message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a technician.`,
+        complaintId: complaint._id,
+      });
+    }
 
     res.json({
       success: true,
@@ -134,7 +146,7 @@ router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTM
 });
 
 // PUT /api/manager/complaints/:id/assign-team - Assign multiple technicians and create a repair team
-router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MANAGER"), async (req, res) => {
+router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), async (req, res) => {
   try {
     const { technicianIds } = req.body;
     
@@ -148,28 +160,40 @@ router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MA
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check if complaint is assigned to manager's department
-    const department = await getManagerDepartment(req.user.userId);
-    const departmentId = department?._id;
-    
-    if (departmentId && complaint.assignedDepartment?.toString() !== departmentId.toString()) {
-      return res.status(403).json({ success: false, message: "Complaint not in your department" });
+    // Admin can assign without department check, manager must check department
+    let departmentId = null;
+    if (req.user.role === "DEPARTMENT_MANAGER") {
+      const department = await getManagerDepartment(req.user.userId);
+      departmentId = department?._id;
+      
+      if (departmentId && complaint.assignedDepartment?.toString() !== departmentId.toString()) {
+        return res.status(403).json({ success: false, message: "Complaint not in your department" });
+      }
     }
 
-    // Verify all technicians exist and belong to this department
-    const technicians = await User.find({ 
-      _id: { $in: technicianIds }, 
-      department: departmentId, 
-      role: "TECHNICIAN",
-      isActive: true 
-    });
+    // Verify all technicians exist
+    let technicians;
+    if (departmentId) {
+      technicians = await User.find({ 
+        _id: { $in: technicianIds }, 
+        department: departmentId, 
+        role: "TECHNICIAN",
+        isActive: true 
+      });
+    } else {
+      technicians = await User.find({ 
+        _id: { $in: technicianIds }, 
+        role: "TECHNICIAN",
+        isActive: true 
+      });
+    }
     
     if (technicians.length !== technicianIds.length) {
-      return res.status(404).json({ success: false, message: "Some technicians not found in your department" });
+      return res.status(404).json({ success: false, message: "Some technicians not found or not available" });
     }
 
     // Create repair team
-    const teamName = `RC-${complaint._id.toString().slice(-6)} ${complaint.category} - Équipe ${department?.name || 'Maintenance'}`;
+    const teamName = `RC-${complaint._id.toString().slice(-6)} ${complaint.category || 'Maintenance'} - Equipe`;
     const repairTeam = new RepairTeam({
       name: teamName,
       members: technicianIds,
@@ -188,9 +212,29 @@ router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MA
     const populatedTeam = await RepairTeam.findById(repairTeam._id)
       .populate("members", "fullName email");
 
+    // Notify all team members
+    for (const tech of technicians) {
+      await notificationService.sendNotification(null, tech._id, {
+        type: "assigned",
+        title: "New Task Assigned",
+        message: `A new task "${complaint.title || 'Unknown'}" has been assigned to your team.`,
+        complaintId: complaint._id,
+      });
+    }
+
+    // Also notify the citizen
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "assigned",
+        title: "Complaint Assigned",
+        message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a repair team.`,
+        complaintId: complaint._id,
+      });
+    }
+
     res.json({
       success: true,
-      message: `Équipe créée avec ${technicianIds.length} techniciens`,
+      message: `Equipe creee avec ${technicianIds.length} techniciens`,
       data: {
         complaint,
         team: populatedTeam

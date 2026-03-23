@@ -43,10 +43,10 @@ const userSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["PENDING_VERIFICATION", "ACTIVE", "INACTIVE", "SUSPENDED"],
-      default: "ACTIVE",
+      default: "PENDING_VERIFICATION",
     },
     phone: String,
-    isActive: { type: Boolean, default: true },
+    isActive: { type: Boolean, default: false },
     // Department assignment for technicians and managers
     department: {
       type: mongoose.Schema.Types.ObjectId,

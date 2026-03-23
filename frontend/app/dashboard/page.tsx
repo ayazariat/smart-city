@@ -1,88 +1,133 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Bell } from "lucide-react";
+import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { useNotifications } from "@/hooks/useNotifications";
+import { notificationService } from "@/services/notification.service";
+import { Notification } from "@/types";
 
 // Separate component that uses useSearchParams
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, token, logout, fetchProfile, setUserAndTokens } = useAuthStore();
-  const [isVerifying, setIsVerifying] = useState(false);
-  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotifications();
+  const { user, logout, hydrated } = useAuthStore();
+
+  // Notification state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    const { token } = useAuthStore.getState();
+    if (!token) return;
+    
+    try {
+      setLoadingNotifications(true);
+      const [countResult, notificationsResult] = await Promise.all([
+        notificationService.getNotificationCount(),
+        notificationService.getNotifications()
+      ]);
+      
+      if (countResult.success && typeof countResult.count === 'number') {
+        setUnreadCount(countResult.count);
+      }
+      if (notificationsResult.success && notificationsResult.data) {
+        setNotifications(notificationsResult.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  // Mark notification as read
+  const handleMarkAsRead = async (notificationId: string) => {
+    try {
+      await notificationService.markNotificationAsRead(notificationId);
+      setNotifications(prev => 
+        prev.map(n => n._id === notificationId ? { ...n, isRead: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    }
+  };
+
+  // Mark all as read
+  const handleMarkAllAsRead = async () => {
+    try {
+      await notificationService.markAllNotificationsAsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error("Failed to mark all as read:", error);
+    }
+  };
+
+  // Handle notification click
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.isRead) {
+      await handleMarkAsRead(notification._id);
+    }
+    if (notification.relatedId) {
+      router.push(`/dashboard/complaints/${notification.relatedId}`);
+    }
+    setShowNotifications(false);
+  };
+
+  // Fetch notifications on mount and periodically
+  useEffect(() => {
+    const { token } = useAuthStore.getState();
+    if (hydrated && user && token) {
+      fetchNotifications();
+      // Poll for new notifications every 30 seconds
+      const interval = setInterval(fetchNotifications, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [hydrated, user]);
 
   // Handle magic link verification callback
   useEffect(() => {
-    const handleVerification = async () => {
+    const handleVerification = () => {
       const verified = searchParams.get("verified");
       const urlToken = searchParams.get("token");
-      const urlRefreshToken = searchParams.get("refreshToken");
 
-      if (verified === "true" && urlToken && urlRefreshToken) {
-        setIsVerifying(true);
-        // Store tokens from magic link verification
-        setUserAndTokens({
-          user: null,
-          token: urlToken,
-          refreshToken: urlRefreshToken,
-        });
-
-        // Fetch user profile
-        try {
-          await fetchProfile();
-        } catch (error) {
-          console.error("Failed to fetch profile after verification:", error);
-        }
-
-        setIsVerifying(false);
-
-        // Clean up URL
-        router.replace("/dashboard");
+      if (verified === "true" && urlToken) {
+        window.location.href = "/dashboard";
       }
     };
 
     handleVerification();
-  }, [searchParams, router, fetchProfile]);
+  }, [searchParams]);
 
-  // Redirect if not logged in (client-side check)
+  // Redirect if not logged in (after hydration only)
   useEffect(() => {
-    if (!token && !isVerifying) {
-      router.push("/");
+    if (!hydrated) return;
+    if (!user) {
+      window.location.href = "/";
     }
-  }, [token, isVerifying, router]);
+  }, [hydrated, user]);
 
-  const handleLogout = async () => {
-    await logout();
-    router.push("/");
-  };
-
-  if (isVerifying || (!user && token)) {
+  // Show loading while hydrating
+  if (!hydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">Verifying your account...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <Loader2 className="w-12 h-12 animate-spin text-primary" />
           <p className="text-slate-600">Loading...</p>
         </div>
       </div>
     );
   }
+
+  const handleLogout = () => {
+    logout();
+  };
 
   // Get role display name
   const getRoleDisplayName = (role: string) => {
@@ -98,6 +143,7 @@ function DashboardContent() {
 
   // Get role-based dashboard configuration
   const getDashboardConfig = () => {
+    if (!user) return null;
     switch (user.role) {
       case "CITIZEN":
         return {
@@ -128,7 +174,7 @@ function DashboardContent() {
         };
       case "TECHNICIAN":
         return {
-          link: "/agent/complaints",
+          link: "/tasks",
           label: "My Tasks",
           description: "View your assigned repairs",
           newComplaintLink: "",
@@ -158,6 +204,15 @@ function DashboardContent() {
 
   const dashboardConfig = getDashboardConfig();
 
+  // Don't render dashboard content if not logged in
+  if (!dashboardConfig) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       {/* Navigation */}
@@ -181,54 +236,79 @@ function DashboardContent() {
             </div>
             
             <div className="flex items-center gap-4">
-              {/* Notifications Bell */}
+              {/* Notification Bell */}
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm"
+                  className="relative p-2.5 hover:bg-white/20 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center text-white"
+                  title="Notifications"
                 >
                   <Bell className="w-5 h-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? "9+" : unreadCount}
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                      {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                   )}
                 </button>
                 
                 {/* Notifications Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl z-50 border border-gray-100 overflow-hidden">
-                    <div className="flex justify-between items-center p-4 border-b border-gray-100">
-                      <h3 className="font-semibold text-gray-900">Notifications</h3>
-                      {unreadCount > 0 && (
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 to-secondary-50">
+                      <h3 className="font-semibold text-slate-900">Notifications</h3>
+                      <div className="flex items-center gap-2">
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-xs text-primary hover:text-primary-700 font-medium"
+                          >
+                            Mark all read
+                          </button>
+                        )}
                         <button
-                          onClick={markAllAsRead}
-                          className="text-sm text-primary hover:underline"
+                          onClick={() => setShowNotifications(false)}
+                          className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
                         >
-                          Mark all read
+                          <X className="w-4 h-4 text-slate-500" />
                         </button>
-                      )}
+                      </div>
                     </div>
-                    <div className="max-h-80 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500">
-                          No notifications
+                    <div className="max-h-96 overflow-y-auto">
+                      {loadingNotifications ? (
+                        <div className="p-8 text-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                        </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No notifications yet</p>
                         </div>
                       ) : (
                         notifications.slice(0, 10).map((notification) => (
-                          <div
+                          <button
                             key={notification._id}
-                            className={`p-4 border-b border-gray-50 hover:bg-gray-50 cursor-pointer ${
-                              !notification.isRead ? "bg-blue-50" : ""
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${
+                              !notification.isRead ? 'bg-primary/5' : ''
                             }`}
-                            onClick={() => markAsRead(notification._id)}
                           >
-                            <p className="font-medium text-gray-900 text-sm">{notification.title}</p>
-                            <p className="text-gray-600 text-sm mt-1">{notification.message}</p>
-                            <p className="text-gray-400 text-xs mt-2">
-                              {new Date(notification.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
+                            <div className="flex items-start gap-3">
+                              {!notification.isRead && (
+                                <span className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></span>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-900 truncate">
+                                  {notification.title}
+                                </p>
+                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                                  {notification.message}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
                         ))
                       )}
                     </div>
@@ -347,6 +427,22 @@ function DashboardContent() {
               </span>
             </Link>
           )}
+          {/* Archive Card - All roles */}
+          <Link href="/archive" className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                <Archive className="w-6 h-6 text-slate-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">Archive</h3>
+            </div>
+            <p className="text-slate-600 mb-4 text-sm">
+              View closed and rejected complaints
+            </p>
+            <span className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors group">
+              View Archive
+              <span className="group-hover:translate-x-1 transition-transform">→</span>
+            </span>
+          </Link>
         </div>
 
         {/* Statistics Section */}

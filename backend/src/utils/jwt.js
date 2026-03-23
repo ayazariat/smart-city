@@ -26,6 +26,10 @@ const generateAccessToken = (user) => {
       userId: (user._id && user._id.toString()) || user.id,
       email: user.email,
       role: user.role,
+      municipality: user.municipality || null,
+      municipalityName: user.municipalityName || "",
+      governorate: user.governorate || "",
+      department: user.department || null,
     },
     ACCESS_TOKEN_SECRET,
     {

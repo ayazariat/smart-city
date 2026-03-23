@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const Department = require("../models/Department");
 const { getStatus: getSlaStatus } = require("../utils/slaCalculator");
+const { normalizeMunicipality } = require("../utils/normalize");
 
 class ComplaintController {
   // Create new complaint (citizen)
@@ -11,37 +12,28 @@ class ComplaintController {
       const { title, description, category, governorate, municipality, latitude, longitude, images, media } = req.body;
       const userId = req.user.userId;
 
-      // Validate required fields
       if (!title || !description || !category) {
         return res.status(400).json({ success: false, message: "Title, description, and category are required" });
       }
 
-      // Validate category
       const validCategories = [
-        "ROAD",
-        "LIGHTING",
-        "WASTE",
-        "WATER",
-        "GREEN_SPACE",
-        "BUILDING",
-        "NOISE",
-        "OTHER"
+        "ROAD", "LIGHTING", "WASTE", "WATER", "GREEN_SPACE", "BUILDING", "NOISE", "OTHER"
       ];
       
       if (!validCategories.includes(category)) {
         return res.status(400).json({ success: false, message: "Invalid category" });
       }
 
-      // Use media if provided, otherwise fallback to images (backward compatibility)
       const mediaData = media || images || [];
+      const normalizedMunicipality = normalizeMunicipality(municipality || "");
 
-      // Create complaint
       const complaint = new Complaint({
         title,
         description,
         category,
         governorate: governorate || "",
         municipality: municipality || "",
+        municipalityNormalized: normalizedMunicipality,
         latitude: latitude || null,
         longitude: longitude || null,
         media: mediaData,
@@ -51,17 +43,34 @@ class ComplaintController {
 
       await complaint.save();
 
-      // Create notification for admin
+      // Notify municipal agents in the same municipality
       try {
-        await Notification.create({
-          user: null, // Admin notification
-          title: "New Complaint",
-          message: `New complaint submitted: ${title}`,
-          type: "COMPLAINT",
-          relatedId: complaint._id,
-        });
+        const normalizedMun = normalizeMunicipality(municipality || "");
+        
+        // Find municipal agents in the same municipality
+        const agents = await User.find({
+          role: "MUNICIPAL_AGENT",
+          $or: [
+            { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') } },
+            { 'municipality.name': { $regex: new RegExp(`^${normalizedMun}$`, 'i') } }
+          ]
+        }).select('_id');
+        
+        // Create notifications for each agent
+        const notificationPromises = agents.map(agent => 
+          Notification.create({
+            recipient: agent._id,
+            title: "New Complaint",
+            message: `New complaint in ${municipality || 'your municipality'}: ${title}`,
+            type: "COMPLAINT",
+            relatedId: complaint._id,
+          })
+        );
+        
+        await Promise.all(notificationPromises);
+        console.log(`Created ${notificationPromises.length} notifications for municipal agents`);
       } catch (notifError) {
-        console.error("Failed to create notification:", notifError);
+        console.error("Failed to create notifications for agents:", notifError);
       }
 
       res.status(201).json({
@@ -243,7 +252,21 @@ class ComplaintController {
 
       // Separate internal notes (from comments marked isInternal)
       const allComments = complaint.comments || [];
-      const publicComments = allComments.filter((c) => !c.isInternal);
+      const publicComments =
+        userRole === "CITIZEN"
+          ? []
+          : allComments
+              .filter((c) => !c.isInternal)
+              .map((n) => ({
+                content: n.text,
+                author: n.author
+                  ? {
+                      _id: n.author._id,
+                      fullName: n.author.fullName,
+                    }
+                  : null,
+                date: n.createdAt,
+              }));
       const internalNotes =
         userRole === "CITIZEN"
           ? []
@@ -289,6 +312,7 @@ class ComplaintController {
         proofPhotos: (complaint.afterPhotos || []).map((m) => m.url).filter(Boolean),
         confirmations: [], // can be populated later if confirmation model exists
         history,
+        publicComments,
         internalNotes, // empty array for CITIZEN
         rejectionReason: complaint.rejectionReason || null,
         resolutionNote: complaint.resolutionNotes || null,
@@ -362,11 +386,22 @@ class ComplaintController {
         // Municipal agents see all complaints in their municipality
         const user = await User.findById(req.user.userId)
           .populate('municipality')
-          .select('municipality governorate')
+          .select('municipality municipalityName governorate')
           .lean();
         
         if (user?.municipality?._id) {
-          query.municipality = user.municipality._id;
+          // Use $or to check both municipality ID and municipalityName
+          query.$or = [
+            { municipality: user.municipality._id },
+            { municipalityName: { $regex: new RegExp(`^${user.municipalityName || user.municipality?.name}$`, 'i') } },
+            { 'location.municipality': { $regex: new RegExp(`^${user.municipalityName || user.municipality?.name}$`, 'i') } }
+          ];
+        } else if (user?.municipalityName) {
+          // Fallback to municipalityName string
+          query.$or = [
+            { municipalityName: { $regex: new RegExp(`^${user.municipalityName}$`, 'i') } },
+            { 'location.municipality': { $regex: new RegExp(`^${user.municipalityName}$`, 'i') } }
+          ];
         } else if (user?.governorate) {
           query.governorate = user.governorate;
         }
@@ -508,7 +543,7 @@ class ComplaintController {
       // Notify citizen
       try {
         await Notification.create({
-          user: complaint.createdBy,
+          recipient: complaint.createdBy,
           title: "Complaint Status Updated",
           message: `Your complaint "${complaint.title}" has been ${status.toLowerCase()}`,
           type: "COMPLAINT",
@@ -581,7 +616,7 @@ class ComplaintController {
       // Notify technician
       try {
         await Notification.create({
-          user: assignedToId,
+          recipient: assignedToId,
           title: "New Assignment",
           message: `You have been assigned to complaint: ${complaint.title}`,
           type: "ASSIGNMENT",
@@ -804,9 +839,10 @@ class ComplaintController {
   async addComment(req, res) {
     try {
       const { id } = req.params;
-      const { text, isInternal } = req.body;
+      const { text, type, isInternal } = req.body;
       const userId = req.user.userId;
       const userRole = req.user.role;
+      const commentType = type || (isInternal ? "NOTE" : "NOTE");
 
       if (!text || text.trim().length === 0) {
         return res.status(400).json({ success: false, message: "Comment text is required" });
@@ -821,19 +857,29 @@ class ComplaintController {
       // authorization: only owner or admin/agents or assigned technician
       const isOwner = complaint.createdBy?.toString() === userId;
       const isAdminOrAgent = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
-      const isTechnician = userRole === "TECHNICIAN" && complaint.assignedTo?.toString() === userId;
+      const isTechnician = userRole === "TECHNICIAN" && complaint.assignedTo?.map(a => a.toString()).includes(userId);
       
-      // Only staff can create internal notes
-      const canAddInternal = isAdminOrAgent && isInternal === true;
+      // Only staff can create NOTE, BLOCAGE, PUBLIC types
+      const isStaff = isAdminOrAgent || isTechnician;
       
-      if (!isOwner && !isAdminOrAgent && !isTechnician) {
+      if (!isOwner && !isStaff) {
         return res.status(403).json({ success: false, message: "Forbidden" });
       }
+
+      // Only staff can set type, citizens can only add public comments
+      const finalType = isStaff ? commentType : "PUBLIC";
+
+      // Get author name for notification
+      const authorUser = await User.findById(userId).select("fullName").lean();
+      const authorName = authorUser?.fullName || "Staff";
 
       complaint.comments.push({
         text: text.trim(),
         author: userId,
-        isInternal: canAddInternal || false,
+        authorName: authorName,
+        authorRole: userRole,
+        type: finalType,
+        isInternal: finalType === "NOTE",
         createdAt: new Date(),
       });
 
@@ -844,6 +890,24 @@ class ComplaintController {
         .populate("comments.author", "fullName");
 
       const newComment = updatedComplaint.comments[updatedComplaint.comments.length - 1];
+
+      // If PUBLIC note → notify citizen
+      if (finalType === "PUBLIC" && complaint.createdBy) {
+        const io = req.app.get("io");
+        const notificationService = require("../services/notification.service");
+        
+        try {
+          const notificationData = {
+            type: "public_note",
+            message: `New update on your complaint ${complaint.referenceId || complaint._id}: "${text.trim().slice(0, 50)}${text.length > 50 ? '...' : ''}"`,
+            complaintId: complaint._id
+          };
+          
+          await notificationService.sendNotification(io, complaint.createdBy.toString(), notificationData);
+        } catch (notifError) {
+          console.error("Failed to send notification:", notifError);
+        }
+      }
 
       res.json({
         success: true,

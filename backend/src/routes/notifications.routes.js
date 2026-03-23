@@ -6,14 +6,31 @@ const { authenticate } = require("../middleware/auth");
 // GET /notifications - Get all notifications for current user
 router.get("/", authenticate, async (req, res) => {
   try {
-    const notifications = await Notification.find({ recipient: req.user.id })
-      .populate("complaint", "title")
+    const notifications = await Notification.find({ recipient: req.user.userId })
+      .populate({
+        path: "complaint",
+        select: "title _id"
+      })
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
+
+    // Transform notifications to include relatedId from complaint
+    const transformedNotifications = notifications.map(n => ({
+      _id: n._id,
+      recipient: n.recipient,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      complaint: n.complaint,
+      relatedId: n.complaint?._id || n.relatedId,
+      isRead: n.isRead,
+      createdAt: n.createdAt
+    }));
 
     res.json({
       success: true,
-      data: notifications,
+      notifications: transformedNotifications,
     });
   } catch (error) {
     console.error("Error fetching notifications:", error);
@@ -28,13 +45,13 @@ router.get("/", authenticate, async (req, res) => {
 router.get("/count", authenticate, async (req, res) => {
   try {
     const count = await Notification.countDocuments({
-      recipient: req.user.id,
+      recipient: req.user.userId,
       isRead: false,
     });
 
     res.json({
       success: true,
-      count,
+      unread: count,
     });
   } catch (error) {
     console.error("Error fetching notification count:", error);
@@ -49,7 +66,7 @@ router.get("/count", authenticate, async (req, res) => {
 router.put("/:id/read", authenticate, async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
-      { _id: req.params.id, recipient: req.user.id },
+      { _id: req.params.id, recipient: req.user.userId },
       { isRead: true },
       { new: true }
     );
@@ -78,7 +95,7 @@ router.put("/:id/read", authenticate, async (req, res) => {
 router.put("/read-all", authenticate, async (req, res) => {
   try {
     await Notification.updateMany(
-      { recipient: req.user.id, isRead: false },
+      { recipient: req.user.userId, isRead: false },
       { isRead: true }
     );
 
@@ -100,7 +117,7 @@ router.delete("/:id", authenticate, async (req, res) => {
   try {
     const notification = await Notification.findOneAndDelete({
       _id: req.params.id,
-      recipient: req.user.id,
+      recipient: req.user.userId,
     });
 
     if (!notification) {

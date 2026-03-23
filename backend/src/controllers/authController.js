@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const PendingUser = require("../models/PendingUser");
 const AuditLog = require("../models/AuditLog");
@@ -10,6 +11,7 @@ const {
 } = require("../utils/jwt");
 const { sendMagicLinkEmail, sendPasswordResetEmail } = require("../utils/mailer");
 const { verifyRecaptcha } = require("../utils/recaptcha");
+const { normalizeMunicipality } = require("../utils/normalize");
 
 // Simple reusable validators
 const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
@@ -33,13 +35,10 @@ function validateFullName(name) {
 function validatePhone(phone) {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("216")) {
-    const localNumber = digits.substring(3);
-    if (localNumber.length !== 8) {
-      return "Phone must be 8 digits after country code (e.g., +21625448885).";
-    }
-  } else if (digits.length !== 8) {
-    return "Invalid phone number. Use 8 digits (e.g., 25448885).";
+  // Strip country code if present
+  const localNumber = digits.startsWith("216") ? digits.substring(3) : digits;
+  if (!/^[2-9][0-9]{7}$/.test(localNumber)) {
+    return "Phone must be 8 digits starting with 2-9 (e.g., 25448885).";
   }
   return null;
 }
@@ -69,10 +68,11 @@ class AuthController {
         return res.status(400).json({ message: "User already exists" });
       }
 
-      // Check for pending registration
+      // Check for pending registration - DELETE if exists (to allow fresh registration)
       const existingPending = await PendingUser.findOne({ email: normalizedEmail });
       if (existingPending) {
-        return res.status(400).json({ message: "A pending registration already exists for this email" });
+        // Delete the old pending registration to allow fresh registration
+        await PendingUser.deleteOne({ email: normalizedEmail });
       }
 
       // Validate fullName minimum 3 characters
@@ -93,12 +93,13 @@ class AuthController {
         return res.status(400).json({ message: phoneError });
       }
 
-      // Optional: verify governorate/municipality pair if both provided
+      // Optional: verify governorate/municipality pair if both provided (with normalized comparison)
       if (municipality && governorate) {
-        // simple lookup using shared geography map if available
         const geo = require("./userController").TUNISIA_GEOGRAPHY;
         const govList = geo[governorate] || [];
-        if (!govList.includes(municipality)) {
+        const normalizedInput = normalizeMunicipality(municipality);
+        const isValid = govList.some(m => normalizeMunicipality(m) === normalizedInput);
+        if (!isValid) {
           return res.status(400).json({ message: "Invalid municipality for selected governorate" });
         }
       }
@@ -159,23 +160,25 @@ class AuthController {
       // For now, use manual input or empty values
 
       // Create pending user
-      await PendingUser.create({
+      const pendingUser = await PendingUser.create({
         fullName,
         email: normalizedEmail,
         password: hashedPassword,
-        phone: phone ? "+216" + phone.replace(/\D/g, "").slice(-8) : null,
+        phone: phone ? phone.replace(/\D/g, "").slice(-8) : null, // Store as 8 digits without +216
         governorate: finalGovernorate,
         municipality: finalMunicipality,
+        municipalityName: finalMunicipality,
         latitude: latitude || null,
         longitude: longitude || null,
         verificationToken: magicToken,
         verificationExpires: magicTokenExpires,
         verificationMethod: "email",
+        role: "CITIZEN", // Default role for public registration
       });
 
-      // Send magic link email
+      // Send magic link email with the pending user's _id
       try {
-        await sendMagicLinkEmail(normalizedEmail, normalizedEmail, magicToken, fullName);
+        await sendMagicLinkEmail(normalizedEmail, pendingUser._id.toString(), magicToken, fullName);
       } catch (emailError) {
         console.error("Failed to send magic link email:", emailError);
         return res.status(500).json({ message: "Failed to send verification email" });
@@ -221,7 +224,9 @@ class AuthController {
         return res.status(400).json({ message: "Invalid or expired verification code" });
       }
 
-      // Create verified user
+      // Create verified user - for citizens, activate immediately; for admins, require activation
+      const isAdminRole = user.role && user.role !== 'CITIZEN';
+      
       await User.create({
         fullName: user.fullName,
         email: user.email,
@@ -229,7 +234,10 @@ class AuthController {
         phone: user.phone,
         governorate: user.governorate || "",
         municipality: user.municipality || "",
+        municipalityName: user.municipality || "",
+        role: user.role || 'CITIZEN',
         isVerified: true,
+        isActive: isAdminRole ? false : true, // Citizens active immediately
       });
 
       // Delete pending user
@@ -251,38 +259,49 @@ class AuthController {
         return res.status(400).json({ message: "Token and user ID are required" });
       }
 
+      // Validate MongoDB ObjectId
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({ message: "Invalid verification link format. Please check your email for the correct verification link." });
+      }
+
       // First check if it's a PendingUser
       const pendingUser = await PendingUser.findOne({
-        _id: userId,
+        _id: new mongoose.Types.ObjectId(userId),
         verificationToken: token,
       });
 
       if (pendingUser) {
         // Check if token is expired
         if (Date.now() > pendingUser.verificationExpires) {
-          return res.status(400).json({ message: "Verification link has expired" });
+          return res.status(400).json({ message: "Verification link has expired. Please register again to get a new link." });
         }
 
-        // Create verified user
+        // Create verified user - for citizens, activate immediately; for admins, require activation
+        const isAdminRole = pendingUser.role && pendingUser.role !== 'CITIZEN';
+        
         const newUser = await User.create({
           fullName: pendingUser.fullName,
           email: pendingUser.email,
           password: pendingUser.password,
           phone: pendingUser.phone,
           governorate: pendingUser.governorate || "",
-          municipality: pendingUser.municipality || "",
+          municipality: null,
+          municipalityName: pendingUser.municipalityName || pendingUser.municipality || "",
+          role: pendingUser.role || 'CITIZEN',
           isVerified: true,
+          isActive: isAdminRole ? false : true, // Citizens active immediately, admins need activation
         });
 
         // Delete pending user
         await PendingUser.deleteOne({ _id: userId });
 
-        // Generate tokens
+        // Citizens can login immediately - give them tokens
+        // Admins need to set password first (if not already set)
         const accessToken = generateAccessToken(newUser);
         const refreshToken = generateRefreshToken(newUser);
 
         return res.json({
-          message: "Account verified successfully!",
+          message: "Email verified successfully! You can now login.",
           token: accessToken,
           refreshToken: refreshToken,
           user: {
@@ -294,25 +313,41 @@ class AuthController {
         });
       }
 
-      // Check if it's an existing user verifying their email
+      // Check if it's an existing user verifying their email (admin-created user)
       const user = await User.findOne({
-        _id: userId,
+        _id: new mongoose.Types.ObjectId(userId),
         verificationToken: token,
       });
 
       if (user) {
         // Check if token is expired
         if (Date.now() > user.verificationExpires) {
-          return res.status(400).json({ message: "Verification link has expired" });
+          return res.status(400).json({ message: "Verification link has expired. Please request a new verification email." });
         }
 
         // Update user to verified
         user.isVerified = true;
         user.verificationToken = undefined;
         user.verificationExpires = undefined;
+        // If user was created by admin but not active, keep isActive false
         await user.save();
 
-        // Generate tokens
+        // If user is now verified but still needs password or activation
+        if (!user.isActive) {
+          return res.json({
+            message: "Email verified successfully! Please set your password.",
+            needsPasswordSetup: true,
+            redirectUrl: `/set-password?email=${encodeURIComponent(user.email)}&token=${user.magicToken}`,
+            user: {
+              id: user._id,
+              fullName: user.fullName,
+              email: user.email,
+              role: user.role,
+            },
+          });
+        }
+
+        // User is already active - give them tokens
         const accessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
 
@@ -329,7 +364,10 @@ class AuthController {
         });
       }
 
-      return res.status(400).json({ message: "Invalid verification link" });
+      // Provide more helpful error message
+      return res.status(400).json({ 
+        message: "This verification link is invalid or has already been used. Please register again to get a new verification link." 
+      });
     } catch (error) {
       console.error("Magic link verification error:", error);
       res.status(500).json({ message: "Server error during verification" });
@@ -339,27 +377,19 @@ class AuthController {
   // Delete pending registration
   async deletePendingRegistration(req, res) {
     try {
-      const { email, token } = req.body;
+      const { email } = req.body;
 
-      if (!email || !token) {
-        return res.status(400).json({ message: "Email and token are required" });
-      }
-
-      // optional admin check
-      if (req.user && !req.user.isAdmin) {
-        return res.status(403).json({ message: "Forbidden" });
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
-      const pending = await PendingUser.findOne({ email: normalizedEmail, verificationToken: token });
-      if (!pending) {
-        return res.status(400).json({ message: "Invalid email or token" });
-      }
-
-      const result = await PendingUser.deleteOne({ email: normalizedEmail, verificationToken: token });
+      
+      // Find and delete any pending registration for this email
+      const result = await PendingUser.deleteOne({ email: normalizedEmail });
 
       if (!result.deletedCount) {
-        return res.status(500).json({ message: "Failed to delete pending registration" });
+        return res.status(404).json({ message: "No pending registration found for this email" });
       }
 
       res.json({ message: "Pending registration deleted successfully" });
@@ -382,8 +412,12 @@ class AuthController {
         return res.status(400).json({ message: "Invalid credentials" });
       }
 
-      if (!user.isActive) {
-        return res.status(403).json({ message: "Your account has been deactivated. Please contact support." });
+      if (!user.isActive || user.status === "PENDING_VERIFICATION") {
+        // Check if user is verified but not yet activated
+        if (!user.isVerified) {
+          return res.status(403).json({ message: "Please verify your email first. Check your inbox for the verification link." });
+        }
+        return res.status(403).json({ message: "Your account is pending activation. Please wait for an administrator to activate your account." });
       }
 
       const isMatch = user.password ? await bcrypt.compare(password, user.password) : false;
@@ -397,9 +431,19 @@ class AuthController {
         return res.status(400).json({ message: "Invalid credentials" });
       }
 
-      // Generate tokens
-      const accessToken = generateAccessToken(user);
-      const refreshToken = generateRefreshToken(user);
+      // Generate tokens with explicit municipality + department payload (debug)
+      const tokenUser = {
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+        municipality: user.municipality || user.municipalityName || null,
+        municipalityName: user.municipalityName || "",
+        governorate: user.governorate || "",
+        department: user.department || user.departmentId || null,
+      };
+
+      const accessToken = generateAccessToken(tokenUser);
+      const refreshToken = generateRefreshToken(tokenUser);
 
       // Save refresh token
       user.refreshToken = refreshToken;
@@ -588,7 +632,7 @@ class AuthController {
 
         // Send verification email
         try {
-          await sendMagicLinkEmail(user.email, user.fullName, verificationToken, user._id.toString());
+          await sendMagicLinkEmail(user.email, user._id.toString(), verificationToken, user.fullName);
         } catch (emailError) {
           console.error("Failed to send verification email:", emailError);
         }
@@ -673,6 +717,7 @@ class AuthController {
       user.password = await bcrypt.hash(password, salt);
       user.isActive = true;
       user.isVerified = true;
+      user.status = "ACTIVE";
       user.magicToken = undefined;
       user.magicTokenExpires = undefined;
       user.passwordLastChanged = new Date();

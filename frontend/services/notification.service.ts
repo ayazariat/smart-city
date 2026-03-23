@@ -1,29 +1,16 @@
 import { Notification } from "@/types";
-
-const API_URL = "/api";
+import { clientGet, clientPatch } from "@/lib/api";
 
 /**
  * Get notification count
  */
 export const getNotificationCount = async (): Promise<{ success: boolean; count?: number; message?: string }> => {
   try {
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("accessToken="))
-      ?.split("=")[1];
-
-    const response = await fetch(`${API_URL}/notifications/count`, {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-      credentials: "include",
-    });
-
-    const data = await response.json();
-    return data;
+    const data = await clientGet<{ success: boolean; unread?: number }>("/notifications/count");
+    return { success: data.success, count: data.unread ?? 0 };
   } catch (error) {
-    console.error("Error fetching notification count:", error);
-    return { success: false, message: "Failed to fetch notification count" };
+    // 401 = not authenticated yet, return 0 silently
+    return { success: true, count: 0 };
   }
 };
 
@@ -32,23 +19,11 @@ export const getNotificationCount = async (): Promise<{ success: boolean; count?
  */
 export const getNotifications = async (): Promise<{ success: boolean; data?: Notification[]; message?: string }> => {
   try {
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("accessToken="))
-      ?.split("=")[1];
-
-    const response = await fetch(`${API_URL}/notifications`, {
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-      credentials: "include",
-    });
-
-    const data = await response.json();
-    return data;
+    const data = await clientGet<{ success: boolean; notifications?: Notification[] }>("/notifications");
+    return { success: data.success, data: data.notifications };
   } catch (error) {
-    console.error("Error fetching notifications:", error);
-    return { success: false, message: "Failed to fetch notifications" };
+    // 401 = not authenticated yet, return empty silently
+    return { success: true, data: [] };
   }
 };
 
@@ -57,23 +32,9 @@ export const getNotifications = async (): Promise<{ success: boolean; data?: Not
  */
 export const markNotificationAsRead = async (id: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("accessToken="))
-      ?.split("=")[1];
-
-    const response = await fetch(`${API_URL}/notifications/${id}/read`, {
-      method: "PUT",
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-      credentials: "include",
-    });
-
-    const data = await response.json();
+    const data = await clientPatch<{ success: boolean }>(`/notifications/${id}/read`);
     return data;
-  } catch (error) {
-    console.error("Error marking notification as read:", error);
+  } catch {
     return { success: false, message: "Failed to mark notification as read" };
   }
 };
@@ -83,23 +44,9 @@ export const markNotificationAsRead = async (id: string): Promise<{ success: boo
  */
 export const markAllNotificationsAsRead = async (): Promise<{ success: boolean; message?: string }> => {
   try {
-    const token = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("accessToken="))
-      ?.split("=")[1];
-
-    const response = await fetch(`${API_URL}/notifications/read-all`, {
-      method: "PUT",
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-      credentials: "include",
-    });
-
-    const data = await response.json();
+    const data = await clientPatch<{ success: boolean }>("/notifications/read-all");
     return data;
-  } catch (error) {
-    console.error("Error marking all notifications as read:", error);
+  } catch {
     return { success: false, message: "Failed to mark all notifications as read" };
   }
 };

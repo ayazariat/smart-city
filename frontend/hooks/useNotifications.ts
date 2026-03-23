@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { notificationService } from "@/services/notification.service";
 import { Notification } from "@/types";
+import { useAuthStore } from "@/store/useAuthStore";
 
 interface UseNotificationsReturn {
   notifications: Notification[];
@@ -15,24 +16,31 @@ interface UseNotificationsReturn {
 }
 
 export function useNotifications(): UseNotificationsReturn {
+  const { token, hydrated } = useAuthStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
+    if (!token || !hydrated) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      
-      // Fetch count and notifications in parallel
+
       const [countResult, notificationsResult] = await Promise.all([
         notificationService.getNotificationCount(),
         notificationService.getNotifications(),
       ]);
 
       if (countResult.success) {
-        setUnreadCount(countResult.count || 0);
+        setUnreadCount(countResult.count ?? 0);
       }
 
       if (notificationsResult.success) {
@@ -40,55 +48,62 @@ export function useNotifications(): UseNotificationsReturn {
       } else {
         setError(notificationsResult.message || "Failed to fetch notifications");
       }
-    } catch (err) {
-      console.error("Error fetching notifications:", err);
+    } catch {
       setError("Failed to fetch notifications");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token, hydrated]);
 
   const markAsRead = useCallback(async (id: string) => {
+    if (!token) return;
+
     try {
       const result = await notificationService.markNotificationAsRead(id);
       if (result.success) {
-        // Update local state
         setNotifications((prev) =>
           prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
       }
-    } catch (err) {
-      console.error("Error marking notification as read:", err);
+    } catch {
+      // Silent fail
     }
-  }, []);
+  }, [token]);
 
   const markAllAsRead = useCallback(async () => {
+    if (!token) return;
+
     try {
       const result = await notificationService.markAllNotificationsAsRead();
       if (result.success) {
-        // Update local state
         setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
         setUnreadCount(0);
       }
-    } catch (err) {
-      console.error("Error marking all notifications as read:", err);
+    } catch {
+      // Silent fail
     }
-  }, []);
+  }, [token]);
 
-  // Initial fetch
   useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+    if (hydrated && token) {
+      fetchNotifications();
+    } else if (hydrated && !token) {
+      setLoading(false);
+    }
+  }, [hydrated, token, fetchNotifications]);
 
-  // Poll for new notifications every 60 seconds
   useEffect(() => {
+    if (!hydrated || !token) {
+      return;
+    }
+
     const interval = setInterval(() => {
       fetchNotifications();
-    }, 60000);
+    }, 30000); // Poll every 30 seconds
 
     return () => clearInterval(interval);
-  }, [fetchNotifications]);
+  }, [hydrated, token, fetchNotifications]);
 
   return {
     notifications,

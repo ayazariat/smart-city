@@ -1,5 +1,6 @@
 import { Complaint, CreateComplaintData, ComplaintCategory, ComplaintUrgency, ComplaintLocation, ComplaintMedia, Comment } from "@/types";
 import { apiClient } from "./api.client";
+import { useAuthStore } from "@/store/useAuthStore";
 
 // Cloudinary base URL for media files - used for prepending to relative paths
 // This should be configured in your .env.local
@@ -75,8 +76,8 @@ export function processComplaintMedia(complaint: Complaint): Complaint {
 }
 
 /**
- * Upload media files to Cloudinary
- */
+  * Upload media files to Cloudinary
+  */
 export const uploadMedia = async (
   files: File[]
 ): Promise<{ success: boolean; data?: ComplaintMedia[]; message?: string }> => {
@@ -86,18 +87,18 @@ export const uploadMedia = async (
   });
 
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/upload`,
-      {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      }
-    );
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    
+    const response = await fetch(`${apiUrl}/upload`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
 
     const result = await response.json();
     
     if (!response.ok) {
+      console.error('Upload failed:', result.message);
       return { success: false, message: result.message || 'Upload failed' };
     }
 
@@ -145,7 +146,8 @@ export const getMyComplaints = async (params?: {
   const queryString = searchParams.toString();
   const endpoint = `/citizen/complaints${queryString ? `?${queryString}` : ""}`;
 
-  return apiClient.get<{
+  console.log("Fetching from endpoint:", endpoint);
+  const result = await apiClient.get<{
     message: string;
     complaints: Complaint[];
     pagination: {
@@ -155,6 +157,8 @@ export const getMyComplaints = async (params?: {
       pages: number;
     };
   }>(endpoint);
+  console.log("API response:", result);
+  return result;
 };
 
 /**
@@ -400,18 +404,18 @@ export const predictCategory = async (text: string): Promise<{
   alternatives: string[];
   reasoning: string;
 }> => {
-  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   
-  const response = await fetch(`${aiUrl}/ai/predict-category`, {
+  const response = await fetch(`${apiUrl}/api/ai/predict-category`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
+    credentials: "include",
     body: JSON.stringify({ text }),
   });
 
   if (!response.ok) {
-    // Fallback on error
     return {
       predicted: "AUTRE",
       confidence: 0,
@@ -454,6 +458,56 @@ export const extractKeywords = async (text: string): Promise<{
   return response.json();
 };
 
+/**
+ * Confirm a complaint (citizen BL-28)
+ * Returns updated confirmation count
+ */
+export const confirmComplaint = async (
+  id: string
+): Promise<{ success: boolean; confirmationCount: number; message: string }> => {
+  return apiClient.post<{ success: boolean; confirmationCount: number; message: string }>(
+    `/complaints/${id}/confirm`,
+    {}
+  );
+};
+
+/**
+ * Remove confirmation from a complaint (citizen BL-28)
+ * Only allowed within 24 hours
+ */
+export const unconfirmComplaint = async (
+  id: string
+): Promise<{ success: boolean; confirmationCount: number; message: string }> => {
+  return apiClient.delete<{ success: boolean; confirmationCount: number; message: string }>(
+    `/complaints/${id}/confirm`
+  );
+};
+
+/**
+ * Upvote a complaint (citizen BL-28)
+ * Returns updated upvote count
+ */
+export const upvoteComplaint = async (
+  id: string
+): Promise<{ success: boolean; upvoteCount: number; message: string }> => {
+  return apiClient.post<{ success: boolean; upvoteCount: number; message: string }>(
+    `/complaints/${id}/upvote`,
+    {}
+  );
+};
+
+/**
+ * Remove upvote from a complaint (citizen BL-28)
+ * Only allowed within 24 hours
+ */
+export const removeUpvote = async (
+  id: string
+): Promise<{ success: boolean; upvoteCount: number; message: string }> => {
+  return apiClient.delete<{ success: boolean; upvoteCount: number; message: string }>(
+    `/complaints/${id}/upvote`
+  );
+};
+
 export const complaintService = {
   submitComplaint,
   getMyComplaints,
@@ -475,4 +529,8 @@ export const complaintService = {
   processComplaintMedia,
   predictCategory,
   extractKeywords,
+  confirmComplaint,
+  unconfirmComplaint,
+  upvoteComplaint,
+  removeUpvote,
 };

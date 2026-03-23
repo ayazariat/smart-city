@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, User, Phone, Sparkles, MapPin, Navigation } from "lucide-react";
+import { Mail, Lock, User, Sparkles, MapPin, Navigation } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +20,7 @@ import { getLocationWithDetails, LocationData } from "@/services/geo.service";
  */
 export default function RegisterPage() {
   const router = useRouter();
-  const { register, isLoading, error, deletePendingRegistration } = useAuthStore();
+  const { register, isLoading, error } = useAuthStore();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -92,26 +92,16 @@ export default function RegisterPage() {
       errors.confirmPassword = "Passwords do not match";
     }
 
-    // Optional phone: validate Tunisia format (+216XXXXXXXX) if provided
+    // Optional phone: validate Tunisia format (8 digits starting with 2-9) if provided
     if (formData.phone) {
-      const tunisianPhoneRegex = /^\+216[0-9]{8}$/;
-      if (!tunisianPhoneRegex.test(formData.phone)) {
-        errors.phone = "Please enter a valid Tunisian phone number (+216XXXXXXXX)";
+      const phoneRegex = /^[2-9][0-9]{7}$/;
+      if (!phoneRegex.test(formData.phone)) {
+        errors.phone = "Phone must be 8 digits starting with 2-9";
       }
     }
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
-  };
-
-  const handleDeletePending = async () => {
-    if (!formData.email) return;
-    try {
-      await deletePendingRegistration(formData.email);
-      setLocalError("Pending registration deleted. You can now register again.");
-    } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Failed to delete pending registration");
-    }
   };
 
   const handleUseMyLocation = async () => {
@@ -156,14 +146,8 @@ export default function RegisterPage() {
       captchaToken = freshToken;
     }
 
-    // Phone transformation: normalize to E.164 format +216XXXXXXXX if needed
-    let phoneValue = formData.phone;
-    if (formData.phone) {
-      const digits = formData.phone.replace(/\D/g, "");
-      if (digits.length === 8 && !formData.phone.includes("+216")) {
-        phoneValue = "+216" + digits;
-      }
-    }
+    // Phone: send 8 digits without +216 prefix
+    const phoneValue = formData.phone || undefined;
 
     try {
       await register({
@@ -228,23 +212,6 @@ export default function RegisterPage() {
 
           {/* Form Card */}
           <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 animate-scaleIn delay-200">
-            {(error || localError) && (
-              <div className="mb-6 animate-slideInLeft">
-                <Alert variant="error" onClose={() => setLocalError("")}>
-                  {error || localError}
-                  {error?.includes("pending registration") && (
-                    <button
-                      type="button"
-                      onClick={handleDeletePending}
-                      className="mt-2 text-sm underline hover:text-urgent-800"
-                    >
-                      Click here to delete the pending registration and try again
-                    </button>
-                  )}
-                </Alert>
-              </div>
-            )}
-
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="animate-slideInLeft delay-300">
@@ -340,17 +307,45 @@ export default function RegisterPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="animate-slideInLeft delay-400">
-                  <Input
-                    label="Phone"
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    placeholder="20XXXXXX (8 digits)"
-                    icon={<Phone size={18} />}
-                    error={fieldErrors.phone}
-                    helperText="Optional. Enter 8 digits (e.g., 20555555)"
-                  />
+                  <div className="w-full">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Phone
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                      <span style={{
+                        padding: '0 12px',
+                        height: 42,
+                        display: 'flex', alignItems: 'center',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRight: 'none',
+                        borderRadius: '8px 0 0 8px',
+                        fontSize: 13, color: '#64748b',
+                        fontFamily: 'DM Mono, monospace',
+                        flexShrink: 0
+                      }}>TN</span>
+                      <input
+                        type="tel"
+                        className="w-full px-3 py-2.5 border rounded-r-lg focus:outline-none focus:ring-4 focus:border-primary focus:ring-primary/20 transition-all placeholder:text-slate-400"
+                        style={{ borderRadius: '0 8px 8px 0' }}
+                        placeholder="2X XXX XXX"
+                        maxLength={8}
+                        value={formData.phone}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                          setFormData({ ...formData, phone: digits });
+                          if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
+                        }}
+                      />
+                    </div>
+                    {fieldErrors.phone && (
+                      <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                        <span className="inline-block w-1 h-1 bg-red-600 rounded-full"></span>
+                        {fieldErrors.phone}
+                      </p>
+                    )}
+                    <p className="mt-1.5 text-sm text-slate-500">Optional. Enter 8 digits (e.g., 20555555)</p>
+                  </div>
                 </div>
               </div>
 
@@ -415,6 +410,15 @@ export default function RegisterPage() {
                   Create Account
                 </Button>
               </div>
+
+              {/* Error display at bottom of form */}
+              {(error || localError) && (
+                <div className="mt-4 animate-slideInLeft">
+                  <Alert variant="error" onClose={() => setLocalError("")}>
+                    {error || localError}
+                  </Alert>
+                </div>
+              )}
             </form>
 
             <div className="mt-6 pt-6 border-t border-slate-100 animate-fadeIn delay-500">

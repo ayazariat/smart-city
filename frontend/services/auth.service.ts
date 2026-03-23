@@ -67,7 +67,6 @@ export const authService = {
 
   async login(data: LoginData): Promise<LoginResponse> {
     const url = `${API_URL}/login`;
-    console.log("Login request to:", url);
     
     const response = await fetch(url, {
       method: "POST",
@@ -76,16 +75,12 @@ export const authService = {
       credentials: "include",
     });
 
-    console.log("Login response status:", response.status);
-    console.log("Login response headers:", Object.fromEntries(response.headers.entries()));
-
     if (!response.ok) {
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("text/html")) {
         throw new Error("Server error. Please ensure the backend is running.");
       }
       const error = await response.json().catch(() => ({ message: "Network error" }));
-      console.error("Login error response:", error);
       throw new Error(error.message || `Login failed (${response.status})`);
     }
 

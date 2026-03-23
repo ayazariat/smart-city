@@ -23,7 +23,6 @@ export default function AdminComplaintsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [governorateFilter, setGovernorateFilter] = useState<string>("");
   const [municipalityFilter, setMunicipalityFilter] = useState<string>("");
-  const [showArchived, setShowArchived] = useState<boolean>(false);
   const [availableMunicipalities, setAvailableMunicipalities] = useState<string[]>([]);
 
   // Update available municipalities when governorate changes
@@ -52,7 +51,6 @@ export default function AdminComplaintsPage() {
           governorate: governorateFilter || undefined,
           municipality: municipalityFilter || undefined,
           search: searchTerm || undefined,
-          includeArchived: showArchived || undefined,
         });
         if (response.data?.complaints) {
           setComplaints(response.data.complaints);
@@ -66,7 +64,7 @@ export default function AdminComplaintsPage() {
     };
 
     fetchComplaints();
-  }, [token, user, statusFilter, governorateFilter, municipalityFilter, showArchived, searchTerm]);
+  }, [token, user, statusFilter, governorateFilter, municipalityFilter, searchTerm]);
 
   const filteredComplaints = complaints.filter((c) => {
     if (!searchTerm) return true;
@@ -150,17 +148,6 @@ export default function AdminComplaintsPage() {
               ))}
             </select>
 
-            {/* Show Archived Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-                className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary"
-              />
-              <span className="text-sm text-slate-600">Show Archived</span>
-            </label>
-
             {/* Results Count */}
             <span className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
               {filteredComplaints.length} results
@@ -185,7 +172,7 @@ export default function AdminComplaintsPage() {
                 <ComplaintCard
                   key={complaint._id || complaint.id}
                   complaint={complaint}
-                  href={`/dashboard/complaints/${complaint._id || complaint.id}`}
+                  href={`/dashboard/complaints/${complaint._id || complaint.id}?from=admin`}
                   showCitizen
                   showDepartment
                   showMunicipality

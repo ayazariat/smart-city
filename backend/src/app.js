@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
+const path = require("path");
 const authRoutes = require("./routes/auth");
 const citizenRoutes = require("./routes/citizen.routes");
 const agentRoutes = require("./routes/agent.routes");
@@ -11,6 +12,7 @@ const adminRoutes = require("./routes/admin.routes");
 const complaintRoutes = require("./routes/complaints");
 const uploadRoutes = require("./routes/upload");
 const notificationRoutes = require("./routes/notifications.routes");
+const aiRoutes = require("./routes/ai.routes");
 
 const app = express();
 
@@ -23,7 +25,7 @@ app.use(cors({
     "http://127.0.0.1:3001",
     "http://localhost:5000",
     "http://127.0.0.1:5000",
-    "http://10.0.2.2:5000", // Android emulator
+    "http://10.0.2.2:5000",
     "http://10.0.2.2:3000",
   ],
   credentials: true,
@@ -31,6 +33,9 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
+
+// Serve uploaded files statically
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Routes
 app.get("/", (req, res) => {
@@ -50,6 +55,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/notifications", notificationRoutes.router);
+app.use("/api/ai", aiRoutes);
 
 // 404 handler
 app.use((req, res) => {

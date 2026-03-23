@@ -95,6 +95,9 @@ const complaintSchema = new mongoose.Schema(
     comments: [{
       text: String,
       author: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      authorName: String,
+      authorRole: String,
+      type: { type: String, enum: ["NOTE", "BLOCAGE", "PUBLIC"], default: "NOTE" },
       isInternal: { type: Boolean, default: false },
       createdAt: { type: Date, default: Date.now }
     }],
@@ -107,9 +110,53 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    municipalityNormalized: {
+      type: String,
+      index: true,
+      default: "",
+    },
     isArchived: { type: Boolean, default: false },
     archivedAt: { type: Date },
     archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // SLA fields
+    slaDeadline: { type: Date },
+    slaStatus: { type: String, enum: ['ON_TRACK', 'AT_RISK', 'OVERDUE'], default: 'ON_TRACK' },
+    // Resolution tracking
+    resolutionNote: String,
+    proofPhotos: [String],
+    materialsUsed: [String],
+    resolutionTimeHours: Number,
+    // Validation/rejection tracking
+    validatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    validatedAt: Date,
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    rejectedAt: Date,
+    // Assignment tracking
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    assignedAt: Date,
+    startedAt: Date,
+    closedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    closedAt: Date,
+    // Rating
+    rating: {
+      score: { type: Number, min: 1, max: 5 },
+      comment: String,
+      createdAt: Date
+    },
+    // Reference ID for display
+    referenceId: String,
+    // Citizen confirmations (BL-28)
+    confirmations: [{
+      citizenId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+      confirmedAt: { type: Date, default: Date.now }
+    }],
+    confirmationCount: { type: Number, default: 0, min: 0 },
+    // Citizen upvotes (BL-28)
+    upvotes: [{
+      citizenId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+      upvotedAt: { type: Date, default: Date.now }
+    }],
+    upvoteCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
@@ -117,22 +164,22 @@ const complaintSchema = new mongoose.Schema(
 // Status transition validation (BL-21)
 complaintSchema.statics.VALID_TRANSITIONS = {
   SUBMITTED: ['VALIDATED', 'REJECTED'],
-  VALIDATED: ['ASSIGNED', 'REJECTED'],
-  ASSIGNED: ['IN_PROGRESS'],
-  IN_PROGRESS: ['RESOLVED'],
-  RESOLVED: ['CLOSED'],
+  VALIDATED: ['ASSIGNED'],          // AGENT assigns to department
+  ASSIGNED: ['IN_PROGRESS'],        // TECH starts work
+  IN_PROGRESS: ['RESOLVED'],       // TECH resolves
+  RESOLVED: ['CLOSED'],            // AGENT closes
   CLOSED: ['ARCHIVED'],
   ARCHIVED: [],
-  REJECTED: []
+  REJECTED: []                     // AGENT can reopen via separate endpoint
 };
 
-// Role permissions for status transitions (BL-21)
+// Role permissions for status transitions (Agent-Centric Workflow)
 complaintSchema.statics.ROLE_PERMISSIONS = {
-  CITIZEN: [],
-  MUNICIPAL_AGENT: ['SUBMITTED', 'VALIDATED', 'REJECTED'],
-  DEPARTMENT_MANAGER: ['VALIDATED', 'ASSIGNED', 'RESOLVED', 'CLOSED'],
-  TECHNICIAN: ['ASSIGNED', 'IN_PROGRESS', 'RESOLVED'],
-  ADMIN: ['SUBMITTED', 'VALIDATED', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REJECTED']
+  CITIZEN: [],                                    // Citizens cannot change status
+  MUNICIPAL_AGENT: ['VALIDATED', 'REJECTED', 'ASSIGNED', 'CLOSED'],  // AGENT centralizes workflow
+  DEPARTMENT_MANAGER: ['ASSIGNED'],               // Can assign but primary is AGENT
+  TECHNICIAN: ['IN_PROGRESS', 'RESOLVED'],        // TECH handles assigned → resolved
+  ADMIN: ['VALIDATED', 'REJECTED', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']  // Full access
 };
 
 // Method to update status with history

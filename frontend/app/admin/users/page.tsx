@@ -23,6 +23,7 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { adminService, AdminUser, UserRole, UserStats } from "@/services/admin.service";
 import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
+import { showToast } from "@/components/ui/Toast";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   CITIZEN: "Citizen",
@@ -56,8 +57,6 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -130,9 +129,9 @@ export default function AdminUsersPage() {
 
     setIsAuthReady(true);
 
-    if (!token) {
+    if (!user) {
       router.push("/");
-    } else if (user?.role !== "ADMIN") {
+    } else if (user.role !== "ADMIN") {
       router.push("/dashboard");
     }
   }, [token, user, router, hydrated]);
@@ -143,7 +142,6 @@ export default function AdminUsersPage() {
 
     try {
       setLoading(true);
-      setError(null);
       const response = await adminService.getUsers({
         page,
         limit: 10,
@@ -153,7 +151,7 @@ export default function AdminUsersPage() {
       setTotal(response.pagination.total);
       setTotalPages(response.pagination.pages);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      showToast(err instanceof Error ? err.message : "Failed to load users", "error");
     } finally {
       setLoading(false);
     }
@@ -281,12 +279,9 @@ export default function AdminUsersPage() {
         department: "",
       });
       setCreateErrors({});
-      setSuccess("User created successfully!");
-      setError(null);
+      showToast("User created successfully!", "success");
       fetchUsers();
       fetchStats();
-      // Auto-clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err: unknown) {
       let message = "";
       if (typeof err === "string") {
@@ -302,7 +297,6 @@ export default function AdminUsersPage() {
           ...prev,
           email: "Un compte existe déjà avec cet email.",
         }));
-        setError(null);
         return;
       }
 
@@ -311,11 +305,10 @@ export default function AdminUsersPage() {
           ...prev,
           fullName: "A user with this name already exists.",
         }));
-        setError(null);
         return;
       }
 
-      setError("Unable to create user at the moment. Please try again or contact an administrator.");
+      showToast("Unable to create user at the moment. Please try again or contact an administrator.", "error");
     }
   };
 
@@ -342,14 +335,11 @@ export default function AdminUsersPage() {
 
       setShowEditModal(false);
       setSelectedUser(null);
-      setSuccess("User updated successfully!");
-      setError(null);
+      showToast("User updated successfully!", "success");
       fetchUsers();
       fetchStats();
-      // Auto-clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update user");
+      showToast(err instanceof Error ? err.message : "Failed to update user", "error");
     }
   };
 
@@ -357,15 +347,11 @@ export default function AdminUsersPage() {
   const handleToggleActive = async (userId: string, isActive: boolean) => {
     try {
       await adminService.toggleUserActive(userId, isActive);
-      setSuccess(isActive ? "User activated successfully" : "User deactivated successfully");
-      setError(null);
+      showToast(isActive ? "User activated successfully" : "User deactivated successfully", "success");
       fetchUsers();
       fetchStats();
-      // Auto-clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update user status");
-      setSuccess(null);
+      showToast(err instanceof Error ? err.message : "Failed to update user status", "error");
     }
   };
 
@@ -377,14 +363,11 @@ export default function AdminUsersPage() {
 
     try {
       await adminService.deleteUser(userId);
-      setSuccess("User deleted successfully!");
-      setError(null);
+      showToast("User deleted successfully!", "success");
       fetchUsers();
       fetchStats();
-      // Auto-clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete user");
+      showToast(err instanceof Error ? err.message : "Failed to delete user", "error");
     }
   };
 
@@ -429,6 +412,13 @@ export default function AdminUsersPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
+              <Link 
+                href="/dashboard" 
+                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
               <Link href="/dashboard" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
                   <Users className="w-6 h-6" />
@@ -441,12 +431,6 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="flex items-center gap-4">
-              <Link
-                href="/dashboard"
-                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
               <button
                 onClick={() => logout()}
                 className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2.5 rounded-xl transition-all duration-200 hover:shadow-lg backdrop-blur-sm"
@@ -497,20 +481,6 @@ export default function AdminUsersPage() {
               </div>
               <div className="text-sm text-slate-600">Administrators</div>
             </div>
-          </div>
-        )}
-
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* Success Message */}
-        {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-            {success}
           </div>
         )}
 

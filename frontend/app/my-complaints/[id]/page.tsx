@@ -15,7 +15,8 @@ import {
   Pencil,
   Trash2,
   X,
-  Save
+  Save,
+  Phone
 } from "lucide-react";
 import { Complaint, ComplaintCategory, ComplaintUrgency } from "@/types";
 import { complaintService } from "@/services/complaint.service";
@@ -72,6 +73,7 @@ export default function MyComplaintDetailPage() {
 
   // Photo modal state
   const [photoModal, setPhotoModal] = useState<{url: string; index: number} | null>(null);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
 
   // Save current page when component mounts
   useEffect(() => {
@@ -117,7 +119,6 @@ export default function MyComplaintDetailPage() {
           setError("Complaint not found");
         }
       } catch (err: unknown) {
-        console.error("Error fetching complaint:", err);
         const apiError = err as { response?: { status?: number; data?: { message?: string } } };
         if (apiError.response?.status === 403) {
           setError(apiError.response.data?.message || "Access denied. You can only view your own complaints.");
@@ -181,7 +182,6 @@ export default function MyComplaintDetailPage() {
         setIsEditing(false);
       }
     } catch (err: unknown) {
-      console.error("Error updating complaint:", err);
       setError("Failed to update complaint. Please try again.");
     } finally {
       setIsSaving(false);
@@ -196,7 +196,6 @@ export default function MyComplaintDetailPage() {
       await complaintService.deleteComplaint(complaintId);
       router.push("/my-complaints");
     } catch (err: unknown) {
-      console.error("Error deleting complaint:", err);
       setError("Failed to delete complaint. Please try again.");
       setDeleteConfirm(false);
     } finally {
@@ -214,7 +213,6 @@ export default function MyComplaintDetailPage() {
         setComplaint(response.data);
       }
     } catch (err: unknown) {
-      console.error("Error confirming resolution:", err);
       setError("Failed to confirm resolution. Please try again.");
     } finally {
       setConfirmLoading(false);
@@ -229,6 +227,18 @@ export default function MyComplaintDetailPage() {
     (complaint.location?.latitude && complaint.location?.longitude) || 
     (complaint.location?.coordinates && complaint.location.coordinates[0] !== 0 && complaint.location.coordinates[1] !== 0)
   );
+
+  // Helper to get full Cloudinary URL
+  const getPhotoUrl = (url: string) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('//')) return `https:${url}`;
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'demo';
+    if (url.includes('/')) {
+      return `https://res.cloudinary.com/${cloudName}/image/upload/${url}`;
+    }
+    return `https://res.cloudinary.com/${cloudName}/image/upload/${url}`;
+  };
 
   // Wait for hydration before rendering
   if (!hydrated || !isHydrated) {
@@ -368,7 +378,7 @@ export default function MyComplaintDetailPage() {
                     title="Edit complaint"
                   >
                     <Pencil className="w-4 h-4" />
-                    Modifier
+                    Edit
                   </button>
                   <button
                     onClick={() => setDeleteConfirm(true)}
@@ -493,7 +503,31 @@ export default function MyComplaintDetailPage() {
             {/* Description */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">
               <h2 id="description-title" className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
-              <p className="text-gray-800 whitespace-pre-wrap">{complaint.description}</p>
+              {(() => {
+                const contactMatch = complaint.description.match(/Contact phone:\s*(\+216\s*\d+|\d+)/i);
+                const contactPhone = contactMatch ? contactMatch[0].replace('Contact phone:', '').trim() : null;
+                const cleanDescription = contactPhone 
+                  ? complaint.description.replace(/Contact phone:\s*\+?216?\s*\d+/gi, '').trim()
+                  : complaint.description;
+                return (
+                  <>
+                    <p className="text-gray-800 whitespace-pre-wrap">{cleanDescription}</p>
+                    {contactPhone && (
+                      <div className="mt-4 p-3 bg-primary/5 rounded-xl border border-primary/20">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <Phone className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Phone</p>
+                            <p className="text-lg font-bold text-primary">{contactPhone}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </section>
 
             {/* Location */}
@@ -576,14 +610,14 @@ export default function MyComplaintDetailPage() {
                     <div key={index} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden">
                       {item.type === "video" ? (
                         <video
-                          src={item.url}
+                          src={getPhotoUrl(item.url) || undefined}
                           controls
                           className="w-full h-full object-cover"
                           aria-label={`Video ${index + 1}`}
                         />
                       ) : (
                         <img
-                          src={item.url}
+                          src={getPhotoUrl(item.url) || undefined}
                           alt={`Photo ${index + 1} of the complaint`}
                           className="w-full h-full object-cover hover:opacity-90 transition"
                           onError={(e) => {
@@ -598,6 +632,25 @@ export default function MyComplaintDetailPage() {
                 </div>
               )}
             </section>
+
+            {/* Fullscreen Photo Viewer */}
+            {fullscreenPhoto && (
+              <div
+                onClick={() => setFullscreenPhoto(null)}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 200,
+                  background: 'rgba(0,0,0,0.9)',
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', cursor: 'pointer'
+                }}
+              >
+                <img
+                  src={fullscreenPhoto}
+                  style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8 }}
+                  onClick={e => e.stopPropagation()}
+                />
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -607,7 +660,7 @@ export default function MyComplaintDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
                 <h2 id="department-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-primary" />
-                  Département
+                  Department
                 </h2>
                 <p className="font-semibold text-slate-900">{complaint.department.name}</p>
               </section>
@@ -621,9 +674,9 @@ export default function MyComplaintDetailPage() {
               </h2>
               <dl className="space-y-3 text-sm">
                 <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                  <dt className="text-slate-500">Créée:</dt>
+                  <dt className="text-slate-500">Created:</dt>
                   <dd className="text-slate-900 font-medium">
-                    {new Date(complaint.createdAt).toLocaleDateString("fr-FR", {
+                    {new Date(complaint.createdAt).toLocaleDateString("en-US", {
                       day: "numeric",
                       month: "long",
                       year: "numeric",
@@ -632,9 +685,9 @@ export default function MyComplaintDetailPage() {
                 </div>
                 {complaint.updatedAt && complaint.updatedAt !== complaint.createdAt && (
                   <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                    <dt className="text-slate-500">Modifiée:</dt>
+                    <dt className="text-slate-500">Modified:</dt>
                     <dd className="text-slate-900 font-medium">
-                      {new Date(complaint.updatedAt).toLocaleDateString("fr-FR", {
+                      {new Date(complaint.updatedAt).toLocaleDateString("en-US", {
                         day: "numeric",
                         month: "long",
                         year: "numeric",
@@ -650,7 +703,7 @@ export default function MyComplaintDetailPage() {
               <section className="bg-red-50 rounded-2xl shadow-lg p-6 border border-red-200" aria-labelledby="rejection-title">
                 <h2 id="rejection-title" className="text-lg font-semibold text-red-900 mb-2 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5" />
-                  Motif de rejet
+                  Rejection Reason
                 </h2>
                 <p className="text-red-800">{complaint.rejectionReason}</p>
               </section>

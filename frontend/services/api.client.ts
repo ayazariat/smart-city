@@ -9,14 +9,19 @@ interface RequestOptions extends RequestInit {
 export const apiClient = {
   async extractErrorMessage(response: Response): Promise<string> {
     const contentType = response.headers.get("content-type") || "";
+    const status = response.status;
     
-    // If response is HTML (like a 404 error page), return a generic message
-    if (contentType.includes("text/html") || response.status === 404) {
-      return `Request failed with status ${response.status}`;
+    if (status === 403) return "Access denied";
+    if (status === 404) return "Resource not found";
+    if (status === 401) return "Session expired";
+    
+    if (contentType.includes("text/html")) {
+      return `Request failed (${status})`;
     }
     
     const text = await response.text();
-    if (!text) return "Request failed";
+    if (!text) return `Request failed (${status})`;
+    
     try {
       const errorData = JSON.parse(text);
       if (errorData && errorData.message) {
@@ -25,11 +30,13 @@ export const apiClient = {
       if (errorData && errorData.error) {
         return errorData.error;
       }
+      if (errorData && errorData.msg) {
+        return errorData.msg;
+      }
     } catch {
-      // If not JSON, return the text if it's not empty
-      if (text) return text;
+      if (text) return text.substring(0, 200);
     }
-    return "Request failed";
+    return `Request failed (${status})`;
   },
 
   async get<T = unknown>(
@@ -85,8 +92,23 @@ export const apiClient = {
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { requiresAuth = true, headers = {}, ...rest } = options;
 
-    const { token, refreshToken } = useAuthStore.getState();
-    if (requiresAuth && !token) throw new Error("Authentication required");
+    const { token, refreshToken, hydrated } = useAuthStore.getState();
+    
+    if (!hydrated) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      const state = useAuthStore.getState();
+      if (!state.token) {
+        if (requiresAuth) {
+          console.log("Not hydrated or no token for:", endpoint);
+          return {} as T;
+        }
+      }
+    }
+    
+    if (requiresAuth && !token) {
+      console.log("No token available for:", endpoint);
+      return {} as T;
+    }
 
     const requestHeaders: HeadersInit = {
       "Content-Type": "application/json",
@@ -95,6 +117,7 @@ export const apiClient = {
 
     if (token) {
       (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      console.log("Making authenticated request to:", endpoint);
     }
 
     const makeRequest = async (authToken?: string): Promise<Response> => {
@@ -111,7 +134,6 @@ export const apiClient = {
 
     let response = await makeRequest(token || undefined);
 
-    // Handle 401 - try to refresh token
     if (response.status === 401 && requiresAuth && refreshToken) {
       try {
         const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
@@ -132,22 +154,17 @@ export const apiClient = {
           }
         }
       } catch {
-        // Refresh failed, will fall through to error handling
+        // Refresh failed
       }
     }
 
-    // Handle 403 Forbidden - Access denied
     if (response.status === 403) {
-      // Don't throw for 403, just return empty data
       return {} as T;
     }
 
-    // If still 401 after refresh, clear auth and redirect to login
     if (response.status === 401) {
       useAuthStore.setState({ user: null, token: null, refreshToken: null });
-      if (typeof window !== 'undefined') {
-        window.location.href = '/?expired=true';
-      }
+      // Don't redirect - let the app handle auth errors gracefully
       throw new Error("Session expired. Please log in again.");
     }
 
@@ -158,10 +175,8 @@ export const apiClient = {
 
     const text = await response.text();
     
-    // Check if response is JSON
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("application/json") && text) {
-      // If not JSON, return the text as is (for HTML or other responses)
       return text as unknown as T;
     }
     

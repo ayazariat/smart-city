@@ -1,5 +1,5 @@
 /**
- * Next.js Middleware for Authentication
+ * Next.js Proxy for Authentication (formerly Middleware)
  * 
  * Protects routes based on authentication status and user role.
  * Allows public access to specific paths.
@@ -91,30 +91,70 @@ function hasRequiredRole(userRole: string, requiredRoles: string[]): boolean {
  * Handle expired token - redirect to login
  */
 function handleExpiredToken(request: NextRequest): NextResponse {
+  const { pathname } = request.nextUrl;
+  
+  // Don't redirect if already on public path
+  const publicPaths = ['/', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password'];
+  if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+    return NextResponse.next();
+  }
+  
+  // Check if already has expired param - don't add it again
+  if (request.nextUrl.searchParams.get('expired') === 'true') {
+    return NextResponse.next();
+  }
+  
   const loginUrl = new URL("/", request.url);
   loginUrl.searchParams.set("expired", "true");
   return NextResponse.redirect(loginUrl);
 }
 
 /**
- * Main middleware function
+ * Main proxy function (also exported as default)
  */
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export function proxy(request: NextRequest) {
+  return proxyHandler(request);
+}
 
-  // Allow public paths
-  if (isPublicPath(pathname)) {
+// Also export as default for compatibility
+export default function(request: NextRequest) {
+  return proxyHandler(request);
+}
+
+function proxyHandler(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  
+  // Check token from cookie OR Authorization header
+  let token = request.cookies.get('accessToken')?.value;
+  
+  // If no cookie, check Authorization header
+  if (!token) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  // CRITICAL: Never redirect if already on login page with expired=true
+  // This prevents infinite redirect loops
+  if (pathname === '/' && request.nextUrl.searchParams.get('expired') === 'true') {
     return NextResponse.next();
   }
 
-  // Get token
-  const token = getToken(request);
+  // Public paths - never redirect these (include API routes)
+  const publicPaths = ['/', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password', '/public', '/api/auth', '/api/upload'];
+  
+  const isPublic = publicPaths.some(p => pathname === p || pathname.startsWith(p + '/') || pathname.includes('/api/auth/') || pathname.includes('/api/upload/'));
 
-  // No token - redirect to login for protected routes
+  // Already on public page - never redirect (breaks loop)
+  if (isPublic) return NextResponse.next();
+
+  // No token on protected page - redirect to login ONCE
   if (!token) {
-    const loginUrl = new URL("/", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    url.searchParams.set('expired', 'true');
+    return NextResponse.redirect(url);
   }
 
   // Get user role from token
@@ -143,7 +183,7 @@ export function middleware(request: NextRequest) {
 }
 
 /**
- * Configure which routes the middleware runs on
+ * Configure which routes the proxy runs on
  */
 export const config = {
   matcher: [

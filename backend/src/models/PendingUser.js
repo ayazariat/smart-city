@@ -51,6 +51,11 @@ const pendingUserSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    municipalityName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     // Verification fields
     verificationToken: { type: String }, // Token for email/SMS verification
     verificationExpires: { type: Date },

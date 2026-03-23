@@ -1,2 +1,0 @@
-fatal: path 'backend/src/controllers/complaintController.js' exists, but not 'src/controllers/complaintController.js'
-hint: Did you mean 'e91716b:backend/src/controllers/complaintController.js' aka 'e91716b:./src/controllers/complaintController.js'?

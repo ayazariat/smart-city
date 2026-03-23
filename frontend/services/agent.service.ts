@@ -72,15 +72,14 @@ export const rejectComplaint = async (
 };
 
 /**
- * Assign complaint to a department
+ * Close a resolved complaint
  */
-export const assignComplaintToDepartment = async (
-  id: string,
-  departmentId: string
+export const closeComplaint = async (
+  id: string
 ): Promise<{ success: boolean; message: string; data: Complaint }> => {
   return apiClient.put<{ success: boolean; message: string; data: Complaint }>(
-    `/agent/complaints/${id}/assign`,
-    { departmentId }
+    `/agent/complaints/${id}/close`,
+    {}
   );
 };
 
@@ -97,10 +96,24 @@ export const getAgentDepartments = async (): Promise<{
   }>("/agent/departments");
 };
 
+/**
+ * Assign complaint to department
+ */
+export const assignComplaintToDepartment = async (
+  complaintId: string,
+  departmentId: string
+): Promise<{ success: boolean; message: string; data: Complaint }> => {
+  return apiClient.put<{ success: boolean; message: string; data: Complaint }>(
+    `/agent/complaints/${complaintId}/assign-department`,
+    { departmentId }
+  );
+};
+
 export const agentService = {
   getAgentComplaints,
   validateComplaint,
   rejectComplaint,
-  assignComplaintToDepartment,
+  closeComplaint,
   getAgentDepartments,
+  assignComplaintToDepartment,
 };

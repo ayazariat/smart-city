@@ -1,45 +1,31 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { 
   Archive, 
   Search, 
   Filter,
   Loader2,
   ArrowLeft,
-  MapPin,
-  Calendar,
   Eye,
-  RotateCcw,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  FileText,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { ComplaintCard } from "@/components/ui/ComplaintCard";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { complaintService } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Complaint } from "@/types";
 
-// Debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
-export default function ArchivePage() {
+function ArchivePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, hydrated } = useAuthStore();
@@ -48,18 +34,13 @@ export default function ArchivePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("CLOSED");
   
-  // Pagination state
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 10;
 
-  // Debounce search
-  const debouncedSearch = useDebounce(searchTerm, 400);
-
-  // Fetch archived complaints with server-side pagination and filters
   useEffect(() => {
     const fetchArchived = async () => {
       if (!token) return;
@@ -67,7 +48,7 @@ export default function ArchivePage() {
       try {
         setLoading(true);
         const currentPage = parseInt(searchParams.get("page") || "1");
-        const filter = searchParams.get("filter") || "";
+        const filter = searchParams.get("filter") || statusFilter;
         const search = searchParams.get("search") || "";
         
         const response = await complaintService.getArchivedComplaints({
@@ -81,8 +62,6 @@ export default function ArchivePage() {
         setTotal(response.total || 0);
         setTotalPages(response.pages || 1);
         setPage(currentPage);
-        
-        // Sync filters from URL
         setStatusFilter(filter);
         setSearchTerm(search);
       } catch (err) {
@@ -98,24 +77,6 @@ export default function ArchivePage() {
     }
   }, [token, hydrated, searchParams]);
 
-  // Update URL when debounced search changes
-  useEffect(() => {
-    if (hydrated && token) {
-      const currentSearch = searchParams.get("search") || "";
-      if (debouncedSearch !== currentSearch) {
-        const params = new URLSearchParams(searchParams.toString());
-        if (debouncedSearch) {
-          params.set("search", debouncedSearch);
-        } else {
-          params.delete("search");
-        }
-        params.set("page", "1");
-        router.push(`/archive?${params.toString()}`);
-      }
-    }
-  }, [debouncedSearch, hydrated, token, searchParams, router]);
-
-  // Handle filter/search changes
   const updateParams = (newParams: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(newParams).forEach(([key, value]) => {
@@ -125,18 +86,8 @@ export default function ArchivePage() {
         params.delete(key);
       }
     });
-    params.set("page", "1"); // Reset to page 1 on filter change
+    params.set("page", "1");
     router.push(`/archive?${params.toString()}`);
-  };
-
-  const handleSearch = (value: string) => {
-    setSearchTerm(value);
-    updateParams({ search: value });
-  };
-
-  const handleFilterChange = (value: string) => {
-    setStatusFilter(value);
-    updateParams({ filter: value });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -146,79 +97,123 @@ export default function ArchivePage() {
     router.push(`/archive?${params.toString()}`);
   };
 
-  // Wait for hydration
+  const filteredComplaints = complaints.filter((c) => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase();
+    return c.description?.toLowerCase().includes(q);
+  });
+
   if (!hydrated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-        <Loader2 className="w-12 h-12 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingSpinner fullScreen />;
   }
 
-  // Redirect if not logged in
   if (!user || !token) {
     router.push("/");
     return null;
   }
 
+  const stats = {
+    total: total,
+    closed: complaints.filter(c => c.status === "CLOSED").length,
+    rejected: complaints.filter(c => c.status === "REJECTED").length,
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.back()}
-                className="p-2 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
-                aria-label="Go back"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div className="h-6 w-px bg-white/30" aria-hidden="true"></div>
-              <div className="flex items-center gap-3">
-                <Archive className="w-6 h-6" />
-                <h1 className="text-2xl font-bold">Archived Complaints</h1>
+    <div className="min-h-screen bg-slate-50/50">
+      <PageHeader
+        title="Archived Complaints"
+        subtitle="View closed and rejected complaints"
+        backHref="/dashboard"
+        variant="hero"
+        rightContent={
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2">
+            <span className="text-sm text-white/70">Total:</span>
+            <span className="ml-2 font-bold text-white">{total}</span>
+          </div>
+        }
+      />
+
+      {/* Stats Cards */}
+      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Total Archived</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total}</p>
+              </div>
+              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                <Archive className="w-6 h-6 text-slate-600" />
               </div>
             </div>
-            <span className="px-4 py-2 bg-white/20 rounded-full text-sm font-medium">
-              {total} archived
-            </span>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-75">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Closed</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{stats.closed}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-150">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Rejected</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{stats.rejected}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <XCircle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Search and Filters */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200 animate-fadeIn">
+          <div className="flex flex-col md:flex-row gap-3 items-center">
+            <div className="flex-1 w-full relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search archived complaints..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    updateParams({ search: searchTerm, filter: statusFilter });
+                  }
+                }}
+                className="w-full pl-10 pr-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
               />
               {searchTerm && (
                 <button
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full"
+                  onClick={() => {
+                    setSearchTerm("");
+                    updateParams({ filter: statusFilter });
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition-colors"
                 >
                   <X className="w-4 h-4 text-slate-400" />
                 </button>
               )}
             </div>
             
-            {/* Status Filter */}
             <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-slate-400" />
+              <Filter className="w-4 h-4 text-slate-400" />
               <select
                 value={statusFilter}
-                onChange={(e) => handleFilterChange(e.target.value)}
-                className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  updateParams({ search: searchTerm, filter: e.target.value });
+                }}
+                className="px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white"
               >
                 <option value="">All Status</option>
                 <option value="CLOSED">Closed</option>
@@ -228,44 +223,33 @@ export default function ArchivePage() {
           </div>
         </div>
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <span className="ml-3 text-slate-600">Loading archived complaints...</span>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
+        {loading ? (
+          <LoadingSpinner />
+        ) : error ? (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-6">
             {error}
           </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && !error && complaints.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-sm p-12 text-center">
-            <Archive className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-            <h3 className="text-xl font-semibold text-slate-900 mb-2">
+        ) : filteredComplaints.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-slate-200 animate-fadeIn">
+            <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Archive className="w-10 h-10 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">
               {searchTerm || statusFilter ? "No results found" : "No archived complaints"}
             </h3>
-            <p className="text-slate-600 mb-6">
+            <p className="text-slate-500 mb-6">
               {searchTerm || statusFilter 
                 ? "Try adjusting your search or filters"
                 : "Closed or rejected complaints will appear here"}
             </p>
-            <Button variant="primary" onClick={() => router.push("/dashboard")}>
+            <Button onClick={() => router.push("/dashboard")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Dashboard
             </Button>
           </div>
-        )}
-
-        {/* Complaints List */}
-        {!loading && !error && complaints.length > 0 && (
+        ) : (
           <div className="grid gap-4">
-            {complaints.map((complaint, index) => (
+            {filteredComplaints.map((complaint, index) => (
               <div
                 key={complaint._id || complaint.id}
                 className="animate-fadeIn"
@@ -273,19 +257,18 @@ export default function ArchivePage() {
               >
                 <ComplaintCard
                   complaint={complaint}
-                  href={`/my-complaints/${complaint._id || complaint.id}`}
+                  href={`/dashboard/complaints/${complaint._id || complaint.id}`}
+                  showCitizen
                   showMunicipality
                   showPriority
                   actions={
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => router.push(`/my-complaints/${complaint._id || complaint.id}`)}
-                        className="flex items-center gap-2 text-primary hover:text-primary-700 font-medium text-sm transition-colors"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View Details
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => router.push(`/dashboard/complaints/${complaint._id || complaint.id}`)}
+                      className="flex items-center gap-2 text-primary hover:text-primary-700 font-medium text-sm transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Details
+                    </button>
                   }
                 />
               </div>
@@ -303,17 +286,17 @@ export default function ArchivePage() {
               <button
                 onClick={() => handlePageChange(page - 1)}
                 disabled={page === 1}
-                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
-              <span className="px-4 py-2 text-sm font-medium">
+              <span className="px-4 py-2 text-sm font-medium bg-primary/10 text-primary rounded-lg">
                 Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => handlePageChange(page + 1)}
                 disabled={page === totalPages}
-                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
@@ -322,5 +305,13 @@ export default function ArchivePage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function ArchivePage() {
+  return (
+    <Suspense fallback={<LoadingSpinner fullScreen />}>
+      <ArchivePageContent />
+    </Suspense>
   );
 }

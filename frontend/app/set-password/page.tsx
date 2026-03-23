@@ -8,6 +8,7 @@ import { authService } from "@/services/auth.service";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
+import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
 
 export default function SetPasswordPage() {
   const router = useRouter();
@@ -65,10 +66,10 @@ export default function SetPasswordPage() {
       await authService.setPassword(token!, email!, password);
       setSuccess(true);
       
-      // Redirect to login after 3 seconds
+      // Redirect to login after 2 seconds
       setTimeout(() => {
-        router.push("/");
-      }, 3000);
+        router.push("/?activated=true");
+      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to set password");
     } finally {
@@ -113,10 +114,10 @@ export default function SetPasswordPage() {
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8 animate-fadeIn">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-600 to-green-800 rounded-2xl mb-4 shadow-xl shadow-green-600/25">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary to-primary-700 rounded-2xl mb-4 shadow-xl shadow-primary/25">
               <Sparkles className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            <h1 className="text-3xl font-bold text-slate-900 mb-2 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-primary-900">
               Set Your Password
             </h1>
             <p className="text-slate-600">
@@ -124,8 +125,8 @@ export default function SetPasswordPage() {
             </p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 animate-slideInLeft">
+          {/* Form Card */}
+          <form onSubmit={handleSubmit} className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
             {error && (
               <Alert variant="error">{error}</Alert>
             )}
@@ -215,26 +216,19 @@ export default function SetPasswordPage() {
             {/* Submit Button */}
             <Button
               type="submit"
+              isLoading={loading}
+              fullWidth
+              size="lg"
               disabled={loading || !token || !email}
-              className="w-full mt-6"
+              className="group"
             >
               {loading ? "Setting Password..." : "Set Password & Activate Account"}
             </Button>
-
-            {/* Back to Login */}
-            <div className="mt-6 text-center">
-              <Link
-                href="/"
-                className="text-sm text-green-600 hover:text-green-700 font-medium"
-              >
-                ← Back to Login
-              </Link>
-            </div>
           </form>
 
-          {/* Footer */}
-          <div className="mt-8 text-center text-sm text-slate-500">
-            <p>Protected by reCAPTCHA v3</p>
+          {/* ReCAPTCHA Badge */}
+          <div className="mt-6 animate-fadeIn">
+            <ReCaptchaBadge action="setPassword" />
           </div>
         </div>
       </div>

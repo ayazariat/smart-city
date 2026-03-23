@@ -30,7 +30,6 @@ import {
   Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
 import { ComplaintCategory, ComplaintUrgency, ComplaintMedia, CreateComplaintData } from "@/types";
 import { complaintService, uploadMedia, predictCategory } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -426,29 +425,16 @@ export default function NewComplaintPage() {
     setError(null);
 
     try {
-      // Upload to Cloudinary
       const result = await uploadMedia(validFiles);
 
       if (result.success && result.data) {
         setMedia([...media, ...result.data]);
       } else {
-        setError(result.message || 'Failed to upload files');
-        // Fallback to local URLs if upload fails
-        const newMedia: ComplaintMedia[] = validFiles.map((file) => ({
-          type: file.type.startsWith('image/') ? 'photo' : 'video',
-          url: URL.createObjectURL(file),
-        }));
-        setMedia([...media, ...newMedia]);
+        throw new Error(result.message || 'Upload failed');
       }
     } catch (err) {
       console.error('Upload error:', err);
-      setError('Failed to upload files. Using local preview instead.');
-      // Fallback to local URLs
-      const newMedia: ComplaintMedia[] = validFiles.map((file) => ({
-        type: file.type.startsWith('image/') ? 'photo' : 'video',
-        url: URL.createObjectURL(file),
-      }));
-      setMedia([...media, ...newMedia]);
+      setError('Failed to upload files. Please try again.');
     } finally {
       setIsUploading(false);
       setUploadProgress(100);
@@ -771,13 +757,6 @@ export default function NewComplaintPage() {
 
       <div className="container mx-auto max-w-3xl px-4 py-8">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="error" onClose={() => setError(null)}>
-              {error}
-            </Alert>
-          )}
-
           {/* Location with Map */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <div className="flex items-center justify-between mb-4">
@@ -1203,6 +1182,26 @@ export default function NewComplaintPage() {
               📷 {media.length}/5 photos added - Click to preview
             </p>
           </div>
+
+          {/* Error Alert - shown at bottom for better visibility */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 animate-fadeIn">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-800">{error}</p>
+                </div>
+                <button 
+                  onClick={() => setError(null)} 
+                  className="text-red-400 hover:text-red-600 p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Submit Buttons */}
           <div className="flex gap-4 pt-4">

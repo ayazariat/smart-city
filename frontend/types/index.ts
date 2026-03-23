@@ -81,6 +81,7 @@ export interface ComplaintWorkPhoto {
 export interface Complaint {
   _id?: string;
   id?: string;
+  referenceId?: string;
   title: string;
   description: string;
   category: ComplaintCategory;
@@ -106,6 +107,28 @@ export interface Complaint {
     isInternal?: boolean;
     createdAt: string;
   }>;
+  // History from backend (transformed statusHistory)
+  history?: Array<{
+    status: string;
+    changedBy?: { fullName: string };
+    date: string;
+    comment?: string;
+  }>;
+  // Public comments (non-internal)
+  publicComments?: Array<{
+    _id: string;
+    content: string;
+    author?: { _id: string; fullName: string };
+    date: string;
+  }>;
+  // Internal notes
+  internalNotes?: Array<{
+    _id: string;
+    content: string;
+    author?: { _id: string; fullName: string };
+    date: string;
+    type: string;
+  }>;
   statusHistory?: Array<{
     status: string;
     updatedBy?: { _id: string; fullName: string };
@@ -130,8 +153,21 @@ export interface Complaint {
     _id: string;
     name: string;
   };
+  // SLA deadline
+  slaDeadline?: string | Date | null;
   createdAt: string;
   updatedAt: string;
+  // BL-28: Citizen confirmations
+  confirmationCount?: number;
+  upvoteCount?: number;
+  confirmations?: Array<{
+    citizenId: string;
+    confirmedAt: string;
+  }>;
+  upvotes?: Array<{
+    citizenId: string;
+    upvotedAt: string;
+  }>;
 }
 
 export interface CreateComplaintData {
@@ -159,11 +195,13 @@ export interface Comment {
 
 export interface Notification {
   _id: string;
-  user: string | { _id: string; fullName: string };
-  type: "VALIDATED" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "REJECTED" | "SLA_ALERT" | "COMMENT" | "CONFIRMATION";
+  recipient?: string;
+  user?: string | { _id: string; fullName: string };
+  type?: string;
   title: string;
   message: string;
   complaint?: { _id: string; title: string };
+  relatedId?: string;
   isRead: boolean;
   createdAt: string;
 }  

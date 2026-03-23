@@ -117,7 +117,6 @@ async function processNewComplaint(complaint) {
             'aiData.similarityHash': keywords.similarityHash
           }
         });
-        console.log(`[AI Service] Keywords extracted for complaint ${complaint._id}`);
       }
     } catch (error) {
       console.error('[AI Service] Error processing new complaint:', error.message);
@@ -148,7 +147,6 @@ async function recalculateSLA(complaint) {
           slaDeadline: sla.deadline
         }
       });
-      console.log(`[AI Service] SLA calculated for complaint ${complaint._id}: ${sla.status}`);
     } catch (error) {
       console.error('[AI Service] Error calculating SLA:', error.message);
       // Never throw - this runs in background

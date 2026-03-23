@@ -8,8 +8,6 @@
  * - Clears cookies on logout
  */
 
-import { cookies } from "next/headers";
-
 // API Base URL - configure per environment
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -30,6 +28,7 @@ export interface ApiRequestOptions extends RequestInit {
  */
 export async function getAccessToken(): Promise<string | undefined> {
   try {
+    const { cookies } = await import("next/headers");
     const cookieStore = await cookies();
     return cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   } catch {
@@ -42,6 +41,7 @@ export async function getAccessToken(): Promise<string | undefined> {
  */
 export async function getRefreshToken(): Promise<string | undefined> {
   try {
+    const { cookies } = await import("next/headers");
     const cookieStore = await cookies();
     return cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
   } catch {
@@ -53,24 +53,29 @@ export async function getRefreshToken(): Promise<string | undefined> {
  * Set auth cookies (server-side)
  */
 export async function setAuthCookies(accessToken: string, refreshToken?: string): Promise<void> {
-  const cookieStore = await cookies();
-  
-  cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: COOKIE_MAX_AGE,
-    path: "/",
-  });
-
-  if (refreshToken) {
-    cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    
+    cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
       path: "/",
     });
+
+    if (refreshToken) {
+      cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: COOKIE_MAX_AGE,
+        path: "/",
+      });
+    }
+  } catch {
+    // Silent fail - cookies may not be available server-side
   }
 }
 
@@ -78,10 +83,15 @@ export async function setAuthCookies(accessToken: string, refreshToken?: string)
  * Clear auth cookies (server-side)
  */
 export async function clearAuthCookies(): Promise<void> {
-  const cookieStore = await cookies();
-  
-  cookieStore.delete(ACCESS_TOKEN_COOKIE);
-  cookieStore.delete(REFRESH_TOKEN_COOKIE);
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    
+    cookieStore.delete(ACCESS_TOKEN_COOKIE);
+    cookieStore.delete(REFRESH_TOKEN_COOKIE);
+  } catch {
+    // Silent fail - cookies may not be available server-side
+  }
 }
 
 /**
@@ -139,6 +149,12 @@ export async function apiFetch<T = unknown>(
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, fetchOptions);
 
+  // Detect HTML response (backend error page instead of JSON)
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error('API returned HTML. Check NEXT_PUBLIC_API_URL is correct.');
+  }
+
   // Handle 401 - try to refresh token
   if (response.status === 401 && requiresAuth) {
     const refreshToken = await getRefreshToken();
@@ -175,6 +191,12 @@ export async function apiFetch<T = unknown>(
             const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, retryFetchOptions);
 
             if (retryResponse.ok) {
+              // Detect HTML response in retry
+              const retryContentType = retryResponse.headers.get('content-type') || '';
+              if (retryContentType.includes('text/html')) {
+                throw new Error('API returned HTML. Check NEXT_PUBLIC_API_URL is correct.');
+              }
+              
               const text = await retryResponse.text();
               return text ? JSON.parse(text) : ({} as T);
             }
@@ -228,12 +250,19 @@ export async function apiFetch<T = unknown>(
 }
 
 /**
- * Redirect to auth page
+ * Redirect to auth page - ONLY call this on explicit logout
  */
-function redirectToAuth(): void {
-  if (typeof window !== "undefined") {
-    window.location.href = "/?expired=true";
-  }
+export function redirectToAuth(): void {
+  if (typeof window === 'undefined') return
+
+  const { pathname } = window.location
+  const publicPaths = ['/', '/register', '/forgot-password',
+                       '/reset-password', '/verify-account', '/set-password']
+
+  // Already on public page → do nothing
+  if (publicPaths.some(p => pathname === p)) return
+
+  window.location.href = '/'
 }
 
 /**
@@ -297,8 +326,15 @@ export async function apiDelete<T = unknown>(
 // Cookie helpers for client-side
 function getCookie(name: string): string | undefined {
   if (typeof document === "undefined") return undefined;
-  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return match ? decodeURIComponent(match[2]) : undefined;
+  // Simple and reliable cookie reading
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const [cookieName, ...valueParts] = cookie.trim().split('=');
+    if (cookieName === name) {
+      return decodeURIComponent(valueParts.join('='));
+    }
+  }
+  return undefined;
 }
 
 function setCookie(name: string, value: string, maxAge: number = 7 * 24 * 60 * 60): void {
@@ -309,7 +345,20 @@ function setCookie(name: string, value: string, maxAge: number = 7 * 24 * 60 * 6
 
 function deleteCookie(name: string): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+  
+  // Delete with multiple path combinations to ensure complete cleanup
+  const paths = ['/', ''];
+  const sameSites = ['', '; SameSite=Lax'];
+  
+  paths.forEach(path => {
+    sameSites.forEach(sameSite => {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}${sameSite}`;
+    });
+  });
+  
+  // Also try to clear any other possible variations
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
+  document.cookie = `${name}=; max-age=0; path=/`;
 }
 
 /**
@@ -326,6 +375,19 @@ export async function clientApiFetch<T = unknown>(
     requiresAuth = true,
     ...rest 
   } = options;
+
+  // Early return for notifications when not authenticated
+  if (requiresAuth) {
+    const token = getCookie(ACCESS_TOKEN_COOKIE);
+    const isNotificationEndpoint = 
+      endpoint.includes('/notifications') ||
+      endpoint.includes('/notifications/count');
+    
+    if (!token && isNotificationEndpoint) {
+      // Return empty data for notification endpoints when not authenticated
+      return {} as T;
+    }
+  }
 
   const requestHeaders: HeadersInit = {
     "Content-Type": "application/json",
@@ -394,21 +456,25 @@ export async function clientApiFetch<T = unknown>(
             }
 
             if (response.status === 401) {
-              deleteCookie(ACCESS_TOKEN_COOKIE);
-              deleteCookie(REFRESH_TOKEN_COOKIE);
-              redirectToAuth();
+              const isBackgroundRequest = 
+                endpoint.includes('/notifications') ||
+                endpoint.includes('/count');
+              
+              if (!isBackgroundRequest) {
+                deleteCookie(ACCESS_TOKEN_COOKIE);
+                deleteCookie(REFRESH_TOKEN_COOKIE);
+              }
+              throw new ApiError('Authentication required', 401);
             }
           }
         }
       } catch {
         deleteCookie(ACCESS_TOKEN_COOKIE);
         deleteCookie(REFRESH_TOKEN_COOKIE);
-        redirectToAuth();
       }
     } else {
       deleteCookie(ACCESS_TOKEN_COOKIE);
       deleteCookie(REFRESH_TOKEN_COOKIE);
-      redirectToAuth();
     }
   }
 
@@ -475,8 +541,26 @@ export function setClientAuthTokens(accessToken: string, refreshToken?: string):
  * Clear auth tokens on client
  */
 export function clearClientAuthTokens(): void {
-  deleteCookie(ACCESS_TOKEN_COOKIE);
-  deleteCookie(REFRESH_TOKEN_COOKIE);
+  if (typeof document === 'undefined') return;
+
+  const cookieNames = ['accessToken', 'refreshToken'];
+  const paths = ['/', '/dashboard', ''];
+  const isProduction = process.env.NODE_ENV === "production";
+
+  cookieNames.forEach(name => {
+    paths.forEach(path => {
+      const base = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}`;
+      document.cookie = base;
+      document.cookie = `${base}; SameSite=Lax`;
+      if (isProduction) {
+        document.cookie = `${base}; SameSite=Lax; Secure`;
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}; Secure`;
+      }
+    });
+  });
+  
+  document.cookie = `accessToken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
+  document.cookie = `refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
 }
 
 /**

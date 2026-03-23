@@ -4,219 +4,270 @@ const { authenticate, authorize } = require("../middleware/auth");
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const Department = require("../models/Department");
+const { normalizeMunicipality } = require("../utils/normalize");
+const notificationService = require("../services/notification.service");
 
 // All agent routes require authentication and MUNICIPAL_AGENT role
 
 // Get agent's municipality from user profile
 async function getAgentMunicipality(userId) {
-  const user = await User.findById(userId).select("municipality municipalityName governorate");
-  return user;
+  const user = await User.findById(userId)
+    .populate('municipality', 'name governorate')
+    .select("municipality municipalityName governorate");
+  
+  // Get municipality name from either populated municipality or municipalityName field
+  let municipalityName = user?.municipalityName || "";
+  
+  // If municipality is populated, use its name
+  if (user?.municipality && typeof user.municipality === 'object') {
+    municipalityName = user.municipality.name || municipalityName;
+  }
+  
+  return {
+    ...user?.toObject(),
+    municipalityName,
+  };
 }
 
 // GET /api/agent/complaints - Get complaints for agent's municipality
 router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
   try {
     const user = await getAgentMunicipality(req.user.userId);
-    const municipalityId = user?.municipality;
-    const municipalityName = user?.municipalityName;
-    
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+
     const { status, category, page = 1, limit = 50 } = req.query;
-    
-    // Build query - filter by agent's municipality
-    const query = {};
-    
-    // If user has municipality ID, use it
-    if (municipalityId) {
-      // Use $in to match both ObjectId and string municipality
-      query.$or = [
-        { municipality: municipalityId },
-        { municipality: municipalityId.toString() }
-      ];
-    } else if (municipalityName) {
-      // Fallback to municipality name
-      query.municipalityName = municipalityName;
-    } else if (user?.governorate) {
-      // If no municipality, check by governorate
-      query.governorate = user.governorate;
-    }
-    // If no municipality or governorate is set, show no complaints (or all - depending on requirement)
-    
-    // Filter by status if provided
-    if (status) {
-      if (status === "ALL") {
-        // Show all statuses
-      } else if (status === "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED") {
-        // Show all relevant statuses for agent
-        query.status = { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
-      } else {
-        query.status = status;
-      }
-    }
-    // Default: show all statuses - no filter by default
-    
-    if (category) {
-      query.category = category;
+
+    if (!userMunicipality) {
+      return res.status(400).json({ message: "Municipality not configured for this user" });
     }
 
+    const allComplaints = await Complaint.find({})
+      .populate("createdBy", "fullName email")
+      .populate("assignedTo", "fullName")
+      .populate("assignedDepartment", "name")
+      .populate("municipality", "name governorate")
+      .sort({ createdAt: -1 });
+
+    const filtered = allComplaints.filter(c => {
+      const cMun = normalizeMunicipality(c.municipalityName || c.municipality?.name || "");
+      const cMunLoc = normalizeMunicipality(c.location?.municipality || "");
+      return cMun === userMunicipality || cMunLoc === userMunicipality;
+    });
+
+    let result = filtered;
+    if (status) {
+      if (status === "ALL") {
+      } else if (status === "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED") {
+        result = result.filter(c => ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"].includes(c.status));
+      } else {
+        result = result.filter(c => c.status === status);
+      }
+    }
+
+    if (category) {
+      result = result.filter(c => c.category === category);
+    }
+
+    const total = result.length;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    const [complaints, total] = await Promise.all([
-      Complaint.find(query)
-        .populate("createdBy", "fullName email phone")
-        .populate("assignedDepartment", "name")
-        .populate("assignedTo", "fullName")
-        .populate("municipality", "name governorate")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
-      Complaint.countDocuments(query)
-    ]);
+    const complaints = result.slice(skip, skip + parseInt(limit));
 
     res.json({
       success: true,
-      message: "Complaints retrieved successfully",
+      message: "Complaints fetched successfully",
       data: {
         complaints,
         pagination: {
-          total,
           page: parseInt(page),
           limit: parseInt(limit),
-          pages: Math.ceil(total / parseInt(limit))
-        }
-      }
+          total,
+          pages: Math.ceil(total / parseInt(limit)),
+        },
+      },
     });
   } catch (error) {
-    console.error("Agent get complaints error:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve complaints" });
+    console.error("Error fetching agent complaints:", error);
+    res.status(500).json({ message: "Failed to fetch complaints" });
   }
 });
 
-// PUT /api/agent/complaints/:id/validate - Validate a submitted complaint
+// GET /api/agent/queue - Get pending complaints in agent's municipality queue
+router.get("/queue", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+  try {
+    const user = await getAgentMunicipality(req.user.userId);
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+
+    if (!userMunicipality) {
+      return res.status(400).json({ message: "Municipality not configured" });
+    }
+
+    const allComplaints = await Complaint.find({})
+      .populate("createdBy", "fullName email phone")
+      .populate("assignedDepartment", "name")
+      .sort({ createdAt: -1 });
+
+    const complaints = allComplaints.filter(c => {
+      const cMun = normalizeMunicipality(c.municipalityName || c.municipality?.name || "");
+      const cMunLoc = normalizeMunicipality(c.location?.municipality || "");
+      return (cMun === userMunicipality || cMunLoc === userMunicipality) && ["SUBMITTED", "VALIDATED"].includes(c.status);
+    });
+
+    res.json(complaints);
+  } catch (error) {
+    console.error("Error fetching agent queue:", error);
+    res.status(500).json({ message: "Failed to fetch queue" });
+  }
+});
+
+// PUT /api/agent/complaints/:id/validate - Validate a complaint
 router.put("/complaints/:id/validate", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id);
-    
+
     if (!complaint) {
-      return res.status(404).json({ success: false, message: "Complaint not found" });
+      return res.status(404).json({ message: "Complaint not found" });
     }
 
-    // Only SUBMITTED complaints can be validated
-    if (complaint.status !== "SUBMITTED") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Only submitted complaints can be validated" 
-      });
-    }
-
-    // Check if complaint belongs to agent's municipality
     const user = await getAgentMunicipality(req.user.userId);
-    const municipalityId = user?.municipality;
-    const municipalityName = user?.municipalityName;
-    
-    if (municipalityId && complaint.municipality?.toString() !== municipalityId.toString()) {
-      return res.status(403).json({ success: false, message: "Complaint not in your municipality" });
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+
+    if (userMunicipality !== complaintMunicipality) {
+      return res.status(403).json({ message: "Complaint does not belong to your municipality" });
     }
-    if (municipalityName && complaint.municipalityName !== municipalityName) {
-      return res.status(403).json({ success: false, message: "Complaint not in your municipality" });
+
+    if (complaint.status !== "SUBMITTED") {
+      return res.status(400).json({ message: "Only SUBMITTED complaints can be validated" });
     }
 
     complaint.status = "VALIDATED";
+    complaint.validatedAt = new Date();
+    complaint.validatedBy = req.user.userId;
     await complaint.save();
 
-    res.json({
-      success: true,
-      message: "Complaint validated successfully",
-      data: complaint
-    });
-  } catch (error) {
-    console.error("Agent validate complaint error:", error);
-    res.status(500).json({ success: false, message: "Failed to validate complaint" });
-  }
-});
-
-// PUT /api/agent/complaints/:id/reject - Reject a submitted complaint with justification
-router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
-  try {
-    const { reason } = req.body;
-    
-    if (!reason) {
-      return res.status(400).json({ success: false, message: "Rejection reason is required" });
-    }
-
-    const complaint = await Complaint.findById(req.params.id);
-    
-    if (!complaint) {
-      return res.status(404).json({ success: false, message: "Complaint not found" });
-    }
-
-    // Only SUBMITTED complaints can be rejected
-    if (complaint.status !== "SUBMITTED") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Only submitted complaints can be rejected" 
+    // Notify citizen that complaint was validated
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "validated",
+        title: "Complaint Validated",
+        message: `Your complaint "${complaint.title}" has been validated and is being processed.`,
+        complaintId: complaint._id,
       });
     }
 
-    // Check if complaint belongs to agent's municipality
-    const user = await getAgentMunicipality(req.user.userId);
-    const municipalityId = user?.municipality;
-    const municipalityName = user?.municipalityName;
-    
-    if (municipalityId && complaint.municipality?.toString() !== municipalityId.toString()) {
-      return res.status(403).json({ success: false, message: "Complaint not in your municipality" });
+    res.json({ success: true, message: "Complaint validated successfully", data: complaint });
+  } catch (error) {
+    console.error("Error validating complaint:", error);
+    res.status(500).json({ message: "Failed to validate complaint" });
+  }
+});
+
+// PUT /api/agent/complaints/:id/reject - Reject a complaint
+router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ message: "Rejection reason is required" });
     }
-    if (municipalityName && complaint.municipalityName !== municipalityName) {
-      return res.status(403).json({ success: false, message: "Complaint not in your municipality" });
+
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    const user = await getAgentMunicipality(req.user.userId);
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+
+    if (userMunicipality !== complaintMunicipality) {
+      return res.status(403).json({ message: "Complaint does not belong to your municipality" });
+    }
+
+    if (complaint.status !== "SUBMITTED") {
+      return res.status(400).json({ message: "Only SUBMITTED complaints can be rejected" });
     }
 
     complaint.status = "REJECTED";
     complaint.rejectionReason = reason;
+    complaint.rejectedAt = new Date();
+    complaint.rejectedBy = req.user.userId;
     await complaint.save();
 
-    res.json({
-      success: true,
-      message: "Complaint rejected successfully",
-      data: complaint
-    });
+    // Notify citizen that complaint was rejected
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "rejected",
+        title: "Complaint Rejected",
+        message: `Your complaint "${complaint.title}" has been rejected. Reason: ${reason}`,
+        complaintId: complaint._id,
+      });
+    }
+
+    res.json({ success: true, message: "Complaint rejected", data: complaint });
   } catch (error) {
-    console.error("Agent reject complaint error:", error);
-    res.status(500).json({ success: false, message: "Failed to reject complaint" });
+    console.error("Error rejecting complaint:", error);
+    res.status(500).json({ message: "Failed to reject complaint" });
   }
 });
 
-// PUT /api/agent/complaints/:id/assign - Assign complaint to a department
-router.put("/complaints/:id/assign", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+// PUT /api/agent/complaints/:id/close - Close a resolved complaint
+router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    const user = await getAgentMunicipality(req.user.userId);
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+
+    if (userMunicipality !== complaintMunicipality) {
+      return res.status(403).json({ message: "Complaint does not belong to your municipality" });
+    }
+
+    if (complaint.status !== "RESOLVED") {
+      return res.status(400).json({ message: "Only RESOLVED complaints can be closed" });
+    }
+
+    complaint.status = "CLOSED";
+    complaint.closedAt = new Date();
+    complaint.closedBy = req.user.userId;
+    await complaint.save();
+
+    // Notify citizen that complaint was closed
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "closed",
+        title: "Complaint Closed",
+        message: `Your complaint "${complaint.title}" has been closed. Thank you for using our service.`,
+        complaintId: complaint._id,
+      });
+    }
+
+    res.json({ success: true, message: "Complaint closed", data: complaint });
+  } catch (error) {
+    console.error("Error closing complaint:", error);
+    res.status(500).json({ message: "Failed to close complaint" });
+  }
+});
+
+// PUT /api/agent/complaints/:id/assign-department - Assign complaint to department
+router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
   try {
     const { departmentId } = req.body;
-    
+
     if (!departmentId) {
       return res.status(400).json({ success: false, message: "Department ID is required" });
     }
 
     const complaint = await Complaint.findById(req.params.id);
-    
+
     if (!complaint) {
-      return res.status(404).json({ success: false, message: "Complaint not found" });
-    }
-
-    // Only VALIDATED complaints can be assigned to department
-    if (complaint.status !== "VALIDATED") {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Only validated complaints can be assigned to a department" 
-      });
-    }
-
-    // Check if complaint belongs to agent's municipality
-    const user = await getAgentMunicipality(req.user.userId);
-    const municipalityId = user?.municipality;
-    const municipalityName = user?.municipalityName;
-    
-    if (municipalityId && complaint.municipality?.toString() !== municipalityId.toString()) {
-      return res.status(403).json({ success: false, message: "Complaint not in your municipality" });
-    }
-    if (municipalityName && complaint.municipalityName !== municipalityName) {
-      return res.status(403).json({ success: false, message: "Complaint not in your municipality" });
+      return res.status(404).json({ message: "Complaint not found" });
     }
 
     // Verify department exists
@@ -226,32 +277,60 @@ router.put("/complaints/:id/assign", authenticate, authorize("MUNICIPAL_AGENT"),
     }
 
     complaint.assignedDepartment = departmentId;
-    complaint.status = "ASSIGNED";
+    
+    // Auto-validate and assign if not already validated
+    if (complaint.status === "SUBMITTED") {
+      complaint.status = "VALIDATED";
+      complaint.validatedAt = new Date();
+      complaint.validatedBy = req.user.userId;
+    }
+    
+    // Set to ASSIGNED when department is assigned
+    if (complaint.status === "VALIDATED") {
+      complaint.status = "ASSIGNED";
+    }
+    
     await complaint.save();
 
-    res.json({
-      success: true,
-      message: "Complaint assigned to department successfully",
-      data: complaint
+    // Notify department managers about the new assignment
+    await notificationService.notifyManagersByDepartment(null, departmentId, {
+      type: "assigned",
+      title: "New Complaint Assigned",
+      message: `Complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
+      complaintId: complaint._id,
     });
+    
+    // Also notify citizen if exists
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "assigned",
+        title: "Complaint Assigned",
+        message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
+        complaintId: complaint._id,
+      });
+    }
+
+    res.json({ success: true, message: "Complaint assigned to department", data: complaint });
   } catch (error) {
-    console.error("Agent assign complaint error:", error);
-    res.status(500).json({ success: false, message: "Failed to assign complaint" });
+    console.error("Error assigning department:", error);
+    res.status(500).json({ message: "Failed to assign department" });
   }
 });
 
-// GET /api/agent/departments - Get available departments
+// GET /api/agent/departments - Get ALL departments (agents can assign to any department)
 router.get("/departments", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
   try {
-    const departments = await Department.find({ isActive: true }).select("name email phone");
-    
+    const departments = await Department.find({})
+      .select("_id name email phone municipality municipalityName description")
+      .sort({ name: 1 });
+
     res.json({
       success: true,
-      data: departments
+      data: departments,
     });
   } catch (error) {
-    console.error("Agent get departments error:", error);
-    res.status(500).json({ success: false, message: "Failed to retrieve departments" });
+    console.error("Error fetching departments:", error);
+    res.status(500).json({ message: "Failed to fetch departments" });
   }
 });
 

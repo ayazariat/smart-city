@@ -1,12 +1,4 @@
-"""
-Category Predictor Service
-==========================
 
-Predicts complaint category based on description using Claude AI.
-- Uses Claude Haiku model (claude-haiku-4-5-20251001)
-- Returns predicted category, confidence, alternatives, and reasoning
-- Always falls back to {predicted: AUTRE, confidence: 0} on error
-"""
 
 import os
 import json

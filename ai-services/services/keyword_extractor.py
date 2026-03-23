@@ -1,12 +1,4 @@
-"""
-Keyword Extractor Service
-==========================
 
-Extracts keywords from complaint text using Claude AI + NLTK.
-- Uses Claude Haiku model for semantic understanding
-- Uses NLTK for basic NLP processing
-- Returns keywords, location keywords, urgency keywords, and similarity hash
-"""
 
 import os
 import json

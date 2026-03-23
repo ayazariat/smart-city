@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, authorize } = require("../middleware/auth");
 const Complaint = require("../models/Complaint");
 const RepairTeam = require("../models/RepairTeam");
+const notificationService = require("../services/notification.service");
 
 // All technician routes require authentication and TECHNICIAN role
 
@@ -13,10 +14,10 @@ router.get("/complaints", authenticate, authorize("TECHNICIAN"), async (req, res
     const technicianId = req.user.userId;
     
     // Find repair teams where this technician is a member
-    const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+    const teams = await RepairTeam.find({ members: technicianId }).select("_id name members").lean();
     const teamIds = teams.map(t => t._id);
     
-    // Build query - filter by technician's ID (assignedTo) OR as member of repair team
+    // Build query - filter by technician's ID (assignedTo) OR as member of repair team (assignedTeam)
     const query = {
       $or: [
         { assignedTo: technicianId },
@@ -28,13 +29,12 @@ router.get("/complaints", authenticate, authorize("TECHNICIAN"), async (req, res
     if (status) {
       if (status === "ALL") {
         // Show all statuses
-        delete query.status;
       } else {
         query.status = status;
       }
     } else {
-      // Default: show ASSIGNED and IN_PROGRESS complaints
-      query.status = { $in: ["ASSIGNED", "IN_PROGRESS"] };
+      // Default: show ASSIGNED, IN_PROGRESS, RESOLVED complaints
+      query.status = { $in: ["ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
     }
     
     if (category) {
@@ -48,7 +48,14 @@ router.get("/complaints", authenticate, authorize("TECHNICIAN"), async (req, res
         .populate("createdBy", "fullName email phone")
         .populate("assignedDepartment", "name")
         .populate("assignedTo", "fullName")
-        .populate("assignedTeam", "name members")
+        .populate({
+          path: "assignedTeam",
+          select: "name members",
+          populate: {
+            path: "members",
+            select: "fullName"
+          }
+        })
         .populate("municipality", "name governorate")
         .populate("beforePhotos.takenBy", "fullName")
         .populate("afterPhotos.takenBy", "fullName")
@@ -86,8 +93,16 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check if complaint is assigned to this technician
-    if (complaint.assignedTo?.toString() !== req.user.userId) {
+    // Check if complaint is assigned to this technician (via assignedTo or assignedTeam)
+    const technicianId = req.user.userId;
+    const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+    const teamIds = teams.map(t => t._id);
+    
+    const isAssigned = 
+      complaint.assignedTo?.toString() === technicianId ||
+      (complaint.assignedTeam && teamIds.some(id => id.toString() === complaint.assignedTeam?.toString()));
+    
+    if (!isAssigned) {
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
     }
 
@@ -100,7 +115,28 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
     }
 
     complaint.status = "IN_PROGRESS";
+    complaint.startedAt = new Date();
     await complaint.save();
+
+    // Notify department managers
+    if (complaint.assignedDepartment) {
+      await notificationService.notifyManagersByDepartment(null, complaint.assignedDepartment, {
+        type: "in_progress",
+        title: "Work Started",
+        message: `Technician started work on "${complaint.title}".`,
+        complaintId: complaint._id,
+      });
+    }
+
+    // Notify citizen
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "in_progress",
+        title: "Work Started",
+        message: `Work has started on your complaint "${complaint.title}".`,
+        complaintId: complaint._id,
+      });
+    }
 
     res.json({
       success: true,
@@ -124,8 +160,16 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check if complaint is assigned to this technician
-    if (complaint.assignedTo?.toString() !== req.user.userId) {
+    // Check if complaint is assigned to this technician (via assignedTo or assignedTeam)
+    const technicianId = req.user.userId;
+    const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+    const teamIds = teams.map(t => t._id);
+    
+    const isAssigned = 
+      complaint.assignedTo?.toString() === technicianId ||
+      (complaint.assignedTeam && teamIds.some(id => id.toString() === complaint.assignedTeam?.toString()));
+    
+    if (!isAssigned) {
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
     }
 
@@ -143,7 +187,7 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
         type: photo.type || "photo",
         url: photo.url,
         takenAt: new Date(),
-        takenBy: req.user.userId
+        takenBy: technicianId
       }));
     }
 
@@ -153,7 +197,7 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
         type: photo.type || "photo",
         url: photo.url,
         takenAt: new Date(),
-        takenBy: req.user.userId
+        takenBy: technicianId
       }));
     }
 
@@ -163,6 +207,26 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
       complaint.resolutionNotes = notes;
     }
     await complaint.save();
+
+    // Notify department managers and citizen
+    if (complaint.assignedDepartment) {
+      await notificationService.notifyManagersByDepartment(null, complaint.assignedDepartment, {
+        type: "resolved",
+        title: "Task Resolved",
+        message: `Technician has resolved complaint "${complaint.title}".`,
+        complaintId: complaint._id,
+      });
+    }
+    
+    // Notify citizen
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "resolved",
+        title: "Complaint Resolved",
+        message: `Your complaint "${complaint.title}" has been resolved.`,
+        complaintId: complaint._id,
+      });
+    }
 
     res.json({
       success: true,
@@ -272,14 +336,122 @@ router.post("/complaints/:id/after-photo", authenticate, authorize("TECHNICIAN")
   }
 });
 
+// POST /api/technician/complaints/:id/comments - Add comment/note to complaint
+router.post("/complaints/:id/comments", authenticate, authorize("TECHNICIAN"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content, type = 'NOTE' } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ success: false, message: 'Comment content is required' });
+    }
+
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: 'Complaint not found' });
+    }
+
+    // Verify technician is assigned to this complaint
+    if (complaint.assignedTo?.toString() !== req.user.userId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to comment on this complaint' });
+    }
+
+    // Add comment
+    const comment = {
+      text: content,
+      type: type, // NOTE or BLOCAGE
+      author: req.user.userId,
+      createdAt: new Date()
+    };
+
+    if (!complaint.comments) {
+      complaint.comments = [];
+    }
+    complaint.comments.push(comment);
+    await complaint.save();
+
+    res.json({
+      success: true,
+      message: 'Comment added successfully',
+      data: {
+        _id: comment._id,
+        text: comment.text,
+        type: comment.type,
+        author: { _id: req.user.userId, fullName: req.user.name },
+        createdAt: comment.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Technician add comment error:', error);
+    res.status(500).json({ success: false, message: 'Failed to add comment' });
+  }
+});
+
+// PUT /api/technician/complaints/:id/location - Update technician location for GPS tracking
+router.put("/complaints/:id/location", authenticate, authorize("TECHNICIAN"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude, timestamp } = req.body;
+
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ success: false, message: 'Latitude and longitude are required' });
+    }
+
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: 'Complaint not found' });
+    }
+
+    // Verify technician is assigned to this complaint
+    if (complaint.assignedTo?.toString() !== req.user.userId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update location for this complaint' });
+    }
+
+    // Update or create technician location tracking
+    if (!complaint.technicianLocations) {
+      complaint.technicianLocations = [];
+    }
+    complaint.technicianLocations.push({
+      technician: req.user.userId,
+      latitude,
+      longitude,
+      timestamp: timestamp || new Date()
+    });
+
+    await complaint.save();
+
+    res.json({
+      success: true,
+      message: 'Location updated successfully'
+    });
+  } catch (error) {
+    console.error('Technician update location error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update location' });
+  }
+});
+
 // GET /api/technician/stats - Get technician statistics
 router.get("/stats", authenticate, authorize("TECHNICIAN"), async (req, res) => {
   try {
+    const technicianId = req.user.userId;
+    
+    // Find repair teams where this technician is a member
+    const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+    const teamIds = teams.map(t => t._id);
+    
+    // Build query for all complaints assigned to technician (via assignedTo or assignedTeam)
+    const baseQuery = {
+      $or: [
+        { assignedTo: technicianId },
+        { assignedTeam: { $in: teamIds } }
+      ]
+    };
+
     const [total, assigned, inProgress, resolved] = await Promise.all([
-      Complaint.countDocuments({ assignedTo: req.user.userId }),
-      Complaint.countDocuments({ assignedTo: req.user.userId, status: "ASSIGNED" }),
-      Complaint.countDocuments({ assignedTo: req.user.userId, status: "IN_PROGRESS" }),
-      Complaint.countDocuments({ assignedTo: req.user.userId, status: "RESOLVED" })
+      Complaint.countDocuments(baseQuery),
+      Complaint.countDocuments({ ...baseQuery, status: "ASSIGNED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
+      Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" })
     ]);
 
     res.json({

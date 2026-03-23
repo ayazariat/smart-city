@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
+import { clearClientAuthTokens } from "@/lib/api";
 
 /**
  * Login Page - Smart City Tunis
@@ -19,29 +20,42 @@ import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptcha
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isLoading, error, user } = useAuthStore();
+  const activatedParam = useMemo(
+    () => searchParams.get("activated") === "true",
+    [searchParams]
+  );
+  const { login, isLoading, error, user, hydrated, clearError } = useAuthStore();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [localError, setLocalError] = useState("");
+  const [successMessage, setSuccessMessage] = useState(() =>
+    activatedParam ? "Account activated! You can now login." : ""
+  );
+
+  // Check for activation success
+  useEffect(() => {
+    if (activatedParam) {
+      // Clean URL
+      window.history.replaceState({}, "", "/");
+    }
+  }, [activatedParam]);
+
+  // Clear error on mount
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
 
   // Redirect if already logged in
   useEffect(() => {
+    if (!hydrated) return;
+
     if (user) {
-      // Check for redirect parameter in URL
-      const params = new URLSearchParams(window.location.search);
-      const redirectParam = params.get("redirect");
-      if (redirectParam && !redirectParam.startsWith("/") && !redirectParam.startsWith("http")) {
-        // Safe internal redirect
-        router.push(redirectParam);
-      } else if (redirectParam) {
-        router.push("/dashboard");
-      } else {
-        router.push("/dashboard");
-      }
+      router.replace('/dashboard');
+      return;
     }
-  }, [user, router]);
+  }, [user, router, hydrated]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -51,6 +65,9 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError("");
+
+    // Clear any stale tokens before login
+    clearClientAuthTokens();
 
     let captchaToken: string | undefined;
     const recaptchaEnabled = !!process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
@@ -70,7 +87,8 @@ export default function LoginPage() {
         password: formData.password,
         captchaToken,
       });
-      router.push("/dashboard");
+      // Navigate immediately — no setTimeout
+      router.replace('/dashboard');
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Login failed");
     }
@@ -105,6 +123,14 @@ export default function LoginPage() {
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setLocalError("")}>
                   {error}
+                </Alert>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="mb-6 animate-slideInLeft">
+                <Alert variant="success" onClose={() => setSuccessMessage("")}>
+                  {successMessage}
                 </Alert>
               </div>
             )}

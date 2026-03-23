@@ -105,15 +105,21 @@ export default function DashboardComplaintsPage() {
             />
           ) : (
             <div className="grid gap-4">
-              {filteredComplaints.map((complaint) => (
+              {filteredComplaints.map((complaint) => {
+                const fromParam = user?.role === "MUNICIPAL_AGENT" ? "agent" 
+                  : user?.role === "DEPARTMENT_MANAGER" ? "manager"
+                  : user?.role === "ADMIN" ? "admin"
+                  : user?.role === "TECHNICIAN" ? "tasks" : "";
+                return (
                 <ComplaintCard
                   key={complaint._id || complaint.id}
                   complaint={complaint}
-                  href={`/dashboard/complaints/${complaint._id || complaint.id}`}
+                  href={`/dashboard/complaints/${complaint._id || complaint.id}${fromParam ? `?from=${fromParam}` : ''}`}
                   showCitizen
                   showDepartment
                 />
-              ))}
+                );
+              })}
             </div>
           )
         )}

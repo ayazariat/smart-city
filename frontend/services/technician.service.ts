@@ -2,11 +2,11 @@
  * Technician Service
  * 
  * Handles technician-specific operations:
- * - GET /technician/tasks (assigned complaints)
- * - PUT /technician/tasks/:id/status
- * - PUT /technician/tasks/:id/status + note + proof photos
- * - POST /technician/tasks/:id/comments { type: BLOCAGE }
- * - PUT /technician/tasks/:id/location (GPS tracking)
+ * - GET /technician/complaints (assigned complaints)
+ * - PUT /technician/complaints/:id/start
+ * - PUT /technician/complaints/:id/complete
+ * - POST /technician/complaints/:id/comments
+ * - PUT /technician/complaints/:id/location (GPS tracking)
  */
 
 import { apiClient } from "./api.client";
@@ -19,7 +19,8 @@ export type TaskStatus = "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
 interface TasksResponse {
   success: boolean;
   data: {
-    tasks: Complaint[];
+    tasks?: Complaint[];
+    complaints?: Complaint[];
     pagination: {
       total: number;
       page: number;
@@ -59,7 +60,7 @@ export interface LocationUpdate {
 }
 
 /**
- * Get technician's assigned tasks
+ * Get technician's assigned tasks/complaints
  */
 export async function getTechnicianTasks(params?: {
   status?: string;
@@ -72,7 +73,7 @@ export async function getTechnicianTasks(params?: {
   if (params?.limit) searchParams.set("limit", params.limit.toString());
 
   const queryString = searchParams.toString();
-  const endpoint = `/technician/tasks${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/technician/complaints${queryString ? `?${queryString}` : ""}`;
 
   return apiClient.get<TasksResponse>(endpoint);
 }
@@ -81,7 +82,7 @@ export async function getTechnicianTasks(params?: {
  * Get single task detail
  */
 export async function getTaskDetail(taskId: string): Promise<TaskDetailResponse> {
-  return apiClient.get<TaskDetailResponse>(`/technician/tasks/${taskId}`);
+  return apiClient.get<TaskDetailResponse>(`/technician/complaints/${taskId}`);
 }
 
 /**
@@ -92,7 +93,18 @@ export async function updateTaskStatus(
   status: TaskStatus,
   notes?: string
 ): Promise<StatusUpdateResponse> {
-  return apiClient.put<StatusUpdateResponse>(`/technician/tasks/${taskId}/status`, {
+  // Use the correct endpoints based on status
+  if (status === "IN_PROGRESS") {
+    return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/start`, {
+      notes,
+    });
+  }
+  if (status === "RESOLVED") {
+    return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/complete`, {
+      notes,
+    });
+  }
+  return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/status`, {
     status,
     notes,
   });
@@ -102,7 +114,7 @@ export async function updateTaskStatus(
  * Start work on a task
  */
 export async function startWork(taskId: string): Promise<StatusUpdateResponse> {
-  return updateTaskStatus(taskId, "IN_PROGRESS");
+  return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/start`, {});
 }
 
 /**
@@ -113,8 +125,7 @@ export async function resolveTask(
   resolutionNotes: string,
   proofPhotos?: string[]
 ): Promise<StatusUpdateResponse> {
-  return apiClient.put<StatusUpdateResponse>(`/technician/tasks/${taskId}/status`, {
-    status: "RESOLVED",
+  return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/complete`, {
     notes: resolutionNotes,
     proofPhotos,
   });
@@ -129,7 +140,7 @@ export async function addTaskComment(
   content: string,
   type: "NOTE" | "BLOCAGE" = "NOTE"
 ): Promise<CommentResponse> {
-  return apiClient.post<CommentResponse>(`/technician/tasks/${taskId}/comments`, {
+  return apiClient.post<CommentResponse>(`/technician/complaints/${taskId}/comments`, {
     content,
     type,
   });
@@ -153,7 +164,7 @@ export async function updateLocation(
   location: LocationUpdate
 ): Promise<{ success: boolean; message: string }> {
   return apiClient.put<{ success: boolean; message: string }>(
-    `/technician/tasks/${taskId}/location`,
+    `/technician/complaints/${taskId}/location`,
     location
   );
 }

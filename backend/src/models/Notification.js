@@ -5,12 +5,12 @@ const notificationSchema = new mongoose.Schema(
     recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     type: {
       type: String,
-      enum: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "REJECTED", "SLA_ALERT", "COMMENT", "CONFIRMATION"],
-      default: "COMMENT"
+      enum: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "REJECTED", "SLA_ALERT", "COMMENT", "CONFIRMATION", "COMPLAINT", "ASSIGNMENT", "SYSTEM"]
     },
     title: { type: String, required: true },
     message: { type: String, required: true },
     complaint: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint" },
+    relatedId: { type: mongoose.Schema.Types.ObjectId },
     isRead: { type: Boolean, default: false },
   },
   { timestamps: true }

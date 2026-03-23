@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Department = require("../models/Department");
 const Municipality = require("../models/Municipality");
 const { sendMagicLinkEmail } = require("../utils/mailer");
+const { normalizeMunicipality } = require("../utils/normalize");
 
 // Tunisia Governorates and their municipalities
 const TUNISIA_GEOGRAPHY = {
@@ -203,10 +204,12 @@ class UserController {
         return res.status(400).json({ success: false, message: "Invalid governorate" });
       }
 
-      // Validate municipality if provided
+      // Validate municipality if provided (with normalized comparison)
       if (municipality && governorate) {
         const municipalities = TUNISIA_GEOGRAPHY[governorate] || [];
-        if (!municipalities.includes(municipality)) {
+        const normalizedInput = normalizeMunicipality(municipality);
+        const isValid = municipalities.some(m => normalizeMunicipality(m) === normalizedInput);
+        if (!isValid) {
           return res.status(400).json({ success: false, message: "Invalid municipality for selected governorate" });
         }
       }
@@ -235,7 +238,9 @@ class UserController {
         governorate: governorate || "",
         municipality: municipalityId || null,
         municipalityName: municipality || "",
-        isVerified: true, // Admin-created users are verified by default
+        isVerified: false, // Must verify via email
+        isActive: false, // Must activate via magic link
+        status: "PENDING_VERIFICATION",
         magicToken,
         magicTokenExpires,
       });
@@ -324,8 +329,12 @@ class UserController {
         if (governorate || user.governorate) {
           const gov = governorate || user.governorate;
           const municipalities = TUNISIA_GEOGRAPHY[gov] || [];
-          if (municipality && !municipalities.includes(municipality)) {
-            return res.status(400).json({ success: false, message: "Invalid municipality for selected governorate" });
+          if (municipality) {
+            const normalizedInput = normalizeMunicipality(municipality);
+            const isValid = municipalities.some(m => normalizeMunicipality(m) === normalizedInput);
+            if (!isValid) {
+              return res.status(400).json({ success: false, message: "Invalid municipality for selected governorate" });
+            }
           }
         }
         // Use municipalityId if provided, otherwise keep the string for backward compatibility

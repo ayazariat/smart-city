@@ -29,26 +29,15 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
         return;
       }
 
-      // If user is already loaded from persisted storage, access is granted
-      if (user) {
-        // Check role-based access
-        if (allowedRoles && !allowedRoles.includes(user.role)) {
-          router.push("/unauthorized");
-          return;
-        }
-        setIsReady(true);
-        return;
-      }
-
-      // We have token but no user yet - need to verify
+      // CRITICAL: Always verify the token with the server
+      // Don't trust localStorage blindly - the token might be expired
       setIsVerifying(true);
       
       // Try to refresh token first if we have a refresh token
       if (refreshToken) {
         const refreshed = await refreshAccessToken();
         if (refreshed) {
-          // Token was refreshed, now verify session
-          const { token: newToken, user: refreshedUser } = useAuthStore.getState();
+          const { user: refreshedUser } = useAuthStore.getState();
           if (refreshedUser) {
             if (allowedRoles && !allowedRoles.includes(refreshedUser.role)) {
               router.push("/unauthorized");
@@ -61,14 +50,15 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
         }
       }
 
+      // Verify the session with the server
       try {
         const isValid = await verifySession();
         if (!isValid) {
-          router.push(`/?redirect=${encodeURIComponent(pathname)}`);
+          router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
           return;
         }
       } catch {
-        router.push(`/?redirect=${encodeURIComponent(pathname)}`);
+        router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
         return;
       }
 
@@ -79,6 +69,10 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
           router.push("/unauthorized");
           return;
         }
+      } else {
+        // No user after verification means token was invalid
+        router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
+        return;
       }
 
       setIsVerifying(false);
