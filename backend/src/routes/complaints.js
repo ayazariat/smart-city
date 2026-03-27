@@ -53,6 +53,7 @@ router.get("/archived", authenticate, async (req, res) => {
         ];
       }
     }
+    // ADMIN sees all archived complaints - no additional filter needed
     if (req.user.role === 'DEPARTMENT_MANAGER') {
       query.assignedDepartment = req.user.department;
     }

@@ -34,23 +34,31 @@ router.get("/complaints", authenticate, authorize("DEPARTMENT_MANAGER"), async (
     
     const { status, category, page = 1, limit = 50 } = req.query;
     
-    // Build query - filter by manager's department
+    // Build query - filter by manager's department or municipality
     const query = {};
     
     if (departmentId) {
       query.assignedDepartment = departmentId;
+    } else {
+      // If no department, filter by user's municipality as fallback
+      const user = await User.findById(req.user.userId).select('municipality municipalityName').lean();
+      if (user?.municipality) {
+        query.municipality = user.municipality;
+      } else if (user?.municipalityName) {
+        query.municipalityName = user.municipalityName;
+      }
     }
     
     // Filter by status if provided
     if (status) {
       if (status === "ALL") {
-        // Show all statuses for the department
+        // Show all statuses
         delete query.status;
       } else {
         query.status = status;
       }
     } else {
-      // Default: show ASSIGNED, IN_PROGRESS complaints
+      // Default: show ASSIGNED, IN_PROGRESS, RESOLVED complaints
       query.status = { $in: ["ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
     }
     
@@ -81,7 +89,8 @@ router.get("/complaints", authenticate, authorize("DEPARTMENT_MANAGER"), async (
           page: parseInt(page),
           limit: parseInt(limit),
           pages: Math.ceil(total / parseInt(limit))
-        }
+        },
+        departmentName: department?.name || ""
       }
     });
   } catch (error) {
@@ -114,10 +123,20 @@ router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTM
 
     complaint.assignedTo = technicianId;
     complaint.status = "ASSIGNED";
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "ASSIGNED",
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: `Assigned to technician`
+    });
+    
     await complaint.save();
 
     // Notify the technician about the new task
-    await notificationService.sendNotification(null, technicianId, {
+    await notificationService.sendNotification(req.app.get('io'), technicianId, {
       type: "assigned",
       title: "New Task Assigned",
       message: `A new task "${complaint.title || 'Unknown'}" has been assigned to you.`,
@@ -126,7 +145,7 @@ router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTM
 
     // Also notify the citizen
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "assigned",
         title: "Complaint Assigned",
         message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a technician.`,
@@ -214,7 +233,7 @@ router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MA
 
     // Notify all team members
     for (const tech of technicians) {
-      await notificationService.sendNotification(null, tech._id, {
+      await notificationService.sendNotification(req.app.get('io'), tech._id, {
         type: "assigned",
         title: "New Task Assigned",
         message: `A new task "${complaint.title || 'Unknown'}" has been assigned to your team.`,
@@ -224,7 +243,7 @@ router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MA
 
     // Also notify the citizen
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "assigned",
         title: "Complaint Assigned",
         message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a repair team.`,
@@ -290,20 +309,30 @@ router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAG
 });
 
 // GET /api/manager/technicians - Get technicians in manager's department
-router.get("/technicians", authenticate, authorize("DEPARTMENT_MANAGER"), async (req, res) => {
+router.get("/technicians", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), async (req, res) => {
   try {
-    const department = await getManagerDepartment(req.user.userId);
-    const departmentId = department?._id;
+    // Admin can see all technicians, manager only sees their department's technicians
+    let technicians;
     
-    if (!departmentId) {
-      return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-    }
+    if (req.user.role === "ADMIN") {
+      technicians = await User.find({ 
+        role: "TECHNICIAN",
+        isActive: true 
+      }).select("fullName email phone department");
+    } else {
+      const department = await getManagerDepartment(req.user.userId);
+      const departmentId = department?._id;
+      
+      if (!departmentId) {
+        return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+      }
 
-    const technicians = await User.find({ 
-      department: departmentId, 
-      role: "TECHNICIAN",
-      isActive: true 
-    }).select("fullName email phone");
+      technicians = await User.find({ 
+        department: departmentId, 
+        role: "TECHNICIAN",
+        isActive: true 
+      }).select("fullName email phone");
+    }
 
     res.json({
       success: true,

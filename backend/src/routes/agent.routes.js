@@ -41,36 +41,45 @@ router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req
       return res.status(400).json({ message: "Municipality not configured for this user" });
     }
 
-    const allComplaints = await Complaint.find({})
-      .populate("createdBy", "fullName email")
-      .populate("assignedTo", "fullName")
-      .populate("assignedDepartment", "name")
-      .populate("municipality", "name governorate")
-      .sort({ createdAt: -1 });
+    // Create case-insensitive regex for municipality matching
+    const munRegex = new RegExp("^" + userMunicipality.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "$", "i");
 
-    const filtered = allComplaints.filter(c => {
-      const cMun = normalizeMunicipality(c.municipalityName || c.municipality?.name || "");
-      const cMunLoc = normalizeMunicipality(c.location?.municipality || "");
-      return cMun === userMunicipality || cMunLoc === userMunicipality;
-    });
+    // Build query with MongoDB regex for municipality fields
+    const query = {
+      $or: [
+        { municipalityNormalized: userMunicipality },
+        { municipalityName: munRegex },
+        { "location.municipality": munRegex }
+      ]
+    };
 
-    let result = filtered;
-    if (status) {
-      if (status === "ALL") {
-      } else if (status === "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED") {
-        result = result.filter(c => ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"].includes(c.status));
+    // Apply status filter
+    if (status && status !== "ALL") {
+      if (status.includes(",")) {
+        query.status = { $in: status.split(",") };
       } else {
-        result = result.filter(c => c.status === status);
+        query.status = status;
       }
     }
 
+    // Apply category filter
     if (category) {
-      result = result.filter(c => c.category === category);
+      query.category = category;
     }
 
-    const total = result.length;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const complaints = result.slice(skip, skip + parseInt(limit));
+    
+    const [complaints, total] = await Promise.all([
+      Complaint.find(query)
+        .populate("createdBy", "fullName email")
+        .populate("assignedTo", "fullName")
+        .populate("assignedDepartment", "name")
+        .populate("municipality", "name governorate")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Complaint.countDocuments(query)
+    ]);
 
     res.json({
       success: true,
@@ -83,6 +92,7 @@ router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req
           total,
           pages: Math.ceil(total / parseInt(limit)),
         },
+        municipalityName: user.municipalityName || userMunicipality
       },
     });
   } catch (error) {
@@ -143,11 +153,20 @@ router.put("/complaints/:id/validate", authenticate, authorize("MUNICIPAL_AGENT"
     complaint.status = "VALIDATED";
     complaint.validatedAt = new Date();
     complaint.validatedBy = req.user.userId;
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "VALIDATED",
+      updatedBy: req.user.userId,
+      updatedAt: new Date()
+    });
+    
     await complaint.save();
 
     // Notify citizen that complaint was validated
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "validated",
         title: "Complaint Validated",
         message: `Your complaint "${complaint.title}" has been validated and is being processed.`,
@@ -193,11 +212,21 @@ router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"),
     complaint.rejectionReason = reason;
     complaint.rejectedAt = new Date();
     complaint.rejectedBy = req.user.userId;
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "REJECTED",
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: reason
+    });
+    
     await complaint.save();
 
     // Notify citizen that complaint was rejected
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "rejected",
         title: "Complaint Rejected",
         message: `Your complaint "${complaint.title}" has been rejected. Reason: ${reason}`,
@@ -236,11 +265,20 @@ router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), 
     complaint.status = "CLOSED";
     complaint.closedAt = new Date();
     complaint.closedBy = req.user.userId;
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "CLOSED",
+      updatedBy: req.user.userId,
+      updatedAt: new Date()
+    });
+    
     await complaint.save();
 
     // Notify citizen that complaint was closed
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "closed",
         title: "Complaint Closed",
         message: `Your complaint "${complaint.title}" has been closed. Thank you for using our service.`,
@@ -293,7 +331,7 @@ router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIP
     await complaint.save();
 
     // Notify department managers about the new assignment
-    await notificationService.notifyManagersByDepartment(null, departmentId, {
+    await notificationService.notifyManagersByDepartment(req.app.get('io'), departmentId, {
       type: "assigned",
       title: "New Complaint Assigned",
       message: `Complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
@@ -302,7 +340,7 @@ router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIP
     
     // Also notify citizen if exists
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "assigned",
         title: "Complaint Assigned",
         message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
@@ -359,11 +397,21 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
     complaint.status = "CLOSED";
     complaint.closedAt = new Date();
     complaint.closedBy = req.user.userId;
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "CLOSED",
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: "Resolution approved"
+    });
+    
     await complaint.save();
 
     // Notify citizen
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
         type: "closed",
         title: "Complaint Closed",
         message: `Your complaint "${complaint.title}" has been resolved and closed.`,
@@ -373,7 +421,7 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
 
     // Notify technician who submitted the resolution
     if (complaint.assignedTo) {
-      await notificationService.sendNotification(null, complaint.assignedTo, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.assignedTo, {
         type: "resolution_approved",
         title: "Resolution Approved",
         message: `Your resolution for "${complaint.title}" has been approved by the agent.`,
@@ -419,11 +467,21 @@ router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICI
     // Revert status back to IN_PROGRESS
     complaint.status = "IN_PROGRESS";
     complaint.resolutionRejectionReason = rejectionReason;
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "IN_PROGRESS",
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: `Resolution rejected: ${rejectionReason}`
+    });
+    
     await complaint.save();
 
     // Notify technician who submitted the resolution
     if (complaint.assignedTo) {
-      await notificationService.sendNotification(null, complaint.assignedTo, {
+      await notificationService.sendNotification(req.app.get('io'), complaint.assignedTo, {
         type: "resolution_rejected",
         title: "Resolution Rejected",
         message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}`,

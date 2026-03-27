@@ -3,9 +3,15 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3 } from "lucide-react";
+import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
+import { agentService } from "@/services/agent.service";
+import { managerService } from "@/services/manager.service";
+import { complaintService } from "@/services/complaint.service";
+import { technicianService } from "@/services/technician.service";
+import { adminService } from "@/services/admin.service";
+import { categoryLabels } from "@/lib/complaints";
 import { Notification } from "@/types";
 
 // Separate component that uses useSearchParams
@@ -19,6 +25,15 @@ function DashboardContent() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  
+  // Stats state for agent/manager
+  const [stats, setStats] = useState<any>({});
+  const [byCategory, setByCategory] = useState<Record<string, number>>({});
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  // Municipality complaints for citizens
+  const [municipalityComplaints, setMunicipalityComplaints] = useState<any[]>([]);
+  const [loadingMunicipalityComplaints, setLoadingMunicipalityComplaints] = useState(false);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -80,6 +95,119 @@ function DashboardContent() {
     setShowNotifications(false);
   };
 
+  // Fetch stats for all roles
+  const fetchStats = async () => {
+    const { token } = useAuthStore.getState();
+    if (!token || !user) return;
+    
+    try {
+      setLoadingStats(true);
+      
+      let statsRes;
+      if (user.role === "MUNICIPAL_AGENT") {
+        statsRes = await agentService.getStats();
+      } else if (user.role === "DEPARTMENT_MANAGER") {
+        statsRes = await managerService.getStats();
+      } else if (user.role === "TECHNICIAN") {
+        statsRes = await technicianService.getTechnicianStats();
+      } else if (user.role === "ADMIN") {
+        statsRes = await adminService.getStats();
+      }
+      
+      if (statsRes?.data) {
+        setStats(statsRes.data as any);
+        setByCategory((statsRes.data as any).byCategory || {});
+      }
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  // Fetch municipality complaints for citizens
+  const fetchMunicipalityComplaints = async () => {
+    const { token } = useAuthStore.getState();
+    if (!token || !user || user.role !== "CITIZEN") return;
+    
+    try {
+      setLoadingMunicipalityComplaints(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const response = await fetch(
+        `${apiUrl}/public/my-municipality-complaints?limit=20&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`,
+        { 
+          credentials: "include",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        }
+      );
+      const data = await response.json();
+      if (data.success && data.complaints) {
+        setMunicipalityComplaints(data.complaints);
+      }
+    } catch (err) {
+      console.error("Error fetching municipality complaints:", err);
+    } finally {
+      setLoadingMunicipalityComplaints(false);
+    }
+  };
+
+  // Handle upvote for citizen
+  const handleUpvote = async (complaintId: string) => {
+    const { token } = useAuthStore.getState();
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/upvote`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMunicipalityComplaints(prev => prev.map((c: any) => 
+          c._id === complaintId 
+            ? { ...c, upvoteCount: data.voteCount }
+            : c
+        ));
+      }
+    } catch (err) {
+      console.error("Upvote failed:", err);
+    }
+  };
+
+  // Handle confirm for citizen
+  const handleConfirm = async (complaintId: string) => {
+    const { token } = useAuthStore.getState();
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/confirm`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMunicipalityComplaints(prev => prev.map((c: any) => 
+          c._id === complaintId 
+            ? { ...c, confirmationCount: data.confirmationCount }
+            : c
+        ));
+      }
+    } catch (err) {
+      console.error("Confirm failed:", err);
+    }
+  };
+
   // Fetch notifications on mount and periodically
   useEffect(() => {
     const { token } = useAuthStore.getState();
@@ -88,6 +216,22 @@ function DashboardContent() {
       // Poll for new notifications every 30 seconds
       const interval = setInterval(fetchNotifications, 30000);
       return () => clearInterval(interval);
+    }
+  }, [hydrated, user]);
+
+  // Fetch stats for all roles on mount
+  useEffect(() => {
+    const { token } = useAuthStore.getState();
+    if (hydrated && user && token) {
+      fetchStats();
+    }
+  }, [hydrated, user]);
+
+  // Fetch municipality complaints for citizens
+  useEffect(() => {
+    const { token } = useAuthStore.getState();
+    if (hydrated && user && token && user.role === "CITIZEN") {
+      fetchMunicipalityComplaints();
     }
   }, [hydrated, user]);
 
@@ -427,6 +571,7 @@ function DashboardContent() {
               </span>
             </Link>
           )}
+
           {/* Archive Card - All roles */}
           <Link href="/archive" className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
             <div className="flex items-center gap-3 mb-4">
@@ -443,54 +588,178 @@ function DashboardContent() {
               <span className="group-hover:translate-x-1 transition-transform">→</span>
             </span>
           </Link>
-          {/* Analytics - Agent/Manager only (not Admin) */}
-          {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER") && (
-            <Link href="/dashboard/analytics" className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-900">Analytics</h3>
-              </div>
-              <p className="text-slate-600 mb-4 text-sm">
-                View performance statistics
-              </p>
-              <span className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors group">
-                View Analytics
-                <span className="group-hover:translate-x-1 transition-transform">→</span>
-              </span>
-            </Link>
-          )}
         </div>
 
         {/* Statistics Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-900 mb-6">
-            {dashboardConfig.statsTitle}
-          </h3>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-slate-900">
+              {dashboardConfig.statsTitle}
+            </h3>
+            {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER") && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchStats}
+                  className="text-sm text-primary hover:text-primary-700 font-medium"
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+          </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {/* Stats Cards - All roles can refresh */}
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={fetchStats}
+              className="text-sm text-primary hover:text-primary-700 font-medium"
+            >
+              Refresh
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total */}
             <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-              <div className="text-2xl font-bold text-primary mb-1">0</div>
+              <div className="text-2xl font-bold text-primary mb-1">
+                {stats.total || 0}
+              </div>
               <div className="text-sm text-slate-600">Total</div>
             </div>
             
-            <div className="bg-attention/5 rounded-xl p-4 border border-attention/10">
-              <div className="text-2xl font-bold text-attention mb-1">0</div>
+            {/* In Progress */}
+            <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+              <div className="text-2xl font-bold text-orange-600 mb-1">
+                {stats.inProgress || 0}
+              </div>
               <div className="text-sm text-slate-600">In Progress</div>
             </div>
             
-            <div className="bg-success/5 rounded-xl p-4 border border-success/10">
-              <div className="text-2xl font-bold text-success mb-1">0</div>
+            {/* Resolved */}
+            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+              <div className="text-2xl font-bold text-green-600 mb-1">
+                {stats.resolved || 0}
+              </div>
               <div className="text-sm text-slate-600">Resolved</div>
             </div>
             
-            <div className="bg-urgent/5 rounded-xl p-4 border border-urgent/10">
-              <div className="text-2xl font-bold text-urgent mb-1">0</div>
-              <div className="text-sm text-slate-600">Urgent</div>
+            {/* Overdue */}
+            <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+              <div className="text-2xl font-bold text-red-600 mb-1">
+                {stats.totalOverdue || stats.overdue || 0}
+              </div>
+              <div className="text-sm text-slate-600">Overdue</div>
             </div>
           </div>
+
+          {/* Category Chart - For roles that have category data */}
+          {Object.keys(byCategory).length > 0 && (
+            <div className="mt-6 pt-6 border-t border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                Complaints by Category
+              </h4>
+              <div className="space-y-3">
+                {Object.entries(byCategory).map(([cat, count]: [string, any]) => {
+                  const maxCount = Math.max(...Object.values(byCategory));
+                  const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                  
+                  return (
+                    <div key={cat} className="flex items-center gap-3">
+                      <div className="w-32 text-sm font-medium text-slate-700 truncate">
+                        {categoryLabels[cat] || cat}
+                      </div>
+                      <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary rounded-full transition-all duration-500"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                      <div className="w-10 text-sm font-bold text-slate-700 text-right">
+                        {count}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Municipality Complaints Section - For CITIZEN role */}
+        {user?.role === "CITIZEN" && municipalityComplaints && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-primary" />
+                  Complaints in Your Area
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Support issues in your municipality by confirming or upvoting
+                </p>
+              </div>
+              <button
+                onClick={fetchMunicipalityComplaints}
+                disabled={loadingMunicipalityComplaints}
+                className="text-sm text-primary hover:text-primary/700 font-medium disabled:opacity-50"
+              >
+                {loadingMunicipalityComplaints ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {municipalityComplaints.slice(0, 6).map((complaint: any) => (
+                <div 
+                  key={complaint._id}
+                  className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow"
+                >
+                  <div className="relative h-24 bg-gradient-to-br from-slate-100 to-slate-50">
+                    {complaint.media?.[0]?.url ? (
+                      <img 
+                        src={complaint.media[0].url} 
+                        alt={complaint.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <FileText className="w-8 h-8 text-slate-300" />
+                      </div>
+                    )}
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-white/90 text-slate-700">
+                        {categoryLabels[complaint.category] || complaint.category}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2">{complaint.title}</h4>
+                    <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
+                    </p>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => handleConfirm(complaint._id)}
+                        className="flex items-center gap-1 px-2 py-1 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-xs text-green-600 font-medium transition-colors"
+                      >
+                        <CheckCircle className="w-3 h-3" />
+                        {complaint.confirmationCount || 0}
+                      </button>
+                      <button
+                        onClick={() => handleUpvote(complaint._id)}
+                        className="flex items-center gap-1 px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-xs text-red-500 font-medium transition-colors"
+                      >
+                        <Heart className="w-3 h-3" />
+                        {complaint.upvoteCount || 0}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

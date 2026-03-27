@@ -33,6 +33,7 @@ class ComplaintController {
         category,
         governorate: governorate || "",
         municipality: municipality || "",
+        municipalityName: municipality || "",
         municipalityNormalized: normalizedMunicipality,
         latitude: latitude || null,
         longitude: longitude || null,
@@ -537,12 +538,25 @@ class ComplaintController {
       // Update status
       complaint.status = status;
       
+      // Add to status history with actor info
+      if (!complaint.statusHistory) complaint.statusHistory = [];
+      complaint.statusHistory.push({
+        status: status,
+        updatedBy: userId,
+        updatedAt: new Date(),
+        notes: rejectionReason || null
+      });
+      
       if (status === "REJECTED" && rejectionReason) {
         complaint.rejectionReason = rejectionReason;
       }
 
       if (status === "RESOLVED") {
         complaint.resolvedAt = new Date();
+      }
+
+      if (status === "CLOSED") {
+        complaint.closedAt = new Date();
       }
 
       await complaint.save();

@@ -10,7 +10,6 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { managerService } from "@/services/manager.service";
 import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
-import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
 import {
   PageHeader,
   LoadingSpinner,
@@ -36,11 +35,8 @@ export default function ManagerPendingPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
-  const [governorateFilter, setGovernorateFilter] = useState<string>("");
-  const [municipalityFilter, setMunicipalityFilter] = useState<string>("");
-  const [availableMunicipalities, setAvailableMunicipalities] = useState<string[]>([]);
+  const [departmentName, setDepartmentName] = useState<string>("");
   const [technicians, setTechnicians] = useState<Array<{ _id: string; fullName: string }>>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -53,21 +49,17 @@ export default function ManagerPendingPage() {
 
   // Update available municipalities when governorate changes
   useEffect(() => {
-    if (governorateFilter) {
-      setAvailableMunicipalities(getMunicipalitiesByGovernorate(governorateFilter));
-    } else {
-      setAvailableMunicipalities([]);
-    }
-    setMunicipalityFilter("");
-  }, [governorateFilter]);
-
-  useEffect(() => {
     if (!token) router.push("/");
   }, [token, router]);
 
   const refreshComplaints = async () => {
     const response = await managerService.getManagerComplaints({ status: statusFilter || undefined });
-    if (response.data) setComplaints(response.data.complaints);
+    if (response.data) {
+      setComplaints(response.data.complaints);
+      if (response.data.departmentName) {
+        setDepartmentName(response.data.departmentName);
+      }
+    }
   };
 
   useEffect(() => {
@@ -80,7 +72,12 @@ export default function ManagerPendingPage() {
           limit: 100,
           status: statusFilter || undefined,
         });
-        if (response.data?.complaints) setComplaints(response.data.complaints);
+        if (response.data?.complaints) {
+          setComplaints(response.data.complaints);
+          if (response.data.departmentName) {
+            setDepartmentName(response.data.departmentName);
+          }
+        }
       } catch (err) {
         console.error("Error fetching complaints:", err);
         setComplaints([]);
@@ -140,21 +137,19 @@ export default function ManagerPendingPage() {
     }
   };
 
-  // Filter complaints
+  // Filter complaints based on all filters
   const filteredComplaints = complaints.filter((c) => {
-    if (categoryFilter && c.category !== categoryFilter) return false;
     if (priorityFilter) {
-      if (priorityFilter === "HIGH" && (c.priorityScore || 0) < 15) return false;
-      if (priorityFilter === "MEDIUM" && ((c.priorityScore || 0) < 6 || (c.priorityScore || 0) >= 15)) return false;
-      if (priorityFilter === "LOW" && (c.priorityScore || 0) >= 6) return false;
+      const score = c.priorityScore || 0;
+      if (priorityFilter === "HIGH" && score < 15) return false;
+      if (priorityFilter === "MEDIUM" && (score < 6 || score >= 15)) return false;
+      if (priorityFilter === "LOW" && score >= 6) return false;
     }
-    if (governorateFilter && c.location?.governorate !== governorateFilter) return false;
-    if (municipalityFilter && c.municipalityName !== municipalityFilter) return false;
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
       c.description?.toLowerCase().includes(q) ||
-      categoryLabels[c.category]?.toLowerCase().includes(q)
+      c.location?.address?.toLowerCase().includes(q)
     );
   });
 
@@ -210,7 +205,49 @@ export default function ManagerPendingPage() {
   };
 
   const exportPDF = () => {
-    alert("PDF export feature coming soon!");
+    // Create printable content
+    const content = filteredComplaints.map(c => 
+      `${c._id?.slice(-6)} | ${c.description?.slice(0, 50)} | ${c.status} | ${categoryLabels[c.category] || c.category} | ${c.municipalityName || ""}`
+    ).join("\n");
+    
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Department Complaints Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { color: #16a34a; }
+              pre { white-space: pre-wrap; font-size: 12px; }
+              table { width: 100%; border-collapse: collapse; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { background: #f3f4f6; }
+            </style>
+          </head>
+          <body>
+            <h1>Department Complaints Report</h1>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+            <p>Department: ${departmentName || "All"}</p>
+            <p>Total: ${filteredComplaints.length} complaints</p>
+            <table>
+              <tr><th>Reference</th><th>Description</th><th>Status</th><th>Category</th><th>Municipality</th></tr>
+              ${filteredComplaints.map(c => `
+                <tr>
+                  <td>${c._id?.slice(-6)}</td>
+                  <td>${(c.description || "").slice(0, 50)}</td>
+                  <td>${c.status}</td>
+                  <td>${categoryLabels[c.category] || c.category}</td>
+                  <td>${c.municipalityName || ""}</td>
+                </tr>
+              `).join("")}
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
   };
 
   if (!user || user.role !== "DEPARTMENT_MANAGER") return null;
@@ -219,7 +256,7 @@ export default function ManagerPendingPage() {
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="All Complaints"
-        subtitle="Manager complaint management"
+        subtitle={departmentName ? `Complaints in ${departmentName}` : "Manager complaint management"}
         backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
@@ -284,12 +321,12 @@ export default function ManagerPendingPage() {
         <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Team Performance</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-3 bg-green-50 rounded-xl">
-              <p className="text-2xl font-bold text-green-600">{resolvedCount}</p>
-              <p className="text-xs text-slate-500 mt-1">Resolved</p>
-            </div>
             <div className="text-center p-3 bg-blue-50 rounded-xl">
-              <p className="text-2xl font-bold text-blue-600">{avgDays}</p>
+              <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
+              <p className="text-xs text-slate-500 mt-1">In Progress</p>
+            </div>
+            <div className="text-center p-3 bg-purple-50 rounded-xl">
+              <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
               <p className="text-xs text-slate-500 mt-1">Avg Days</p>
             </div>
             <div className="text-center p-3 bg-emerald-50 rounded-xl">
@@ -369,49 +406,6 @@ export default function ManagerPendingPage() {
                   <option value="RESOLVED">Resolved</option>
                 </select>
 
-                {/* Governorate Filter */}
-                <select
-                  value={governorateFilter}
-                  onChange={(e) => setGovernorateFilter(e.target.value)}
-                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                >
-                  <option value="">All Governorates</option>
-                  {TUNISIA_GEOGRAPHY.map((gov) => (
-                    <option key={gov.governorate} value={gov.governorate}>
-                      {gov.governorate}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Municipality Filter */}
-                <select
-                  value={municipalityFilter}
-                  onChange={(e) => setMunicipalityFilter(e.target.value)}
-                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                  disabled={!governorateFilter}
-                >
-                  <option value="">All Municipalities</option>
-                  {availableMunicipalities.map((mun) => (
-                    <option key={mun} value={mun}>
-                      {mun}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Category Filter */}
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                >
-                  <option value="">All Categories</option>
-                  {Object.entries(categoryLabels).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-
                 {/* Priority Filter */}
                 <select
                   value={priorityFilter}
@@ -442,7 +436,7 @@ export default function ManagerPendingPage() {
             <EmptyState
               icon="file"
               message={
-                searchTerm || statusFilter || categoryFilter || priorityFilter || governorateFilter
+                searchTerm || statusFilter || priorityFilter
                   ? "Try adjusting your search or filters."
                   : "No complaints pending for your department."
               }

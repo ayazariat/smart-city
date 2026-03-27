@@ -116,26 +116,44 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
 
     complaint.status = "IN_PROGRESS";
     complaint.startedAt = new Date();
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "IN_PROGRESS",
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: "Work started by technician"
+    });
+    
     await complaint.save();
 
-    // Notify department managers
+    // Notify department managers (don't fail if notification fails)
     if (complaint.assignedDepartment) {
-      await notificationService.notifyManagersByDepartment(null, complaint.assignedDepartment, {
-        type: "in_progress",
-        title: "Work Started",
-        message: `Technician started work on "${complaint.title}".`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.notifyManagersByDepartment(req.app.get('io'), complaint.assignedDepartment, {
+          type: "in_progress",
+          title: "Work Started",
+          message: `Technician started work on "${complaint.title}".`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify managers:", notifError);
+      }
     }
 
-    // Notify citizen
+    // Notify citizen (don't fail if notification fails)
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
-        type: "in_progress",
-        title: "Work Started",
-        message: `Work has started on your complaint "${complaint.title}".`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+          type: "in_progress",
+          title: "Work Started",
+          message: `Work has started on your complaint "${complaint.title}".`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify citizen:", notifError);
+      }
     }
 
     res.json({
@@ -206,26 +224,44 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
     if (notes) {
       complaint.resolutionNotes = notes;
     }
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: "RESOLVED",
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: notes || "Resolved by technician"
+    });
+    
     await complaint.save();
 
-    // Notify department managers and citizen
+    // Notify department managers and citizen (don't fail if notification fails)
     if (complaint.assignedDepartment) {
-      await notificationService.notifyManagersByDepartment(null, complaint.assignedDepartment, {
-        type: "resolved",
-        title: "Task Resolved",
-        message: `Technician has resolved complaint "${complaint.title}".`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.notifyManagersByDepartment(req.app.get('io'), complaint.assignedDepartment, {
+          type: "resolved",
+          title: "Task Resolved",
+          message: `Technician has resolved complaint "${complaint.title}".`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify managers:", notifError);
+      }
     }
     
-    // Notify citizen
+    // Notify citizen (don't fail if notification fails)
     if (complaint.createdBy) {
-      await notificationService.sendNotification(null, complaint.createdBy, {
-        type: "resolved",
-        title: "Complaint Resolved",
-        message: `Your complaint "${complaint.title}" has been resolved.`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+          type: "resolved",
+          title: "Complaint Resolved",
+          message: `Your complaint "${complaint.title}" has been resolved.`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify citizen:", notifError);
+      }
     }
 
     res.json({
@@ -486,6 +522,53 @@ router.get("/stats", authenticate, authorize("TECHNICIAN"), async (req, res) => 
   } catch (error) {
     console.error("Technician get stats error:", error);
     res.status(500).json({ success: false, message: "Failed to retrieve statistics" });
+  }
+});
+
+// GET /api/technician/complaints/:id - Get single complaint detail
+router.get("/complaints/:id", authenticate, authorize("TECHNICIAN"), async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id)
+      .populate("createdBy", "fullName email phone")
+      .populate("assignedTo", "fullName")
+      .populate("assignedDepartment", "name")
+      .populate({
+        path: "assignedTeam",
+        select: "name members",
+        populate: {
+          path: "members",
+          select: "fullName"
+        }
+      })
+      .populate("municipality", "name governorate")
+      .populate("beforePhotos.takenBy", "fullName")
+      .populate("afterPhotos.takenBy", "fullName");
+    
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    // Check if complaint is assigned to this technician
+    const technicianId = req.user.userId;
+    const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+    const teamIds = teams.map(t => t._id);
+    
+    const isAssigned = 
+      complaint.assignedTo?.toString() === technicianId ||
+      (complaint.assignedTeam && teamIds.some(id => id.toString() === complaint.assignedTeam?._id?.toString()));
+    
+    if (!isAssigned) {
+      return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
+    }
+
+    res.json({
+      success: true,
+      message: "Complaint retrieved successfully",
+      data: complaint
+    });
+  } catch (error) {
+    console.error("Technician get complaint error:", error);
+    res.status(500).json({ success: false, message: "Failed to retrieve complaint" });
   }
 });
 

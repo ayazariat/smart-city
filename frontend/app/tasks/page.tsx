@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -71,11 +71,11 @@ export default function TechnicianTasksPage() {
 
   const [selectedTask, setSelectedTask] = useState<Complaint | null>(null);
   const [resolveModal, setResolveModal] = useState(false);
-  const [taskDetailModal, setTaskDetailModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [resolveNote, setResolveNote] = useState("");
   const [proofPhotos, setProofPhotos] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (hydrated && user && user.role !== "TECHNICIAN") {
@@ -209,8 +209,7 @@ export default function TechnicianTasksPage() {
   };
 
   const openTaskDetail = (task: Complaint) => {
-    setSelectedTask(task);
-    setTaskDetailModal(true);
+    router.push(`/tasks/${task._id || task.id}`);
   };
 
   const filteredTasks = useMemo(() => {
@@ -551,122 +550,30 @@ export default function TechnicianTasksPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Proof Photos (recommended)</label>
             <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-primary/40 transition-colors">
-              <input type="file" multiple accept="image/*" className="hidden" id="proof-photos-input-2" onChange={(e) => { const files = Array.from(e.target.files || []); setProofPhotos(files); }} />
+              <input 
+                ref={fileInputRef}
+                type="file" 
+                multiple 
+                accept="image/*" 
+                className="hidden" 
+                onChange={(e) => { 
+                  const files = Array.from(e.target.files || []); 
+                  setProofPhotos(files); 
+                }} 
+              />
               <div 
                 className="cursor-pointer flex flex-col items-center"
-                onClick={() => document.getElementById('proof-photos-input-2')?.click()}
+                onClick={() => fileInputRef.current?.click()}
               >
                 <Camera className="w-10 h-10 mx-auto text-slate-400 mb-2" />
                 <p className="text-sm text-slate-500">Click to upload proof photos</p>
+                {proofPhotos.length > 0 && (
+                  <p className="text-xs text-green-600 mt-2">{proofPhotos.length} file(s) selected</p>
+                )}
               </div>
             </div>
           </div>
         </div>
-      </Modal>
-
-      {/* Task Detail Modal */}
-      <Modal
-        isOpen={taskDetailModal}
-        onClose={() => setTaskDetailModal(false)}
-        title="Task Details"
-        description={selectedTask ? `#${selectedTask.referenceId || (selectedTask._id || "").slice(-6)}` : ""}
-        size="lg"
-        footer={<Button variant="ghost" onClick={() => setTaskDetailModal(false)}>Close</Button>}
-      >
-        {selectedTask && (
-          <div className="space-y-6">
-            {/* Status and Priority Badges */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold shadow-sm ${statusConfig[selectedTask.status]?.bgClass || "bg-slate-100"} ${statusConfig[selectedTask.status]?.textClass || "text-slate-700"}`}>
-                {statusConfig[selectedTask.status]?.label || selectedTask.status}
-              </span>
-              {selectedTask.urgency && (
-                <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold shadow-sm ${urgencyConfig[selectedTask.urgency]?.bgClass || "bg-slate-100"} ${urgencyConfig[selectedTask.urgency]?.textClass || "text-slate-700"}`}>
-                  {urgencyConfig[selectedTask.urgency]?.label || selectedTask.urgency}
-                </span>
-              )}
-              {selectedTask.category && (
-                <span className="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold bg-primary/10 text-primary shadow-sm">
-                  {categoryLabels[selectedTask.category] || selectedTask.category}
-                </span>
-              )}
-            </div>
-
-            {/* Title and Description */}
-            <div className="bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-2xl p-6 border border-slate-200">
-              <h4 className="text-xl font-bold text-slate-900 mb-3">{selectedTask.title || "No title"}</h4>
-              <p className="text-slate-600 leading-relaxed">{selectedTask.description}</p>
-            </div>
-
-            {/* Info Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-1">Submitted</p>
-                <p className="text-sm font-bold text-blue-900">{new Date(selectedTask.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}</p>
-              </div>
-              {selectedTask.updatedAt && (
-                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-                  <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-1">Last Updated</p>
-                  <p className="text-sm font-bold text-purple-900">{new Date(selectedTask.updatedAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Location */}
-            {selectedTask.location && (
-              <div className="space-y-3">
-                <h5 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-primary" />
-                  Location
-                </h5>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <p className="text-sm font-medium text-slate-700">{selectedTask.location.address || "No address provided"}</p>
-                  {selectedTask.location.commune && (
-                    <p className="text-xs text-slate-500 mt-1">{selectedTask.location.commune}</p>
-                  )}
-                </div>
-                {selectedTask.location.coordinates && selectedTask.location.coordinates.length >= 2 && (
-                  <div className="space-y-2">
-                    <iframe
-                      title="Location Map"
-                      width="100%"
-                      height="200"
-                      loading="lazy"
-                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${selectedTask.location.coordinates[1] - 0.005}%2C${selectedTask.location.coordinates[0] - 0.005}%2C${selectedTask.location.coordinates[1] + 0.005}%2C${selectedTask.location.coordinates[0] + 0.005}&layer=mapnik&marker=${selectedTask.location.coordinates[0]}%2C${selectedTask.location.coordinates[1]}`}
-                      className="rounded-xl border-2 border-slate-200 w-full"
-                    />
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${selectedTask.location.coordinates[0]},${selectedTask.location.coordinates[1]}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-600 transition-colors text-sm font-bold shadow-lg"
-                    >
-                      <MapPin className="w-4 h-4" />
-                      Open in Google Maps
-                    </a>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Media */}
-            {selectedTask.media && selectedTask.media.length > 0 && (
-              <div>
-                <h5 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
-                  <Camera className="w-4 h-4 text-primary" />
-                  Photos ({selectedTask.media.length})
-                </h5>
-                <div className="grid grid-cols-3 gap-2">
-                  {selectedTask.media.slice(0, 6).map((m, i) => (
-                    <a key={i} href={m.url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-slate-200 hover:ring-2 hover:ring-primary/30 transition-all">
-                      <img src={m.url} alt={`Photo ${i + 1}`} className="w-full h-20 object-cover" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </Modal>
     </div>
   );

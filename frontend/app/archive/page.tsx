@@ -101,6 +101,55 @@ function ArchivePageContent() {
     router.push(`/archive?${params.toString()}`);
   };
 
+  const exportCSV = () => {
+    const headers = ["Reference", "Title", "Category", "Status", "Municipality", "Created"];
+    const rows = filteredComplaints.map(c => [
+      c.referenceId || c._id?.slice(-6),
+      c.title?.replace(/,/g, " "),
+      c.category,
+      c.status,
+      c.municipalityName || "",
+      new Date(c.createdAt).toLocaleDateString()
+    ]);
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `archive_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
+  const exportPDF = () => {
+    const content = filteredComplaints.map(c => 
+      `${c.referenceId || c._id?.slice(-6)} | ${c.title} | ${c.status} | ${c.municipalityName || ""}`
+    ).join("\n");
+    
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Archive Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { color: #16a34a; }
+              pre { white-space: pre-wrap; }
+            </style>
+          </head>
+          <body>
+            <h1>Archived Complaints</h1>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+            <p>Total: ${filteredComplaints.length} complaints</p>
+            <pre>${content}</pre>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
+
   const filteredComplaints = complaints.filter((c) => {
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
@@ -216,6 +265,14 @@ function ArchivePageContent() {
                 <option value="CLOSED">Closed</option>
                 <option value="REJECTED">Rejected</option>
               </select>
+              
+              {/* Export Buttons */}
+              <Button onClick={exportCSV} className="bg-green-600 hover:bg-green-700 text-white">
+                Export CSV
+              </Button>
+              <Button onClick={exportPDF} className="bg-red-600 hover:bg-red-700 text-white">
+                Export PDF
+              </Button>
             </div>
           </div>
         </div>

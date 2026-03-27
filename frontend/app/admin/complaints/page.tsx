@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { complaintService } from "@/services/complaint.service";
+import { adminService } from "@/services/admin.service";
 import { Complaint } from "@/types";
 import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
 import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
+import { 
+  FileText, Download, Filter, Search, TrendingUp, CheckCircle, 
+  Clock, AlertTriangle, BarChart3 
+} from "lucide-react";
 import {
   PageHeader,
   LoadingSpinner,
@@ -27,6 +32,9 @@ export default function AdminComplaintsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [availableMunicipalities, setAvailableMunicipalities] = useState<string[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [stats, setStats] = useState<any>({});
+  const [byCategory, setByCategory] = useState<Record<string, number>>({});
 
   // Update available municipalities when governorate changes
   useEffect(() => {
@@ -65,9 +73,27 @@ export default function AdminComplaintsPage() {
         setLoading(false);
       }
     };
+  }, [token, user]);
 
-    fetchComplaints();
-  }, [token, user, statusFilter, governorateFilter, municipalityFilter, searchTerm]);
+  // Fetch stats
+  const fetchStats = async () => {
+    if (!token) return;
+    try {
+      const statsRes = await adminService.getStats();
+      if (statsRes?.data) {
+        setStats(statsRes.data as any);
+        setByCategory((statsRes.data as any).byCategory || {});
+      }
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (token && user?.role === "ADMIN") {
+      fetchStats();
+    }
+  }, [token, user]);
 
   const filteredComplaints = complaints.filter((c) => {
     if (categoryFilter && c.category !== categoryFilter) return false;
@@ -112,6 +138,23 @@ export default function AdminComplaintsPage() {
     const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
     return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 4 && daysSinceCreation <= 7;
   }).length;
+  const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+  const avgDays = complaints.length > 0 
+    ? Math.round(complaints.reduce((acc, c) => {
+        const days = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        return acc + days;
+      }, 0) / complaints.length * 10) / 10
+    : 0;
+  const resolutionRate = complaints.length > 0 
+    ? Math.round((resolvedCount / complaints.length) * 100) 
+    : 0;
+
+  // Get categories count
+  const categoryCount: Record<string, number> = {};
+  filteredComplaints.forEach(c => {
+    const cat = categoryLabels[c.category] || c.category || "Other";
+    categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+  });
 
   if (!user || user.role !== "ADMIN") return null;
 
@@ -129,6 +172,92 @@ export default function AdminComplaintsPage() {
       />
 
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Total Complaints</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">{complaints.length}</p>
+              </div>
+              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-slate-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Resolved</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">At Risk (SLA)</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">{atRiskCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <Clock className="w-6 h-6 text-amber-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Overdue</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{overdueCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Team Performance */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">Team Performance</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-3 bg-blue-50 rounded-xl">
+              <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
+              <p className="text-xs text-slate-500 mt-1">In Progress</p>
+            </div>
+            <div className="text-center p-3 bg-purple-50 rounded-xl">
+              <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
+              <p className="text-xs text-slate-500 mt-1">Avg Days</p>
+            </div>
+            <div className="text-center p-3 bg-emerald-50 rounded-xl">
+              <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
+              <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
+            </div>
+            <div className="text-center p-3 bg-orange-50 rounded-xl">
+              <p className="text-2xl font-bold text-orange-600">{complaints.filter(c => (c.priorityScore || 0) >= 15).length}</p>
+              <p className="text-xs text-slate-500 mt-1">High Priority</p>
+            </div>
+          </div>
+          
+          {/* Categories */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <p className="text-sm text-slate-600 mb-2">Categories:</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(categoryCount).slice(0, 5).map(([cat, count]) => (
+                <span key={cat} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
+                  {categoryLabels[cat] || cat}: {count}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Advanced Filters */}
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-100">
           <div className="flex flex-col md:flex-row gap-3 items-center">

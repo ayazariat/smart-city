@@ -241,17 +241,19 @@ export default function ComplaintDetailPage() {
   // Fetch departments when opening department modal
   useEffect(() => {
     const fetchDepartments = async () => {
-      if (actionModal === "department") {
+      if (actionModal === "department" && user?.role === "ADMIN") {
         try {
           const deptData = await adminService.getDepartments();
           setDepartments(deptData);
         } catch (error) {
           console.error("Error fetching departments:", error);
+          // Set empty departments on error
+          setDepartments([]);
         }
       }
       
       // Fetch technicians for manager
-      if (actionModal === "technician") {
+      if (actionModal === "technician" && (user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN")) {
         try {
           const techData = await managerService.getTechnicians();
           if (techData.data) {
@@ -263,7 +265,7 @@ export default function ComplaintDetailPage() {
       }
     };
     fetchDepartments();
-  }, [actionModal]);
+  }, [actionModal, user?.role]);
 
   const getComplaintIdDisplay = (id: string) => {
     return `RC-${id.slice(-6)}`;
@@ -1223,10 +1225,10 @@ export default function ComplaintDetailPage() {
                     </>
                   )}
 
-                  {/* RESOLVED - Agent/Manager/Admin can Close */}
+                  {/* RESOLVED - Agent/Admin can Close */}
                   {complaint.status === "RESOLVED" && (
                     <>
-                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
                         <Button
                           className="w-full bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700"
                           icon={<CheckCircle2 className="w-4 h-4" />}

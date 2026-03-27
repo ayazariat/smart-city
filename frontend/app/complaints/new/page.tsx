@@ -915,6 +915,25 @@ export default function NewComplaintPage() {
             </p>
           </div>
 
+          {/* Description */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Description <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the issue in detail. Include relevant details like location, time, and any other information that might help us resolve this faster..."
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50 resize-none"
+              rows={5}
+              maxLength={1000}
+              required
+            />
+            <p className="text-xs text-slate-400 mt-2 text-right">
+              {description.length}/1000 characters (minimum 20)
+            </p>
+          </div>
+
           {/* AI Suggested Category */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <div className="flex items-center justify-between mb-3">
@@ -1010,25 +1029,6 @@ export default function NewComplaintPage() {
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* Description */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Description <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the issue in detail. Include relevant details like location, time, and any other information that might help us resolve this faster..."
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50 resize-none"
-              rows={5}
-              maxLength={1000}
-              required
-            />
-            <p className="text-xs text-slate-400 mt-2 text-right">
-              {description.length}/1000 characters (minimum 20)
-            </p>
           </div>
 
           {/* Date/Time & Phone */}
@@ -1212,7 +1212,7 @@ export default function NewComplaintPage() {
             </Link>
             <Button
               type="submit"
-              disabled={isSubmitting || !title || !description || !category || media.length === 0}
+              disabled={isSubmitting || !title || !description || !category}
               size="lg"
               className="flex-1"
             >

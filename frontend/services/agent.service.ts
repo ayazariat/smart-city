@@ -20,6 +20,7 @@ export const getAgentComplaints = async (params?: {
       limit: number;
       pages: number;
     };
+    municipalityName?: string;
   };
 }> => {
   const searchParams = new URLSearchParams();
@@ -29,7 +30,7 @@ export const getAgentComplaints = async (params?: {
   if (params?.limit) searchParams.set("limit", params.limit.toString());
 
   const queryString = searchParams.toString();
-  const endpoint = `/agent/complaints${queryString ? `?${queryString}` : "?status=ALL"}`;
+  const endpoint = `/agent/complaints${queryString ? `?${queryString}` : ""}`;
 
   return apiClient.get<{
     success: boolean;

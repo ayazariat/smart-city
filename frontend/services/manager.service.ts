@@ -27,6 +27,7 @@ interface ManagerComplaintsResponse {
       limit: number;
       pages: number;
     };
+    departmentName?: string;
   };
 }
 

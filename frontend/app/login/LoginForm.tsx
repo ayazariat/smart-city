@@ -105,7 +105,7 @@ function LoginForm() {
             <div className="mt-3">
               <Link 
                 href="/transparency" 
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors text-sm font-medium"
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-green-50/80 text-green-700 border border-green-200/60 hover:bg-green-100 transition-colors text-sm font-medium shadow-sm"
               >
                 <BarChart3 className="w-4 h-4" />
                 View Public Statistics

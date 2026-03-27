@@ -175,4 +175,45 @@ export const adminService = {
     const response = await apiClient.get<ApiResponse<any[]>>("/admin/departments");
     return response.data;
   },
+
+  /**
+   * Get complaint statistics (system-wide for admin)
+   */
+  async getStats(): Promise<{
+    success: boolean;
+    data: {
+      total: number;
+      submitted: number;
+      validated: number;
+      assigned: number;
+      inProgress: number;
+      resolved: number;
+      closed: number;
+      rejected: number;
+      totalOverdue: number;
+      totalAtRisk: number;
+      resolutionRate: number;
+      averageResolutionTime: number;
+      byCategory: Record<string, number>;
+    };
+  }> {
+    return apiClient.get<{
+      success: boolean;
+      data: {
+        total: number;
+        submitted: number;
+        validated: number;
+        assigned: number;
+        inProgress: number;
+        resolved: number;
+        closed: number;
+        rejected: number;
+        totalOverdue: number;
+        totalAtRisk: number;
+        resolutionRate: number;
+        averageResolutionTime: number;
+        byCategory: Record<string, number>;
+      };
+    }>("/complaints/stats");
+  },
 };

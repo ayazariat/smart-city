@@ -1,7 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const Complaint = require("../models/Complaint");
+const User = require("../models/User");
 const { authenticate, authorize } = require("../middleware/auth");
+const { normalizeMunicipality } = require("../utils/normalize");
 
 // Public routes - NO authentication required
 
@@ -285,6 +287,60 @@ router.get("/complaints", async (req, res) => {
     });
   } catch (error) {
     console.error("Public complaints error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch complaints" });
+  }
+});
+
+// GET /api/public/my-municipality-complaints - Get complaints for citizen's municipality (requires auth)
+router.get("/my-municipality-complaints", authenticate, authorize("CITIZEN"), async (req, res) => {
+  try {
+    const { category, status, page = 1, limit = 20 } = req.query;
+    
+    // Get citizen's municipality from their profile
+    const user = await User.findById(req.user.userId).select('municipality municipalityName').lean();
+    const userMunicipality = user?.municipalityName || "";
+    const normalizedMun = normalizeMunicipality(userMunicipality);
+    
+    if (!normalizedMun) {
+      return res.json({ success: true, complaints: [], total: 0, page: 1, pages: 1 });
+    }
+    
+    const munRegex = new RegExp("^" + normalizedMun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "$", "i");
+    
+    const query = {
+      $or: [
+        { municipalityNormalized: normalizedMun },
+        { municipalityName: munRegex },
+        { "location.municipality": munRegex }
+      ],
+      status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] }
+    };
+    
+    if (category) {
+      query.category = category;
+    }
+    
+    if (status) {
+      const statusList = status.split(",");
+      query.status = { $in: statusList };
+    }
+    
+    const total = await Complaint.countDocuments(query);
+    const complaints = await Complaint.find(query)
+      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId')
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
+      .sort({ createdAt: -1 });
+    
+    res.json({
+      success: true,
+      complaints,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / parseInt(limit))
+    });
+  } catch (error) {
+    console.error("My municipality complaints error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch complaints" });
   }
 });

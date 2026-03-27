@@ -159,7 +159,8 @@ export const apiClient = {
     }
 
     if (response.status === 403) {
-      return {} as T;
+      const message = await apiClient.extractErrorMessage(response);
+      throw new Error(message || "Access denied - You don't have permission for this action");
     }
 
     if (response.status === 401) {
