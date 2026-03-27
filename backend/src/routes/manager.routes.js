@@ -325,20 +325,53 @@ router.get("/stats", authenticate, authorize("DEPARTMENT_MANAGER"), async (req, 
       return res.status(400).json({ success: false, message: "No department assigned to this manager" });
     }
 
-    const [total, assigned, inProgress, resolved] = await Promise.all([
-      Complaint.countDocuments({ assignedDepartment: departmentId }),
-      Complaint.countDocuments({ assignedDepartment: departmentId, status: "ASSIGNED" }),
-      Complaint.countDocuments({ assignedDepartment: departmentId, status: "IN_PROGRESS" }),
-      Complaint.countDocuments({ assignedDepartment: departmentId, status: "RESOLVED" })
+    const baseQuery = { assignedDepartment: departmentId, isArchived: false };
+    
+    const [total, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory] = await Promise.all([
+      Complaint.countDocuments(baseQuery),
+      Complaint.countDocuments({ ...baseQuery, status: "SUBMITTED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "VALIDATED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "ASSIGNED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
+      Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "REJECTED" }),
+      Complaint.countDocuments({ ...baseQuery, slaStatus: "OVERDUE" }),
+      Complaint.countDocuments({ ...baseQuery, slaStatus: "AT_RISK" }),
+      Complaint.aggregate([
+        { $match: baseQuery },
+        { $group: { _id: "$category", count: { $sum: 1 } } }
+      ])
     ]);
+
+    const resolvedCount = resolved + closed;
+    const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+
+    const avgTimeResult = await Complaint.aggregate([
+      { $match: { ...baseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+      { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+    ]);
+    const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
     res.json({
       success: true,
       data: {
         total,
+        submitted,
+        validated,
         assigned,
         inProgress,
-        resolved
+        resolved,
+        closed,
+        rejected,
+        totalOverdue: overdue,
+        totalAtRisk: atRisk,
+        resolutionRate,
+        averageResolutionTime,
+        byCategory: byCategory.reduce((acc, item) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {})
       }
     });
   } catch (error) {

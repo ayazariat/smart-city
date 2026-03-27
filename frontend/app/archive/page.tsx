@@ -43,10 +43,14 @@ function ArchivePageContent() {
 
   useEffect(() => {
     const fetchArchived = async () => {
-      if (!token) return;
+      if (!token) {
+        setLoading(false);
+        return;
+      }
       
       try {
         setLoading(true);
+        setError(null);
         const currentPage = parseInt(searchParams.get("page") || "1");
         const filter = searchParams.get("filter") || statusFilter;
         const search = searchParams.get("search") || "";
@@ -72,7 +76,7 @@ function ArchivePageContent() {
       }
     };
 
-    if (hydrated && token) {
+    if (hydrated) {
       fetchArchived();
     }
   }, [token, hydrated, searchParams]);
@@ -122,19 +126,12 @@ function ArchivePageContent() {
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="Archived Complaints"
-        subtitle="View closed and rejected complaints"
+        subtitle={`${total} closed/rejected complaints`}
         backHref="/dashboard"
-        variant="hero"
-        rightContent={
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2">
-            <span className="text-sm text-white/70">Total:</span>
-            <span className="ml-2 font-bold text-white">{total}</span>
-          </div>
-        }
       />
 
       {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
             <div className="flex items-center justify-between">

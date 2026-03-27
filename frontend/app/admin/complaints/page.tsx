@@ -12,6 +12,7 @@ import {
   LoadingSpinner,
   EmptyState,
   ComplaintCard,
+  Button,
 } from "@/components/ui";
 
 export default function AdminComplaintsPage() {
@@ -23,6 +24,8 @@ export default function AdminComplaintsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [governorateFilter, setGovernorateFilter] = useState<string>("");
   const [municipalityFilter, setMunicipalityFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [availableMunicipalities, setAvailableMunicipalities] = useState<string[]>([]);
 
   // Update available municipalities when governorate changes
@@ -67,6 +70,12 @@ export default function AdminComplaintsPage() {
   }, [token, user, statusFilter, governorateFilter, municipalityFilter, searchTerm]);
 
   const filteredComplaints = complaints.filter((c) => {
+    if (categoryFilter && c.category !== categoryFilter) return false;
+    if (priorityFilter) {
+      if (priorityFilter === "HIGH" && (c.priorityScore || 0) < 15) return false;
+      if (priorityFilter === "MEDIUM" && ((c.priorityScore || 0) < 6 || (c.priorityScore || 0) >= 15)) return false;
+      if (priorityFilter === "LOW" && (c.priorityScore || 0) >= 6) return false;
+    }
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -74,6 +83,35 @@ export default function AdminComplaintsPage() {
       categoryLabels[c.category]?.toLowerCase().includes(q)
     );
   });
+
+  const exportCSV = () => {
+    const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
+    const rows = filteredComplaints.map(c => [
+      c.referenceId || c._id?.slice(-6),
+      c.title?.replace(/,/g, " "),
+      categoryLabels[c.category] || c.category,
+      c.status,
+      (c.priorityScore || 0).toString(),
+      c.municipalityName || "",
+      new Date(c.createdAt).toLocaleDateString()
+    ]);
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `complaints_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
+  const overdueCount = complaints.filter(c => {
+    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 7;
+  }).length;
+  const atRiskCount = complaints.filter(c => {
+    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 4 && daysSinceCreation <= 7;
+  }).length;
 
   if (!user || user.role !== "ADMIN") return null;
 
@@ -148,12 +186,64 @@ export default function AdminComplaintsPage() {
               ))}
             </select>
 
+            {/* Category Filter */}
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            >
+              <option value="">All Categories</option>
+              {Object.entries(categoryLabels).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+
+            {/* Priority Filter */}
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            >
+              <option value="">All Priorities</option>
+              <option value="HIGH">High (≥15)</option>
+              <option value="MEDIUM">Medium (6-14)</option>
+              <option value="LOW">Low (&lt;6)</option>
+            </select>
+
+            {/* Export Button */}
+            <Button onClick={exportCSV} variant="outline" size="sm">
+              Export CSV
+            </Button>
+
             {/* Results Count */}
             <span className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
               {filteredComplaints.length} results
             </span>
           </div>
         </div>
+
+        {/* SLA Monitoring Section */}
+        {overdueCount > 0 || atRiskCount > 0 ? (
+          <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">SLA Monitoring</h3>
+            <div className="flex gap-4">
+              {overdueCount > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-xl border border-red-200">
+                  <span className="text-red-600 font-bold">{overdueCount}</span>
+                  <span className="text-sm text-red-700">Overdue</span>
+                </div>
+              )}
+              {atRiskCount > 0 && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 rounded-xl border border-amber-200">
+                  <span className="text-amber-600 font-bold">{atRiskCount}</span>
+                  <span className="text-sm text-amber-700">At Risk</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
 
         {loading && <LoadingSpinner />}
 

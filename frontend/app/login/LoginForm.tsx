@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, ShieldCheck, Sparkles, BarChart3 } from "lucide-react";
+import { Mail, Lock, Sparkles, BarChart3 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +32,7 @@ function LoginForm() {
 
   useEffect(() => {
     if (activatedParam) {
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState({}, "", "/login");
     }
   }, [activatedParam]);
 
@@ -88,38 +89,36 @@ function LoginForm() {
       
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-md">
+          {/* Header */}
           <div className="text-center mb-8 animate-fadeIn">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary to-primary-700 rounded-2xl mb-4 shadow-xl shadow-primary/25 hover-lift">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
+            <Link href="/transparency" className="inline-block">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary to-primary-700 rounded-2xl mb-4 shadow-xl shadow-primary/25 hover-lift">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+            </Link>
             <h1 className="text-3xl font-bold text-slate-900 mb-2 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-primary-900">
               Smart City Tunisia
             </h1>
             <p className="text-slate-600">
               Sign in to manage city services
             </p>
-            <div className="mt-3 inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-white/60 border border-white/80 shadow-sm text-xs text-slate-600">
-              <ShieldCheck className="w-4 h-4 text-success-500" />
-              <span>Secure access with enhanced protection</span>
+            <div className="mt-3">
+              <Link 
+                href="/transparency" 
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors text-sm font-medium"
+              >
+                <BarChart3 className="w-4 h-4" />
+                View Public Statistics
+              </Link>
             </div>
           </div>
 
-          {/* View Public Statistics Button */}
-          <div className="mb-6 flex justify-center animate-fadeIn delay-200">
-            <Link 
-              href="/transparency"
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 text-primary hover:bg-primary/20 font-medium text-sm transition-all duration-200 shadow-sm hover:shadow-md"
-            >
-              <BarChart3 className="w-4 h-4" />
-              View Public Statistics
-            </Link>
-          </div>
-
+          {/* Form Card */}
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
-            {error && (
+            {(error || localError) && (
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setLocalError("")}>
-                  {error}
+                  {error || localError}
                 </Alert>
               </div>
             )}
@@ -212,14 +211,4 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    }>
-      <LoginForm />
-    </Suspense>
-  );
-}
+export { LoginForm };

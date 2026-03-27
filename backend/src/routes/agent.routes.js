@@ -334,4 +334,108 @@ router.get("/departments", authenticate, authorize("MUNICIPAL_AGENT"), async (re
   }
 });
 
+// POST /api/agent/complaints/:id/approve-resolution - Approve technician resolution
+router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    // Check municipality
+    const user = await getAgentMunicipality(req.user.userId);
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+
+    if (userMunicipality !== complaintMunicipality) {
+      return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
+    }
+
+    if (complaint.status !== "RESOLVED") {
+      return res.status(400).json({ success: false, message: "Only RESOLVED complaints can have their resolution approved" });
+    }
+
+    complaint.status = "CLOSED";
+    complaint.closedAt = new Date();
+    complaint.closedBy = req.user.userId;
+    await complaint.save();
+
+    // Notify citizen
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(null, complaint.createdBy, {
+        type: "closed",
+        title: "Complaint Closed",
+        message: `Your complaint "${complaint.title}" has been resolved and closed.`,
+        complaintId: complaint._id,
+      });
+    }
+
+    // Notify technician who submitted the resolution
+    if (complaint.assignedTo) {
+      await notificationService.sendNotification(null, complaint.assignedTo, {
+        type: "resolution_approved",
+        title: "Resolution Approved",
+        message: `Your resolution for "${complaint.title}" has been approved by the agent.`,
+        complaintId: complaint._id,
+      });
+    }
+
+    res.json({ success: true, message: "Resolution approved and complaint closed", data: complaint });
+  } catch (error) {
+    console.error("Error approving resolution:", error);
+    res.status(500).json({ success: false, message: "Failed to approve resolution" });
+  }
+});
+
+// POST /api/agent/complaints/:id/reject-resolution - Reject technician resolution
+router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+  try {
+    const { rejectionReason } = req.body;
+    
+    if (!rejectionReason) {
+      return res.status(400).json({ success: false, message: "Rejection reason is required" });
+    }
+
+    const complaint = await Complaint.findById(req.params.id);
+
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    // Check municipality
+    const user = await getAgentMunicipality(req.user.userId);
+    const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+
+    if (userMunicipality !== complaintMunicipality) {
+      return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
+    }
+
+    if (complaint.status !== "RESOLVED") {
+      return res.status(400).json({ success: false, message: "Only RESOLVED complaints can have their resolution rejected" });
+    }
+
+    // Revert status back to IN_PROGRESS
+    complaint.status = "IN_PROGRESS";
+    complaint.resolutionRejectionReason = rejectionReason;
+    await complaint.save();
+
+    // Notify technician who submitted the resolution
+    if (complaint.assignedTo) {
+      await notificationService.sendNotification(null, complaint.assignedTo, {
+        type: "resolution_rejected",
+        title: "Resolution Rejected",
+        message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}`,
+        complaintId: complaint._id,
+      });
+    }
+
+    res.json({ success: true, message: "Resolution rejected, complaint returned to IN_PROGRESS", data: complaint });
+  } catch (error) {
+    console.error("Error rejecting resolution:", error);
+    res.status(500).json({ success: false, message: "Failed to reject resolution" });
+  }
+});
+
 module.exports = router;

@@ -21,7 +21,7 @@ export const EmptyState = ({
   action,
   icon = "inbox",
 }: EmptyStateProps) => {
-  const IconComponent = typeof icon === "string" ? icons[icon] : null;
+  const IconComponent = typeof icon === "string" ? icons[icon as keyof typeof icons] : null;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-slate-200 animate-fadeInUp">

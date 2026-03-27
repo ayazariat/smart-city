@@ -13,21 +13,23 @@ export const statusConfig: Record<string, { label: string; bgClass: string; text
   REJECTED:    { label: "REJECTED",    bgClass: "bg-red-100",    textClass: "text-red-800"    },
 };
 
-export const categoryLabels: Record<string, string> = {
-  ROAD:           "Roads",
-  LIGHTING:       "Lighting",
-  WASTE:          "Waste",
-  WATER:          "Water",
-  SAFETY:         "Safety",
+export const CATEGORY_LABELS: Record<string, string> = {
+  ROAD:           "Roads & Infrastructure",
+  LIGHTING:       "Public Lighting",
+  WASTE:          "Waste Management",
+  WATER:          "Water & Sanitation",
+  SAFETY:         "Public Safety",
   PUBLIC_PROPERTY:"Public Property",
-  GREEN_SPACE:    "Green Spaces",
-  TRAFFIC:        "Traffic",
+  GREEN_SPACE:    "Parks & Green Spaces",
+  TRAFFIC:        "Traffic & Road Signage",
   URBAN_PLANNING: "Urban Planning",
-  EQUIPMENT:      "Equipment",
+  EQUIPMENT:      "Public Equipment",
   BUILDING:       "Buildings",
-  NOISE:          "Noise",
+  NOISE:          "Noise Pollution",
   OTHER:          "Other",
 };
+
+export const categoryLabels = CATEGORY_LABELS;
 
 export const STATUS_OPTIONS = [
   { value: "SUBMITTED",   label: "Submitted"   },

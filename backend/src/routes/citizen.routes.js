@@ -5,6 +5,7 @@ const { authenticate, authorize } = require("../middleware/auth");
 const Complaint = require("../models/Complaint");
 const Department = require("../models/Department");
 const AuditLog = require("../models/AuditLog");
+const { calculatePriorityAndSLA, explainCalculation } = require("../utils/priorityCalculator");
 
 // All citizen routes require authentication and CITIZEN role
 
@@ -134,8 +135,18 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       assignedDepartment = department._id;
     }
 
-    // Calculate priority score
-    const priorityScore = urgencyPriorityScore[urgency] || urgencyPriorityScore.MEDIUM;
+    // Calculate priority score using intelligent priority calculator
+    const priorityResult = calculatePriorityAndSLA({
+      category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: urgency,
+      confirms: 0,
+      upvotes: 0,
+      locationType: 'NORMAL',
+      createdAt: new Date()
+    });
+    
+    const { priorityScore, urgencyLevel, slaFinal } = priorityResult;
 
     const extractKeywords = (text) => {
       if (!text) return [];
@@ -178,7 +189,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       title: title.trim(),
       description: description.trim(),
       category: category || "OTHER",
-      urgency: urgency || "MEDIUM",
+      urgency: urgencyLevel,
       priorityScore,
       location: Object.keys(geoLocation).length ? geoLocation : {},
       municipalityName: location?.municipality || location?.commune || "",
@@ -189,6 +200,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       createdBy: req.user.userId,
       assignedDepartment,
       status: "SUBMITTED",
+      slaDeadline: new Date(Date.now() + slaFinal * 60 * 60 * 1000),
     });
 
     await complaint.save();
@@ -374,6 +386,50 @@ router.delete("/complaints/:id", authenticate, authorize("CITIZEN"), async (req,
   } catch (error) {
     console.error("Delete complaint error:", error);
     res.status(500).json({ message: "Failed to delete complaint" });
+  }
+});
+
+// GET /api/citizen/stats - Get citizen's complaint statistics
+router.get("/stats", authenticate, authorize("CITIZEN"), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const baseQuery = { createdBy: userId, isArchived: false };
+    
+    const [total, submitted, inProgress, resolved, closed, rejected] = await Promise.all([
+      Complaint.countDocuments(baseQuery),
+      Complaint.countDocuments({ ...baseQuery, status: "SUBMITTED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
+      Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "REJECTED" })
+    ]);
+
+    const resolvedCount = resolved + closed;
+    const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+
+    const avgTimeResult = await Complaint.aggregate([
+      { $match: { ...baseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+      { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+    ]);
+    const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        submitted,
+        inProgress,
+        resolved,
+        closed,
+        rejected,
+        resolutionRate,
+        averageResolutionTime
+      }
+    });
+  } catch (error) {
+    console.error("Citizen get stats error:", error);
+    res.status(500).json({ success: false, message: "Failed to retrieve statistics" });
   }
 });
 

@@ -23,20 +23,7 @@ import { complaintService } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui";
 import { useLastVisitedPage } from "@/hooks/useLastVisitedPage";
-
-// Category labels
-const categoryLabels: Record<string, string> = {
-  ROAD: "Roads",
-  LIGHTING: "Lighting",
-  WASTE: "Waste",
-  WATER: "Water",
-  SAFETY: "Safety",
-  PUBLIC_PROPERTY: "Public Property",
-  GREEN_SPACE: "Green Spaces",
-  BUILDING: "Buildings",
-  NOISE: "Noise",
-  OTHER: "Other",
-};
+import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
 
 // Status labels
 const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {

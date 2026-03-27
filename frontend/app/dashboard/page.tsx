@@ -3,7 +3,7 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X } from "lucide-react";
+import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
 import { Notification } from "@/types";
@@ -318,7 +318,7 @@ function DashboardContent() {
               
               <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2.5 rounded-xl backdrop-blur-sm">
                 <User className="w-5 h-5" />
-                <span className="text-sm font-medium">Welcome, {user.fullName}</span>
+                <span className="text-sm font-medium">Welcome, {user?.fullName}</span>
               </div>
               <button
                 onClick={handleLogout}
@@ -357,22 +357,22 @@ function DashboardContent() {
               </div>
               <h3 className="text-lg font-semibold text-slate-900 group-hover:text-primary transition-colors">My Profile</h3>
             </div>
-            <div className="space-y-2">
+              <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-500">Email:</span>
-                <span className="text-sm font-medium text-slate-700">{user.email}</span>
+                <span className="text-sm font-medium text-slate-700">{user?.email}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-500">Role:</span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                  {getRoleDisplayName(user.role)}
+                  {getRoleDisplayName(user?.role || '')}
                 </span>
               </div>
             </div>
           </Link>
 
           {/* Admin Panel Card */}
-          {user.role === "ADMIN" && (
+          {user?.role === "ADMIN" && (
             <Link 
               href="/admin/users"
               className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white cursor-pointer"
@@ -410,7 +410,7 @@ function DashboardContent() {
           </Link>
 
           {/* Quick Actions Card - Only for CITIZEN role */}
-          {user.role === "CITIZEN" && dashboardConfig.newComplaintLink && (
+          {user?.role === "CITIZEN" && dashboardConfig.newComplaintLink && (
             <Link href={dashboardConfig.newComplaintLink} className="group bg-gradient-to-br from-primary to-primary-700 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 text-white cursor-pointer block">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
@@ -443,6 +443,24 @@ function DashboardContent() {
               <span className="group-hover:translate-x-1 transition-transform">→</span>
             </span>
           </Link>
+          {/* Analytics - Agent/Manager only (not Admin) */}
+          {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER") && (
+            <Link href="/dashboard/analytics" className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                  <BarChart3 className="w-6 h-6 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900">Analytics</h3>
+              </div>
+              <p className="text-slate-600 mb-4 text-sm">
+                View performance statistics
+              </p>
+              <span className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors group">
+                View Analytics
+                <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </span>
+            </Link>
+          )}
         </div>
 
         {/* Statistics Section */}

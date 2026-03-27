@@ -7,28 +7,24 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import anthropic
 
-# Initialize FastAPI app
 app = FastAPI(title="Category Predictor Service")
 
-# Get API key from environment
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Valid complaint categories
 VALID_CATEGORIES = [
-    "ROAD",          # Roads and infrastructure
-    "LIGHTING",      # Street lighting
-    "WASTE",         # Waste management
-    "WATER",         # Water and sanitation
-    "SAFETY",        # Public safety
-    "PUBLIC_PROPERTY", # Public buildings and property
-    "GREEN_SPACE",   # Parks and green spaces
-    "TRAFFIC",       # Traffic and signage
-    "URBAN_PLANNING", # Urban planning issues
-    "EQUIPMENT",     # Public equipment
-    "AUTRE",         # Other
+    "ROAD",          
+    "LIGHTING",      
+    "WASTE",         
+    "WATER",        
+    "SAFETY",       
+    "PUBLIC_PROPERTY", 
+    "GREEN_SPACE",  
+    "TRAFFIC",       
+    "URBAN_PLANNING", 
+    "EQUIPMENT",    
+    "AUTRE",         
 ]
 
-# System prompt for category prediction
 SYSTEM_PROMPT = """You are an expert in categorizing citizen complaints for a municipal government in Tunisia.
 
 Your task is to analyze complaint descriptions and predict the most appropriate category from this list:
@@ -83,13 +79,13 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
         )
     
     try:
-        # Combine title and description for analysis
+        
         text_to_analyze = f"Title: {title}\n\nDescription: {description}" if title else description
         
-        # Initialize Claude client
+        
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         
-        # Make request to Claude
+        
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=256,
@@ -102,15 +98,15 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
             ]
         )
         
-        # Extract response text
+        
         response_text = message.content[0].text if message.content else ""
         
-        # Parse JSON from response
+       
         try:
-            # Try to extract JSON from the response
+           
             result = json.loads(response_text)
         except json.JSONDecodeError:
-            # Try to find JSON in the text
+           
             import re
             json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
             if json_match:
@@ -118,7 +114,7 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
             else:
                 raise ValueError("Could not parse JSON from response")
         
-        # Validate and normalize the response
+        
         predicted = result.get("predicted", "AUTRE").upper()
         if predicted not in VALID_CATEGORIES:
             predicted = "AUTRE"
@@ -140,7 +136,7 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
         
     except Exception as e:
         print(f"Error in category prediction: {e}")
-        # Always fallback to AUTRE on error
+        
         return PredictionResponse(
             predicted="AUTRE",
             confidence=0.0,

@@ -13,6 +13,7 @@ const complaintRoutes = require("./routes/complaints");
 const uploadRoutes = require("./routes/upload");
 const notificationRoutes = require("./routes/notifications.routes");
 const aiRoutes = require("./routes/ai.routes");
+const publicRoutes = require("./routes/public.routes");
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use("/api/complaints", complaintRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/notifications", notificationRoutes.router);
 app.use("/api/ai", aiRoutes);
+app.use("/api/public", publicRoutes);
 
 // 404 handler
 app.use((req, res) => {

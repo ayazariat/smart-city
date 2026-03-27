@@ -24,24 +24,12 @@ import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
 import { adminService } from "@/services/admin.service";
 import { managerService } from "@/services/manager.service";
+import { agentService } from "@/services/agent.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button, PageHeader } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
-
-// Category labels
-const categoryLabels: Record<string, string> = {
-  ROAD: "Roads",
-  LIGHTING: "Lighting",
-  WASTE: "Waste",
-  WATER: "Water",
-  SAFETY: "Safety",
-  PUBLIC_PROPERTY: "Public Property",
-  GREEN_SPACE: "Green Spaces",
-  BUILDING: "Buildings",
-  NOISE: "Noise",
-  OTHER: "Other",
-};
+import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
 
 // Category to department name mapping for suggestions
 const categoryToDepartmentMap: Record<string, string[]> = {
@@ -139,7 +127,7 @@ export default function ComplaintDetailPage() {
   };
 
   // BL-28: Check if current user has confirmed/upvoted
-  const userId = user?._id || user?.id;
+  const userId = user?.id;
   const hasConfirmed = complaint?.confirmations?.some(
     c => c.citizenId === userId
   );
@@ -1017,6 +1005,68 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
+            {/* Resolution Report - Shown when RESOLVED */}
+            {complaint.status === "RESOLVED" && complaint.resolutionNotes && (
+              <section className="bg-green-50 rounded-2xl shadow-lg p-6 border border-green-200" aria-labelledby="resolution-title">
+                <h2 id="resolution-title" className="text-lg font-semibold text-green-900 mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  Resolution Report
+                </h2>
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl p-4 border border-green-100">
+                    <p className="text-sm font-medium text-slate-600 mb-2">Technician's Report:</p>
+                    <p className="text-slate-800 whitespace-pre-wrap">{complaint.resolutionNotes}</p>
+                  </div>
+                  
+                  {/* Agent Actions - Approve/Reject Resolution */}
+                  {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                    <div className="flex gap-3 pt-4 border-t border-green-200">
+                      <Button
+                        className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                        icon={<CheckCircle className="w-4 h-4" />}
+                        onClick={async () => {
+                            try {
+                            setActionLoading(true);
+                            const result = await agentService.approveResolution(complaintId);
+                            if (result.success) {
+                              alert("Resolution approved! Complaint has been closed.");
+                              const updatedResponse = await complaintService.getComplaintById(complaintId);
+                              if (updatedResponse?.complaint) setComplaint(processComplaintMedia(updatedResponse.complaint));
+                            } else {
+                              alert(result.message || "Failed to approve resolution");
+                            }
+                          } catch (err) {
+                            console.error("Error approving resolution:", err);
+                            alert("Failed to approve resolution");
+                          } finally {
+                            setActionLoading(false);
+                          }
+                        }}
+                        isLoading={actionLoading}
+                      >
+                        Approve Resolution
+                      </Button>
+                      <Button
+                        variant="danger"
+                        className="flex-1"
+                        onClick={() => setActionModal("reject-resolution")}
+                      >
+                        Reject Resolution
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* Show status for non-agent users */}
+                  {user?.role !== "MUNICIPAL_AGENT" && user?.role !== "DEPARTMENT_MANAGER" && user?.role !== "ADMIN" && (
+                    <div className="flex items-center gap-2 text-sm text-green-700 pt-4 border-t border-green-200">
+                      <Clock className="w-4 h-4" />
+                      <span>Waiting for agent review...</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
             {/* BL-28: Confirmation/Upvote Panel for Citizens */}
             {canConfirmUpvote && (
               <section className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl shadow-lg p-6 border border-emerald-200" aria-labelledby="community-title">
@@ -1271,6 +1321,7 @@ export default function ComplaintDetailPage() {
               {actionModal === "department" && "Assign to Department"}
               {actionModal === "priority" && "Update Priority"}
               {actionModal === "technician" && "Assign to Repair Team"}
+              {actionModal === "reject-resolution" && "Reject Resolution Report"}
             </h3>
             
             {actionModal === "validate" && (
@@ -1531,6 +1582,66 @@ export default function ComplaintDetailPage() {
                     {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 
                       selectedTechnicians.length > 1 ? "Create Team & Assign" : "Assign"
                     }
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {actionModal === "reject-resolution" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Rejection Reason <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    rows={4}
+                    placeholder="Explain why this resolution report is being rejected..."
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    The complaint will be returned to IN_PROGRESS status with this reason.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setActionModal(null);
+                      setRejectionReason("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    className="flex-1"
+                    onClick={async () => {
+                      if (!rejectionReason.trim()) return;
+                      try {
+                        setActionLoading(true);
+                        const result = await agentService.rejectResolution(complaintId, rejectionReason);
+                        if (result.success) {
+                          alert("Resolution rejected. Complaint returned to IN_PROGRESS.");
+                          const updatedResponse = await complaintService.getComplaintById(complaintId);
+                          if (updatedResponse?.complaint) setComplaint(processComplaintMedia(updatedResponse.complaint));
+                          setActionModal(null);
+                          setRejectionReason("");
+                        } else {
+                          alert(result.message || "Failed to reject resolution");
+                        }
+                      } catch (err) {
+                        console.error("Error rejecting resolution:", err);
+                        alert("Failed to reject resolution");
+                      } finally {
+                        setActionLoading(false);
+                      }
+                    }}
+                    disabled={actionLoading || !rejectionReason.trim()}
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject Resolution"}
                   </Button>
                 </div>
               </div>

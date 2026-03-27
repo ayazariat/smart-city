@@ -29,6 +29,8 @@ import { notificationService } from "@/services/notification.service";
 import { Complaint, Notification } from "@/types";
 import { showToast } from "@/components/ui/Toast";
 import { Button, Modal, PageHeader } from "@/components/ui";
+import { categoryLabels } from "@/lib/complaints";
+import { getPhotoCount } from "@/lib/photos";
 
 const statusConfig: Record<string, { label: string; bgClass: string; textClass: string; borderClass: string }> = {
   ASSIGNED: { label: "Assigned", bgClass: "bg-primary/10", textClass: "text-primary", borderClass: "border-primary/20" },
@@ -44,16 +46,7 @@ const urgencyConfig: Record<string, { label: string; bgClass: string; textClass:
   URGENT: { label: "Urgent", bgClass: "bg-red-100", textClass: "text-red-700" },
 };
 
-const categoryLabels: Record<string, string> = {
-  ROAD: "Roads & Infrastructure",
-  LIGHTING: "Street Lighting",
-  WASTE: "Waste Management",
-  WATER: "Water Supply",
-  GREEN_SPACE: "Green Spaces",
-  BUILDING: "Buildings",
-  NOISE: "Noise Pollution",
-  OTHER: "Other",
-};
+
 
 export default function TechnicianTasksPage() {
   const router = useRouter();
@@ -248,7 +241,6 @@ export default function TechnicianTasksPage() {
         title="My Tasks"
         subtitle="Manage your assigned work orders"
         backHref="/dashboard"
-        variant="hero"
         rightContent={
           <div className="flex items-center gap-3">
             {/* Notifications */}
@@ -303,7 +295,7 @@ export default function TechnicianTasksPage() {
       />
 
       {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
             <div className="flex items-center justify-between">
@@ -473,7 +465,7 @@ export default function TechnicianTasksPage() {
                           {task.media && task.media.length > 0 && (
                             <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">
                               <Camera className="w-4 h-4 text-primary flex-shrink-0" />
-                              <span>{task.media.length} photo(s)</span>
+                              <span>{getPhotoCount(task.media)} photo(s)</span>
                             </div>
                           )}
                         </div>
@@ -559,11 +551,14 @@ export default function TechnicianTasksPage() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Proof Photos (recommended)</label>
             <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-primary/40 transition-colors">
-              <input type="file" multiple accept="image/*" className="hidden" id="proof-photos" onChange={(e) => { const files = Array.from(e.target.files || []); setProofPhotos(files); }} />
-              <label htmlFor="proof-photos" className="cursor-pointer">
+              <input type="file" multiple accept="image/*" className="hidden" id="proof-photos-input-2" onChange={(e) => { const files = Array.from(e.target.files || []); setProofPhotos(files); }} />
+              <div 
+                className="cursor-pointer flex flex-col items-center"
+                onClick={() => document.getElementById('proof-photos-input-2')?.click()}
+              >
                 <Camera className="w-10 h-10 mx-auto text-slate-400 mb-2" />
                 <p className="text-sm text-slate-500">Click to upload proof photos</p>
-              </label>
+              </div>
             </div>
           </div>
         </div>
@@ -575,7 +570,7 @@ export default function TechnicianTasksPage() {
         onClose={() => setTaskDetailModal(false)}
         title="Task Details"
         description={selectedTask ? `#${selectedTask.referenceId || (selectedTask._id || "").slice(-6)}` : ""}
-        size="xl"
+        size="lg"
         footer={<Button variant="ghost" onClick={() => setTaskDetailModal(false)}>Close</Button>}
       >
         {selectedTask && (

@@ -232,4 +232,43 @@ complaintSchema.index({ createdAt: -1 });
 complaintSchema.index({ location: "2dsphere" });
 complaintSchema.index({ isArchived: 1 });
 
+// Method to calculate SLA status
+complaintSchema.methods.calculateSLAStatus = function() {
+  if (!this.slaDeadline || this.status === 'RESOLVED' || this.status === 'CLOSED') {
+    return { status: 'COMPLETED', progress: 100, remainingHours: 0 };
+  }
+  
+  const now = new Date();
+  const deadline = new Date(this.slaDeadline);
+  const created = new Date(this.createdAt);
+  
+  const totalMs = deadline - created;
+  const elapsedMs = now - created;
+  
+  if (totalMs <= 0) {
+    return { status: 'OVERDUE', progress: 100, remainingHours: 0 };
+  }
+  
+  const progress = Math.min(100, (elapsedMs / totalMs) * 100);
+  const remainingHours = Math.max(0, (deadline - now) / (1000 * 60 * 60));
+  
+  let status = 'ON_TRACK';
+  if (progress >= 100) {
+    status = 'OVERDUE';
+  } else if (progress >= 50) {
+    status = 'AT_RISK';
+  }
+  
+  return { status, progress: Math.round(progress), remainingHours: Math.round(remainingHours * 10) / 10 };
+};
+
+// Pre-save hook to update SLA status
+complaintSchema.pre('save', function(next) {
+  if (this.slaDeadline) {
+    const slaStatus = this.calculateSLAStatus();
+    this.slaStatus = slaStatus.status;
+  }
+  next();
+});
+
 module.exports = mongoose.model("Complaint", complaintSchema);

@@ -444,15 +444,29 @@ router.get("/stats", authenticate, authorize("TECHNICIAN"), async (req, res) => 
       $or: [
         { assignedTo: technicianId },
         { assignedTeam: { $in: teamIds } }
-      ]
+      ],
+      isArchived: false
     };
 
-    const [total, assigned, inProgress, resolved] = await Promise.all([
+    const [total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk] = await Promise.all([
       Complaint.countDocuments(baseQuery),
       Complaint.countDocuments({ ...baseQuery, status: "ASSIGNED" }),
       Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
-      Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" })
+      Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
+      Complaint.countDocuments({ ...baseQuery, status: "REJECTED" }),
+      Complaint.countDocuments({ ...baseQuery, slaStatus: "OVERDUE" }),
+      Complaint.countDocuments({ ...baseQuery, slaStatus: "AT_RISK" })
     ]);
+
+    const resolvedCount = resolved + closed;
+    const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+
+    const avgTimeResult = await Complaint.aggregate([
+      { $match: { ...baseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+      { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+    ]);
+    const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
     res.json({
       success: true,
@@ -460,7 +474,13 @@ router.get("/stats", authenticate, authorize("TECHNICIAN"), async (req, res) => 
         total,
         assigned,
         inProgress,
-        resolved
+        resolved,
+        closed,
+        rejected,
+        totalOverdue: overdue,
+        totalAtRisk: atRisk,
+        resolutionRate,
+        averageResolutionTime
       }
     });
   } catch (error) {

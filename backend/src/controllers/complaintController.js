@@ -424,7 +424,14 @@ class ComplaintController {
       if (status) query.status = status;
       if (category) query.category = category;
       if (governorate && req.user.role === "ADMIN") query.governorate = governorate; // Admin can filter by governorate
-      if (municipality && req.user.role === "ADMIN") query.municipality = municipality; // Admin can filter by municipality
+      if (municipality && req.user.role === "ADMIN") {
+        const normalizedMun = normalizeMunicipality(municipality);
+        query.$or = [
+          { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, "i") } },
+          { "location.municipality": { $regex: new RegExp(`^${normalizedMun}$`, "i") } },
+          { municipalityNormalized: normalizedMun }
+        ];
+      }
       
       if (search) {
         const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -927,7 +934,6 @@ class ComplaintController {
 
       // Role-based filtering
       if (req.user.role === "DEPARTMENT_MANAGER") {
-        // Find the department this manager is responsible for
         const myDepartment = await Department.findOne({ 
           responsable: req.user.userId 
         }).select('_id').lean();
@@ -949,36 +955,58 @@ class ComplaintController {
         }
       }
 
-      const [total, pending, inProgress, resolved, rejected, byCategory, byGovernorate] = await Promise.all([
-        Complaint.countDocuments(query),
-        Complaint.countDocuments({ ...query, status: "PENDING" }),
-        Complaint.countDocuments({ ...query, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...query, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...query, status: "REJECTED" }),
+      const [total, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk] = await Promise.all([
+        Complaint.countDocuments({ ...query, isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "SUBMITTED", isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "VALIDATED", isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "ASSIGNED", isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "IN_PROGRESS", isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "RESOLVED", isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "CLOSED", isArchived: false }),
+        Complaint.countDocuments({ ...query, status: "REJECTED", isArchived: false }),
         Complaint.aggregate([
-          { $match: query },
+          { $match: { ...query, isArchived: false } },
           { $group: { _id: "$category", count: { $sum: 1 } } }
         ]),
         Complaint.aggregate([
-          { $match: { ...query, governorate: { $ne: "" } } },
-          { $group: { _id: "$governorate", count: { $sum: 1 } } },
-          { $sort: { count: -1 } }
+          { $match: { ...query, isArchived: false, createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
+          { $group: { _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] }, count: { $sum: 1 } } },
+          { $sort: { _id: 1 } },
+          { $limit: 6 }
         ]),
+        Complaint.countDocuments({ ...query, slaStatus: "OVERDUE", isArchived: false }),
+        Complaint.countDocuments({ ...query, slaStatus: "AT_RISK", isArchived: false }),
       ]);
+
+      const resolvedCount = resolved + closed;
+      const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+
+      const avgTimeResult = await Complaint.aggregate([
+        { $match: { ...query, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true }, isArchived: false } },
+        { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+      ]);
+      const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
       res.json({
         success: true,
         data: {
           total,
-          pending,
+          submitted,
+          validated,
+          assigned,
           inProgress,
           resolved,
+          closed,
           rejected,
+          totalOverdue: overdue,
+          totalAtRisk: atRisk,
+          resolutionRate,
+          averageResolutionTime,
           byCategory: byCategory.reduce((acc, item) => {
             acc[item._id] = item.count;
             return acc;
           }, {}),
-          byGovernorate: byGovernorate.reduce((acc, item) => {
+          byMonth: byMonth.reduce((acc, item) => {
             acc[item._id] = item.count;
             return acc;
           }, {}),

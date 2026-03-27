@@ -129,7 +129,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
         // Clear everything immediately
         localStorage.removeItem('auth-storage');
         clearClientAuthTokens();

@@ -57,10 +57,7 @@ export default function MyComplaintsPage() {
         });
         if (response && Array.isArray(response.complaints)) {
           setComplaints(response.complaints);
-        } else if (response && Array.isArray((response as { data?: { complaints?: Complaint[] } }).data?.complaints)) {
-          setComplaints((response as { data: { complaints: Complaint[] } }).data.complaints);
         } else {
-          console.log("No complaints array found in response");
           setComplaints([]);
         }
       } catch (err: unknown) {
@@ -98,7 +95,6 @@ export default function MyComplaintsPage() {
         title="My Complaints"
         subtitle="Track and manage your submitted complaints"
         backHref="/dashboard"
-        variant="hero"
         rightContent={
           <Link
             href="/complaints/new"
@@ -111,7 +107,7 @@ export default function MyComplaintsPage() {
       />
 
       {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200 animate-fadeInUp">
             <div className="flex items-center gap-3">
@@ -203,7 +199,7 @@ export default function MyComplaintsPage() {
                   index={index}
                   onUpdate={(updated) => {
                     setComplaints(prev => prev.map(c => 
-                      (c._id || c.id) === (updated._id || updated.id) ? updated : c
+                      (c._id || c.id) === (updated._id || updated.id) ? updated as any : c
                     ));
                   }}
                 />

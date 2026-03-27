@@ -97,6 +97,9 @@ export interface Complaint {
   // Photos taken by technician after completing work
   afterPhotos?: ComplaintWorkPhoto[];
   createdBy: string | { _id: string; fullName: string; email: string; phone?: string };
+  phone?: string;
+  startedAt?: string;
+  completedAt?: string;
   citizen?: { _id: string; fullName: string; email: string; phone?: string } | null;
   department?: { _id: string; name: string } | null;
   assignedTo?: { _id: string; fullName: string; email: string };
@@ -152,6 +155,7 @@ export interface Complaint {
   assignedTeam?: {
     _id: string;
     name: string;
+    members?: Array<{ _id: string; fullName: string }>;
   };
   // SLA deadline
   slaDeadline?: string | Date | null;

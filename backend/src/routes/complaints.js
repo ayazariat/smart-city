@@ -5,6 +5,7 @@ const complaintController = require("../controllers/complaintController");
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const { normalizeMunicipality } = require("../utils/normalize");
+const { calculatePriorityAndSLA } = require("../utils/priorityCalculator");
 
 // Public routes
 // None for now
@@ -129,12 +130,28 @@ router.post("/:id/confirm", async (req, res) => {
       confirmedAt: new Date()
     });
     complaint.confirmationCount = (complaint.confirmationCount || 0) + 1;
-    complaint.priorityScore = (complaint.priorityScore || 0) + 10;
+    
+    // Recalculate priority score using intelligent system
+    const priorityResult = calculatePriorityAndSLA({
+      category: complaint.category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: complaint.urgency,
+      confirms: complaint.confirmationCount || 0,
+      upvotes: complaint.upvoteCount || 0,
+      locationType: 'NORMAL',
+      createdAt: complaint.createdAt
+    });
+    complaint.priorityScore = priorityResult.priorityScore;
+    complaint.urgency = priorityResult.urgencyLevel;
+    complaint.slaDeadline = new Date(Date.now() + priorityResult.slaFinal * 60 * 60 * 1000);
+    
     await complaint.save();
 
     res.json({
       success: true,
       confirmationCount: complaint.confirmationCount,
+      priorityScore: complaint.priorityScore,
+      urgency: complaint.urgency,
       message: "Complaint confirmed successfully"
     });
   } catch (err) {
@@ -165,12 +182,28 @@ router.delete("/:id/confirm", async (req, res) => {
 
     complaint.confirmations.splice(confirmIndex, 1);
     complaint.confirmationCount = Math.max(0, (complaint.confirmationCount || 0) - 1);
-    complaint.priorityScore = Math.max(0, (complaint.priorityScore || 0) - 10);
+    
+    // Recalculate priority score using intelligent system
+    const priorityResult = calculatePriorityAndSLA({
+      category: complaint.category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: complaint.urgency,
+      confirms: complaint.confirmationCount || 0,
+      upvotes: complaint.upvoteCount || 0,
+      locationType: 'NORMAL',
+      createdAt: complaint.createdAt
+    });
+    complaint.priorityScore = priorityResult.priorityScore;
+    complaint.urgency = priorityResult.urgencyLevel;
+    complaint.slaDeadline = new Date(Date.now() + priorityResult.slaFinal * 60 * 60 * 1000);
+    
     await complaint.save();
 
     res.json({
       success: true,
       confirmationCount: complaint.confirmationCount,
+      priorityScore: complaint.priorityScore,
+      urgency: complaint.urgency,
       message: "Confirmation removed"
     });
   } catch (err) {
@@ -203,12 +236,28 @@ router.post("/:id/upvote", async (req, res) => {
       upvotedAt: new Date()
     });
     complaint.upvoteCount = (complaint.upvoteCount || 0) + 1;
-    complaint.priorityScore = (complaint.priorityScore || 0) + 5;
+    
+    // Recalculate priority score using intelligent system
+    const priorityResult = calculatePriorityAndSLA({
+      category: complaint.category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: complaint.urgency,
+      confirms: complaint.confirmationCount || 0,
+      upvotes: complaint.upvoteCount || 0,
+      locationType: 'NORMAL',
+      createdAt: complaint.createdAt
+    });
+    complaint.priorityScore = priorityResult.priorityScore;
+    complaint.urgency = priorityResult.urgencyLevel;
+    complaint.slaDeadline = new Date(Date.now() + priorityResult.slaFinal * 60 * 60 * 1000);
+    
     await complaint.save();
 
     res.json({
       success: true,
       upvoteCount: complaint.upvoteCount,
+      priorityScore: complaint.priorityScore,
+      urgency: complaint.urgency,
       message: "Upvote added successfully"
     });
   } catch (err) {
@@ -239,13 +288,76 @@ router.delete("/:id/upvote", async (req, res) => {
 
     complaint.upvotes.splice(upvoteIndex, 1);
     complaint.upvoteCount = Math.max(0, (complaint.upvoteCount || 0) - 1);
-    complaint.priorityScore = Math.max(0, (complaint.priorityScore || 0) - 5);
+    
+    // Recalculate priority score using intelligent system
+    const priorityResult = calculatePriorityAndSLA({
+      category: complaint.category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: complaint.urgency,
+      confirms: complaint.confirmationCount || 0,
+      upvotes: complaint.upvoteCount || 0,
+      locationType: 'NORMAL',
+      createdAt: complaint.createdAt
+    });
+    complaint.priorityScore = priorityResult.priorityScore;
+    complaint.urgency = priorityResult.urgencyLevel;
+    complaint.slaDeadline = new Date(Date.now() + priorityResult.slaFinal * 60 * 60 * 1000);
+    
     await complaint.save();
 
     res.json({
       success: true,
       upvoteCount: complaint.upvoteCount,
+      priorityScore: complaint.priorityScore,
+      urgency: complaint.urgency,
       message: "Upvote removed"
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/complaints/:id/priority - Get priority calculation details
+router.get("/:id/priority", async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+    
+    const { calculatePriorityAndSLA, explainCalculation } = require("../utils/priorityCalculator");
+    
+    const priorityResult = calculatePriorityAndSLA({
+      category: complaint.category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: complaint.urgency,
+      confirms: complaint.confirmationCount || 0,
+      upvotes: complaint.upvoteCount || 0,
+      locationType: 'NORMAL',
+      createdAt: complaint.createdAt
+    });
+    
+    const explanation = explainCalculation({
+      category: complaint.category,
+      aiUrgencyPrediction: 'MEDIUM',
+      userUrgency: complaint.urgency,
+      confirms: complaint.confirmationCount || 0,
+      upvotes: complaint.upvoteCount || 0,
+      locationType: 'NORMAL',
+      priorityScore: priorityResult.priorityScore,
+      urgencyLevel: priorityResult.urgencyLevel,
+      slaFinal: priorityResult.slaFinal
+    });
+    
+    res.json({
+      success: true,
+      priorityScore: priorityResult.priorityScore,
+      urgencyLevel: priorityResult.urgencyLevel,
+      slaFinal: priorityResult.slaFinal,
+      elapsedTime: priorityResult.elapsedTime,
+      progress: priorityResult.progress,
+      status: priorityResult.status,
+      explanation
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

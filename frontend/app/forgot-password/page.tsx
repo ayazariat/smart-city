@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, Sparkles, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import { Mail, Sparkles, ArrowLeft, CheckCircle, AlertCircle, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -108,6 +108,15 @@ export default function ForgotPasswordPage() {
             <p className="text-slate-600">
               No worries! Enter your email and we&apos;ll send you a reset link.
             </p>
+            <div className="mt-3">
+              <Link 
+                href="/transparency" 
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors text-sm font-medium"
+              >
+                <BarChart3 className="w-4 h-4" />
+                View Public Statistics
+              </Link>
+            </div>
           </div>
 
           {/* Form Card */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Lock, ShieldCheck, Sparkles, Eye, EyeOff } from "lucide-react";
@@ -10,7 +10,7 @@ import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
 
-export default function SetPasswordPage() {
+function SetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -233,5 +233,17 @@ export default function SetPasswordPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function SetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    }>
+      <SetPasswordForm />
+    </Suspense>
   );
 }

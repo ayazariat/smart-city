@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { statusConfig, categoryLabels, getComplaintIdDisplay } from "@/lib/complaints";
+import { getPhotoUrl, getPhotoCount } from "@/lib/photos";
 import { useAuthStore } from "@/store/useAuthStore";
 import { confirmComplaint, unconfirmComplaint, upvoteComplaint, removeUpvote } from "@/services/complaint.service";
 
@@ -98,7 +99,7 @@ export const ComplaintCard = ({
 
   const statusStyle = statusColors[complaint.status] ?? { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" };
 
-  const userId = user?._id || user?.id;
+  const userId = user?.id;
   const hasConfirmed = complaint.confirmations?.some(
     c => c.citizenId === userId || (user as any)?.sub === c.citizenId
   );
@@ -332,7 +333,7 @@ export const ComplaintCard = ({
                 >
                   {item.type === "photo" || !item.type ? (
                     <img
-                      src={item.url?.startsWith('blob:') ? '/placeholder.png' : item.url}
+                      src={getPhotoUrl(item.url) || '/placeholder.png'}
                       alt={`Media ${idx + 1}`}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                       onError={(e) => {

@@ -109,6 +109,56 @@ export const assignComplaintToDepartment = async (
   );
 };
 
+/**
+ * Get agent statistics
+ */
+export const getAgentStats = async (): Promise<{
+  success: boolean;
+  data: {
+    total: number;
+    submitted: number;
+    validated: number;
+    assigned: number;
+    inProgress: number;
+    resolved: number;
+    closed: number;
+    rejected: number;
+    totalOverdue: number;
+    totalAtRisk: number;
+    resolutionRate: number;
+    averageResolutionTime: number;
+    byCategory: Record<string, number>;
+    byMonth: Record<string, number>;
+  };
+}> => {
+  return apiClient.get("/complaints/stats");
+};
+
+/**
+ * Approve technician resolution report
+ */
+export const approveResolution = async (
+  complaintId: string
+): Promise<{ success: boolean; message: string; data: Complaint }> => {
+  return apiClient.post<{ success: boolean; message: string; data: Complaint }>(
+    `/agent/complaints/${complaintId}/approve-resolution`,
+    {}
+  );
+};
+
+/**
+ * Reject technician resolution report
+ */
+export const rejectResolution = async (
+  complaintId: string,
+  rejectionReason: string
+): Promise<{ success: boolean; message: string; data: Complaint }> => {
+  return apiClient.post<{ success: boolean; message: string; data: Complaint }>(
+    `/agent/complaints/${complaintId}/reject-resolution`,
+    { rejectionReason }
+  );
+};
+
 export const agentService = {
   getAgentComplaints,
   validateComplaint,
@@ -116,4 +166,7 @@ export const agentService = {
   closeComplaint,
   getAgentDepartments,
   assignComplaintToDepartment,
+  getStats: getAgentStats,
+  approveResolution,
+  rejectResolution,
 };

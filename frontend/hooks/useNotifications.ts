@@ -1,9 +1,9 @@
-"use client";
-
 import { useEffect, useState, useCallback } from "react";
 import { notificationService } from "@/services/notification.service";
 import { Notification } from "@/types";
 import { useAuthStore } from "@/store/useAuthStore";
+import { subscribeToNotifications, connectSocket } from "@/lib/socket";
+import { showToast } from "@/components/ui/Toast";
 
 interface UseNotificationsReturn {
   notifications: Notification[];
@@ -16,7 +16,7 @@ interface UseNotificationsReturn {
 }
 
 export function useNotifications(): UseNotificationsReturn {
-  const { token, hydrated } = useAuthStore();
+  const { user, token, hydrated } = useAuthStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -55,6 +55,13 @@ export function useNotifications(): UseNotificationsReturn {
     }
   }, [token, hydrated]);
 
+  const handleNewNotification = useCallback((notification: unknown) => {
+    const notif = notification as Notification;
+    setNotifications(prev => [notif, ...prev]);
+    setUnreadCount(prev => prev + 1);
+    showToast(notif.message || "New notification", "info");
+  }, []);
+
   const markAsRead = useCallback(async (id: string) => {
     if (!token) return;
 
@@ -85,25 +92,23 @@ export function useNotifications(): UseNotificationsReturn {
     }
   }, [token]);
 
+  // Initial fetch and socket connection
   useEffect(() => {
-    if (hydrated && token) {
+    if (hydrated && token && user?.id) {
       fetchNotifications();
-    } else if (hydrated && !token) {
-      setLoading(false);
+      connectSocket(user.id);
+      const unsubscribe = subscribeToNotifications(handleNewNotification);
+      return () => unsubscribe();
     }
-  }, [hydrated, token, fetchNotifications]);
+  }, [hydrated, token, user, fetchNotifications, handleNewNotification]);
 
+  // Cleanup on logout
   useEffect(() => {
-    if (!hydrated || !token) {
-      return;
+    if (hydrated && !token) {
+      setNotifications([]);
+      setUnreadCount(0);
     }
-
-    const interval = setInterval(() => {
-      fetchNotifications();
-    }, 30000); // Poll every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [hydrated, token, fetchNotifications]);
+  }, [hydrated, token]);
 
   return {
     notifications,

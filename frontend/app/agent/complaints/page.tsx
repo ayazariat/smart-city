@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, CheckCircle, XCircle, Building, TrendingUp } from "lucide-react";
+import { 
+  FileText, CheckCircle, XCircle, Building, TrendingUp,
+  Clock, AlertTriangle, Filter, Download, Search
+} from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
 import { Complaint } from "@/types";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
+import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
 import {
   PageHeader,
-  FilterBar,
   LoadingSpinner,
   EmptyState,
   ComplaintCard,
@@ -25,14 +28,30 @@ export default function AgentComplaintsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [priorityFilter, setPriorityFilter] = useState<string>("");
+  const [governorateFilter, setGovernorateFilter] = useState<string>("");
+  const [municipalityFilter, setMunicipalityFilter] = useState<string>("");
+  const [availableMunicipalities, setAvailableMunicipalities] = useState<string[]>([]);
   const [departments, setDepartments] = useState<Array<{ _id: string; name: string }>>([]);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const [rejectTarget, setRejectTarget] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState("");
+
+  // Update available municipalities when governorate changes
+  useEffect(() => {
+    if (governorateFilter) {
+      setAvailableMunicipalities(getMunicipalitiesByGovernorate(governorateFilter));
+    } else {
+      setAvailableMunicipalities([]);
+    }
+    setMunicipalityFilter("");
+  }, [governorateFilter]);
 
   const refreshComplaints = async () => {
     const response = await agentService.getAgentComplaints({ status: statusFilter || undefined });
@@ -51,7 +70,7 @@ export default function AgentComplaintsPage() {
         setLoading(true);
         const response = await agentService.getAgentComplaints({
           page: 1,
-          limit: 50,
+          limit: 100,
           status: statusFilter || undefined,
         });
         if (response.data?.complaints) setComplaints(response.data.complaints);
@@ -130,7 +149,16 @@ export default function AgentComplaintsPage() {
     }
   };
 
+  // Filter complaints based on all filters
   const filteredComplaints = complaints.filter((c) => {
+    if (categoryFilter && c.category !== categoryFilter) return false;
+    if (priorityFilter) {
+      if (priorityFilter === "HIGH" && (c.priorityScore || 0) < 15) return false;
+      if (priorityFilter === "MEDIUM" && ((c.priorityScore || 0) < 6 || (c.priorityScore || 0) >= 15)) return false;
+      if (priorityFilter === "LOW" && (c.priorityScore || 0) >= 6) return false;
+    }
+    if (governorateFilter && c.location?.governorate !== governorateFilter) return false;
+    if (municipalityFilter && c.municipalityName !== municipalityFilter) return false;
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -139,145 +167,293 @@ export default function AgentComplaintsPage() {
     );
   });
 
-  // Stats
-  const submitted = complaints.filter(c => c.status === "SUBMITTED").length;
-  const validated = complaints.filter(c => c.status === "VALIDATED").length;
-  const total = complaints.length;
+  // Calculate statistics
+  const overdueCount = complaints.filter(c => {
+    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 7;
+  }).length;
+  
+  const atRiskCount = complaints.filter(c => {
+    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 4 && daysSinceCreation <= 7;
+  }).length;
+
+  const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+  const highPriorityCount = complaints.filter(c => (c.priorityScore || 0) >= 15).length;
+  const avgDays = complaints.length > 0 
+    ? Math.round(complaints.reduce((acc, c) => {
+        const days = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        return acc + days;
+      }, 0) / complaints.length * 10) / 10
+    : 0;
+  const resolutionRate = complaints.length > 0 
+    ? Math.round((resolvedCount / complaints.length) * 100) 
+    : 0;
+
+  // Get categories count
+  const byCategory: Record<string, number> = {};
+  filteredComplaints.forEach(c => {
+    const cat = categoryLabels[c.category] || c.category || "Other";
+    byCategory[cat] = (byCategory[cat] || 0) + 1;
+  });
+
+  // Export functions
+  const exportCSV = () => {
+    const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
+    const rows = filteredComplaints.map(c => [
+      c.referenceId || c._id?.slice(-6),
+      c.title?.replace(/,/g, " "),
+      categoryLabels[c.category] || c.category,
+      c.status,
+      (c.priorityScore || 0).toString(),
+      c.municipalityName || "",
+      new Date(c.createdAt).toLocaleDateString()
+    ]);
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `agent_complaints_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
+  const exportPDF = () => {
+    alert("PDF export feature coming soon!");
+  };
 
   if (!user || user.role !== "MUNICIPAL_AGENT") return null;
 
   return (
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
-        title="Agent Dashboard"
-        subtitle="Manage and process citizen complaints"
+        title="All Complaints"
+        subtitle="Agent complaint management"
         backHref="/dashboard"
-        variant="hero"
         rightContent={
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2">
-              <div className="text-xs text-white/70">Total</div>
-              <div className="text-xl font-bold text-white">{total}</div>
-            </div>
-          </div>
+          <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
+            {filteredComplaints.length} complaints
+          </span>
         }
       />
 
-      {/* Stats Cards */}
-      <div className="max-w-7xl mx-auto px-4 -mt-6 relative z-10">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Pending Review</p>
-                <p className="text-3xl font-bold text-amber-600 mt-1">{submitted}</p>
+                <p className="text-sm text-slate-500">Total Complaints</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">{complaints.length}</p>
+              </div>
+              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-slate-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Resolved</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{resolvedCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">At Risk (SLA)</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">{atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                <XCircle className="w-6 h-6 text-amber-600" />
+                <Clock className="w-6 h-6 text-amber-600" />
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-100">
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Validated</p>
-                <p className="text-3xl font-bold text-blue-600 mt-1">{validated}</p>
+                <p className="text-sm text-slate-500">Overdue</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{overdueCount}</p>
               </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-blue-600" />
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Team Performance */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">Team Performance</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-3 bg-green-50 rounded-xl">
+              <p className="text-2xl font-bold text-green-600">{resolvedCount}</p>
+              <p className="text-xs text-slate-500 mt-1">Resolved</p>
+            </div>
+            <div className="text-center p-3 bg-blue-50 rounded-xl">
+              <p className="text-2xl font-bold text-blue-600">{avgDays}</p>
+              <p className="text-xs text-slate-500 mt-1">Avg Days</p>
+            </div>
+            <div className="text-center p-3 bg-emerald-50 rounded-xl">
+              <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
+              <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
+            </div>
+            <div className="text-center p-3 bg-orange-50 rounded-xl">
+              <p className="text-2xl font-bold text-orange-600">{highPriorityCount}</p>
+              <p className="text-xs text-slate-500 mt-1">High Priority</p>
             </div>
           </div>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 font-medium">All Complaints</p>
-                <p className="text-3xl font-bold text-primary mt-1">{total}</p>
-              </div>
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-primary" />
-              </div>
+          {/* Categories */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <p className="text-sm text-slate-600 mb-2">Categories:</p>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(byCategory).slice(0, 5).map(([cat, count]) => (
+                <span key={cat} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
+                  {cat}: {count}
+                </span>
+              ))}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Reject Modal */}
-      <Modal
-        isOpen={rejectTarget !== null}
-        onClose={() => { setRejectTarget(null); setRejectReason(""); }}
-        title="Reject Complaint"
-        description="Please provide a reason for rejecting this complaint."
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => { setRejectTarget(null); setRejectReason(""); }} disabled={actionLoading !== null}>
-              Cancel
+        {/* Filters Section */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200">
+          <div className="flex flex-col md:flex-row gap-3 items-center">
+            {/* Show Filters Button */}
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              {showFilters ? "Hide Filters" : "Show Filters"}
             </Button>
-            <Button variant="danger" onClick={handleReject} isLoading={actionLoading !== null} disabled={!rejectReason || actionLoading !== null}>
-              Reject
-            </Button>
-          </>
-        }
-      >
-        <textarea
-          value={rejectReason}
-          onChange={(e) => setRejectReason(e.target.value)}
-          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none transition-all"
-          rows={4}
-          placeholder="Enter rejection reason..."
-        />
-      </Modal>
 
-      {/* Assign Modal */}
-      <Modal
-        isOpen={assignTarget !== null}
-        onClose={() => { setAssignTarget(null); setSelectedDepartment(""); }}
-        title="Assign to Department"
-        description="Select the department that will handle this complaint."
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => { setAssignTarget(null); setSelectedDepartment(""); }} disabled={actionLoading !== null}>
-              Cancel
-            </Button>
-            <Button onClick={handleAssign} isLoading={actionLoading !== null} disabled={!selectedDepartment || actionLoading !== null}>
-              Assign
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <select
-            value={selectedDepartment}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white transition-all"
-          >
-            <option value="">Select department...</option>
-            {departments.map((dept) => (
-              <option key={dept._id} value={dept._id}>{dept.name}</option>
-            ))}
-          </select>
+            {/* Export Buttons */}
+            <div className="flex gap-2 ml-auto">
+              <Button onClick={exportCSV} className="bg-green-600 hover:bg-green-700 text-white">
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button onClick={exportPDF} className="bg-red-600 hover:bg-red-700 text-white">
+                <Download className="w-4 h-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
+
+          {/* Expanded Filters */}
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <div className="flex flex-col md:flex-row gap-3 items-center">
+                {/* Search */}
+                <div className="flex-1 w-full relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by description or category..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                >
+                  <option value="">All Statuses</option>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Governorate Filter */}
+                <select
+                  value={governorateFilter}
+                  onChange={(e) => setGovernorateFilter(e.target.value)}
+                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                >
+                  <option value="">All Governorates</option>
+                  {TUNISIA_GEOGRAPHY.map((gov) => (
+                    <option key={gov.governorate} value={gov.governorate}>
+                      {gov.governorate}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Municipality Filter */}
+                <select
+                  value={municipalityFilter}
+                  onChange={(e) => setMunicipalityFilter(e.target.value)}
+                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                  disabled={!governorateFilter}
+                >
+                  <option value="">All Municipalities</option>
+                  {availableMunicipalities.map((mun) => (
+                    <option key={mun} value={mun}>
+                      {mun}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Category Filter */}
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                >
+                  <option value="">All Categories</option>
+                  {Object.entries(categoryLabels).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Priority Filter */}
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                >
+                  <option value="">All Priorities</option>
+                  <option value="HIGH">High (≥15)</option>
+                  <option value="MEDIUM">Medium (6-14)</option>
+                  <option value="LOW">Low (&lt;6)</option>
+                </select>
+
+                {/* Results Count */}
+                <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                  {filteredComplaints.length} results
+                </span>
+              </div>
+            </div>
+          )}
         </div>
-      </Modal>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <FilterBar
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
-          statusFilter={statusFilter}
-          onStatusChange={setStatusFilter}
-          count={filteredComplaints.length}
-        />
-
+        {/* Loading State */}
         {loading && <LoadingSpinner />}
 
+        {/* Complaints List */}
         {!loading && (
           filteredComplaints.length === 0 ? (
             <EmptyState
               icon="file"
               message={
-                searchTerm || statusFilter
+                searchTerm || statusFilter || categoryFilter || priorityFilter || governorateFilter
                   ? "Try adjusting your search or filters."
                   : "No complaints assigned to you yet."
               }
@@ -351,6 +527,63 @@ export default function AgentComplaintsPage() {
           )
         )}
       </main>
+
+      {/* Reject Modal */}
+      <Modal
+        isOpen={rejectTarget !== null}
+        onClose={() => { setRejectTarget(null); setRejectReason(""); }}
+        title="Reject Complaint"
+        description="Please provide a reason for rejecting this complaint."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => { setRejectTarget(null); setRejectReason(""); }} disabled={actionLoading !== null}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleReject} isLoading={actionLoading !== null} disabled={!rejectReason || actionLoading !== null}>
+              Reject
+            </Button>
+          </>
+        }
+      >
+        <textarea
+          value={rejectReason}
+          onChange={(e) => setRejectReason(e.target.value)}
+          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none transition-all"
+          rows={4}
+          placeholder="Enter rejection reason..."
+        />
+      </Modal>
+
+      {/* Assign Modal */}
+      <Modal
+        isOpen={assignTarget !== null}
+        onClose={() => { setAssignTarget(null); setSelectedDepartment(""); }}
+        title="Assign to Department"
+        description="Select the department that will handle this complaint."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => { setAssignTarget(null); setSelectedDepartment(""); }} disabled={actionLoading !== null}>
+              Cancel
+            </Button>
+            <Button onClick={handleAssign} isLoading={actionLoading !== null} disabled={!selectedDepartment || actionLoading !== null}>
+              Assign
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <select
+            value={selectedDepartment}
+            onChange={(e) => setSelectedDepartment(e.target.value)}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white transition-all"
+          >
+            <option value="">Select department...</option>
+            {departments.map((dept) => (
+              <option key={dept._id} value={dept._id}>{dept.name}</option>
+            ))}
+          </select>
+        </div>
+      </Modal>
     </div>
   );
 }
