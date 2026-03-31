@@ -265,7 +265,7 @@ router.get("/complaints", async (req, res) => {
     
     const [complaints, total] = await Promise.all([
       Complaint.find(query)
-        .select("title description category status location createdAt priorityScore confirmationCount")
+        .select("title description category status location createdAt priorityScore confirmationCount upvoteCount media municipalityName referenceId")
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit))
@@ -327,7 +327,7 @@ router.get("/my-municipality-complaints", authenticate, authorize("CITIZEN"), as
     
     const total = await Complaint.countDocuments(query);
     const complaints = await Complaint.find(query)
-      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId')
+      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId media')
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit))
       .sort({ createdAt: -1 });

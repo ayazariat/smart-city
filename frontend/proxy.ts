@@ -28,7 +28,6 @@ const PUBLIC_PATHS = [
 // Paths that require specific roles
 const ROLE_BASED_PATHS = {
   "/admin": ["ADMIN"],
-  "/archive": ["ADMIN"],
   "/manager": ["DEPARTMENT_MANAGER", "ADMIN"],
   "/agent": ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN"],
   "/technician": ["TECHNICIAN", "DEPARTMENT_MANAGER", "ADMIN"],

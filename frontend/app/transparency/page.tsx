@@ -274,9 +274,9 @@ export default function TransparencyPage() {
 
   if (!hydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-slate-50">
         <div className="text-center">
-          <Loader2 className="w-16 h-16 animate-spin text-primary mx-auto mb-4" />
+          <Loader2 className="w-16 h-16 animate-spin text-green-600 mx-auto mb-4" />
           <p className="text-slate-500 text-lg">Loading dashboard...</p>
         </div>
       </div>
@@ -284,14 +284,14 @@ export default function TransparencyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-white to-secondary-50">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-primary to-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/25">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-600 to-green-700 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
                   <Sparkles className="w-6 h-6 text-white" />
                 </div>
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse"></div>
@@ -312,7 +312,7 @@ export default function TransparencyPage() {
                   placeholder="Search municipalities, complaints, categories..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  className="w-full pl-12 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
                 />
                 {searchQuery && (
                   <button
@@ -341,7 +341,7 @@ export default function TransparencyPage() {
               </Link>
               <Link 
                 href="/register"
-                className="px-4 py-2 bg-gradient-to-r from-primary to-blue-500 text-white hover:from-primary/90 hover:to-blue-500/90 rounded-xl text-sm font-medium transition-all shadow-lg shadow-primary/25"
+                className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 rounded-xl text-sm font-medium transition-all shadow-lg shadow-green-500/25"
               >
                 Create Account
               </Link>
@@ -360,7 +360,7 @@ export default function TransparencyPage() {
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   activeTab === tab.id
-                    ? "bg-primary/10 text-primary border border-primary/20"
+                    ? "bg-green-100 text-green-700 border border-green-200"
                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -376,7 +376,7 @@ export default function TransparencyPage() {
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
-              <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+              <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
               <p className="text-slate-500">Loading dashboard...</p>
             </div>
           </div>
@@ -390,7 +390,7 @@ export default function TransparencyPage() {
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                        <Activity className="w-7 h-7 text-primary" />
+                        <Activity className="w-7 h-7 text-green-600" />
                         Live Performance Metrics
                       </h2>
                       <p className="text-slate-500 mt-1">Real-time municipal performance across Tunisia</p>
@@ -407,7 +407,7 @@ export default function TransparencyPage() {
                             onClick={() => setPeriod(p)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                               period === p
-                                ? "bg-primary text-white shadow-md"
+                                ? "bg-green-600 text-white shadow-md"
                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                             }`}
                           >
@@ -449,12 +449,12 @@ export default function TransparencyPage() {
                 <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-primary" />
+                      <Sparkles className="w-5 h-5 text-green-600" />
                       Featured Complaints
                     </h3>
                     <button
                       onClick={() => setActiveTab("complaints")}
-                      className="flex items-center gap-1 text-primary hover:text-primary/80 text-sm font-medium transition-colors"
+                      className="flex items-center gap-1 text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
                     >
                       View All Complaints
                       <ArrowRight className="w-4 h-4" />
@@ -576,7 +576,7 @@ export default function TransparencyPage() {
                   {/* Category Stats */}
                   <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
                     <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                      <Target className="w-5 h-5 text-primary" />
+                      <Target className="w-5 h-5 text-green-600" />
                       Category Performance
                     </h3>
                     <div className="space-y-4">
@@ -666,7 +666,7 @@ export default function TransparencyPage() {
                     <select
                       value={categoryFilter}
                       onChange={(e) => setCategoryFilter(e.target.value)}
-                      className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20"
                     >
                       <option value="">All Categories</option>
                       {Object.entries(categoryLabels).map(([key, label]) => (
@@ -676,13 +676,13 @@ export default function TransparencyPage() {
                     <div className="flex gap-1 ml-auto">
                       <button
                         onClick={() => setViewMode("grid")}
-                        className={`p-2 rounded-lg transition-colors ${viewMode === "grid" ? "bg-primary text-white" : "bg-slate-100 text-slate-500"}`}
+                        className={`p-2 rounded-lg transition-colors ${viewMode === "grid" ? "bg-green-600 text-white" : "bg-slate-100 text-slate-500"}`}
                       >
                         <Grid3X3 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setViewMode("list")}
-                        className={`p-2 rounded-lg transition-colors ${viewMode === "list" ? "bg-primary text-white" : "bg-slate-100 text-slate-500"}`}
+                        className={`p-2 rounded-lg transition-colors ${viewMode === "list" ? "bg-green-600 text-white" : "bg-slate-100 text-slate-500"}`}
                       >
                         <List className="w-4 h-4" />
                       </button>
@@ -858,7 +858,7 @@ export default function TransparencyPage() {
                         return (
                           <div 
                             key={`${mun.name}-${mun.governorate}`}
-                            className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-primary/30 hover:shadow-md transition-all cursor-pointer"
+                            className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-green-500/30 hover:shadow-md transition-all cursor-pointer"
                           >
                             <div className="flex items-center justify-between">
                               <div>
@@ -938,7 +938,7 @@ export default function TransparencyPage() {
         )}
 
         {/* Call to Action */}
-        <div className="mt-12 bg-gradient-to-r from-primary via-blue-500 to-blue-600 rounded-3xl shadow-xl p-8 text-white">
+        <div className="mt-12 bg-gradient-to-r from-green-600 via-green-700 to-green-800 rounded-3xl shadow-xl p-8 text-white">
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-3">See a problem in your neighborhood?</h2>
             <p className="text-white/80 mb-6 max-w-lg mx-auto">
@@ -947,7 +947,7 @@ export default function TransparencyPage() {
             <div className="flex flex-wrap justify-center gap-4">
               <Link 
                 href="/register"
-                className="px-6 py-3 bg-white text-primary font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
+                className="px-6 py-3 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
               >
                 <Users className="w-5 h-5" />
                 Create Account

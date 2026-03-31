@@ -313,7 +313,7 @@ router.get("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, re
 // PUT /api/citizen/complaints/:id - Update citizen's own complaint (only if SUBMITTED)
 router.put("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, res) => {
   try {
-    const { title, description, category, urgency, location, media } = req.body;
+    const { title, description, category, urgency, location, media, phone } = req.body;
 
     // Find complaint and verify ownership
     const complaint = await Complaint.findOne({

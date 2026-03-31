@@ -27,23 +27,29 @@ import { Complaint } from "@/types";
 
 function ArchivePageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, token, hydrated } = useAuthStore();
   
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("CLOSED");
-  
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 10;
 
   useEffect(() => {
+    if (!hydrated) return;
+    if (!token || !user) {
+      router.push("/");
+      return;
+    }
+  }, [hydrated, token, user, router]);
+
+  useEffect(() => {
     const fetchArchived = async () => {
-      if (!token) {
+      if (!token || !hydrated || !user) {
         setLoading(false);
         return;
       }
@@ -51,54 +57,40 @@ function ArchivePageContent() {
       try {
         setLoading(true);
         setError(null);
-        const currentPage = parseInt(searchParams.get("page") || "1");
-        const filter = searchParams.get("filter") || statusFilter;
-        const search = searchParams.get("search") || "";
         
         const response = await complaintService.getArchivedComplaints({
-          filter: filter || undefined,
-          search: search || undefined,
-          page: currentPage,
+          filter: statusFilter || undefined,
+          search: searchTerm || undefined,
+          page: page,
           limit
         });
         
-        setComplaints(response.complaints || []);
-        setTotal(response.total || 0);
-        setTotalPages(response.pages || 1);
-        setPage(currentPage);
-        setStatusFilter(filter);
-        setSearchTerm(search);
+        if (response && response.success) {
+          setComplaints(response.complaints || []);
+          setTotal(response.total || 0);
+          setTotalPages(response.pages || 1);
+        } else {
+          setError("Failed to load archived complaints");
+        }
       } catch (err) {
-        console.error("Error fetching archived complaints:", err);
         setError("Failed to load archived complaints");
       } finally {
         setLoading(false);
       }
     };
 
-    if (hydrated) {
+    if (hydrated && token && user) {
       fetchArchived();
     }
-  }, [token, hydrated, searchParams]);
-
-  const updateParams = (newParams: Record<string, string>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(newParams).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, value);
-      } else {
-        params.delete(key);
-      }
-    });
-    params.set("page", "1");
-    router.push(`/archive?${params.toString()}`);
-  };
+  }, [token, hydrated, user, page, statusFilter, searchTerm]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", newPage.toString());
-    router.push(`/archive?${params.toString()}`);
+    setPage(newPage);
+  };
+
+  const handleSearch = () => {
+    setPage(1);
   };
 
   const exportCSV = () => {
@@ -233,7 +225,7 @@ function ArchivePageContent() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    updateParams({ search: searchTerm, filter: statusFilter });
+                    handleSearch();
                   }
                 }}
                 className="w-full pl-10 pr-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
@@ -242,7 +234,7 @@ function ArchivePageContent() {
                 <button
                   onClick={() => {
                     setSearchTerm("");
-                    updateParams({ filter: statusFilter });
+                    handleSearch();
                   }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition-colors"
                 >
@@ -257,7 +249,7 @@ function ArchivePageContent() {
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
-                  updateParams({ search: searchTerm, filter: e.target.value });
+                  setPage(1);
                 }}
                 className="px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white"
               >

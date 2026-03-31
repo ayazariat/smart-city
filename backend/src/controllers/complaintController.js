@@ -159,7 +159,8 @@ class ComplaintController {
       const currentUserId = req.user.userId?.toString();
       const isOwner = citizenId === currentUserId;
       const isAdminOrAgent = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
-      const isTechnician = userRole === "TECHNICIAN" && complaint.assignedTo?.toString() === currentUserId;
+      const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
+      const isTechnician = userRole === "TECHNICIAN" && assignedToId === currentUserId;
 
       // For CITIZEN role - can only see their own complaints
       if (userRole === "CITIZEN" && !isOwner) {
@@ -170,22 +171,24 @@ class ComplaintController {
       if (userRole === "MUNICIPAL_AGENT") {
         const user = await User.findById(userId)
           .populate('municipality')
-          .select('municipality')
+          .select('municipality municipalityName')
           .lean();
         
         const userMunicipalityId = user?.municipality?._id?.toString();
+        const userMunicipalityName = user?.municipalityName || user?.municipality?.name;
         const complaintMunicipalityId = complaint.municipality?._id?.toString();
+        const complaintMunicipalityName = complaint.municipalityName || complaint.location?.municipality;
         
-        // Check if user has municipality assigned
-        if (userMunicipalityId && complaintMunicipalityId) {
+        // If complaint has no municipality set, allow agent to view it
+        if (!complaintMunicipalityId && !complaintMunicipalityName) {
+          // Allow - complaint has no municipality
+        } else if (userMunicipalityId && complaintMunicipalityId) {
           if (userMunicipalityId !== complaintMunicipalityId) {
             return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your municipality" });
           }
-        } else if (userMunicipalityId && !complaintMunicipalityId) {
-          // User has municipality but complaint doesn't - check municipalityName for backward compatibility
-          const complaintMunicipalityName = complaint.municipalityName || complaint.location?.municipality;
-          const userMunicipality = user.municipality;
-          if (userMunicipality.name !== complaintMunicipalityName) {
+        } else if (userMunicipalityName && complaintMunicipalityName) {
+          // Compare by name (case-insensitive)
+          if (userMunicipalityName.toLowerCase() !== complaintMunicipalityName.toLowerCase()) {
             return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your municipality" });
           }
         }
@@ -198,7 +201,7 @@ class ComplaintController {
         let myDepartmentId = null;
         
         if (user?.department) {
-          myDepartmentId = user.department.toString();
+          myDepartmentId = user.department?.toString();
         } else {
           // Fallback: try to find department where user is responsible
           const myDepartment = await Department.findOne({ 
@@ -206,22 +209,25 @@ class ComplaintController {
           }).select('_id').lean();
           
           if (myDepartment) {
-            myDepartmentId = myDepartment._id.toString();
+            myDepartmentId = myDepartment._id?.toString();
           }
         }
         
-        if (myDepartmentId) {
-          const complaintDepartment = complaint.assignedDepartment?._id?.toString();
-          if (complaintDepartment !== myDepartmentId) {
+        // If manager has no department or complaint has no department, allow access
+        const complaintDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
+        if (myDepartmentId && complaintDeptId) {
+          if (complaintDeptId !== myDepartmentId) {
             return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your department" });
           }
-        } else {
-          return res.status(403).json({ success: false, message: "No department assigned" });
         }
+        // If no department assigned to either, allow manager to view (they may need to assign)
       }
 
       // For non-admin/agent/technician roles - check ownership
-      if (!isOwner && !isAdminOrAgent && !isTechnician) {
+      const isTechAssigned = userRole === "TECHNICIAN" && 
+        (complaint.assignedTo?._id?.toString() === currentUserId || 
+         complaint.assignedTo?.toString() === currentUserId);
+      if (!isOwner && !isAdminOrAgent && !isTechAssigned) {
         return res.status(403).json({ success: false, message: "Access denied" });
       }
 
@@ -878,7 +884,8 @@ class ComplaintController {
       // authorization: only owner or admin/agents or assigned technician
       const isOwner = complaint.createdBy?.toString() === userId;
       const isAdminOrAgent = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
-      const isTechnician = userRole === "TECHNICIAN" && complaint.assignedTo?.map(a => a.toString()).includes(userId);
+      const assignedToArray = Array.isArray(complaint.assignedTo) ? complaint.assignedTo : [complaint.assignedTo];
+      const isTechnician = userRole === "TECHNICIAN" && assignedToArray.some(a => a?.toString() === userId);
       
       // Only staff can create NOTE, BLOCAGE, PUBLIC types
       const isStaff = isAdminOrAgent || isTechnician;
@@ -914,19 +921,21 @@ class ComplaintController {
 
       // If PUBLIC note → notify citizen
       if (finalType === "PUBLIC" && complaint.createdBy) {
-        const io = req.app.get("io");
+        const io = req.app?.get?.("io");
         const notificationService = require("../services/notification.service");
         
-        try {
-          const notificationData = {
-            type: "public_note",
-            message: `New update on your complaint ${complaint.referenceId || complaint._id}: "${text.trim().slice(0, 50)}${text.length > 50 ? '...' : ''}"`,
-            complaintId: complaint._id
-          };
-          
-          await notificationService.sendNotification(io, complaint.createdBy.toString(), notificationData);
-        } catch (notifError) {
-          console.error("Failed to send notification:", notifError);
+        if (io) {
+          try {
+            const notificationData = {
+              type: "public_note",
+              message: `New update on your complaint ${complaint.referenceId || complaint._id}: "${text.trim().slice(0, 50)}${text.length > 50 ? '...' : ''}"`,
+              complaintId: complaint._id
+            };
+            
+            await notificationService.sendNotification(io, complaint.createdBy.toString(), notificationData);
+          } catch (notifError) {
+            console.error("Failed to send notification:", notifError);
+          }
         }
       }
 

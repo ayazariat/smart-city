@@ -135,22 +135,31 @@ router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTM
     
     await complaint.save();
 
-    // Notify the technician about the new task
-    await notificationService.sendNotification(req.app.get('io'), technicianId, {
-      type: "assigned",
-      title: "New Task Assigned",
-      message: `A new task "${complaint.title || 'Unknown'}" has been assigned to you.`,
-      complaintId: complaint._id,
-    });
-
-    // Also notify the citizen
-    if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+    // Notify the technician about the new task (don't fail if notification fails)
+    const io = req.app?.get?.('io');
+    try {
+      await notificationService.sendNotification(io, technicianId, {
         type: "assigned",
-        title: "Complaint Assigned",
-        message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a technician.`,
+        title: "New Task Assigned",
+        message: `A new task "${complaint.title || 'Unknown'}" has been assigned to you.`,
         complaintId: complaint._id,
       });
+    } catch (notifError) {
+      console.error("Failed to notify technician:", notifError);
+    }
+
+    // Also notify the citizen (don't fail if notification fails)
+    if (complaint.createdBy) {
+      try {
+        await notificationService.sendNotification(io, complaint.createdBy, {
+          type: "assigned",
+          title: "Complaint Assigned",
+          message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a technician.`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify citizen:", notifError);
+      }
     }
 
     res.json({
@@ -231,24 +240,33 @@ router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MA
     const populatedTeam = await RepairTeam.findById(repairTeam._id)
       .populate("members", "fullName email");
 
-    // Notify all team members
+    // Notify all team members (don't fail if notification fails)
+    const io = req.app?.get?.('io');
     for (const tech of technicians) {
-      await notificationService.sendNotification(req.app.get('io'), tech._id, {
-        type: "assigned",
-        title: "New Task Assigned",
-        message: `A new task "${complaint.title || 'Unknown'}" has been assigned to your team.`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.sendNotification(io, tech._id, {
+          type: "assigned",
+          title: "New Task Assigned",
+          message: `A new task "${complaint.title || 'Unknown'}" has been assigned to your team.`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify team member:", notifError);
+      }
     }
 
-    // Also notify the citizen
+    // Also notify the citizen (don't fail if notification fails)
     if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
-        type: "assigned",
-        title: "Complaint Assigned",
-        message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a repair team.`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.sendNotification(io, complaint.createdBy, {
+          type: "assigned",
+          title: "Complaint Assigned",
+          message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a repair team.`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify citizen:", notifError);
+      }
     }
 
     res.json({
@@ -283,8 +301,13 @@ router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAG
     // Check if complaint is assigned to manager's department
     const department = await getManagerDepartment(req.user.userId);
     const departmentId = department?._id;
+    const isAdmin = req.user.role === "ADMIN";
     
-    if (departmentId && complaint.assignedDepartment?.toString() !== departmentId.toString()) {
+    // Admin can update any, manager can only update if complaint has their department or no department
+    const assignedDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
+    const canAccess = isAdmin || !assignedDeptId || assignedDeptId === departmentId?.toString();
+    
+    if (!canAccess) {
       return res.status(403).json({ success: false, message: "Complaint not in your department" });
     }
 

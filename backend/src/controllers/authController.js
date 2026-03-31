@@ -649,14 +649,15 @@ class AuthController {
   // Reset password
   async resetPassword(req, res) {
     try {
-      const { token, password } = req.body;
+      const { token, password, newPassword } = req.body;
+      const pwd = password || newPassword;
 
-      if (!token || !password) {
+      if (!token || !pwd) {
         return res.status(400).json({ message: "Token and new password are required" });
       }
 
       // validate password strength
-      const pwdError = validatePasswordStrength(password);
+      const pwdError = validatePasswordStrength(pwd);
       if (pwdError) {
         return res.status(400).json({ message: pwdError });
       }
@@ -672,7 +673,7 @@ class AuthController {
 
       // Hash new password
       const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(password, salt);
+      user.password = await bcrypt.hash(pwd, salt);
       user.resetToken = null;
       user.resetTokenExpires = null;
       user.passwordLastChanged = new Date();

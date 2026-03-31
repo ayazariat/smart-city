@@ -164,14 +164,18 @@ router.put("/complaints/:id/validate", authenticate, authorize("MUNICIPAL_AGENT"
     
     await complaint.save();
 
-    // Notify citizen that complaint was validated
+    // Notify citizen that complaint was validated (don't fail if notification fails)
     if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
-        type: "validated",
-        title: "Complaint Validated",
-        message: `Your complaint "${complaint.title}" has been validated and is being processed.`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+          type: "validated",
+          title: "Complaint Validated",
+          message: `Your complaint "${complaint.title}" has been validated and is being processed.`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify citizen:", notifError);
+      }
     }
 
     res.json({ success: true, message: "Complaint validated successfully", data: complaint });
@@ -224,14 +228,18 @@ router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"),
     
     await complaint.save();
 
-    // Notify citizen that complaint was rejected
+    // Notify citizen that complaint was rejected (don't fail if notification fails)
     if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
-        type: "rejected",
-        title: "Complaint Rejected",
-        message: `Your complaint "${complaint.title}" has been rejected. Reason: ${reason}`,
-        complaintId: complaint._id,
-      });
+      try {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+          type: "rejected",
+          title: "Complaint Rejected",
+          message: `Your complaint "${complaint.title}" has been rejected. Reason: ${reason}`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify citizen:", notifError);
+      }
     }
 
     res.json({ success: true, message: "Complaint rejected", data: complaint });
@@ -278,7 +286,7 @@ router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), 
 
     // Notify citizen that complaint was closed
     if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
         type: "closed",
         title: "Complaint Closed",
         message: `Your complaint "${complaint.title}" has been closed. Thank you for using our service.`,
@@ -331,7 +339,7 @@ router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIP
     await complaint.save();
 
     // Notify department managers about the new assignment
-    await notificationService.notifyManagersByDepartment(req.app.get('io'), departmentId, {
+    await notificationService.notifyManagersByDepartment(req.app?.get?.('io'), departmentId, {
       type: "assigned",
       title: "New Complaint Assigned",
       message: `Complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
@@ -340,7 +348,7 @@ router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIP
     
     // Also notify citizen if exists
     if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
         type: "assigned",
         title: "Complaint Assigned",
         message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
@@ -411,7 +419,7 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
 
     // Notify citizen
     if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
         type: "closed",
         title: "Complaint Closed",
         message: `Your complaint "${complaint.title}" has been resolved and closed.`,
@@ -421,7 +429,7 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
 
     // Notify technician who submitted the resolution
     if (complaint.assignedTo) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.assignedTo, {
+      await notificationService.sendNotification(req.app?.get?.('io'), complaint.assignedTo, {
         type: "resolution_approved",
         title: "Resolution Approved",
         message: `Your resolution for "${complaint.title}" has been approved by the agent.`,
@@ -481,7 +489,7 @@ router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICI
 
     // Notify technician who submitted the resolution
     if (complaint.assignedTo) {
-      await notificationService.sendNotification(req.app.get('io'), complaint.assignedTo, {
+      await notificationService.sendNotification(req.app?.get?.('io'), complaint.assignedTo, {
         type: "resolution_rejected",
         title: "Resolution Rejected",
         message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}`,

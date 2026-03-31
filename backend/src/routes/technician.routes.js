@@ -96,21 +96,27 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
     // Check if complaint is assigned to this technician (via assignedTo or assignedTeam)
     const technicianId = req.user.userId;
     const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
-    const teamIds = teams.map(t => t._id);
+    const teamIds = teams.map(t => t._id.toString());
+    
+    const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
+    const assignedTeamId = complaint.assignedTeam?._id?.toString() || complaint.assignedTeam?.toString();
     
     const isAssigned = 
-      complaint.assignedTo?.toString() === technicianId ||
-      (complaint.assignedTeam && teamIds.some(id => id.toString() === complaint.assignedTeam?.toString()));
+      assignedToId === technicianId ||
+      (assignedTeamId && teamIds.includes(assignedTeamId));
     
     if (!isAssigned) {
-      return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
+      return res.status(403).json({ 
+        success: false, 
+        message: `Not assigned. assignedTo: ${assignedToId}, yourId: ${technicianId}`
+      });
     }
 
     // Only ASSIGNED complaints can be started
     if (complaint.status !== "ASSIGNED") {
       return res.status(400).json({ 
         success: false, 
-        message: "Only assigned complaints can be started" 
+        message: `Wrong status: ${complaint.status}. Need ASSIGNED.` 
       });
     }
 
@@ -128,10 +134,11 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
     
     await complaint.save();
 
-    // Notify department managers (don't fail if notification fails)
-    if (complaint.assignedDepartment) {
+    // Notify (don't fail if notification fails)
+    const io = req.app?.get?.('io');
+    if (io && complaint.assignedDepartment) {
       try {
-        await notificationService.notifyManagersByDepartment(req.app.get('io'), complaint.assignedDepartment, {
+        await notificationService.notifyManagersByDepartment(io, complaint.assignedDepartment, {
           type: "in_progress",
           title: "Work Started",
           message: `Technician started work on "${complaint.title}".`,
@@ -142,13 +149,12 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
       }
     }
 
-    // Notify citizen (don't fail if notification fails)
-    if (complaint.createdBy) {
+    if (io && complaint.createdBy) {
       try {
-        await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+        await notificationService.sendNotification(io, complaint.createdBy, {
           type: "in_progress",
           title: "Work Started",
-          message: `Work has started on your complaint "${complaint.title}".`,
+          message: `Work started on your complaint "${complaint.title}".`,
           complaintId: complaint._id,
         });
       } catch (notifError) {
@@ -162,8 +168,8 @@ router.put("/complaints/:id/start", authenticate, authorize("TECHNICIAN"), async
       data: complaint
     });
   } catch (error) {
-    console.error("Technician start complaint error:", error);
-    res.status(500).json({ success: false, message: "Failed to start complaint" });
+    console.error("Technician start error:", error.message, error.stack);
+    res.status(500).json({ success: false, message: `Failed to start: ${error.message}` });
   }
 });
 
@@ -178,24 +184,30 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check if complaint is assigned to this technician (via assignedTo or assignedTeam)
+    // Check if complaint is assigned to this technician
     const technicianId = req.user.userId;
     const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
-    const teamIds = teams.map(t => t._id);
+    const teamIds = teams.map(t => t._id.toString());
+    
+    const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
+    const assignedTeamId = complaint.assignedTeam?._id?.toString() || complaint.assignedTeam?.toString();
     
     const isAssigned = 
-      complaint.assignedTo?.toString() === technicianId ||
-      (complaint.assignedTeam && teamIds.some(id => id.toString() === complaint.assignedTeam?.toString()));
+      assignedToId === technicianId ||
+      (assignedTeamId && teamIds.includes(assignedTeamId));
     
     if (!isAssigned) {
-      return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
+      return res.status(403).json({ 
+        success: false, 
+        message: `Not assigned. assignedTo: ${assignedToId}, yourId: ${technicianId}`
+      });
     }
 
     // Only IN_PROGRESS complaints can be completed
     if (complaint.status !== "IN_PROGRESS") {
       return res.status(400).json({ 
         success: false, 
-        message: "Only in-progress complaints can be completed" 
+        message: `Wrong status: ${complaint.status}. Need IN_PROGRESS.` 
       });
     }
 
@@ -236,13 +248,14 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
     
     await complaint.save();
 
-    // Notify department managers and citizen (don't fail if notification fails)
-    if (complaint.assignedDepartment) {
+    // Notify (don't fail if notification fails)
+    const io = req.app?.get?.('io');
+    if (io && complaint.assignedDepartment) {
       try {
-        await notificationService.notifyManagersByDepartment(req.app.get('io'), complaint.assignedDepartment, {
+        await notificationService.notifyManagersByDepartment(io, complaint.assignedDepartment, {
           type: "resolved",
           title: "Task Resolved",
-          message: `Technician has resolved complaint "${complaint.title}".`,
+          message: `Technician resolved complaint "${complaint.title}".`,
           complaintId: complaint._id,
         });
       } catch (notifError) {
@@ -250,10 +263,9 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
       }
     }
     
-    // Notify citizen (don't fail if notification fails)
-    if (complaint.createdBy) {
+    if (io && complaint.createdBy) {
       try {
-        await notificationService.sendNotification(req.app.get('io'), complaint.createdBy, {
+        await notificationService.sendNotification(io, complaint.createdBy, {
           type: "resolved",
           title: "Complaint Resolved",
           message: `Your complaint "${complaint.title}" has been resolved.`,
@@ -270,8 +282,8 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
       data: complaint
     });
   } catch (error) {
-    console.error("Technician complete complaint error:", error);
-    res.status(500).json({ success: false, message: "Failed to complete complaint" });
+    console.error("Technician complete error:", error.message, error.stack);
+    res.status(500).json({ success: false, message: `Failed to complete: ${error.message}` });
   }
 });
 
@@ -551,11 +563,14 @@ router.get("/complaints/:id", authenticate, authorize("TECHNICIAN"), async (req,
     // Check if complaint is assigned to this technician
     const technicianId = req.user.userId;
     const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
-    const teamIds = teams.map(t => t._id);
+    const teamIds = teams.map(t => t._id.toString());
+    
+    const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
+    const assignedTeamId = complaint.assignedTeam?._id?.toString() || complaint.assignedTeam?.toString();
     
     const isAssigned = 
-      complaint.assignedTo?.toString() === technicianId ||
-      (complaint.assignedTeam && teamIds.some(id => id.toString() === complaint.assignedTeam?._id?.toString()));
+      assignedToId === technicianId ||
+      (assignedTeamId && teamIds.includes(assignedTeamId));
     
     if (!isAssigned) {
       return res.status(403).json({ success: false, message: "Complaint not assigned to you" });

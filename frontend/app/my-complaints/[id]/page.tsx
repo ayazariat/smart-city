@@ -51,7 +51,8 @@ export default function MyComplaintDetailPage() {
     title: "",
     description: "",
     category: "",
-    urgency: ""
+    urgency: "",
+    phone: ""
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -161,7 +162,8 @@ export default function MyComplaintDetailPage() {
         title: editData.title,
         description: editData.description,
         category: editData.category as ComplaintCategory,
-        urgency: editData.urgency as ComplaintUrgency
+        urgency: editData.urgency as ComplaintUrgency,
+        phone: editData.phone
       });
       
       if (response.complaint) {
@@ -486,6 +488,46 @@ export default function MyComplaintDetailPage() {
                 </div>
               </div>
             </section>
+
+            {/* History Timeline */}
+            {complaint.statusHistory && complaint.statusHistory.length > 0 && (
+              <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="history-title">
+                <h2 id="history-title" className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  History
+                </h2>
+                <div className="space-y-4">
+                  {complaint.statusHistory.map((entry, idx) => (
+                    <div key={idx} className="flex items-start gap-4 p-3 bg-slate-50 rounded-lg">
+                      <div className="w-2 h-2 mt-2 rounded-full bg-primary flex-shrink-0" />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-slate-900">
+                            {entry.status === 'SUBMITTED' ? 'Submitted' :
+                             entry.status === 'VALIDATED' ? 'Validated' :
+                             entry.status === 'ASSIGNED' ? 'Assigned to department' :
+                             entry.status === 'IN_PROGRESS' ? 'Work started' :
+                             entry.status === 'RESOLVED' ? 'Resolved' :
+                             entry.status === 'CLOSED' ? 'Closed' :
+                             entry.status === 'REJECTED' ? 'Rejected' :
+                             entry.status}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : ''}
+                          </span>
+                        </div>
+                        {entry.updatedBy?.fullName && (
+                          <p className="text-sm text-slate-600">By {entry.updatedBy.fullName}</p>
+                        )}
+                        {entry.notes && (
+                          <p className="text-sm text-slate-500 mt-1 italic">{entry.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Description */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">

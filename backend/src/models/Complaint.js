@@ -263,12 +263,11 @@ complaintSchema.methods.calculateSLAStatus = function() {
 };
 
 // Pre-save hook to update SLA status
-complaintSchema.pre('save', function(next) {
+complaintSchema.pre('save', async function() {
   if (this.slaDeadline) {
     const slaStatus = this.calculateSLAStatus();
     this.slaStatus = slaStatus.status;
   }
-  next();
 });
 
 module.exports = mongoose.model("Complaint", complaintSchema);
