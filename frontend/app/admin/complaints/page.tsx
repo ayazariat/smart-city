@@ -73,7 +73,8 @@ export default function AdminComplaintsPage() {
         setLoading(false);
       }
     };
-  }, [token, user]);
+    fetchComplaints();
+  }, [token, user, statusFilter, governorateFilter, municipalityFilter, searchTerm]);
 
   // Fetch stats
   const fetchStats = async () => {

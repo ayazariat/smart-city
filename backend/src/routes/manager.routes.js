@@ -349,17 +349,26 @@ router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAG
   }
 });
 
-// GET /api/manager/technicians - Get technicians in manager's department
+// GET /api/manager/technicians - Get technicians in manager's department (with optional search)
 router.get("/technicians", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), async (req, res) => {
   try {
+    const { search } = req.query;
+    
+    // Build base query
+    let query = { role: "TECHNICIAN", isActive: true };
+    
+    // Add search filter if provided
+    if (search) {
+      query.fullName = { $regex: search, $options: "i" };
+    }
+    
     // Admin can see all technicians, manager only sees their department's technicians
     let technicians;
     
     if (req.user.role === "ADMIN") {
-      technicians = await User.find({ 
-        role: "TECHNICIAN",
-        isActive: true 
-      }).select("fullName email phone department");
+      technicians = await User.find(query)
+        .select("fullName email phone department")
+        .sort({ fullName: 1 });
     } else {
       const department = await getManagerDepartment(req.user.userId);
       const departmentId = department?._id;
@@ -368,11 +377,10 @@ router.get("/technicians", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"
         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
       }
 
-      technicians = await User.find({ 
-        department: departmentId, 
-        role: "TECHNICIAN",
-        isActive: true 
-      }).select("fullName email phone");
+      query.department = departmentId;
+      technicians = await User.find(query)
+        .select("fullName email phone")
+        .sort({ fullName: 1 });
     }
 
     res.json({

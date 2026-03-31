@@ -28,19 +28,20 @@ const from = process.env.MAIL_FROM || process.env.SMTP_USER;
 const sendMagicLinkEmail = async (to, userId, token, fullName) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const magicLink = `${frontendUrl}/verify-account?token=${token}&id=${userId}`;
+  const userName = fullName || to.split('@')[0] || "User";
 
   try {
     await transporter.sendMail({
       from,
       to,
       subject: "Smart City Tunisia - Verify your account",
-      text: `Hi ${fullName}, click to verify your account: ${magicLink} (expires in 15 minutes)`,
+      text: `Hi ${userName}, click to verify your account: ${magicLink} (expires in 15 minutes)`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
           </div>
-          <p>Hi <strong>${fullName}</strong>,</p>
+          <p>Hi <strong>${userName}</strong>,</p>
           <p>Thank you for signing up for Smart City Tunisia!</p>
           <p>Click the button below to verify your account:</p>
           <div style="text-align: center; margin: 30px 0;">
@@ -66,19 +67,20 @@ const sendMagicLinkEmail = async (to, userId, token, fullName) => {
 const sendPasswordResetEmail = async (to, userId, token, fullName) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const resetLink = `${frontendUrl}/reset-password?token=${token}&id=${userId}`;
+  const userName = fullName || to.split('@')[0] || "User";
 
   try {
     await transporter.sendMail({
       from,
       to,
       subject: "Smart City Tunisia - Reset your password",
-      text: `Hi ${fullName}, click to reset your password: ${resetLink} (expires in 1 hour)`,
+      text: `Hi ${userName}, click to reset your password: ${resetLink} (expires in 1 hour)`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
           </div>
-          <p>Hi <strong>${fullName}</strong>,</p>
+          <p>Hi <strong>${userName}</strong>,</p>
           <p>You requested to reset your password. Click the button below to create a new password:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${resetLink}" style="background: #2E7D32; color: white; padding: 15px 30px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
@@ -101,17 +103,19 @@ const sendPasswordResetEmail = async (to, userId, token, fullName) => {
 
 // Send login email reminder
 const sendLoginEmailReminder = async (to, fullName, email) => {
+  const userName = fullName || to.split('@')[0] || "User";
+  
   await transporter.sendMail({
     from,
     to,
     subject: "Smart City Tunisia - Your login email",
-    text: `Hi ${fullName}, your login email is: ${email}`,
+    text: `Hi ${userName}, your login email is: ${email}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
-        <p>Hi <strong>${fullName}</strong>,</p>
+        <p>Hi <strong>${userName}</strong>,</p>
         <p>Your login email for Smart City Tunisia is:</p>
         <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center; margin: 20px 0;">
           <strong style="font-size: 18px;">${email}</strong>
@@ -129,19 +133,20 @@ const sendLoginEmailReminder = async (to, fullName, email) => {
 const sendInvitationEmail = async (to, userId, token, fullName, role) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const invitationLink = `${frontendUrl}/set-password?token=${token}&email=${encodeURIComponent(to)}`;
+  const userName = fullName || to.split('@')[0] || "User";
 
   try {
     await transporter.sendMail({
       from,
       to,
       subject: "Smart City Tunisia - Account Invitation",
-      text: `Hi ${fullName}, you've been invited to join Smart City Tunisia as ${role}. Click to set your password and activate your account: ${invitationLink} (expires in 24 hours)`,
+      text: `Hi ${userName}, you've been invited to join Smart City Tunisia as ${role}. Click to set your password and activate your account: ${invitationLink} (expires in 24 hours)`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
           </div>
-          <p>Hi <strong>${fullName}</strong>,</p>
+          <p>Hi <strong>${userName}</strong>,</p>
           <p>You've been invited to join Smart City Tunisia as <strong>${role}</strong>.</p>
           <p>Click the button below to set your password and activate your account:</p>
           <div style="text-align: center; margin: 30px 0;">

@@ -630,7 +630,6 @@ export default function MyComplaintDetailPage() {
                 })()
               )}
             </section>
-            </section>
 
             {/* Location */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="location-title">

@@ -182,6 +182,7 @@ export const updateComplaint = async (
     urgency: ComplaintUrgency;
     location: ComplaintLocation;
     media: ComplaintMedia[];
+    phone: string;
   }>
 ): Promise<{ message: string; complaint: Complaint }> => {
   return apiClient.put<{ message: string; complaint: Complaint }>(`/citizen/complaints/${id}`, data);

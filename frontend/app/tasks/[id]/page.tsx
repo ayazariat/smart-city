@@ -379,6 +379,54 @@ export default function TechnicianTaskDetailPage() {
                   <span className="text-xs mt-1 font-medium text-slate-600">Closed</span>
                 </div>
               </div>
+              
+              {/* SLA Countdown */}
+              {task.slaDeadline && (
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-slate-500" />
+                      <span className="text-sm text-slate-600">SLA Deadline:</span>
+                    </div>
+                    <div className="text-right">
+                      {(() => {
+                        const deadline = new Date(task.slaDeadline);
+                        const now = new Date();
+                        const diffMs = deadline.getTime() - now.getTime();
+                        const isOverdue = diffMs < 0;
+                        
+                        if (isOverdue) {
+                          const hoursOverdue = Math.abs(Math.floor(diffMs / (1000 * 60 * 60)));
+                          return (
+                            <span className="text-red-600 font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-4 h-4" />
+                              Overdue by {hoursOverdue}h
+                            </span>
+                          );
+                        }
+                        
+                        const hoursLeft = Math.floor(diffMs / (1000 * 60 * 60));
+                        const minutesLeft = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                        
+                        if (hoursLeft < 24) {
+                          return (
+                            <span className={hoursLeft < 12 ? "text-orange-600 font-bold" : "text-green-600 font-medium"}>
+                              {hoursLeft}h {minutesLeft}m remaining
+                            </span>
+                          );
+                        }
+                        
+                        const daysLeft = Math.floor(hoursLeft / 24);
+                        return (
+                          <span className="text-green-600 font-medium">
+                            {daysLeft} day{daysLeft > 1 ? 's' : ''} remaining
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="bg-white rounded-xl shadow-sm p-6">

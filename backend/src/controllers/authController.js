@@ -239,6 +239,7 @@ class AuthController {
         role: user.role || 'CITIZEN',
         isVerified: true,
         isActive: isAdminRole ? false : true, // Citizens active immediately
+        status: isAdminRole ? "PENDING_VERIFICATION" : "ACTIVE", // Set status based on role
       });
 
       // Delete pending user
@@ -291,6 +292,7 @@ class AuthController {
           role: pendingUser.role || 'CITIZEN',
           isVerified: true,
           isActive: isAdminRole ? false : true, // Citizens active immediately, admins need activation
+          status: isAdminRole ? "PENDING_VERIFICATION" : "ACTIVE", // Set status based on role
         });
 
         // Delete pending user

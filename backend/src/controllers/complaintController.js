@@ -968,11 +968,27 @@ class ComplaintController {
         }
       } else if (req.user.role === "MUNICIPAL_AGENT") {
         const user = await User.findById(req.user.userId)
-          .populate('municipality')
-          .select('municipality governorate')
+          .populate('municipality', 'name governorate')
+          .select('municipality municipalityName governorate')
           .lean();
-        if (user?.municipality?._id) {
-          query.municipality = user.municipality._id;
+        
+        // Get municipality name from either populated municipality or municipalityName field
+        let municipalityName = user?.municipalityName || "";
+        if (user?.municipality && typeof user.municipality === 'object') {
+          municipalityName = user.municipality.name || municipalityName;
+        }
+        
+        if (municipalityName) {
+          // Normalize municipality name for matching
+          const normalizedMun = normalizeMunicipality(municipalityName);
+          const munRegex = new RegExp("^" + normalizedMun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "$", "i");
+          
+          // Match complaints by municipality (same pattern as agent routes)
+          query.$or = [
+            { municipalityNormalized: normalizedMun },
+            { municipalityName: munRegex },
+            { "location.municipality": munRegex }
+          ];
         } else if (user?.governorate) {
           query.governorate = user.governorate;
         }

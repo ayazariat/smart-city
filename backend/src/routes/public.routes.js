@@ -245,7 +245,13 @@ router.get("/complaints", async (req, res) => {
     }
     
     if (status) {
-      query.status = status;
+      // Support comma-separated status values
+      const statusList = status.split(',').map(s => s.trim().toUpperCase());
+      if (statusList.length > 1) {
+        query.status = { $in: statusList };
+      } else {
+        query.status = statusList[0];
+      }
     }
     
     if (municipality) {
@@ -288,6 +294,33 @@ router.get("/complaints", async (req, res) => {
   } catch (error) {
     console.error("Public complaints error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch complaints" });
+  }
+});
+
+// GET /api/public/complaints/:id - Get single complaint by ID (public, no personal data)
+router.get("/complaints/:id", async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id)
+      .select("title description category status priorityScore municipalityName location createdAt updatedAt media confirmationCount upvoteCount")
+      .lean();
+    
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+    
+    // Only show public statuses
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"];
+    if (!publicStatuses.includes(complaint.status)) {
+      return res.status(404).json({ success: false, message: "Complaint not available" });
+    }
+    
+    res.json({
+      success: true,
+      data: complaint
+    });
+  } catch (error) {
+    console.error("Public complaint detail error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch complaint" });
   }
 });
 

@@ -41,8 +41,8 @@ router.get("/profile", authenticate, authorize("CITIZEN"), (req, res) => {
   });
 });
 
-// POST /api/citizen/complaints - Submit a new complaint
-router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) => {
+// POST /api/citizen/complaints - Submit a new complaint (also allows ADMIN)
+router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (req, res) => {
   try {
     const {
       title,
