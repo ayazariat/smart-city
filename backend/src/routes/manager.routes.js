@@ -284,7 +284,7 @@ router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MA
 });
 
 // PUT /api/manager/complaints/:id/priority - Update complaint priority
-router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAGER"), async (req, res) => {
+router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), async (req, res) => {
   try {
     const { urgency, priorityScore } = req.body;
     
@@ -296,6 +296,15 @@ router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAG
     
     if (!complaint) {
       return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    // Priority can only be changed when status is VALIDATED or ASSIGNED
+    const allowedStatuses = ["VALIDATED", "ASSIGNED"];
+    if (!allowedStatuses.includes(complaint.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Priority can only be changed when complaint is ${allowedStatuses.join(" or ")}. Current status: ${complaint.status}` 
+      });
     }
 
     // Check if complaint is assigned to manager's department
@@ -317,6 +326,15 @@ router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAG
     if (priorityScore !== undefined) {
       complaint.priorityScore = priorityScore;
     }
+    
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: complaint.status, // Status doesn't change, just priority
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: `Priority changed to ${urgency || `score ${priorityScore}`}`
+    });
     
     await complaint.save();
 

@@ -4,8 +4,10 @@ const router = express.Router();
 const { authenticate, authorize } = require("../middleware/auth");
 const Complaint = require("../models/Complaint");
 const Department = require("../models/Department");
+const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const { calculatePriorityAndSLA, explainCalculation } = require("../utils/priorityCalculator");
+const { normalizeMunicipality } = require("../utils/normalize");
 
 // All citizen routes require authentication and CITIZEN role
 
@@ -185,6 +187,10 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
 
     const keywords = extractKeywords(description);
 
+    // Get user's municipality for consistent matching
+    const user = await User.findById(req.user.userId).select('municipalityName municipality').lean();
+    const userMunicipalityName = user?.municipalityName || location?.municipality || location?.commune || "";
+
     const complaint = new Complaint({
       title: title.trim(),
       description: description.trim(),
@@ -192,7 +198,8 @@ router.post("/complaints", authenticate, authorize("CITIZEN"), async (req, res) 
       urgency: urgencyLevel,
       priorityScore,
       location: Object.keys(geoLocation).length ? geoLocation : {},
-      municipalityName: location?.municipality || location?.commune || "",
+      municipalityName: userMunicipalityName,
+      municipalityNormalized: normalizeMunicipality(userMunicipalityName),
       media: media || [],
       isAnonymous: !!isAnonymous,
       ownerName: !isAnonymous ? ownerName : undefined,
@@ -337,6 +344,7 @@ router.put("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, re
     if (description) complaint.description = description;
     if (category) complaint.category = category;
     if (urgency) complaint.urgency = urgency;
+    if (phone !== undefined) complaint.phone = phone;
     if (location) {
       if (location.latitude) complaint.location.latitude = location.latitude;
       if (location.longitude) complaint.location.longitude = location.longitude;
@@ -345,6 +353,15 @@ router.put("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, re
       if (location.governorate) complaint.location.governorate = location.governorate;
     }
     if (media) complaint.media = media;
+
+    // Add to status history
+    if (!complaint.statusHistory) complaint.statusHistory = [];
+    complaint.statusHistory.push({
+      status: complaint.status,
+      updatedBy: req.user.userId,
+      updatedAt: new Date(),
+      notes: "Edited by citizen"
+    });
 
     await complaint.save();
 

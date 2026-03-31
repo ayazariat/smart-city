@@ -12,6 +12,7 @@ const {
 const { sendMagicLinkEmail, sendPasswordResetEmail } = require("../utils/mailer");
 const { verifyRecaptcha } = require("../utils/recaptcha");
 const { normalizeMunicipality } = require("../utils/normalize");
+const notificationService = require("../services/notification.service");
 
 // Simple reusable validators
 const passwordPolicyRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
@@ -295,6 +296,18 @@ class AuthController {
         // Delete pending user
         await PendingUser.deleteOne({ _id: userId });
 
+        // Send welcome notification
+        try {
+          const io = req.app?.get?.('io');
+          await notificationService.sendNotification(io, newUser._id.toString(), {
+            type: "welcome",
+            title: "Welcome to Smart City Tunisia!",
+            message: `Hello ${newUser.fullName}! Your account is ready. Start by submitting your first complaint.`,
+          });
+        } catch (notifErr) {
+          console.error("Failed to send welcome notification:", notifErr);
+        }
+
         // Citizens can login immediately - give them tokens
         // Admins need to set password first (if not already set)
         const accessToken = generateAccessToken(newUser);
@@ -350,6 +363,18 @@ class AuthController {
         // User is already active - give them tokens
         const accessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
+
+        // Send welcome notification for admin-created users
+        try {
+          const io = req.app?.get?.('io');
+          await notificationService.sendNotification(io, user._id.toString(), {
+            type: "welcome",
+            title: "Welcome to Smart City Tunisia!",
+            message: `Hello ${user.fullName}! Your account has been activated. You can now access the system.`,
+          });
+        } catch (notifErr) {
+          console.error("Failed to send welcome notification:", notifErr);
+        }
 
         return res.json({
           message: "Email verified successfully!",

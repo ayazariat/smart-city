@@ -11,14 +11,17 @@ import type { NextRequest } from "next/server";
 // Paths that don't require authentication
 const PUBLIC_PATHS = [
   "/",
+  "/login",
   "/auth",
   "/register",
   "/forgot-password",
   "/reset-password",
   "/verify-account",
   "/set-password",
+  "/transparency",
   "/api/auth",
   "/api/upload",
+  "/api/public",
   "/public",
   "/_next",
   "/favicon.ico",
@@ -93,7 +96,7 @@ function handleExpiredToken(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
   
   // Don't redirect if already on public path
-  const publicPaths = ['/', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password'];
+  const publicPaths = ['/', '/login', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password'];
   if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }
@@ -103,7 +106,7 @@ function handleExpiredToken(request: NextRequest): NextResponse {
     return NextResponse.next();
   }
   
-  const loginUrl = new URL("/", request.url);
+  const loginUrl = new URL("/login", request.url);
   loginUrl.searchParams.set("expired", "true");
   return NextResponse.redirect(loginUrl);
 }
@@ -136,14 +139,14 @@ function proxyHandler(request: NextRequest) {
 
   // CRITICAL: Never redirect if already on login page with expired=true
   // This prevents infinite redirect loops
-  if (pathname === '/' && request.nextUrl.searchParams.get('expired') === 'true') {
+  if ((pathname === '/' || pathname === '/login') && request.nextUrl.searchParams.get('expired') === 'true') {
     return NextResponse.next();
   }
 
   // Public paths - never redirect these (include API routes)
-  const publicPaths = ['/', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password', '/public', '/api/auth', '/api/upload'];
+  const publicPaths = ['/', '/login', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password', '/transparency', '/public', '/api/auth', '/api/upload', '/api/public'];
   
-  const isPublic = publicPaths.some(p => pathname === p || pathname.startsWith(p + '/') || pathname.includes('/api/auth/') || pathname.includes('/api/upload/'));
+  const isPublic = publicPaths.some(p => pathname === p || pathname.startsWith(p + '/') || pathname.includes('/api/auth/') || pathname.includes('/api/upload/') || pathname.includes('/api/public/'));
 
   // Already on public page - never redirect (breaks loop)
   if (isPublic) return NextResponse.next();
@@ -151,7 +154,7 @@ function proxyHandler(request: NextRequest) {
   // No token on protected page - redirect to login ONCE
   if (!token) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = '/login';
     url.searchParams.set('expired', 'true');
     return NextResponse.redirect(url);
   }

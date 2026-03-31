@@ -249,10 +249,13 @@ router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"),
   }
 });
 
-// PUT /api/agent/complaints/:id/close - Close a resolved complaint
+// PUT /api/agent/complaints/:id/close - Close a resolved complaint (REQUIRES resolution report review)
 router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
   try {
-    const complaint = await Complaint.findById(req.params.id);
+    const complaint = await Complaint.findById(req.params.id)
+      .populate("assignedTo", "fullName")
+      .populate("beforePhotos.takenBy", "fullName")
+      .populate("afterPhotos.takenBy", "fullName");
 
     if (!complaint) {
       return res.status(404).json({ message: "Complaint not found" });
@@ -270,34 +273,36 @@ router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), 
       return res.status(400).json({ message: "Only RESOLVED complaints can be closed" });
     }
 
-    complaint.status = "CLOSED";
-    complaint.closedAt = new Date();
-    complaint.closedBy = req.user.userId;
+    // Check if resolution report exists
+    const hasResolutionReport = complaint.resolutionNotes || 
+                                 (complaint.afterPhotos && complaint.afterPhotos.length > 0);
     
-    // Add to status history
-    if (!complaint.statusHistory) complaint.statusHistory = [];
-    complaint.statusHistory.push({
-      status: "CLOSED",
-      updatedBy: req.user.userId,
-      updatedAt: new Date()
-    });
-    
-    await complaint.save();
-
-    // Notify citizen that complaint was closed
-    if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
-        type: "closed",
-        title: "Complaint Closed",
-        message: `Your complaint "${complaint.title}" has been closed. Thank you for using our service.`,
-        complaintId: complaint._id,
+    if (!hasResolutionReport) {
+      return res.status(400).json({ 
+        message: "Resolution report required. Technician must submit resolution notes or proof photos before closing.",
+        requiresResolutionReport: true 
       });
     }
 
-    res.json({ success: true, message: "Complaint closed", data: complaint });
+    // Return resolution report for agent to review
+    res.json({ 
+      success: true, 
+      message: "Resolution report available for review",
+      data: {
+        complaint,
+        resolutionReport: {
+          technicianName: complaint.assignedTo?.fullName || "Unknown",
+          resolvedAt: complaint.resolvedAt,
+          resolutionNotes: complaint.resolutionNotes,
+          beforePhotos: complaint.beforePhotos || [],
+          afterPhotos: complaint.afterPhotos || [],
+        }
+      },
+      requiresApproval: true
+    });
   } catch (error) {
-    console.error("Error closing complaint:", error);
-    res.status(500).json({ message: "Failed to close complaint" });
+    console.error("Error reviewing resolution:", error);
+    res.status(500).json({ message: "Failed to review resolution" });
   }
 });
 

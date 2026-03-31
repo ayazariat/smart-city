@@ -132,7 +132,8 @@ export default function MyComplaintDetailPage() {
         title: complaint.title,
         description: complaint.description,
         category: complaint.category,
-        urgency: complaint.urgency
+        urgency: complaint.urgency,
+        phone: complaint.phone || ""
       });
     }
   }, [complaint]);
@@ -148,7 +149,8 @@ export default function MyComplaintDetailPage() {
         title: complaint.title,
         description: complaint.description,
         category: complaint.category,
-        urgency: complaint.urgency
+        urgency: complaint.urgency,
+        phone: complaint.phone || ""
       });
     }
   };
@@ -427,19 +429,79 @@ export default function MyComplaintDetailPage() {
                 <Shield className="w-5 h-5 text-primary" />
                 Main Information
               </h2>
+              
+              {/* Title */}
+              <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                <label className="block text-sm font-medium text-slate-500 mb-2">Title</label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editData.title}
+                    onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                    placeholder="Complaint title"
+                  />
+                ) : (
+                  <span className="text-lg font-semibold text-slate-900">{complaint.title}</span>
+                )}
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="block text-sm font-medium text-slate-500 mb-2">Category</label>
-                  <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
-                    {categoryLabels[complaint.category] || complaint.category}
-                  </span>
+                  {isEditing ? (
+                    <select
+                      value={editData.category}
+                      onChange={(e) => setEditData({ ...editData, category: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="ROAD">Roads & Infrastructure</option>
+                      <option value="LIGHTING">Public Lighting</option>
+                      <option value="WASTE">Waste Management</option>
+                      <option value="WATER">Water & Sanitation</option>
+                      <option value="SAFETY">Public Equipment</option>
+                      <option value="PUBLIC_PROPERTY">Urban Planning</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  ) : (
+                    <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
+                      {categoryLabels[complaint.category] || complaint.category}
+                    </span>
+                  )}
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="block text-sm font-medium text-slate-500 mb-2">Priority</label>
-                  <span className="text-lg font-semibold text-orange-600">
-                    {complaint.urgency || "Medium"}
-                  </span>
+                  {isEditing ? (
+                    <select
+                      value={editData.urgency}
+                      onChange={(e) => setEditData({ ...editData, urgency: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                      <option value="URGENT">Urgent</option>
+                    </select>
+                  ) : (
+                    <span className="text-lg font-semibold text-orange-600">
+                      {complaint.urgency || "Medium"}
+                    </span>
+                  )}
                 </div>
+              </div>
+              <div className="mt-4 bg-slate-50 rounded-xl p-4">
+                <label className="block text-sm font-medium text-slate-500 mb-2">Phone</label>
+                {isEditing ? (
+                  <input
+                    type="tel"
+                    value={editData.phone}
+                    onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                    placeholder="Contact phone number"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
+                  />
+                ) : (
+                  <span className="text-slate-700">{complaint.phone || "Not provided"}</span>
+                )}
               </div>
             </section>
 
@@ -532,31 +594,42 @@ export default function MyComplaintDetailPage() {
             {/* Description */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">
               <h2 id="description-title" className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
-              {(() => {
-                const contactMatch = complaint.description.match(/Contact phone:\s*(\+216\s*\d+|\d+)/i);
-                const contactPhone = contactMatch ? contactMatch[0].replace('Contact phone:', '').trim() : null;
-                const cleanDescription = contactPhone 
-                  ? complaint.description.replace(/Contact phone:\s*\+?216?\s*\d+/gi, '').trim()
-                  : complaint.description;
-                return (
-                  <>
-                    <p className="text-gray-800 whitespace-pre-wrap">{cleanDescription}</p>
-                    {contactPhone && (
-                      <div className="mt-4 p-3 bg-primary/5 rounded-xl border border-primary/20">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            <Phone className="w-5 h-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Phone</p>
-                            <p className="text-lg font-bold text-primary">{contactPhone}</p>
+              {isEditing ? (
+                <textarea
+                  value={editData.description}
+                  onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                  rows={6}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary resize-none"
+                  placeholder="Describe the issue in detail..."
+                />
+              ) : (
+                (() => {
+                  const contactMatch = complaint.description.match(/Contact phone:\s*(\+216\s*\d+|\d+)/i);
+                  const contactPhone = contactMatch ? contactMatch[0].replace('Contact phone:', '').trim() : null;
+                  const cleanDescription = contactPhone 
+                    ? complaint.description.replace(/Contact phone:\s*\+?216?\s*\d+/gi, '').trim()
+                    : complaint.description;
+                  return (
+                    <>
+                      <p className="text-gray-800 whitespace-pre-wrap">{cleanDescription}</p>
+                      {contactPhone && (
+                        <div className="mt-4 p-3 bg-primary/5 rounded-xl border border-primary/20">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                              <Phone className="w-5 h-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Phone</p>
+                              <p className="text-lg font-bold text-primary">{contactPhone}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                      )}
+                    </>
+                  );
+                })()
+              )}
+            </section>
             </section>
 
             {/* Location */}
