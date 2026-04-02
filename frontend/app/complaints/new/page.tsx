@@ -27,6 +27,7 @@ import {
   Droplets,
   ShieldAlert,
   Building2,
+  TreePine,
   Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -74,9 +75,15 @@ const CATEGORIES: CategoryConfig[] = [
   },
   {
     value: "PUBLIC_PROPERTY",
-    label: "Parks & Public Spaces",
-    description: "Parks, benches, monuments, municipal buildings.",
+    label: "Public Property",
+    description: "Municipal buildings, public furniture, monuments.",
     icon: Building2,
+  },
+  {
+    value: "GREEN_SPACE",
+    label: "Parks & Green Spaces",
+    description: "Parks, gardens, trees, green areas maintenance.",
+    icon: TreePine,
   },
   {
     value: "OTHER",

@@ -11,16 +11,19 @@ export const apiClient = {
     const contentType = response.headers.get("content-type") || "";
     const status = response.status;
     
-    if (status === 403) return "Access denied";
-    if (status === 404) return "Resource not found";
-    if (status === 401) return "Session expired";
+    // Default messages per status (used as fallbacks)
+    const defaultMessages: Record<number, string> = {
+      401: "Session expired",
+      403: "Access denied",
+      404: "Resource not found",
+    };
     
     if (contentType.includes("text/html")) {
-      return `Request failed (${status})`;
+      return defaultMessages[status] || `Request failed (${status})`;
     }
     
     const text = await response.text();
-    if (!text) return `Request failed (${status})`;
+    if (!text) return defaultMessages[status] || `Request failed (${status})`;
     
     try {
       const errorData = JSON.parse(text);
@@ -92,22 +95,31 @@ export const apiClient = {
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const { requiresAuth = true, headers = {}, ...rest } = options;
 
-    const { token, refreshToken, hydrated } = useAuthStore.getState();
-    
-    if (!hydrated) {
-      await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait for hydration and get fresh state
+    let attempts = 0;
+    while (attempts < 10) {
       const state = useAuthStore.getState();
-      if (!state.token) {
-        if (requiresAuth) {
-          console.log("Not hydrated or no token for:", endpoint);
-          return {} as T;
-        }
+      if (state.hydrated || state.token) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+
+    const { token, refreshToken, hydrated, user } = useAuthStore.getState();
+
+    if (!hydrated && requiresAuth) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const freshState = useAuthStore.getState();
+      if (!freshState.hydrated || !freshState.token) {
+        throw new Error("Session not ready. Please refresh page or login again.");
       }
     }
     
-    if (requiresAuth && !token) {
-      console.log("No token available for:", endpoint);
-      return {} as T;
+    if (requiresAuth && (!token || !user)) {
+      // Instead of throwing error, redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+      }
+      throw new Error("Please login to view this content");
     }
 
     const requestHeaders: HeadersInit = {
@@ -117,7 +129,6 @@ export const apiClient = {
 
     if (token) {
       (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-      console.log("Making authenticated request to:", endpoint);
     }
 
     const makeRequest = async (authToken?: string): Promise<Response> => {

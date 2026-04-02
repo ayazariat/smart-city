@@ -19,6 +19,7 @@ import {
   X,
   ThumbsUp,
   CheckCircle,
+  Camera,
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
@@ -220,11 +221,28 @@ export default function ComplaintDetailPage() {
         }
       } catch (err: unknown) {
         console.error("Error fetching complaint:", err);
-        const apiError = err as { response?: { status?: number; data?: { message?: string } } };
-        if (apiError.response?.status === 403) {
-          setError(apiError.response.data?.message || "Access denied. You don't have permission to view this complaint.");
-        } else if (apiError.response?.status === 404) {
-          setError("Complaint not found");
+        
+        // Handle ApiError from client
+        if (err && typeof err === 'object' && 'status' in err) {
+          const apiError = err as { status: number; message?: string };
+          if (apiError.status === 403) {
+            setError(apiError.message || "Access denied. You don't have permission to view this complaint.");
+          } else if (apiError.status === 404) {
+            setError("Complaint not found");
+          } else if (apiError.status === 401) {
+            setError("Session expired. Please login again.");
+          } else {
+            setError(apiError.message || "Error loading complaint");
+          }
+        } else if (err instanceof Error) {
+          // Check for specific error messages
+          if (err.message?.toLowerCase().includes("access denied")) {
+            setError(err.message);
+          } else if (err.message?.toLowerCase().includes("login")) {
+            setError("Session expired. Please login again.");
+          } else {
+            setError(err.message || "Error loading complaint");
+          }
         } else {
           setError("Error loading complaint");
         }
@@ -241,10 +259,17 @@ export default function ComplaintDetailPage() {
   // Fetch departments when opening department modal
   useEffect(() => {
     const fetchDepartments = async () => {
-      if (actionModal === "department" && user?.role === "ADMIN") {
+      if (actionModal === "department" && (user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT")) {
         try {
-          const deptData = await adminService.getDepartments();
-          setDepartments(deptData);
+          if (user?.role === "ADMIN") {
+            const deptData = await adminService.getDepartments();
+            setDepartments(deptData);
+          } else {
+            const response = await agentService.getAgentDepartments();
+            if (response.data && Array.isArray(response.data)) {
+              setDepartments(response.data);
+            }
+          }
         } catch (error) {
           console.error("Error fetching departments:", error);
           // Set empty departments on error
@@ -296,7 +321,11 @@ export default function ComplaintDetailPage() {
         newStatus === "REJECTED" ? rejectionReason : undefined
       );
       if (response.success) {
-        setComplaint(response.data);
+        // Re-fetch full detail
+        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
+        if (detailResponse.success) {
+          setComplaint(processComplaintMedia(detailResponse.data));
+        }
         setActionModal(null);
         setRejectionReason("");
       }
@@ -333,7 +362,11 @@ export default function ComplaintDetailPage() {
       }
       
       if (response && response.success) {
-        setComplaint(response.data);
+        // Re-fetch full detail
+        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
+        if (detailResponse.success) {
+          setComplaint(processComplaintMedia(detailResponse.data));
+        }
         setActionModal(null);
         setSelectedUrgency("");
         setSelectedPriorityScore("");
@@ -354,7 +387,11 @@ export default function ComplaintDetailPage() {
         selectedDepartment
       );
       if (response.success) {
-        setComplaint(response.data);
+        // Re-fetch full detail to get populated department name
+        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
+        if (detailResponse.success) {
+          setComplaint(processComplaintMedia(detailResponse.data));
+        }
         setActionModal(null);
         setSelectedDepartment("");
       }
@@ -780,7 +817,7 @@ export default function ComplaintDetailPage() {
             {complaint.history && complaint.history.length > 0 && (
               <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="timeline-title">
                 <h2 id="timeline-title" className="text-lg font-semibold text-gray-900 mb-4">
-                  Historique
+                  History
                 </h2>
                 <Timeline history={complaint.history} />
               </section>
@@ -1016,34 +1053,49 @@ export default function ComplaintDetailPage() {
                 </h2>
                 <div className="space-y-4">
                   <div className="bg-white rounded-xl p-4 border border-green-100">
-                    <p className="text-sm font-medium text-slate-600 mb-2">Technician's Report:</p>
+                    <p className="text-sm font-medium text-slate-600 mb-2">Technician&apos;s Report:</p>
                     <p className="text-slate-800 whitespace-pre-wrap">{complaint.resolutionNotes}</p>
+                    {complaint.resolvedAt && (
+                      <p className="text-xs text-slate-400 mt-2">
+                        Resolved on {new Date(complaint.resolvedAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    )}
                   </div>
+
+                  {/* Proof Photos (After Work) inline with resolution */}
+                  {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
+                    <div className="bg-white rounded-xl p-4 border border-green-100">
+                      <p className="text-sm font-medium text-slate-600 mb-3 flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-green-600" />
+                        Proof Photos ({complaint.afterPhotos.length})
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {complaint.afterPhotos.map((photo: any, idx: number) => (
+                          <a
+                            key={idx}
+                            href={photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block rounded-lg overflow-hidden border border-slate-200 hover:border-green-400 transition-colors"
+                          >
+                            <img
+                              src={photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`}
+                              alt={`Proof photo ${idx + 1}`}
+                              className="w-full h-24 object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Agent Actions - Approve/Reject Resolution */}
-                  {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                  {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
                     <div className="flex gap-3 pt-4 border-t border-green-200">
                       <Button
                         className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                         icon={<CheckCircle className="w-4 h-4" />}
-                        onClick={async () => {
-                            try {
-                            setActionLoading(true);
-                            const result = await agentService.approveResolution(complaintId);
-                            if (result.success) {
-                              alert("Resolution approved! Complaint has been closed.");
-                              const updatedResponse = await complaintService.getComplaintById(complaintId);
-                              if (updatedResponse?.complaint) setComplaint(processComplaintMedia(updatedResponse.complaint));
-                            } else {
-                              alert(result.message || "Failed to approve resolution");
-                            }
-                          } catch (err) {
-                            console.error("Error approving resolution:", err);
-                            alert("Failed to approve resolution");
-                          } finally {
-                            setActionLoading(false);
-                          }
-                        }}
+                        onClick={() => setActionModal("approve-resolution")}
                         isLoading={actionLoading}
                       >
                         Approve Resolution
@@ -1225,17 +1277,14 @@ export default function ComplaintDetailPage() {
                     </>
                   )}
 
-                  {/* RESOLVED - Agent/Admin can Close */}
+                  {/* RESOLVED - Agent reviews resolution report (no direct close allowed) */}
                   {complaint.status === "RESOLVED" && (
                     <>
                       {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
-                        <Button
-                          className="w-full bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700"
-                          icon={<CheckCircle2 className="w-4 h-4" />}
-                          onClick={() => handleStatusUpdate("CLOSED")}
-                        >
-                          Close Complaint
-                        </Button>
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-sm text-green-800 font-medium">Resolution Report Submitted</p>
+                          <p className="text-xs text-green-600">Review the resolution report above to approve or reject</p>
+                        </div>
                       )}
                     </>
                   )}
@@ -1282,7 +1331,7 @@ export default function ComplaintDetailPage() {
                     <Button
                       className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
                       icon={<CheckCircle2 className="w-4 h-4" />}
-                      onClick={() => handleStatusUpdate("IN_PROGRESS")}
+                      onClick={() => setActionModal("start-work")}
                     >
                       Start Work
                     </Button>
@@ -1293,7 +1342,7 @@ export default function ComplaintDetailPage() {
                     <Button
                       className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                       icon={<CheckCircle2 className="w-4 h-4" />}
-                      onClick={() => handleStatusUpdate("RESOLVED")}
+                      onClick={() => setActionModal("resolve")}
                     >
                       Mark as Resolved
                     </Button>
@@ -1324,6 +1373,8 @@ export default function ComplaintDetailPage() {
               {actionModal === "priority" && "Update Priority"}
               {actionModal === "technician" && "Assign to Repair Team"}
               {actionModal === "reject-resolution" && "Reject Resolution Report"}
+              {actionModal === "start-work" && "Start Work"}
+              {actionModal === "resolve" && "Submit Resolution"}
             </h3>
             
             {actionModal === "validate" && (
@@ -1589,6 +1640,54 @@ export default function ComplaintDetailPage() {
               </div>
             )}
 
+            {actionModal === "approve-resolution" && (
+              <div className="space-y-4">
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm font-medium text-green-800">You are about to approve the resolution report for:</p>
+                  <p className="text-sm text-green-700 mt-1 font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</p>
+                  {complaint.resolutionNotes && (
+                    <p className="text-sm text-slate-600 mt-2 italic">&quot;{complaint.resolutionNotes.slice(0, 200)}{complaint.resolutionNotes.length > 200 ? '...' : ''}&quot;</p>
+                  )}
+                </div>
+                <p className="text-sm text-slate-600">
+                  This will close the complaint and notify the citizen and technician.
+                </p>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setActionModal(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={async () => {
+                      try {
+                        setActionLoading(true);
+                        const result = await agentService.approveResolution(complaintId);
+                        if (result.success) {
+                          const updatedResponse = await complaintService.getComplaintDetail(complaintId);
+                          if (updatedResponse.success) setComplaint(processComplaintMedia(updatedResponse.data));
+                          setActionModal(null);
+                        } else {
+                          alert(result.message || "Failed to approve resolution");
+                        }
+                      } catch (err) {
+                        console.error("Error approving:", err);
+                        alert("Failed to approve resolution");
+                      } finally {
+                        setActionLoading(false);
+                      }
+                    }}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Approval"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {actionModal === "reject-resolution" && (
               <div className="space-y-4">
                 <div>
@@ -1626,9 +1725,8 @@ export default function ComplaintDetailPage() {
                         setActionLoading(true);
                         const result = await agentService.rejectResolution(complaintId, rejectionReason);
                         if (result.success) {
-                          alert("Resolution rejected. Complaint returned to IN_PROGRESS.");
-                          const updatedResponse = await complaintService.getComplaintById(complaintId);
-                          if (updatedResponse?.complaint) setComplaint(processComplaintMedia(updatedResponse.complaint));
+                          const updatedResponse = await complaintService.getComplaintDetail(complaintId);
+                          if (updatedResponse.success) setComplaint(processComplaintMedia(updatedResponse.data));
                           setActionModal(null);
                           setRejectionReason("");
                         } else {
@@ -1644,6 +1742,42 @@ export default function ComplaintDetailPage() {
                     disabled={actionLoading || !rejectionReason.trim()}
                   >
                     {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject Resolution"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {actionModal === "start-work" && (
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  Are you sure you want to start work on complaint <span className="font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</span>?
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setActionModal(null)}>Cancel</Button>
+                  <Button
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+                    onClick={() => handleStatusUpdate("IN_PROGRESS")}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Start Work"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {actionModal === "resolve" && (
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  Submit your resolution for <span className="font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</span>? The agent will review your report.
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => setActionModal(null)}>Cancel</Button>
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={() => handleStatusUpdate("RESOLVED")}
+                    disabled={actionLoading}
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Resolution"}
                   </Button>
                 </div>
               </div>

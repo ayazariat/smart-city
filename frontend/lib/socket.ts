@@ -39,6 +39,11 @@ export const connectSocket = (userId: string): void => {
 
   if (!socket.connected) {
     socket.connect();
+    // Emit join after connection is established
+    socket.once('connect', () => {
+      socket?.emit('join', `user:${userId}`);
+    });
+  } else {
     socket.emit('join', `user:${userId}`);
   }
 };

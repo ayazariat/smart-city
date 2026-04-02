@@ -61,7 +61,7 @@ export default function ComplaintHeatmap({ category, height = "500px" }: Complai
     fetchData();
   }, [fetchData]);
 
-  const categories = ["all", "ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "OTHER"];
+  const categories = ["all", "ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
 
   return (
     <div className="h-full w-full flex flex-col" style={{ height }}>
@@ -95,7 +95,9 @@ export default function ComplaintHeatmap({ category, height = "500px" }: Complai
           />
           
           <MarkerClusterGroup>
-            {data.map((point, idx) => (
+            {data
+              .filter(point => filterCategory === "all" || point.category === filterCategory)
+              .map((point, idx) => (
               <Marker
                 key={idx}
                 position={[point.lat, point.lng]}

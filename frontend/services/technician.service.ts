@@ -127,7 +127,6 @@ export async function resolveTask(
 ): Promise<StatusUpdateResponse> {
   return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/complete`, {
     notes: resolutionNotes,
-    beforePhotos: proofPhotos?.map(url => ({ type: "photo", url })),
     afterPhotos: proofPhotos?.map(url => ({ type: "photo", url })),
   });
 }

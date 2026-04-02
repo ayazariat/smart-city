@@ -6,6 +6,7 @@ const Complaint = require("../models/Complaint");
 const Department = require("../models/Department");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
+const notificationService = require("../services/notification.service");
 const { calculatePriorityAndSLA, explainCalculation } = require("../utils/priorityCalculator");
 const { normalizeMunicipality } = require("../utils/normalize");
 
@@ -17,13 +18,10 @@ const categoryToDepartment = {
   LIGHTING: "Public Lighting",
   WASTE: "Waste Management",
   WATER: "Water & Sanitation",
-  SAFETY: "Public Equipment",
-  PUBLIC_PROPERTY: "Urban Planning",
+  SAFETY: "Public Safety",
+  PUBLIC_PROPERTY: "Public Property",
   GREEN_SPACE: "Parks & Green Spaces",
-  TRAFFIC: "Traffic & Road Signage",
-  URBAN_PLANNING: "Urban Planning",
-  EQUIPMENT: "Public Equipment",
-  OTHER: "Services Administratifs",
+  OTHER: "General Services",
 };
 
 // Priority scores based on urgency
@@ -75,7 +73,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
     }
 
     // Validate category
-    const validCategories = ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "OTHER"];
+    const validCategories = ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
     if (category && !validCategories.includes(category)) {
       return res.status(400).json({ message: "Invalid category" });
     }
@@ -212,6 +210,32 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
 
     await complaint.save();
 
+    // Notify municipal agents via socket.io
+    try {
+      const normalizedMun = normalizeMunicipality(userMunicipalityName);
+      const io = req.app?.get?.('io');
+      
+      if (normalizedMun) {
+        // Find municipal agents in the same municipality
+        const agents = await User.find({
+          role: "MUNICIPAL_AGENT",
+          municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') }
+        }).select('_id');
+        
+        const agentIds = agents.map(a => a._id.toString());
+        if (agentIds.length > 0) {
+          await notificationService.sendNotificationToMultiple(io, agentIds, {
+            type: "new_complaint",
+            title: "New Complaint",
+            message: `New complaint in ${userMunicipalityName}: ${title.trim()}`,
+            complaintId: complaint._id,
+          });
+        }
+      }
+    } catch (notifError) {
+      console.error("Failed to notify agents:", notifError);
+    }
+
     // Create audit log
     await AuditLog.create({
       userId: req.user.userId,
@@ -293,7 +317,8 @@ router.get("/complaints/:id", authenticate, authorize("CITIZEN"), async (req, re
       .populate("assignedTeam", "name members")
       .populate("createdBy", "fullName email phone")
       .populate("municipality", "name governorate")
-      .populate("assignedTo", "fullName email");
+      .populate("assignedTo", "fullName email")
+      .populate("statusHistory.updatedBy", "fullName");
 
     if (!complaint) {
       return res.status(404).json({ message: "Complaint not found" });

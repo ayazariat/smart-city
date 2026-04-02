@@ -50,7 +50,8 @@ router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req
         { municipalityNormalized: userMunicipality },
         { municipalityName: munRegex },
         { "location.municipality": munRegex }
-      ]
+      ],
+      isArchived: { $ne: true }
     };
 
     // Apply status filter
@@ -81,11 +82,33 @@ router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req
       Complaint.countDocuments(query)
     ]);
 
+    // Calculate SLA status for each complaint on the fly
+    const complaintsResponse = complaints.map(c => {
+      const complaint = c.toObject();
+      if (complaint.slaDeadline && !['RESOLVED', 'CLOSED'].includes(complaint.status)) {
+        const now = new Date();
+        const deadline = new Date(complaint.slaDeadline);
+        const created = new Date(complaint.createdAt);
+        const totalMs = deadline - created;
+        const elapsedMs = now - created;
+        
+        if (totalMs > 0) {
+          const progress = (elapsedMs / totalMs) * 100;
+          if (progress >= 100) complaint.slaStatus = 'OVERDUE';
+          else if (progress >= 80) complaint.slaStatus = 'AT_RISK';
+          else complaint.slaStatus = 'ON_TRACK';
+        } else {
+          complaint.slaStatus = 'OVERDUE';
+        }
+      }
+      return complaint;
+    });
+
     res.json({
       success: true,
       message: "Complaints fetched successfully",
       data: {
-        complaints,
+        complaints: complaintsResponse,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -140,7 +163,7 @@ router.put("/complaints/:id/validate", authenticate, authorize("MUNICIPAL_AGENT"
 
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
 
     if (userMunicipality !== complaintMunicipality) {
       return res.status(403).json({ message: "Complaint does not belong to your municipality" });
@@ -202,7 +225,7 @@ router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"),
 
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
 
     if (userMunicipality !== complaintMunicipality) {
       return res.status(403).json({ message: "Complaint does not belong to your municipality" });
@@ -263,7 +286,7 @@ router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), 
 
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
 
     if (userMunicipality !== complaintMunicipality) {
       return res.status(403).json({ message: "Complaint does not belong to your municipality" });
@@ -284,6 +307,10 @@ router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), 
       });
     }
 
+    // Mark report as viewed by agent
+    complaint.reportViewedAt = new Date();
+    await complaint.save();
+    
     // Return resolution report for agent to review
     res.json({ 
       success: true, 
@@ -329,16 +356,17 @@ router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIP
 
     complaint.assignedDepartment = departmentId;
     
-    // Auto-validate and assign if not already validated
-    if (complaint.status === "SUBMITTED") {
-      complaint.status = "VALIDATED";
-      complaint.validatedAt = new Date();
-      complaint.validatedBy = req.user.userId;
-    }
-    
-    // Set to ASSIGNED when department is assigned
+    // If status is VALIDATED and we're assigning department, change to ASSIGNED
+    // This is the correct workflow: VALIDATED → department assigned → ASSIGNED (ready for technician)
     if (complaint.status === "VALIDATED") {
       complaint.status = "ASSIGNED";
+      if (!complaint.statusHistory) complaint.statusHistory = [];
+      complaint.statusHistory.push({
+        status: "ASSIGNED",
+        updatedBy: req.user.userId,
+        updatedAt: new Date(),
+        notes: "Department assigned by agent"
+      });
     }
     
     await complaint.save();
@@ -397,7 +425,7 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
     // Check municipality
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
 
     if (userMunicipality !== complaintMunicipality) {
       return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
@@ -467,7 +495,7 @@ router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICI
     // Check municipality
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || "");
+    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
 
     if (userMunicipality !== complaintMunicipality) {
       return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
@@ -498,6 +526,26 @@ router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICI
         type: "resolution_rejected",
         title: "Resolution Rejected",
         message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}`,
+        complaintId: complaint._id,
+      });
+    }
+
+    // Notify citizen that the resolution was rejected and work continues
+    if (complaint.createdBy) {
+      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+        type: "resolution_rejected",
+        title: "Resolution Under Review",
+        message: `The proposed resolution for "${complaint.title}" requires additional work. The technician will continue working on it.`,
+        complaintId: complaint._id,
+      });
+    }
+
+    // Notify department managers
+    if (complaint.assignedDepartment) {
+      await notificationService.notifyManagersByDepartment(req.app?.get?.('io'), complaint.assignedDepartment, {
+        type: "resolution_rejected",
+        title: "Resolution Rejected",
+        message: `Resolution for "${complaint.title}" was rejected by agent. Reason: ${rejectionReason}`,
         complaintId: complaint._id,
       });
     }

@@ -6,7 +6,7 @@ const complaintSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: {
       type: String,
-      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "OTHER"],
+      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"],
       default: "OTHER",
     },
     status: {
@@ -143,6 +143,10 @@ const complaintSchema = new mongoose.Schema(
       comment: String,
       createdAt: Date
     },
+    // Report viewing tracking
+    reportSubmittedAt: { type: Date },
+    reportViewedAt: { type: Date },
+    resolutionRejectionReason: String,
     // Reference ID for display
     referenceId: String,
     // Citizen confirmations (BL-28)
@@ -215,6 +219,7 @@ complaintSchema.pre('save', async function() {
   if (this.isNew && this.status === 'SUBMITTED') {
     this.statusHistory = [{
       status: 'SUBMITTED',
+      updatedBy: this.createdBy,
       updatedAt: new Date()
     }];
   }
@@ -255,7 +260,7 @@ complaintSchema.methods.calculateSLAStatus = function() {
   let status = 'ON_TRACK';
   if (progress >= 100) {
     status = 'OVERDUE';
-  } else if (progress >= 50) {
+  } else if (progress >= 80) {
     status = 'AT_RISK';
   }
   

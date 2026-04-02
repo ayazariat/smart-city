@@ -171,3 +171,16 @@ export const agentService = {
   approveResolution,
   rejectResolution,
 };
+
+// AI Department Prediction
+export const predictDepartment = async (category: string, description: string, municipality?: string): Promise<{
+  success: boolean;
+  data?: {
+    suggestedDepartment: string;
+    departmentName: string;
+    confidence: number;
+    message: string;
+  };
+}> => {
+  return apiClient.post("/public/ai/predict-department", { category, description, municipality });
+};

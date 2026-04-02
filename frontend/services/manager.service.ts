@@ -83,6 +83,15 @@ export const managerService = {
   },
 
   /**
+   * Reassign technician (only when ASSIGNED status)
+   */
+  async reassignTechnician(complaintId: string, technicianId: string) {
+    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/reassign-technician`, {
+      technicianId,
+    });
+  },
+
+  /**
    * Assign multiple technicians and create a repair team
    */
   async assignTeam(complaintId: string, technicianIds: string[]) {

@@ -17,6 +17,7 @@ import {
   ComplaintCard,
   Modal,
   Button,
+  ConfirmationModal,
 } from "@/components/ui";
 import type { BaseComplaint } from "@/components/ui";
 
@@ -46,6 +47,13 @@ export default function ManagerPendingPage() {
 
   const [priorityTarget, setPriorityTarget] = useState<string | null>(null);
   const [priorityScore, setPriorityScore] = useState<number>(5);
+
+  // Confirmation modal state
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "assignTech" | "changePriority" | null;
+    targetId: string | null;
+    targetName: string;
+  }>({ type: null, targetId: null, targetName: "" });
 
   // Update available municipalities when governorate changes
   useEffect(() => {
@@ -517,9 +525,16 @@ export default function ManagerPendingPage() {
           className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white transition-all"
         >
           <option value="">Select technician...</option>
-          {technicians.map((tech) => (
-            <option key={tech._id} value={tech._id}>{tech.fullName}</option>
-          ))}
+          {technicians.map((tech) => {
+            const activeCount = complaints.filter(c =>
+              (c.assignedTo as any)?._id === tech._id && ["ASSIGNED", "IN_PROGRESS"].includes(c.status)
+            ).length;
+            return (
+              <option key={tech._id} value={tech._id}>
+                {tech.fullName}{activeCount > 0 ? ` (${activeCount} active task${activeCount > 1 ? 's' : ''})` : ' (available)'}
+              </option>
+            );
+          })}
         </select>
       </Modal>
 
@@ -567,6 +582,23 @@ export default function ManagerPendingPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Assign Technician Confirmation */}
+      <ConfirmationModal
+        isOpen={confirmAction.type === "assignTech"}
+        onClose={() => setConfirmAction({ type: null, targetId: null, targetName: "" })}
+        onConfirm={() => {
+          if (confirmAction.targetId && selectedTechnician) {
+            handleAssignTechnician();
+          }
+          setConfirmAction({ type: null, targetId: null, targetName: "" });
+        }}
+        title="Assign Technician"
+        message={`Are you sure you want to assign ${complaints.find(c => c._id === confirmAction.targetId)?.title || "this complaint"} to the selected technician?`}
+        confirmText="Assign"
+        variant="warning"
+        isLoading={actionLoading !== null}
+      />
     </div>
   );
 }

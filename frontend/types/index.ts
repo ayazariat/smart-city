@@ -47,7 +47,7 @@ export interface VerifyCodePayload {
 }
 
 // Complaint types
-export type ComplaintCategory = "ROAD" | "LIGHTING" | "WASTE" | "WATER" | "SAFETY" | "PUBLIC_PROPERTY" | "GREEN_SPACE" | "TRAFFIC" | "URBAN_PLANNING" | "EQUIPMENT" | "OTHER";
+export type ComplaintCategory = "ROAD" | "LIGHTING" | "WASTE" | "WATER" | "SAFETY" | "PUBLIC_PROPERTY" | "GREEN_SPACE" | "OTHER";
 export type ComplaintUrgency = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type ComplaintStatus = "SUBMITTED" | "VALIDATED" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "REJECTED";
 export type MediaType = "photo" | "video";

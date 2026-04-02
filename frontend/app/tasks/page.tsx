@@ -26,9 +26,10 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { technicianService } from "@/services/technician.service";
 import { notificationService } from "@/services/notification.service";
+import { connectSocket, subscribeToNotifications } from "@/lib/socket";
 import { Complaint, Notification } from "@/types";
 import { showToast } from "@/components/ui/Toast";
-import { Button, Modal, PageHeader } from "@/components/ui";
+import { Button, Modal, PageHeader, ConfirmationModal } from "@/components/ui";
 import { categoryLabels } from "@/lib/complaints";
 import { getPhotoCount } from "@/lib/photos";
 
@@ -76,6 +77,12 @@ export default function TechnicianTasksPage() {
   const [resolveNote, setResolveNote] = useState("");
   const [proofPhotos, setProofPhotos] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Confirmation modal state
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "start" | "resolve" | null;
+    target: Complaint | null;
+  }>({ type: null, target: null });
 
   useEffect(() => {
     if (hydrated && user && user.role !== "TECHNICIAN") {
@@ -132,8 +139,22 @@ export default function TechnicianTasksPage() {
     if (hydrated && token) {
       fetchTasks();
       fetchNotifications();
-      const interval = setInterval(fetchNotifications, 30000);
-      return () => clearInterval(interval);
+      // Connect socket for real-time notifications
+      const { user } = useAuthStore.getState();
+      if (user?.id) {
+        connectSocket(user.id);
+      }
+      const unsubscribe = subscribeToNotifications((notification: unknown) => {
+        const notif = notification as Notification;
+        setNotifications(prev => [notif, ...prev]);
+        setUnreadCount(prev => prev + 1);
+        showToast(notif.message || "New notification", "info");
+      });
+      const interval = setInterval(fetchNotifications, 60000);
+      return () => {
+        clearInterval(interval);
+        unsubscribe();
+      };
     }
   }, [hydrated, token, fetchTasks, fetchNotifications]);
 
@@ -434,6 +455,30 @@ export default function TechnicianTasksPage() {
                               {urgency.label}
                             </span>
                           )}
+                          {task.priorityScore != null && task.priorityScore >= 15 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                              <AlertTriangle className="w-3 h-3" />
+                              High Priority
+                            </span>
+                          )}
+                          {task.slaDeadline && !["RESOLVED", "CLOSED"].includes(task.status) && (() => {
+                            const diff = new Date(task.slaDeadline).getTime() - Date.now();
+                            const hours = Math.abs(diff) / (1000 * 60 * 60);
+                            const days = Math.floor(hours / 24);
+                            const h = Math.floor(hours % 24);
+                            if (diff < 0) return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 animate-pulse">
+                                <Clock className="w-3 h-3" />
+                                {days > 0 ? `${days}d ${h}h overdue` : `${h}h overdue`}
+                              </span>
+                            );
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${hours < 48 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                                <Clock className="w-3 h-3" />
+                                {days > 0 ? `${days}d ${h}h left` : `${h}h left`}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         <h3 className="font-semibold text-slate-900 mb-2 line-clamp-2 text-lg">
@@ -475,7 +520,7 @@ export default function TechnicianTasksPage() {
                       {task.status === "ASSIGNED" && (
                         <>
                           <button
-                            onClick={() => handleStartWork(id)}
+                            onClick={() => setConfirmAction({ type: "start", target: task })}
                             disabled={actionLoading}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold shadow-lg hover:shadow-xl disabled:opacity-50"
                           >
@@ -491,7 +536,7 @@ export default function TechnicianTasksPage() {
                       {task.status === "IN_PROGRESS" && (
                         <>
                           <button
-                            onClick={() => { setSelectedTask(task); setResolveModal(true); }}
+                            onClick={() => setConfirmAction({ type: "resolve", target: task })}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
                           >
                             <CheckCircle2 className="w-4 h-4" />
@@ -527,13 +572,24 @@ export default function TechnicianTasksPage() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setResolveModal(false)} disabled={actionLoading}>Cancel</Button>
-            <Button onClick={handleResolve} isLoading={actionLoading} disabled={!resolveNote.trim() || resolveNote.trim().length < 20}>
-              Confirm Resolution
+            <Button 
+              onClick={handleResolve} 
+              isLoading={actionLoading} 
+              disabled={!resolveNote.trim() || resolveNote.trim().length < 20}
+              className={resolveNote.trim().length >= 20 ? "bg-green-600 hover:bg-green-700" : ""}
+            >
+              {resolveNote.trim().length >= 20 ? "Submit Resolution" : `${20 - resolveNote.trim().length} more chars needed`}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
+          {selectedTask && (
+            <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+              <p className="text-sm font-medium text-slate-700">{selectedTask.title || selectedTask.description?.slice(0, 80)}</p>
+              <p className="text-xs text-slate-500 mt-1">#{selectedTask.referenceId || selectedTask._id?.slice(-6)}</p>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Resolution Report <span className="text-red-500">*</span>
@@ -572,9 +628,61 @@ export default function TechnicianTasksPage() {
                 )}
               </div>
             </div>
+            {/* Photo previews */}
+            {proofPhotos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {proofPhotos.map((file, i) => (
+                  <div key={i} className="relative h-20 bg-slate-100 rounded-lg overflow-hidden">
+                    <img src={URL.createObjectURL(file)} alt={`Proof ${i + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setProofPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Modal>
+
+      {/* Start Work Confirmation */}
+      <ConfirmationModal
+        isOpen={confirmAction.type === "start"}
+        onClose={() => setConfirmAction({ type: null, target: null })}
+        onConfirm={() => {
+          if (confirmAction.target) {
+            handleStartWork(confirmAction.target?._id || "");
+          }
+          setConfirmAction({ type: null, target: null });
+        }}
+        title="Start Work"
+        message={`Are you sure you want to start working on "${confirmAction.target?.title}"? This will change the status to In Progress.`}
+        confirmText="Start Work"
+        variant="warning"
+        isLoading={actionLoading}
+      />
+
+      {/* Resolve Confirmation */}
+      <ConfirmationModal
+        isOpen={confirmAction.type === "resolve"}
+        onClose={() => setConfirmAction({ type: null, target: null })}
+        onConfirm={() => {
+          if (confirmAction.target) {
+            setSelectedTask(confirmAction.target);
+          }
+          setConfirmAction({ type: null, target: null });
+          setResolveModal(true);
+        }}
+        title="Submit Resolution"
+        message={`Are you sure you want to submit your resolution report for "${confirmAction.target?.title}"? The agent will review and approve.`}
+        confirmText="Submit Report"
+        variant="success"
+        isLoading={actionLoading}
+      />
     </div>
   );
 }

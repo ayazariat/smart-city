@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { 
   ArrowLeft, 
   MapPin, 
@@ -16,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
+import { useAuthStore } from "@/store/useAuthStore";
 import { categoryLabels } from "@/lib/complaints";
 
 interface ComplaintMedia {
@@ -53,12 +55,17 @@ const statusConfig: Record<string, { label: string; bgClass: string; textClass: 
 export default function PublicComplaintDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const complaintId = params.id as string;
+  const actionParam = searchParams.get("action");
+  
+  const { user, token, hydrated } = useAuthStore();
   
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [actionPerformed, setActionPerformed] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchComplaint = async () => {
@@ -89,14 +96,38 @@ export default function PublicComplaintDetailPage() {
     }
   }, [complaintId]);
 
+  // Handle action after login redirect
+  useEffect(() => {
+    if (hydrated && user && token && actionParam && !actionPerformed) {
+      // User just logged in and has pending action
+      if (actionParam === "upvote") {
+        setActionPerformed("upvote");
+        // Could trigger upvote API here
+      } else if (actionParam === "confirm") {
+        setActionPerformed("confirm");
+        // Could trigger confirm API here
+      }
+    }
+  }, [hydrated, user, token, actionParam, actionPerformed]);
+
   const handleUpvote = () => {
-    const returnUrl = `/transparency/complaints/${complaintId}?action=upvote`;
-    router.push(`/?redirect=${encodeURIComponent(returnUrl)}`);
+    if (!user || !token) {
+      const returnUrl = `/transparency/complaints/${complaintId}?action=upvote`;
+      router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
+    } else {
+      setActionPerformed("upvote");
+      // Could trigger upvote API here
+    }
   };
 
   const handleConfirm = () => {
-    const returnUrl = `/transparency/complaints/${complaintId}?action=confirm`;
-    router.push(`/?redirect=${encodeURIComponent(returnUrl)}`);
+    if (!user || !token) {
+      const returnUrl = `/transparency/complaints/${complaintId}?action=confirm`;
+      router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
+    } else {
+      setActionPerformed("confirm");
+      // Could trigger confirm API here
+    }
   };
 
   const nextImage = () => {

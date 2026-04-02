@@ -44,10 +44,11 @@ function LoginForm() {
     if (!hydrated) return;
 
     if (user) {
-      router.replace('/dashboard');
+      const redirectTo = searchParams.get('redirect') || '/dashboard';
+      router.replace(redirectTo);
       return;
     }
-  }, [user, router, hydrated]);
+  }, [user, router, hydrated, searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -77,7 +78,8 @@ function LoginForm() {
         password: formData.password,
         captchaToken,
       });
-      router.replace('/dashboard');
+      const redirectTo = searchParams.get('redirect') || '/dashboard';
+      router.replace(redirectTo);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Login failed");
     }

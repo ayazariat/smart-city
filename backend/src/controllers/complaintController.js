@@ -17,7 +17,7 @@ class ComplaintController {
       }
 
       const validCategories = [
-        "ROAD", "LIGHTING", "WASTE", "WATER", "GREEN_SPACE", "BUILDING", "NOISE", "OTHER"
+        "ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"
       ];
       
       if (!validCategories.includes(category)) {
@@ -174,21 +174,16 @@ class ComplaintController {
           .select('municipality municipalityName')
           .lean();
         
-        const userMunicipalityId = user?.municipality?._id?.toString();
-        const userMunicipalityName = user?.municipalityName || user?.municipality?.name;
-        const complaintMunicipalityId = complaint.municipality?._id?.toString();
-        const complaintMunicipalityName = complaint.municipalityName || complaint.location?.municipality;
+        const userMunicipalityName = normalizeMunicipality(user?.municipalityName || user?.municipality?.name || "");
+        const complaintMunicipalityName = normalizeMunicipality(
+          complaint.municipalityNormalized || complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || ""
+        );
         
         // If complaint has no municipality set, allow agent to view it
-        if (!complaintMunicipalityId && !complaintMunicipalityName) {
+        if (!complaintMunicipalityName) {
           // Allow - complaint has no municipality
-        } else if (userMunicipalityId && complaintMunicipalityId) {
-          if (userMunicipalityId !== complaintMunicipalityId) {
-            return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your municipality" });
-          }
         } else if (userMunicipalityName && complaintMunicipalityName) {
-          // Compare by name (case-insensitive)
-          if (userMunicipalityName.toLowerCase() !== complaintMunicipalityName.toLowerCase()) {
+          if (userMunicipalityName !== complaintMunicipalityName) {
             return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your municipality" });
           }
         }
@@ -223,12 +218,16 @@ class ComplaintController {
         // If no department assigned to either, allow manager to view (they may need to assign)
       }
 
-      // For non-admin/agent/technician roles - check ownership
-      const isTechAssigned = userRole === "TECHNICIAN" && 
-        (complaint.assignedTo?._id?.toString() === currentUserId || 
-         complaint.assignedTo?.toString() === currentUserId);
+      // For non-admin/agent/technician roles - check ownership or assignment
+      const isTechAssigned = userRole === "TECHNICIAN" && (
+        complaint.assignedTo?._id?.toString() === currentUserId ||
+        complaint.assignedTo?.toString() === currentUserId ||
+        (complaint.assignedTeam?.members || []).some(m => 
+          (m?._id?.toString() || m?.toString()) === currentUserId
+        )
+      );
       if (!isOwner && !isAdminOrAgent && !isTechAssigned) {
-        return res.status(403).json({ success: false, message: "Access denied" });
+        return res.status(403).json({ success: false, message: "Access denied - You are not assigned to this complaint" });
       }
 
       // Format citizen info - hide email/phone if anonymous
@@ -315,7 +314,10 @@ class ComplaintController {
             : complaint.assignedTo
             ? [{ _id: complaint.assignedTo._id, fullName: complaint.assignedTo.fullName }]
             : [],
+        media: complaint.media || [],
         photos: (complaint.media || []).map((m) => m.url).filter(Boolean),
+        beforePhotos: complaint.beforePhotos || [],
+        afterPhotos: complaint.afterPhotos || [],
         proofPhotos: (complaint.afterPhotos || []).map((m) => m.url).filter(Boolean),
         confirmations: [], // can be populated later if confirmation model exists
         history,
@@ -462,10 +464,32 @@ class ComplaintController {
         Complaint.countDocuments(query),
       ]);
 
+      // Calculate SLA status for each complaint on the fly
+      const complaintsResponse = complaints.map(c => {
+        const complaint = c.toObject();
+        if (complaint.slaDeadline && !['RESOLVED', 'CLOSED'].includes(complaint.status)) {
+          const now = new Date();
+          const deadline = new Date(complaint.slaDeadline);
+          const created = new Date(complaint.createdAt);
+          const totalMs = deadline - created;
+          const elapsedMs = now - created;
+          
+          if (totalMs > 0) {
+            const progress = (elapsedMs / totalMs) * 100;
+            if (progress >= 100) complaint.slaStatus = 'OVERDUE';
+            else if (progress >= 80) complaint.slaStatus = 'AT_RISK';
+            else complaint.slaStatus = 'ON_TRACK';
+          } else {
+            complaint.slaStatus = 'OVERDUE';
+          }
+        }
+        return complaint;
+      });
+
       res.json({
         success: true,
         data: {
-          complaints,
+          complaints: complaintsResponse,
           pagination: {
             page,
             limit,
@@ -716,6 +740,32 @@ class ComplaintController {
         complaint.status = "ASSIGNED";
       }
       await complaint.save();
+
+      // Send notifications
+      const io = req.app?.get?.("io");
+      if (io) {
+        try {
+          const notificationService = require("../services/notification.service");
+          // Notify department managers
+          await notificationService.notifyManagersByDepartment(io, departmentId, {
+            type: "assigned",
+            title: "New Complaint Assigned",
+            message: `Complaint "${complaint.title || complaint.description?.slice(0, 50)}" assigned to ${department.name}`,
+            complaintId: complaint._id,
+          });
+          // Notify citizen
+          if (complaint.createdBy) {
+            await notificationService.sendNotification(io, complaint.createdBy.toString(), {
+              type: "assigned",
+              title: "Complaint Update",
+              message: `Your complaint has been assigned to the ${department.name} department`,
+              complaintId: complaint._id,
+            });
+          }
+        } catch (err) {
+          console.error("Notification failed:", err);
+        }
+      }
 
       res.json({
         success: true,

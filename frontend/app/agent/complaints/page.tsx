@@ -17,6 +17,7 @@ import {
   ComplaintCard,
   Modal,
   Button,
+  ConfirmationModal,
 } from "@/components/ui";
 
 export default function AgentComplaintsPage() {
@@ -26,7 +27,7 @@ export default function AgentComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [municipalityName, setMunicipalityName] = useState<string>("");
@@ -39,9 +40,17 @@ export default function AgentComplaintsPage() {
 
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [aiSuggestion, setAiSuggestion] = useState<{ departmentId?: string; departmentName?: string; confidence?: number } | null>(null);
+
+  // Confirmation modal states
+  const [confirmAction, setConfirmAction] = useState<{
+    type: "validate" | "reject" | "assign" | null;
+    targetId: string | null;
+    targetName: string;
+  }>({ type: null, targetId: null, targetName: "" });
 
   const refreshComplaints = async () => {
-    const response = await agentService.getAgentComplaints({ status: statusFilter || "ALL" });
+    const response = await agentService.getAgentComplaints({ status: statusFilter === "ACTIVE" ? "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : (statusFilter || "ALL") });
     if (response.data) {
       setComplaints(response.data.complaints);
       if (response.data.municipalityName) {
@@ -63,7 +72,7 @@ export default function AgentComplaintsPage() {
         const response = await agentService.getAgentComplaints({
           page: 1,
           limit: 100,
-          status: statusFilter || "ALL",
+          status: statusFilter === "ACTIVE" ? "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : (statusFilter || "ALL"),
         });
         if (response.data?.complaints) {
           setComplaints(response.data.complaints);
@@ -101,6 +110,7 @@ export default function AgentComplaintsPage() {
   }, [hydrated, token, user]);
 
   const handleValidate = async (complaintId: string) => {
+    setConfirmAction({ type: null, targetId: null, targetName: "" });
     setActionLoading(complaintId);
     try {
       await agentService.validateComplaint(complaintId);
@@ -110,6 +120,12 @@ export default function AgentComplaintsPage() {
       alert("Failed to validate complaint");
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleConfirmValidate = () => {
+    if (confirmAction.targetId) {
+      handleValidate(confirmAction.targetId);
     }
   };
 
@@ -137,6 +153,7 @@ export default function AgentComplaintsPage() {
       if (result.success) {
         setAssignTarget(null);
         setSelectedDepartment("");
+        setAiSuggestion(null);
         await refreshComplaints();
       } else {
         alert((result as { message?: string }).message || "Failed to assign complaint");
@@ -268,7 +285,7 @@ export default function AgentComplaintsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
-        title="All Complaints"
+        title="My Actions"
         subtitle={municipalityName ? `Complaints in ${municipalityName}` : "Agent complaint management"}
         backHref="/dashboard"
         rightContent={
@@ -413,6 +430,7 @@ export default function AgentComplaintsPage() {
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
                 >
+                  <option value="ACTIVE">Active (My Actions)</option>
                   <option value="">All Statuses</option>
                   {STATUS_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -488,7 +506,7 @@ export default function AgentComplaintsPage() {
                         {complaint.status === "SUBMITTED" && (
                           <>
                             <button
-                              onClick={() => handleValidate(id)}
+                              onClick={() => { const c = complaints.find(x => (x._id || x.id) === id); setConfirmAction({ type: "validate", targetId: id, targetName: c?.title || " Complaint" }); }}
                               disabled={actionLoading === id}
                               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
                             >
@@ -507,7 +525,21 @@ export default function AgentComplaintsPage() {
                         )}
                         {complaint.status === "VALIDATED" && !complaint.assignedDepartment && (
                           <button
-                            onClick={() => setAssignTarget(id)}
+                            onClick={() => {
+                              setAssignTarget(id);
+                              // Fetch AI prediction
+                              const c = complaints.find(x => (x._id || x.id) === id);
+                              if (c) {
+                                agentService.predictDepartment(c.category, c.description || "", c.municipalityName || "")
+                                  .then(res => {
+                                    if (res.data) {
+                                      setAiSuggestion({ departmentId: res.data.suggestedDepartment, departmentName: res.data.departmentName, confidence: res.data.confidence });
+                                      if (res.data.suggestedDepartment) setSelectedDepartment(res.data.suggestedDepartment);
+                                    }
+                                  })
+                                  .catch(() => {});
+                              }
+                            }}
                             disabled={actionLoading === id}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg"
                           >
@@ -521,6 +553,12 @@ export default function AgentComplaintsPage() {
                             {typeof complaint.assignedDepartment === 'object' && complaint.assignedDepartment.name 
                               ? `Assigned to ${complaint.assignedDepartment.name}` 
                               : 'Department Assigned'}
+                          </div>
+                        )}
+                        {complaint.status === "RESOLVED" && (
+                          <div className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-100 text-amber-700 rounded-xl text-sm font-semibold">
+                            <AlertTriangle className="w-4 h-4" />
+                            Resolution Pending Review
                           </div>
                         )}
                         <button
@@ -569,12 +607,12 @@ export default function AgentComplaintsPage() {
       {/* Assign Modal */}
       <Modal
         isOpen={assignTarget !== null}
-        onClose={() => { setAssignTarget(null); setSelectedDepartment(""); }}
+        onClose={() => { setAssignTarget(null); setSelectedDepartment(""); setAiSuggestion(null); }}
         title="Assign to Department"
         description="Select the department that will handle this complaint."
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setAssignTarget(null); setSelectedDepartment(""); }} disabled={actionLoading !== null}>
+            <Button variant="ghost" onClick={() => { setAssignTarget(null); setSelectedDepartment(""); setAiSuggestion(null); }} disabled={actionLoading !== null}>
               Cancel
             </Button>
             <Button onClick={handleAssign} isLoading={actionLoading !== null} disabled={!selectedDepartment || actionLoading !== null}>
@@ -584,6 +622,12 @@ export default function AgentComplaintsPage() {
         }
       >
         <div className="space-y-3">
+          {aiSuggestion?.departmentName && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <span className="text-sm font-medium text-blue-800">AI suggests: {aiSuggestion.departmentName}</span>
+              <span className="px-2 py-0.5 bg-blue-200 text-blue-800 text-xs rounded-full font-semibold">{aiSuggestion.confidence}%</span>
+            </div>
+          )}
           <select
             value={selectedDepartment}
             onChange={(e) => setSelectedDepartment(e.target.value)}
@@ -596,6 +640,33 @@ export default function AgentComplaintsPage() {
           </select>
         </div>
       </Modal>
+
+      {/* Validate Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmAction.type === "validate"}
+        onClose={() => setConfirmAction({ type: null, targetId: null, targetName: "" })}
+        onConfirm={handleConfirmValidate}
+        title="Validate Complaint"
+        message={`Are you sure you want to validate this complaint "${confirmAction.targetName}"? It will be sent for department assignment.`}
+        confirmText="Validate"
+        variant="success"
+        isLoading={actionLoading !== null}
+      />
+
+      {/* Assign Department Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmAction.type === "assign"}
+        onClose={() => setConfirmAction({ type: null, targetId: null, targetName: "" })}
+        onConfirm={() => {
+          setConfirmAction({ type: null, targetId: null, targetName: "" });
+          handleAssign();
+        }}
+        title="Assign to Department"
+        message={`Are you sure you want to assign this complaint "${confirmAction.targetName}" to the selected department?`}
+        confirmText="Assign"
+        variant="warning"
+        isLoading={actionLoading !== null}
+      />
     </div>
   );
 }

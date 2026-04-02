@@ -233,6 +233,7 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
 
     complaint.status = "RESOLVED";
     complaint.resolvedAt = new Date();
+    complaint.reportSubmittedAt = new Date();
     if (notes) {
       complaint.resolutionNotes = notes;
     }
@@ -273,6 +274,20 @@ router.put("/complaints/:id/complete", authenticate, authorize("TECHNICIAN"), as
         });
       } catch (notifError) {
         console.error("Failed to notify citizen:", notifError);
+      }
+    }
+
+    // Notify the validating agent so they can review the resolution
+    if (io && complaint.validatedBy) {
+      try {
+        await notificationService.sendNotification(io, complaint.validatedBy, {
+          type: "report_submitted",
+          title: "Resolution Pending Review",
+          message: `Technician submitted a resolution report for "${complaint.title}". Please review.`,
+          complaintId: complaint._id,
+        });
+      } catch (notifError) {
+        console.error("Failed to notify agent:", notifError);
       }
     }
 
@@ -554,7 +569,8 @@ router.get("/complaints/:id", authenticate, authorize("TECHNICIAN"), async (req,
       })
       .populate("municipality", "name governorate")
       .populate("beforePhotos.takenBy", "fullName")
-      .populate("afterPhotos.takenBy", "fullName");
+      .populate("afterPhotos.takenBy", "fullName")
+      .populate("statusHistory.updatedBy", "fullName");
     
     if (!complaint) {
       return res.status(404).json({ success: false, message: "Complaint not found" });

@@ -14,19 +14,14 @@ export const statusConfig: Record<string, { label: string; bgClass: string; text
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  ROAD:           "Roads & Infrastructure",
-  LIGHTING:       "Public Lighting",
-  WASTE:          "Waste Management",
-  WATER:          "Water & Sanitation",
-  SAFETY:         "Public Safety",
-  PUBLIC_PROPERTY:"Public Property",
-  GREEN_SPACE:    "Parks & Green Spaces",
-  TRAFFIC:        "Traffic & Road Signage",
-  URBAN_PLANNING: "Urban Planning",
-  EQUIPMENT:      "Public Equipment",
-  BUILDING:       "Buildings",
-  NOISE:          "Noise Pollution",
-  OTHER:          "Other",
+  ROAD:            "Roads & Infrastructure",
+  LIGHTING:        "Public Lighting",
+  WASTE:           "Waste Management",
+  WATER:           "Water & Sanitation",
+  SAFETY:          "Public Safety",
+  PUBLIC_PROPERTY: "Public Property",
+  GREEN_SPACE:     "Parks & Green Spaces",
+  OTHER:           "Other",
 };
 
 export const categoryLabels = CATEGORY_LABELS;

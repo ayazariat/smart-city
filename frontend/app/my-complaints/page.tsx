@@ -197,6 +197,7 @@ export default function MyComplaintsPage() {
                   complaint={complaint}
                   href={`/my-complaints/${complaint._id || complaint.id}`}
                   index={index}
+                  hideSla
                   onUpdate={(updated) => {
                     setComplaints(prev => prev.map(c => 
                       (c._id || c.id) === (updated._id || updated.id) ? updated as any : c

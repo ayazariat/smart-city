@@ -119,6 +119,7 @@ export default function TransparencyPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeTab, setActiveTab] = useState<"overview" | "complaints" | "municipalities">("overview");
+  const [expandedComplaint, setExpandedComplaint] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async (isRefresh = false) => {
@@ -204,6 +205,10 @@ export default function TransparencyPage() {
         c.location?.municipality?.toLowerCase().includes(query) ||
         categoryLabels[c.category]?.toLowerCase().includes(query)
       );
+      // Auto-switch to complaints tab when searching (unless already on municipalities with matching results)
+      if (activeTab === "overview") {
+        setActiveTab("complaints");
+      }
     }
     
     if (categoryFilter) {
@@ -211,11 +216,11 @@ export default function TransparencyPage() {
     }
     
     setFilteredComplaints(filtered);
-  }, [searchQuery, categoryFilter, complaints]);
+  }, [searchQuery, categoryFilter, complaints, activeTab]);
 
   const handleUpvote = async (complaintId: string) => {
     if (!token) {
-      router.push("/login");
+      router.push(`/login?redirect=/transparency&action=upvote&complaintId=${complaintId}`);
       return;
     }
     try {
@@ -240,7 +245,7 @@ export default function TransparencyPage() {
 
   const handleConfirm = async (complaintId: string) => {
     if (!token) {
-      router.push("/login");
+      router.push(`/login?redirect=/transparency&action=confirm&complaintId=${complaintId}`);
       return;
     }
     try {
@@ -287,37 +292,37 @@ export default function TransparencyPage() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          {/* Top Row: Logo + Actions */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-shrink-0">
               <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-green-600 to-green-700 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/25">
-                  <Sparkles className="w-6 h-6 text-white" />
+                <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/25">
+                  <Sparkles className="w-5 h-5 text-white" />
                 </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-pulse"></div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-slate-800">Smart City Tunisia</h1>
-                <p className="text-sm text-slate-500">Public Transparency Dashboard</p>
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-bold text-slate-800 leading-tight">Smart City Tunisia</h1>
+                <p className="text-xs text-slate-500">Public Transparency Dashboard</p>
               </div>
             </div>
 
             {/* Search Bar */}
-            <div className="flex-1 max-w-md mx-8">
+            <div className="flex-1 max-w-lg mx-4">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search municipalities, complaints, categories..."
+                  placeholder="Search complaints, municipalities, categories..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
+                  className="w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full transition-colors"
                   >
                     <X className="w-4 h-4 text-slate-400" />
                   </button>
@@ -325,31 +330,31 @@ export default function TransparencyPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => fetchData(true)}
                 disabled={refreshing}
-                className="p-2 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors disabled:opacity-50"
+                className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
               >
-                <RefreshCw className={`w-5 h-5 text-slate-600 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 text-slate-600 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
               <Link 
                 href="/login"
-                className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-medium transition-colors"
+                className="hidden sm:inline-flex px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors"
               >
                 Login
               </Link>
               <Link 
                 href="/register"
-                className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 rounded-xl text-sm font-medium transition-all shadow-lg shadow-green-500/25"
+                className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800 rounded-lg text-sm font-medium transition-all shadow-sm"
               >
-                Create Account
+                Sign Up
               </Link>
             </div>
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex items-center gap-1 mt-4 pb-2">
+          <div className="flex items-center gap-1 mt-3 -mb-px overflow-x-auto scrollbar-hide">
             {[
               { id: "overview", label: "Overview", icon: BarChart3 },
               { id: "complaints", label: "Complaints", icon: List },
@@ -358,10 +363,10 @@ export default function TransparencyPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap border-b-2 ${
                   activeTab === tab.id
-                    ? "bg-green-100 text-green-700 border border-green-200"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                    ? "bg-green-50 text-green-700 border-green-600"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent"
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
@@ -386,7 +391,7 @@ export default function TransparencyPage() {
             {activeTab === "overview" && (
               <div className="space-y-8 animate-fadeIn">
                 {/* KPI Header */}
-                <div className="bg-white rounded-3xl p-8 border border-slate-200/50 shadow-xl">
+                <div id="overview" className="bg-white rounded-3xl p-8 border border-slate-200/50 shadow-xl scroll-mt-40">
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
@@ -446,7 +451,7 @@ export default function TransparencyPage() {
                 </div>
 
                 {/* Featured Complaints Section */}
-                <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
+                <div id="featured" className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl scroll-mt-40">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-green-600" />
@@ -574,7 +579,7 @@ export default function TransparencyPage() {
                   </div>
 
                   {/* Category Stats */}
-                  <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
+                  <div id="categories" className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl scroll-mt-40">
                     <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                       <Target className="w-5 h-5 text-green-600" />
                       Category Performance
@@ -696,11 +701,13 @@ export default function TransparencyPage() {
                 {/* Complaints Grid/List */}
                 {viewMode === "grid" ? (
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredComplaints.map((complaint, idx) => (
+                    {filteredComplaints.map((complaint) => {
+                      const isExpanded = expandedComplaint === complaint._id;
+                      return (
                       <div 
                         key={complaint._id}
-                        className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all"
-                        style={{ animationDelay: `${idx * 30}ms` }}
+                        className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer"
+                        onClick={() => setExpandedComplaint(isExpanded ? null : complaint._id)}
                       >
                         {/* Image */}
                         <div className="relative h-40 bg-gradient-to-br from-slate-100 to-slate-50">
@@ -735,9 +742,7 @@ export default function TransparencyPage() {
                         {/* Content */}
                         <div className="p-4">
                           <h4 className="font-semibold text-slate-800 mb-2 line-clamp-2">{complaint.title}</h4>
-                          {complaint.description && (
-                            <p className="text-xs text-slate-500 mb-3 line-clamp-2">{complaint.description}</p>
-                          )}
+                          <p className={`text-xs text-slate-500 mb-3 ${isExpanded ? '' : 'line-clamp-2'}`}>{complaint.description}</p>
                           <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
                             {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
@@ -745,27 +750,59 @@ export default function TransparencyPage() {
                             {new Date(complaint.createdAt).toLocaleDateString()}
                           </p>
                           
+                          {/* Expanded Details */}
+                          {isExpanded && (
+                            <div className="space-y-3 mb-3 pt-3 border-t border-slate-100 animate-fadeIn">
+                              {complaint.location?.address && (
+                                <p className="text-xs text-slate-600 flex items-center gap-1">
+                                  <MapPinned className="w-3 h-3 text-slate-400" />
+                                  {complaint.location.address}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-2 text-xs text-slate-600">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                Submitted: {new Date(complaint.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs">
+                                <Radio className="w-3 h-3 text-slate-400" />
+                                Status: <span className="font-medium text-slate-700">{complaint.status}</span>
+                              </div>
+                              {/* All media photos */}
+                              {complaint.media && complaint.media.length > 1 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {complaint.media.slice(1).map((m, i) => (
+                                    <div key={i} className="h-20 bg-slate-100 rounded-lg overflow-hidden">
+                                      <img src={m.url} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
                           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                             <div className="flex items-center gap-3">
                               <button
-                                onClick={() => handleConfirm(complaint._id)}
+                                onClick={(e) => { e.stopPropagation(); handleConfirm(complaint._id); }}
                                 className="flex items-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-xs text-green-600 font-medium transition-colors"
                               >
                                 <Check className="w-3 h-3" />
                                 Confirm ({complaint.confirmationCount || 0})
                               </button>
                               <button
-                                onClick={() => handleUpvote(complaint._id)}
+                                onClick={(e) => { e.stopPropagation(); handleUpvote(complaint._id); }}
                                 className="flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-xs text-red-500 font-medium transition-colors"
                               >
                                 <Heart className="w-3 h-3" />
                                 Upvote ({complaint.upvoteCount || 0})
                               </button>
                             </div>
+                            <Eye className="w-4 h-4 text-slate-400" />
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -841,7 +878,7 @@ export default function TransparencyPage() {
 
             {/* Municipalities Tab */}
             {activeTab === "municipalities" && (
-              <div className="space-y-6 animate-fadeIn">
+              <div id="municipalities" className="space-y-6 animate-fadeIn scroll-mt-40">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200/50 shadow-xl">
                   <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Globe className="w-5 h-5 text-blue-500" />
@@ -859,6 +896,7 @@ export default function TransparencyPage() {
                           <div 
                             key={`${mun.name}-${mun.governorate}`}
                             className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-green-500/30 hover:shadow-md transition-all cursor-pointer"
+                            onClick={() => { setSearchQuery(mun.name); setActiveTab("complaints"); }}
                           >
                             <div className="flex items-center justify-between">
                               <div>
@@ -917,12 +955,13 @@ export default function TransparencyPage() {
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1">
                                 {gov.municipalities.map((mun) => (
-                                  <span 
+                                  <button 
                                     key={mun}
-                                    className="px-2 py-1 bg-white rounded-lg text-xs text-slate-600 border border-slate-100"
+                                    onClick={() => { setSearchQuery(mun); setActiveTab("complaints"); }}
+                                    className="px-2 py-1 bg-white rounded-lg text-xs text-slate-600 border border-slate-100 hover:border-green-400 hover:text-green-700 hover:bg-green-50 transition-colors cursor-pointer"
                                   >
                                     {mun}
-                                  </span>
+                                  </button>
                                 ))}
                               </div>
                             </div>

@@ -233,11 +233,6 @@ export async function apiFetch<T = unknown>(
     const errorText = await response.text();
     const errorData = errorText ? JSON.parse(errorText) : {};
     
-    // Don't throw for 403 - return empty data
-    if (response.status === 403) {
-      return {} as T;
-    }
-    
     throw new ApiError(
       errorData.message || "Request failed",
       response.status,

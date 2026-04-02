@@ -1,16 +1,13 @@
-// Category labels for complaints
+// Category labels for complaints - single source of truth
+// Must match backend model enum: ROAD, LIGHTING, WASTE, WATER, SAFETY, PUBLIC_PROPERTY, GREEN_SPACE, OTHER
 export const categoryLabels: Record<string, string> = {
   ROAD: "Roads & Infrastructure",
   LIGHTING: "Public Lighting",
   WASTE: "Waste Management",
   WATER: "Water & Sanitation",
-  SAFETY: "Safety",
+  SAFETY: "Public Safety",
   PUBLIC_PROPERTY: "Public Property",
   GREEN_SPACE: "Parks & Green Spaces",
-  TRAFFIC: "Traffic & Road Signage",
-  URBAN_PLANNING: "Urban Planning",
-  EQUIPMENT: "Public Equipment",
-  NOISE: "Noise",
   OTHER: "Other",
 };
 

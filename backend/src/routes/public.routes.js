@@ -2,8 +2,85 @@ const express = require("express");
 const router = express.Router();
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
+const Department = require("../models/Department");
 const { authenticate, authorize } = require("../middleware/auth");
 const { normalizeMunicipality } = require("../utils/normalize");
+
+// Simple AI department prediction based on category and description keywords
+const predictDepartment = (category, description) => {
+  const keywords = {
+    "Roads & Infrastructure": ["road", "pavement", "hole", "damage", "street", "road", "infrastructure", "bridge", "sidewalk"],
+    "Public Lighting": ["light", "lamp", "路灯", "dark", "streetlight", "lighting", "electricity", "power"],
+    "Waste Management": ["waste", "garbage", "trash", "bin", "clean", " collecte", "déchet", " poubelle", "salubrit"],
+    "Parks & Green Spaces": ["park", "tree", "garden", "green", "vegetation", "jardin", "espace vert", "arbre"],
+    "Water & Sanitation": ["water", "drainage", "sewer", "flood", "égout", "eau", "assainissement", "inondation"],
+    "Traffic & Road Signage": ["traffic", "sign", "signal", "road sign", "stop", "signalisation", "panneau", "circulation"],
+    "Urban Planning": ["building", "construction", "permit", "urban", "construction", "bâtiment", "permis", "urbanisme"],
+    "Public Equipment": ["equipment", "bench", "furniture", "公共设施", "équipement", "banc", "mobilier"],
+  };
+  
+  const categoryMap = {
+    "ROAD": "Roads & Infrastructure",
+    "LIGHTING": "Public Lighting",
+    "WASTE": "Waste Management",
+    "WATER": "Water & Sanitation",
+    "SAFETY": "Traffic & Road Signage",
+    "PUBLIC_PROPERTY": "Public Equipment",
+    "GREEN_SPACE": "Parks & Green Spaces",
+    "BUILDING": "Urban Planning",
+    "NOISE": "Waste Management",
+    "OTHER": "Roads & Infrastructure",
+  };
+  
+  // First try category mapping
+  if (category && categoryMap[category]) {
+    return { department: categoryMap[category], confidence: 75 };
+  }
+  
+  // Then try keyword matching in description
+  const descLower = (description || "").toLowerCase();
+  let bestMatch = { department: "Roads & Infrastructure", confidence: 40 };
+  
+  for (const [dept, words] of Object.entries(keywords)) {
+    let matches = 0;
+    for (const word of words) {
+      if (descLower.includes(word.toLowerCase())) matches++;
+    }
+    if (matches > 0) {
+      const confidence = Math.min(95, 50 + (matches * 15));
+      if (confidence > bestMatch.confidence) {
+        bestMatch = { department: dept, confidence };
+      }
+    }
+  }
+  
+  return bestMatch;
+};
+
+// POST /api/public/ai/predict-department - AI department suggestion
+router.post("/ai/predict-department", async (req, res) => {
+  try {
+    const { category, description, municipality } = req.body;
+    
+    const prediction = predictDepartment(category, description);
+    
+    // Find the department by name
+    const department = await Department.findOne({ name: prediction.department });
+    
+    res.json({
+      success: true,
+      data: {
+        suggestedDepartment: department?._id,
+        departmentName: prediction.department,
+        confidence: prediction.confidence,
+        message: `AI suggests: ${prediction.department} (${prediction.confidence}% confidence)`
+      }
+    });
+  } catch (error) {
+    console.error("AI prediction error:", error);
+    res.status(500).json({ success: false, message: "Failed to predict department" });
+  }
+});
 
 // Public routes - NO authentication required
 
@@ -24,16 +101,19 @@ router.get("/stats", async (req, res) => {
       startDate.setFullYear(startDate.getFullYear() - 1);
     }
 
-    // Get complaints within period
+    // Get complaints within period - only show VALIDATED and above for public
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
     const complaints = await Complaint.find({
-      createdAt: { $gte: startDate }
+      createdAt: { $gte: startDate },
+      status: { $in: publicStatuses },
+      isArchived: { $ne: true }
     });
 
     // Total counts
     const total = complaints.length;
     const resolved = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
     const inProgress = complaints.filter(c => ["ASSIGNED", "IN_PROGRESS"].includes(c.status)).length;
-    const pending = complaints.filter(c => c.status === "SUBMITTED" || c.status === "VALIDATED").length;
+    const pending = complaints.filter(c => c.status === "VALIDATED").length;
 
     // Calculate average resolution time (for resolved complaints)
     const resolvedComplaints = complaints.filter(c => c.resolvedAt && c.createdAt);
@@ -86,7 +166,9 @@ router.get("/stats/by-category", async (req, res) => {
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
     else startDate.setHours(0, 0, 0, 0);
 
-    const complaints = await Complaint.find({ createdAt: { $gte: startDate } });
+    // Only show VALIDATED and above for public
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     const categoryStats = {};
     const categories = ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "TRAFFIC", "BUILDING", "NOISE", "EQUIPMENT", "URBAN_PLANNING", "OTHER"];
@@ -122,7 +204,9 @@ router.get("/stats/by-municipality", async (req, res) => {
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
     else startDate.setHours(0, 0, 0, 0);
 
-    const complaints = await Complaint.find({ createdAt: { $gte: startDate } });
+    // Only show VALIDATED and above for public
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     // Group by municipality/commune
     const municipalityStats = {};
@@ -237,7 +321,8 @@ router.get("/complaints", async (req, res) => {
     
     const query = {
       // Only show public statuses
-      status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] }
+      status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] },
+      isArchived: { $ne: true }
     };
     
     if (category) {

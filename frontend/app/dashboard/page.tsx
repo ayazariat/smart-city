@@ -6,6 +6,7 @@ import Link from "next/link";
 import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
+import { connectSocket, subscribeToNotifications, disconnectSocket } from "@/lib/socket";
 import { agentService } from "@/services/agent.service";
 import { managerService } from "@/services/manager.service";
 import { complaintService } from "@/services/complaint.service";
@@ -208,14 +209,24 @@ function DashboardContent() {
     }
   };
 
-  // Fetch notifications on mount and periodically
+  // Fetch notifications on mount, subscribe to real-time updates
   useEffect(() => {
     const { token } = useAuthStore.getState();
     if (hydrated && user && token) {
       fetchNotifications();
-      // Poll for new notifications every 30 seconds
-      const interval = setInterval(fetchNotifications, 30000);
-      return () => clearInterval(interval);
+      // Connect socket for real-time notifications
+      connectSocket(user.id);
+      const unsubscribe = subscribeToNotifications((notification: unknown) => {
+        const notif = notification as Notification;
+        setNotifications(prev => [notif, ...prev]);
+        setUnreadCount(prev => prev + 1);
+      });
+      // Also poll every 60 seconds as fallback
+      const interval = setInterval(fetchNotifications, 60000);
+      return () => {
+        clearInterval(interval);
+        unsubscribe();
+      };
     }
   }, [hydrated, user]);
 
@@ -480,11 +491,15 @@ function DashboardContent() {
       <main className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">
-            Dashboard
+          <h2 className="text-3xl font-bold text-slate-900 mb-1">
+            Welcome back, {user?.fullName?.split(' ')[0] || 'User'} 
           </h2>
-          <p className="text-slate-600">
-            Manage your complaints and track urban services
+          <p className="text-slate-500">
+            {user?.role === "CITIZEN" ? "Track your complaints and city services" 
+             : user?.role === "TECHNICIAN" ? "Check your assigned tasks and progress"
+             : user?.role === "DEPARTMENT_MANAGER" ? "Oversee department operations"
+             : user?.role === "ADMIN" ? "System overview and management"
+             : "Handle and manage incoming complaints"}
           </p>
         </div>
 
@@ -590,13 +605,152 @@ function DashboardContent() {
           </Link>
         </div>
 
+        {/* Today's Priorities - Role-specific action summary */}
+        {!loadingStats && stats.total !== undefined && (
+          <div className="bg-gradient-to-br from-white to-primary/5 rounded-2xl shadow-lg p-6 border border-primary/10 mb-8">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Today&apos;s Priorities
+              <span className="ml-auto text-xs text-slate-400 font-normal">Updated just now</span>
+            </h3>
+            <div className="space-y-3">
+              {/* Agent priorities */}
+              {user?.role === "MUNICIPAL_AGENT" && (
+                <>
+                  {(stats.totalOverdue || 0) > 0 && (
+                    <Link href="/agent/complaints?status=SUBMITTED" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue} overdue complaint{(stats.totalOverdue || 0) > 1 ? 's' : ''} need attention</span>
+                      <ArrowRight className="w-4 h-4 text-red-500" />
+                    </Link>
+                  )}
+                  {(stats.submitted || stats.pending || 0) > 0 && (
+                    <Link href="/agent/complaints?status=SUBMITTED" className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200 hover:bg-amber-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-amber-700">📋 {stats.submitted || stats.pending || 0} new complaint{(stats.submitted || stats.pending || 0) > 1 ? 's' : ''} to validate</span>
+                      <ArrowRight className="w-4 h-4 text-amber-500" />
+                    </Link>
+                  )}
+                  {(stats.resolved || 0) > 0 && (
+                    <Link href="/agent/complaints?status=RESOLVED" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-green-700">✅ {stats.resolved} resolution{(stats.resolved || 0) > 1 ? 's' : ''} awaiting review</span>
+                      <ArrowRight className="w-4 h-4 text-green-500" />
+                    </Link>
+                  )}
+                  {(stats.totalOverdue || 0) === 0 && (stats.submitted || stats.pending || 0) === 0 && (stats.resolved || 0) === 0 && (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">All clear! No urgent actions required.</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Manager priorities */}
+              {user?.role === "DEPARTMENT_MANAGER" && (
+                <>
+                  {(stats.totalOverdue || stats.overdue || 0) > 0 && (
+                    <Link href="/manager/pending" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} in department</span>
+                      <ArrowRight className="w-4 h-4 text-red-500" />
+                    </Link>
+                  )}
+                  {(stats.assigned || 0) > 0 && (
+                    <Link href="/manager/pending?status=ASSIGNED" className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-200 hover:bg-purple-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-purple-700">👷 {stats.assigned} complaint{(stats.assigned || 0) > 1 ? 's' : ''} need technician assignment</span>
+                      <ArrowRight className="w-4 h-4 text-purple-500" />
+                    </Link>
+                  )}
+                  {(stats.inProgress || 0) > 0 && (
+                    <Link href="/manager/pending?status=IN_PROGRESS" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-blue-700">🔧 {stats.inProgress} complaint{(stats.inProgress || 0) > 1 ? 's' : ''} being worked on by technicians</span>
+                      <ArrowRight className="w-4 h-4 text-blue-500" />
+                    </Link>
+                  )}
+                  {(stats.totalOverdue || stats.overdue || 0) === 0 && (stats.assigned || 0) === 0 && (stats.inProgress || 0) === 0 && (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">All clear! Department operations on track.</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Technician priorities */}
+              {user?.role === "TECHNICIAN" && (
+                <>
+                  {(stats.assigned || 0) > 0 && (
+                    <Link href="/tasks?status=ASSIGNED" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-blue-700">🔧 {stats.assigned} new task{(stats.assigned || 0) > 1 ? 's' : ''} to start</span>
+                      <ArrowRight className="w-4 h-4 text-blue-500" />
+                    </Link>
+                  )}
+                  {(stats.inProgress || 0) > 0 && (
+                    <Link href="/tasks?status=IN_PROGRESS" className="flex items-center justify-between p-3 bg-orange-50 rounded-xl border border-orange-200 hover:bg-orange-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-orange-700">🔨 {stats.inProgress} task{(stats.inProgress || 0) > 1 ? 's' : ''} in progress</span>
+                      <ArrowRight className="w-4 h-4 text-orange-500" />
+                    </Link>
+                  )}
+                  {(stats.totalOverdue || stats.overdue || 0) > 0 && (
+                    <Link href="/tasks" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue || stats.overdue} overdue task{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} — resolve ASAP</span>
+                      <ArrowRight className="w-4 h-4 text-red-500" />
+                    </Link>
+                  )}
+                  {(stats.assigned || 0) === 0 && (stats.inProgress || 0) === 0 && (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">No pending tasks. Great work!</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Admin priorities */}
+              {user?.role === "ADMIN" && (
+                <>
+                  {(stats.totalOverdue || stats.overdue || 0) > 0 && (
+                    <Link href="/admin/complaints" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} system-wide</span>
+                      <ArrowRight className="w-4 h-4 text-red-500" />
+                    </Link>
+                  )}
+                  {(stats.total || 0) > 0 && (
+                    <Link href="/admin/complaints" className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/10 hover:bg-primary/10 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-primary">📊 {stats.total} total complaints — Resolution rate: {stats.resolutionRate || 0}%</span>
+                      <ArrowRight className="w-4 h-4 text-primary" />
+                    </Link>
+                  )}
+                </>
+              )}
+              {/* Citizen */}
+              {user?.role === "CITIZEN" && (
+                <>
+                  {(stats.inProgress || 0) > 0 && (
+                    <Link href="/my-complaints" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-blue-700">🔄 {stats.inProgress} of your complaint{(stats.inProgress || 0) > 1 ? 's are' : ' is'} being worked on</span>
+                      <ArrowRight className="w-4 h-4 text-blue-500" />
+                    </Link>
+                  )}
+                  {(stats.resolved || 0) > 0 && (
+                    <Link href="/my-complaints" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-green-700">✅ {stats.resolved} complaint{(stats.resolved || 0) > 1 ? 's' : ''} resolved</span>
+                      <ArrowRight className="w-4 h-4 text-green-500" />
+                    </Link>
+                  )}
+                  {(stats.inProgress || 0) === 0 && (stats.resolved || 0) === 0 && (stats.total || 0) === 0 && (
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-sm font-medium text-slate-600">No complaints submitted yet. <Link href="/complaints/new" className="text-primary hover:underline">Submit your first complaint →</Link></span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Statistics Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-slate-900">
               {dashboardConfig.statsTitle}
             </h3>
-            {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER") && (
+            {(user?.role === "MUNICIPAL_AGENT" || user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "TECHNICIAN") && (
               <div className="flex items-center gap-2">
                 <button
                   onClick={fetchStats}
@@ -606,16 +760,6 @@ function DashboardContent() {
                 </button>
               </div>
             )}
-          </div>
-          
-          {/* Stats Cards - All roles can refresh */}
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={fetchStats}
-              className="text-sm text-primary hover:text-primary-700 font-medium"
-            >
-              Refresh
-            </button>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

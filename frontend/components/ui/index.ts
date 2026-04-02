@@ -11,4 +11,5 @@ export { EmptyState }     from './EmptyState';
 export { Modal }          from './Modal';
 export { FilterBar }      from './FilterBar';
 export { ComplaintCard }  from './ComplaintCard';
+export { ConfirmationModal } from './ConfirmationModal';
 export type { BaseComplaint } from './ComplaintCard';

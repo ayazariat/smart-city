@@ -42,6 +42,9 @@ export interface BaseComplaint {
   confirmations?: Array<{ citizenId: string; confirmedAt: string }>;
   upvotes?: Array<{ citizenId: string; upvotedAt: string }>;
   createdBy?: string | { _id?: string; fullName?: string; email?: string };
+  slaStatus?: string;
+  slaDeadline?: string | Date | null;
+  referenceId?: string;
 }
 
 interface ComplaintCardProps {
@@ -52,6 +55,7 @@ interface ComplaintCardProps {
   showAssignedTo?: boolean;
   showPriority?: boolean;
   showMunicipality?: boolean;
+  hideSla?: boolean;
   actions?: ReactNode;
   onUpdate?: (updatedComplaint: BaseComplaint) => void;
   index?: number;
@@ -81,6 +85,7 @@ export const ComplaintCard = ({
   showAssignedTo = false,
   showPriority = false,
   showMunicipality = false,
+  hideSla = false,
   actions,
   onUpdate,
   index = 0,
@@ -204,11 +209,37 @@ export const ComplaintCard = ({
   const municipalityName = getMunicipalityName();
   const isHighPriority = (complaint.confirmationCount ?? 0) >= 5 || (complaint.priorityScore ?? 0) >= 30;
 
+  // SLA time remaining/overdue calculation
+  const getSlaTimeInfo = (): { text: string; color: string } | null => {
+    if (!complaint.slaDeadline || ["RESOLVED", "CLOSED"].includes(complaint.status)) return null;
+    const now = new Date();
+    const deadline = new Date(complaint.slaDeadline);
+    const diffMs = deadline.getTime() - now.getTime();
+    const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
+    if (diffMs < 0) {
+      const days = Math.floor(diffHours / 24);
+      const hours = Math.floor(diffHours % 24);
+      return { text: days > 0 ? `${days}d ${hours}h overdue` : `${hours}h overdue`, color: "text-red-600" };
+    }
+    const days = Math.floor(diffHours / 24);
+    const hours = Math.floor(diffHours % 24);
+    return { text: days > 0 ? `${days}d ${hours}h left` : `${hours}h left`, color: complaint.slaStatus === "AT_RISK" ? "text-orange-600" : "text-green-600" };
+  };
+  const slaTimeInfo = hideSla ? null : getSlaTimeInfo();
+
+  // SLA left border color
+  const slaBorderColor = hideSla ? "" 
+    : complaint.slaStatus === "OVERDUE" ? "border-l-red-500" 
+    : complaint.slaStatus === "AT_RISK" ? "border-l-orange-500" 
+    : complaint.slaDeadline && !["RESOLVED", "CLOSED"].includes(complaint.status) ? "border-l-green-500" 
+    : "";
+
   const cardContent = (
     <div 
       className={`
         bg-white rounded-2xl border border-slate-200 shadow-sm
         hover:shadow-xl hover:border-primary/20 transition-all duration-300
+        ${slaBorderColor ? `border-l-4 ${slaBorderColor}` : ''}
         ${isHighPriority ? 'ring-2 ring-primary/20' : ''}
         ${href ? 'cursor-pointer' : ''}
         animate-fadeInUp
@@ -245,6 +276,20 @@ export const ComplaintCard = ({
               </span>
             )}
 
+            {/* SLA Status Badge */}
+            {!hideSla && complaint.slaStatus === "OVERDUE" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 animate-pulse">
+                <AlertCircle className="w-3 h-3" />
+                OVERDUE
+              </span>
+            )}
+            {!hideSla && complaint.slaStatus === "AT_RISK" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
+                <AlertCircle className="w-3 h-3" />
+                AT RISK
+              </span>
+            )}
+
             {(complaint.confirmationCount ?? 0) >= 5 && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-sm">
                 <CheckCircle className="w-3 h-3" />
@@ -253,13 +298,20 @@ export const ComplaintCard = ({
             )}
           </div>
 
-          {/* Date */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 flex-shrink-0">
-            <Clock className="w-3.5 h-3.5" />
-            {new Date(complaint.createdAt).toLocaleDateString("en-US", {
-              day: "numeric",
-              month: "short",
-            })}
+          {/* Date & SLA Time */}
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Clock className="w-3.5 h-3.5" />
+              {new Date(complaint.createdAt).toLocaleDateString("en-US", {
+                day: "numeric",
+                month: "short",
+              })}
+            </div>
+            {slaTimeInfo && (
+              <span className={`text-[10px] font-semibold ${slaTimeInfo.color}`}>
+                {slaTimeInfo.text}
+              </span>
+            )}
           </div>
         </div>
 
