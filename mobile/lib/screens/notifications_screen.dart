@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/main.dart' show AppColors;
 import 'package:smart_city_app/providers/notifications_provider.dart';
 import 'package:smart_city_app/models/complaint_model.dart' as models;
+import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -46,12 +47,13 @@ class NotificationsScreen extends ConsumerWidget {
           : ListView.builder(
               itemCount: state.notifications.length,
               itemBuilder: (ctx, i) =>
-                  _buildNotificationItem(ref, state.notifications[i]),
+                  _buildNotificationItem(ctx, ref, state.notifications[i]),
             ),
     );
   }
 
   Widget _buildNotificationItem(
+    BuildContext context,
     WidgetRef ref,
     models.Notification notification,
   ) {
@@ -103,7 +105,13 @@ class NotificationsScreen extends ConsumerWidget {
           }
           // Navigate to complaint if relatedId exists
           if (notification.relatedId != null) {
-            // Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintDetailScreen(complaintId: notification.relatedId!)));
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ComplaintDetailScreen(complaintId: notification.relatedId!),
+              ),
+            );
           }
         },
       ),

@@ -145,6 +145,7 @@ export interface Complaint {
   rejectionReason?: string;
   resolvedAt?: string;
   resolutionNotes?: string;
+  resolutionRejectionReason?: string;
   assignedDepartment?: {
     _id: string;
     name: string;

@@ -107,7 +107,10 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   Future<void> load() async {
     state = state.copyWith(isLoading: true);
     try {
-      final notifications = await _service.getNotifications();
+      final notificationsJson = await _service.getNotifications();
+      final notifications = notificationsJson
+          .map((json) => Notification.fromJson(json))
+          .toList();
       final unreadCount = await _service.getUnreadCount();
       state = state.copyWith(
         notifications: notifications,

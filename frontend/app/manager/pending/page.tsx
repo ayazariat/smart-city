@@ -304,6 +304,7 @@ export default function ManagerPendingPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">At Risk (SLA)</p>
+                <p className="text-xs text-amber-500 mt-1">Close to deadline</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -327,23 +328,27 @@ export default function ManagerPendingPage() {
 
         {/* Team Performance */}
         <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
-          <h3 className="text-sm font-semibold text-slate-700 mb-4">Team Performance</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">Performance Metrics</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-blue-50 rounded-xl">
               <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
               <p className="text-xs text-slate-500 mt-1">In Progress</p>
+              <p className="text-[10px] text-blue-400">Currently being worked on</p>
             </div>
             <div className="text-center p-3 bg-purple-50 rounded-xl">
               <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
-              <p className="text-xs text-slate-500 mt-1">Avg Days</p>
+              <p className="text-xs text-slate-500 mt-1">Average Days</p>
+              <p className="text-[10px] text-purple-400">Time to process</p>
             </div>
             <div className="text-center p-3 bg-emerald-50 rounded-xl">
               <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
               <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
+              <p className="text-[10px] text-emerald-400">Percentage resolved</p>
             </div>
             <div className="text-center p-3 bg-orange-50 rounded-xl">
               <p className="text-2xl font-bold text-orange-600">{highPriorityCount}</p>
               <p className="text-xs text-slate-500 mt-1">High Priority</p>
+              <p className="text-[10px] text-orange-400">Urgent issues (score 15+)</p>
             </div>
           </div>
           
@@ -527,7 +532,7 @@ export default function ManagerPendingPage() {
           <option value="">Select technician...</option>
           {technicians.map((tech) => {
             const activeCount = complaints.filter(c =>
-              (c.assignedTo as any)?._id === tech._id && ["ASSIGNED", "IN_PROGRESS"].includes(c.status)
+              c.assignedTo?._id === tech._id && ["ASSIGNED", "IN_PROGRESS"].includes(c.status)
             ).length;
             return (
               <option key={tech._id} value={tech._id}>

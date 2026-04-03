@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:smart_city_app/main.dart' show AppColors;
+import 'package:smart_city_app/services/api_client.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -11,20 +12,37 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final ApiClient _apiClient = ApiClient();
   bool _isLoading = false;
   bool _emailSent = false;
+  String? _errorMessage;
 
   Future<void> _handleReset() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 2));
-
     setState(() {
-      _isLoading = false;
-      _emailSent = true;
+      _isLoading = true;
+      _errorMessage = null;
     });
+
+    try {
+      await _apiClient.post('/auth/forgot-password', {
+        'email': _emailController.text.trim(),
+      });
+      setState(() {
+        _isLoading = false;
+        _emailSent = true;
+      });
+    } on ApiException catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Failed to send reset link. Please try again.';
+      });
+    }
   }
 
   @override
@@ -87,6 +105,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: 32),
+                    if (_errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(color: Colors.red.shade700),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -96,10 +130,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         prefixIcon: Icon(Icons.email_outlined),
                       ),
                       validator: (v) {
-                        if (v == null || v.isEmpty)
+                        if (v == null || v.isEmpty) {
                           return 'Please enter your email';
-                        if (!v.contains('@'))
+                        }
+                        if (!v.contains('@')) {
                           return 'Please enter a valid email';
+                        }
                         return null;
                       },
                     ),

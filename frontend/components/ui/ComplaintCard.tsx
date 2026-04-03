@@ -41,7 +41,7 @@ export interface BaseComplaint {
   upvoteCount?: number;
   confirmations?: Array<{ citizenId: string; confirmedAt: string }>;
   upvotes?: Array<{ citizenId: string; upvotedAt: string }>;
-  createdBy?: string | { _id?: string; fullName?: string; email?: string };
+  createdBy?: string | { _id?: string; fullName?: string; email?: string; phone?: string };
   slaStatus?: string;
   slaDeadline?: string | Date | null;
   referenceId?: string;
@@ -69,6 +69,8 @@ const statusColors: Record<string, { bg: string; text: string; dot: string }> = 
   RESOLVED: { bg: "bg-green-50", text: "text-green-700", dot: "bg-green-500" },
   CLOSED: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
   REJECTED: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500" },
+  // Special status for when agent rejects technician's resolution
+  RESOLUTION_REJECTED: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500" },
 };
 
 const urgencyColors: Record<string, { bg: string; text: string }> = {
@@ -92,37 +94,42 @@ export const ComplaintCard = ({
 }: ComplaintCardProps) => {
   const id = complaint._id || complaint.id || "";
   const { user } = useAuthStore();
+  const userSub = typeof user === "object" && user !== null && "sub" in user && typeof (user as { sub?: unknown }).sub === "string"
+    ? (user as { sub: string }).sub
+    : undefined;
+  const userId = user?.id ?? userSub;
   const [isConfirming, setIsConfirming] = useState(false);
   const [isUpvoting, setIsUpvoting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const statusCfg = statusConfig[complaint.status] ?? {
+  // Check if this is a rejected resolution (IN_PROGRESS but with resolutionRejectionReason)
+  const isResolutionRejected = complaint.status === "IN_PROGRESS" && (complaint as any).resolutionRejectionReason;
+  
+  // Use special status for rejected resolution
+  const displayStatus = isResolutionRejected ? "RESOLUTION_REJECTED" : complaint.status;
+  
+  const statusCfg = statusConfig[displayStatus] ?? {
     label: complaint.status,
     bgClass: "bg-slate-100",
     textClass: "text-slate-600",
   };
 
-  const statusStyle = statusColors[complaint.status] ?? { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" };
+  const statusStyle = statusColors[displayStatus] ?? { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" };
 
-  const userId = user?.id;
-  const hasConfirmed = complaint.confirmations?.some(
-    c => c.citizenId === userId || (user as any)?.sub === c.citizenId
-  );
-  const hasUpvoted = complaint.upvotes?.some(
-    u => u.citizenId === userId || (user as any)?.sub === u.citizenId
-  );
+  const hasConfirmed = complaint.confirmations?.some(c => c.citizenId === userId);
+  const hasUpvoted = complaint.upvotes?.some(u => u.citizenId === userId);
 
   const createdById = typeof complaint.createdBy === "string" 
     ? complaint.createdBy 
     : complaint.createdBy?._id;
-  const isOwnComplaint = userId === createdById || (user as any)?.sub === createdById;
+  const isOwnComplaint = !!userId && userId === createdById;
 
-  const canConfirmUpvote = user?.role === "CITIZEN" && !isOwnComplaint && complaint._id;
+  const canConfirmUpvote = user?.role === "CITIZEN" && !isOwnComplaint && !!complaint._id && !!userId;
 
   const handleConfirm = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!complaint._id || isConfirming) return;
+    if (!complaint._id || isConfirming || !userId) return;
     setIsConfirming(true);
     try {
       if (hasConfirmed) {
@@ -131,9 +138,7 @@ export const ComplaintCard = ({
           onUpdate({
             ...complaint,
             confirmationCount: result.confirmationCount,
-            confirmations: complaint.confirmations?.filter(
-              c => c.citizenId !== userId && c.citizenId !== (user as any)?.sub
-            ),
+            confirmations: complaint.confirmations?.filter(c => c.citizenId !== userId),
           });
         }
       } else {
@@ -144,7 +149,7 @@ export const ComplaintCard = ({
             confirmationCount: result.confirmationCount,
             confirmations: [
               ...(complaint.confirmations || []),
-              { citizenId: userId || (user as any)?.sub, confirmedAt: new Date().toISOString() },
+              { citizenId: userId, confirmedAt: new Date().toISOString() },
             ],
           });
         }
@@ -159,7 +164,7 @@ export const ComplaintCard = ({
   const handleUpvote = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!complaint._id || isUpvoting) return;
+    if (!complaint._id || isUpvoting || !userId) return;
     setIsUpvoting(true);
     try {
       if (hasUpvoted) {
@@ -168,9 +173,7 @@ export const ComplaintCard = ({
           onUpdate({
             ...complaint,
             upvoteCount: result.upvoteCount,
-            upvotes: complaint.upvotes?.filter(
-              u => u.citizenId !== userId && u.citizenId !== (user as any)?.sub
-            ),
+            upvotes: complaint.upvotes?.filter(u => u.citizenId !== userId),
           });
         }
       } else {
@@ -181,7 +184,7 @@ export const ComplaintCard = ({
             upvoteCount: result.upvoteCount,
             upvotes: [
               ...(complaint.upvotes || []),
-              { citizenId: userId || (user as any)?.sub, upvotedAt: new Date().toISOString() },
+              { citizenId: userId, upvotedAt: new Date().toISOString() },
             ],
           });
         }
@@ -287,6 +290,22 @@ export const ComplaintCard = ({
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
                 <AlertCircle className="w-3 h-3" />
                 AT RISK
+              </span>
+            )}
+
+            {/* Resolution Report Badge - Show when RESOLVED status (needs agent review) */}
+            {complaint.status === "RESOLVED" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm">
+                <AlertCircle className="w-3 h-3" />
+                Report Pending
+              </span>
+            )}
+
+            {/* Resolution Approved Badge - Show when CLOSED status */}
+            {complaint.status === "CLOSED" && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm">
+                <CheckCircle className="w-3 h-3" />
+                Approved
               </span>
             )}
 

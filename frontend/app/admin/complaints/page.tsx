@@ -203,6 +203,7 @@ export default function AdminComplaintsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">At Risk (SLA)</p>
+                <p className="text-xs text-amber-500 mt-1">Close to deadline</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -215,6 +216,7 @@ export default function AdminComplaintsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Overdue</p>
+                <p className="text-xs text-red-500 mt-1">Past deadline</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{overdueCount}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -231,18 +233,22 @@ export default function AdminComplaintsPage() {
             <div className="text-center p-3 bg-blue-50 rounded-xl">
               <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
               <p className="text-xs text-slate-500 mt-1">In Progress</p>
+              <p className="text-[10px] text-blue-400">Currently being worked on</p>
             </div>
             <div className="text-center p-3 bg-purple-50 rounded-xl">
               <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
-              <p className="text-xs text-slate-500 mt-1">Avg Days</p>
+              <p className="text-xs text-slate-500 mt-1">Average Days</p>
+              <p className="text-[10px] text-purple-400">Time to process</p>
             </div>
             <div className="text-center p-3 bg-emerald-50 rounded-xl">
               <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
               <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
+              <p className="text-[10px] text-emerald-400">Percentage resolved</p>
             </div>
             <div className="text-center p-3 bg-orange-50 rounded-xl">
               <p className="text-2xl font-bold text-orange-600">{complaints.filter(c => (c.priorityScore || 0) >= 15).length}</p>
               <p className="text-xs text-slate-500 mt-1">High Priority</p>
+              <p className="text-[10px] text-orange-400">Urgent issues (score 15+)</p>
             </div>
           </div>
           
@@ -357,18 +363,18 @@ export default function AdminComplaintsPage() {
         {/* SLA Monitoring Section */}
         {overdueCount > 0 || atRiskCount > 0 ? (
           <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-700 mb-3">SLA Monitoring</h3>
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">SLA Monitoring (Service Level Agreement)</h3>
             <div className="flex gap-4">
               {overdueCount > 0 && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-xl border border-red-200">
                   <span className="text-red-600 font-bold">{overdueCount}</span>
-                  <span className="text-sm text-red-700">Overdue</span>
+                  <span className="text-sm text-red-700">Overdue (Past deadline)</span>
                 </div>
               )}
               {atRiskCount > 0 && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 rounded-xl border border-amber-200">
                   <span className="text-amber-600 font-bold">{atRiskCount}</span>
-                  <span className="text-sm text-amber-700">At Risk</span>
+                  <span className="text-sm text-amber-700">At Risk (Close to deadline)</span>
                 </div>
               )}
             </div>

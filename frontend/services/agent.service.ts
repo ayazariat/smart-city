@@ -170,10 +170,11 @@ export const agentService = {
   getStats: getAgentStats,
   approveResolution,
   rejectResolution,
+  predictDepartment,
 };
 
 // AI Department Prediction
-export const predictDepartment = async (category: string, description: string, municipality?: string): Promise<{
+export async function predictDepartment(category: string, description: string, municipality?: string): Promise<{
   success: boolean;
   data?: {
     suggestedDepartment: string;
@@ -181,6 +182,6 @@ export const predictDepartment = async (category: string, description: string, m
     confidence: number;
     message: string;
   };
-}> => {
+}> {
   return apiClient.post("/public/ai/predict-department", { category, description, municipality });
-};
+}

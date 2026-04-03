@@ -199,9 +199,127 @@ export default function MyComplaintsPage() {
                   index={index}
                   hideSla
                   onUpdate={(updated) => {
-                    setComplaints(prev => prev.map(c => 
-                      (c._id || c.id) === (updated._id || updated.id) ? updated as any : c
-                    ));
+                    setComplaints((prev): Complaint[] =>
+                      prev.map((c): Complaint => {
+                        const updatedId = updated._id ?? updated.id;
+                        const currentId = c._id ?? c.id;
+                        if (updatedId && currentId && currentId === updatedId) {
+                          const category = (updated.category ?? c.category) as Complaint["category"];
+                          const status = (updated.status ?? c.status) as Complaint["status"];
+                          const urgency = (updated.urgency ?? c.urgency) as Complaint["urgency"];
+                          const media = (updated.media ?? c.media ?? []).map((m) => ({
+                            url: m.url,
+                            type: (m.type ?? "photo") as "photo" | "video",
+                          }));
+                          const createdBy = (() => {
+                            if (typeof updated.createdBy === "string") return updated.createdBy;
+                            if (
+                              updated.createdBy &&
+                              typeof updated.createdBy === "object" &&
+                              "_id" in updated.createdBy &&
+                              typeof updated.createdBy._id === "string" &&
+                              "fullName" in updated.createdBy &&
+                              typeof updated.createdBy.fullName === "string" &&
+                              "email" in updated.createdBy &&
+                              typeof updated.createdBy.email === "string"
+                            ) {
+                              const phone =
+                                "phone" in updated.createdBy &&
+                                typeof updated.createdBy.phone === "string"
+                                  ? updated.createdBy.phone
+                                  : undefined;
+
+                              return {
+                                _id: updated.createdBy._id,
+                                fullName: updated.createdBy.fullName,
+                                email: updated.createdBy.email,
+                                phone,
+                              } satisfies Complaint["createdBy"];
+                            }
+                            return c.createdBy;
+                          })();
+                          const citizen = (() => {
+                            if (!("citizen" in updated)) return c.citizen;
+                            const citizenVal = updated.citizen;
+                            if (citizenVal === null) return null;
+                            if (
+                              citizenVal &&
+                              typeof citizenVal === "object" &&
+                              "_id" in citizenVal &&
+                              typeof citizenVal._id === "string" &&
+                              "email" in citizenVal &&
+                              typeof citizenVal.email === "string"
+                            ) {
+                              const phone =
+                                "phone" in citizenVal && typeof citizenVal.phone === "string"
+                                  ? citizenVal.phone
+                                  : undefined;
+
+                              return {
+                                _id: citizenVal._id,
+                                fullName: citizenVal.fullName,
+                                email: citizenVal.email,
+                                phone,
+                              } as Complaint["citizen"];
+                            }
+                            return c.citizen;
+                          })();
+                          const department = (() => {
+                            if (!("department" in updated)) return c.department;
+                            const departmentVal = updated.department;
+                            if (departmentVal === null) return null;
+                            if (
+                              departmentVal &&
+                              typeof departmentVal === "object" &&
+                              "_id" in departmentVal &&
+                              typeof departmentVal._id === "string" &&
+                              "name" in departmentVal &&
+                              typeof departmentVal.name === "string"
+                            ) {
+                              return {
+                                _id: departmentVal._id,
+                              name: departmentVal.name,
+                            } as Complaint["department"];
+                          }
+                          return c.department;
+                          })();
+                          const assignedTo = (() => {
+                            if (!("assignedTo" in updated)) return c.assignedTo;
+                            const assignedVal = updated.assignedTo;
+                            if (
+                              assignedVal &&
+                              typeof assignedVal === "object" &&
+                              "_id" in assignedVal &&
+                              typeof assignedVal._id === "string" &&
+                              "fullName" in assignedVal &&
+                              typeof assignedVal.fullName === "string" &&
+                              "email" in assignedVal &&
+                              typeof assignedVal.email === "string"
+                            ) {
+                              return {
+                                _id: assignedVal._id,
+                                fullName: assignedVal.fullName,
+                                email: assignedVal.email,
+                              } as Complaint["assignedTo"];
+                            }
+                            return c.assignedTo;
+                          })();
+                          return {
+                            ...c,
+                            ...updated,
+                            category,
+                            status,
+                            urgency,
+                            media,
+                            createdBy,
+                            citizen,
+                            department,
+                            assignedTo,
+                          };
+                        }
+                        return c;
+                      })
+                    );
                   }}
                 />
               ))}
@@ -212,3 +330,4 @@ export default function MyComplaintsPage() {
     </div>
   );
 }
+

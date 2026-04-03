@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/screens/new_complaint_screen.dart';
+import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 
 class ComplaintsScreen extends StatefulWidget {
-  final VoidCallback onLogout;
+  final VoidCallback? onLogout;
 
-  const ComplaintsScreen({super.key, required this.onLogout});
+  const ComplaintsScreen({super.key, this.onLogout});
 
   @override
   State<ComplaintsScreen> createState() => _ComplaintsScreenState();
@@ -49,14 +51,20 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return AppColors.attention;
-      case 'in_progress':
+    switch (status.toUpperCase()) {
+      case 'SUBMITTED':
         return Colors.blue;
-      case 'resolved':
+      case 'VALIDATED':
+        return Colors.purple;
+      case 'ASSIGNED':
+        return AppColors.attention;
+      case 'IN_PROGRESS':
+        return Colors.deepOrange;
+      case 'RESOLVED':
         return AppColors.success;
-      case 'rejected':
+      case 'CLOSED':
+        return Colors.grey;
+      case 'REJECTED':
         return AppColors.urgent;
       default:
         return AppColors.textSecondary;
@@ -64,18 +72,22 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   }
 
   IconData _getCategoryIcon(String? category) {
-    switch (category?.toLowerCase()) {
-      case 'road':
+    switch (category?.toUpperCase()) {
+      case 'ROAD':
         return Icons.add_road;
-      case 'lighting':
+      case 'LIGHTING':
         return Icons.lightbulb;
-      case 'waste':
+      case 'WASTE':
         return Icons.delete;
-      case 'water':
+      case 'WATER':
         return Icons.water_drop;
-      case 'park':
+      case 'SAFETY':
+        return Icons.shield;
+      case 'PUBLIC_PROPERTY':
+        return Icons.account_balance;
+      case 'GREEN_SPACE':
         return Icons.park;
-      case 'other':
+      case 'OTHER':
       default:
         return Icons.report_problem;
     }
@@ -84,18 +96,6 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Complaints'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: widget.onLogout,
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
@@ -150,97 +150,114 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
                   final complaint = _complaints[index];
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withAlpha(25),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  _getCategoryIcon(
-                                    complaint['category'] ?? 'other',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () {
+                        final id = complaint['_id'] ?? complaint['id'];
+                        if (id != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ComplaintDetailScreen(
+                                complaintId: id.toString(),
+                              ),
+                            ),
+                          ).then((_) => _loadComplaints());
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withAlpha(25),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      complaint['title'] ?? 'Complaint',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
+                                  child: Icon(
+                                    _getCategoryIcon(
+                                      complaint['category'] ?? 'other',
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      complaint['description'] ?? '',
-                                      style: TextStyle(
-                                        color: Colors.grey.shade600,
-                                        fontSize: 14,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        complaint['title'] ?? 'Complaint',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
                                       ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        complaint['description'] ?? '',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 14,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getStatusColor(
-                                    complaint['status'] ?? 'pending',
-                                  ).withAlpha(25),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  (complaint['status'] ?? 'pending')
-                                      .replaceAll('_', ' ')
-                                      .toUpperCase(),
-                                  style: TextStyle(
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
                                     color: _getStatusColor(
                                       complaint['status'] ?? 'pending',
+                                    ).withAlpha(25),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    (complaint['status'] ?? 'pending')
+                                        .replaceAll('_', ' ')
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                      color: _getStatusColor(
+                                        complaint['status'] ?? 'pending',
+                                      ),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                              ),
-                              const Spacer(),
-                              Icon(
-                                Icons.location_on,
-                                size: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                complaint['municipality'] ?? 'Unknown',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 12,
+                                const Spacer(),
+                                Icon(
+                                  Icons.location_on,
+                                  size: 14,
+                                  color: Colors.grey.shade500,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(width: 4),
+                                Text(
+                                  complaint['municipality'] ?? 'Unknown',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -259,281 +276,6 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
         },
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
-}
-
-// New Complaint Screen
-class NewComplaintScreen extends StatefulWidget {
-  final VoidCallback onComplaintSubmitted;
-
-  const NewComplaintScreen({super.key, required this.onComplaintSubmitted});
-
-  @override
-  State<NewComplaintScreen> createState() => _NewComplaintScreenState();
-}
-
-class _NewComplaintScreenState extends State<NewComplaintScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _municipalityController = TextEditingController();
-  final ApiClient _apiClient = ApiClient();
-
-  String? _selectedCategory;
-  String? _selectedGovernorate;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  final List<String> _categories = [
-    'Road',
-    'Lighting',
-    'Waste',
-    'Water',
-    'Park',
-    'Other',
-  ];
-
-  final List<String> _governorates = [
-    'Ariana',
-    'Beja',
-    'Ben Arous',
-    'Bizerte',
-    'Gabes',
-    'Gafsa',
-    'Jendouba',
-    'Kairouan',
-    'Kasserine',
-    'Kebili',
-    'Kef',
-    'Mahdia',
-    'Manouba',
-    'Medenine',
-    'Monastir',
-    'Nabeul',
-    'Sfax',
-    'Sidi Bouzid',
-    'Siliana',
-    'Sousse',
-    'Tataouine',
-    'Tozeur',
-    'Tunis',
-    'Zaghouan',
-  ];
-
-  Future<void> _submitComplaint() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (_selectedCategory == null || _selectedGovernorate == null) {
-      setState(() {
-        _errorMessage = 'Please fill in all required fields';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await _apiClient.post('/complaints', {
-        'title': _titleController.text,
-        'description': _descriptionController.text,
-        'category': _selectedCategory!.toLowerCase(),
-        'governorate': _selectedGovernorate,
-        'municipality': _municipalityController.text,
-      });
-
-      if (mounted) {
-        widget.onComplaintSubmitted();
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Complaint submitted successfully!')),
-        );
-      }
-    } on ApiException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to submit complaint';
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _municipalityController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Report Issue'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_errorMessage != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(color: Colors.red.shade700),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Category
-              DropdownButtonFormField<String>(
-                initialValue: _selectedCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  prefixIcon: Icon(Icons.category),
-                ),
-                items: _categories.map((category) {
-                  return DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null) {
-                    return 'Please select a category';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Title
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  prefixIcon: Icon(Icons.title),
-                  hintText: 'Brief description of the issue',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a title';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Description
-              TextFormField(
-                controller: _descriptionController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  prefixIcon: Icon(Icons.description),
-                  hintText: 'Provide more details about the issue',
-                  alignLabelWithHint: true,
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a description';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Governorate
-              DropdownButtonFormField<String>(
-                initialValue: _selectedGovernorate,
-                decoration: const InputDecoration(
-                  labelText: 'Governorate',
-                  prefixIcon: Icon(Icons.location_city),
-                ),
-                items: _governorates.map((gov) {
-                  return DropdownMenuItem(value: gov, child: Text(gov));
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedGovernorate = value;
-                  });
-                },
-                validator: (value) {
-                  if (value == null) {
-                    return 'Please select a governorate';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Municipality
-              TextFormField(
-                controller: _municipalityController,
-                decoration: const InputDecoration(
-                  labelText: 'Municipality',
-                  prefixIcon: Icon(Icons.location_on),
-                  hintText: 'Enter your municipality',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter municipality';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-
-              // Submit Button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submitComplaint,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: AppColors.primary,
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Submit Complaint',
-                        style: TextStyle(fontSize: 16),
-                      ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

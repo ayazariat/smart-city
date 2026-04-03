@@ -20,6 +20,7 @@ import {
   ThumbsUp,
   CheckCircle,
   Camera,
+  FileText,
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
@@ -31,6 +32,24 @@ import { Button, PageHeader } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
 import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
+
+type InternalNoteItem = (NonNullable<Complaint["internalNotes"]>[number]) & {
+  authorName?: string;
+  authorRole?: string;
+  createdAt?: string;
+  text?: string;
+  author?: {
+    _id?: string;
+    fullName?: string;
+    role?: string;
+  } | null;
+};
+type PublicComment = (NonNullable<Complaint["publicComments"]>[number]) & {
+  text?: string;
+  author?: { _id?: string; fullName?: string; name?: string };
+  createdAt?: string;
+};
+type AssignedTeamMember = NonNullable<NonNullable<Complaint["assignedTeam"]>["members"]>[number];
 
 // Category to department name mapping for suggestions
 const categoryToDepartmentMap: Record<string, string[]> = {
@@ -100,7 +119,7 @@ export default function ComplaintDetailPage() {
   const [rejectionReason, setRejectionReason] = useState<string>("");
 
   // Notes state
-  const [internalNotes, setInternalNotes] = useState<any[]>([]);
+  const [internalNotes, setInternalNotes] = useState<InternalNoteItem[]>([]);
 
   // BL-28: Confirm/Upvote state
   const [isConfirming, setIsConfirming] = useState(false);
@@ -119,7 +138,7 @@ export default function ComplaintDetailPage() {
         // Refresh complaint to get updated notes
         const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
         if (detailResponse.success && detailResponse.data.internalNotes) {
-          setInternalNotes(detailResponse.data.internalNotes);
+          setInternalNotes(detailResponse.data.internalNotes as InternalNoteItem[]);
         }
       }
     } catch (error) {
@@ -214,7 +233,7 @@ export default function ComplaintDetailPage() {
           setComplaint(processedComplaint);
           // Load internal notes if available
           if (processedComplaint.internalNotes) {
-            setInternalNotes(processedComplaint.internalNotes);
+            setInternalNotes(processedComplaint.internalNotes as InternalNoteItem[]);
           }
         } else {
           setError("Complaint not found");
@@ -721,8 +740,8 @@ export default function ComplaintDetailPage() {
               )}
             </section>
 
-            {/* Before Photos (Technician) */}
-            {complaint.beforePhotos && complaint.beforePhotos.length > 0 && (
+            {/* Before Photos (Technician) - Hide when resolved/closed (shown in Resolution Report instead) */}
+            {complaint.beforePhotos && complaint.beforePhotos.length > 0 && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
               <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500" aria-labelledby="before-photos-title">
                 <h2 id="before-photos-title" className="text-lg font-semibold text-gray-900 mb-4">
                   Before Work Photos ({complaint.beforePhotos.length})
@@ -767,8 +786,8 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
-            {/* After Photos (Technician) */}
-            {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
+            {/* After Photos (Technician) - Hide when resolved/closed (shown in Resolution Report instead) */}
+            {complaint.afterPhotos && complaint.afterPhotos.length > 0 && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
               <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500" aria-labelledby="after-photos-title">
                 <h2 id="after-photos-title" className="text-lg font-semibold text-gray-900 mb-4">
                   After Work Photos ({complaint.afterPhotos.length})
@@ -830,25 +849,31 @@ export default function ComplaintDetailPage() {
                   Commentaires ({complaint.publicComments.length})
                 </h2>
                 <div className="space-y-4">
-                  {complaint.publicComments.map((comment: any, idx: number) => (
-                    <div key={comment._id || idx} className="border-b pb-4 last:border-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-gray-900">
-                          {comment.author?.fullName || comment.author?.name || "Utilisateur"}
-                        </span>
-                        <time className="text-sm text-gray-500" dateTime={comment.date || comment.createdAt}>
-                          {new Date(comment.date || comment.createdAt).toLocaleDateString("fr-FR", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </time>
+                  {complaint.publicComments.map((comment: PublicComment, idx: number) => {
+                    const commentDate = comment.date || comment.createdAt || "";
+                    const formattedDate = commentDate
+                      ? new Date(commentDate).toLocaleDateString("fr-FR", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "Date inconnue";
+                    return (
+                      <div key={comment._id || idx} className="border-b pb-4 last:border-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-gray-900">
+                            {comment.author?.fullName || comment.author?.name || "Utilisateur"}
+                          </span>
+                          <time className="text-sm text-gray-500" dateTime={commentDate || undefined}>
+                            {formattedDate}
+                          </time>
+                        </div>
+                        <p className="text-gray-700">{comment.content || comment.text}</p>
                       </div>
-                      <p className="text-gray-700">{comment.content || comment.text}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -861,13 +886,13 @@ export default function ComplaintDetailPage() {
                   Internal Notes
                 </h2>
                 <InternalNotes
-                  notes={internalNotes.map((n: any) => ({
+                  notes={internalNotes.map((n: InternalNoteItem) => ({
                     _id: n._id,
-                    type: n.type || "NOTE",
+                    type: n.type === "BLOCAGE" || n.type === "PUBLIC" ? n.type : "NOTE",
                     authorName: n.author?.fullName || n.authorName || "Staff",
-                    authorRole: n.authorRole || "Staff",
+                    authorRole: n.author?.role || n.authorRole || "Staff",
                     content: n.content || n.text || "",
-                    createdAt: n.date || n.createdAt
+                    createdAt: n.date || n.createdAt || new Date().toISOString()
                   }))}
                   userRole={user?.role || ""}
                   canAdd={true}
@@ -959,12 +984,12 @@ export default function ComplaintDetailPage() {
                     </p>
                     {complaint.assignedTeam.members && Array.isArray(complaint.assignedTeam.members) && (
                       <div className="space-y-1">
-                        {complaint.assignedTeam.members.map((member: any, index: number) => (
-                          <p key={member._id || index} className="text-sm text-slate-600 flex items-center gap-2">
-                            <span className="w-5 h-5 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-medium">
-                              {index + 1}
-                            </span>
-                            {member.fullName}
+                    {complaint.assignedTeam.members.map((member: AssignedTeamMember, index: number) => (
+                      <p key={member._id || index} className="text-sm text-slate-600 flex items-center gap-2">
+                        <span className="w-5 h-5 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-medium">
+                          {index + 1}
+                        </span>
+                        {member.fullName}
                           </p>
                         ))}
                       </div>
@@ -1044,80 +1069,135 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
-            {/* Resolution Report - Shown when RESOLVED */}
-            {complaint.status === "RESOLVED" && complaint.resolutionNotes && (
-              <section className="bg-green-50 rounded-2xl shadow-lg p-6 border border-green-200" aria-labelledby="resolution-title">
-                <h2 id="resolution-title" className="text-lg font-semibold text-green-900 mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+            {/* Resolution Report - Shown when RESOLVED or CLOSED */}
+            {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (complaint.resolutionNotes || (complaint.afterPhotos?.length ?? 0) > 0) && (
+              <section className={`rounded-2xl shadow-lg p-6 border ${
+                complaint.status === "CLOSED" 
+                  ? "bg-green-50 border-green-200" 
+                  : "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200"
+              }`} aria-labelledby="resolution-title">
+                <h2 id="resolution-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <CheckCircle2 className={`w-5 h-5 ${complaint.status === "CLOSED" ? "text-green-600" : "text-amber-600"}`} />
                   Resolution Report
+                  {complaint.status === "CLOSED" && (
+                    <span className="ml-auto text-xs font-medium bg-green-200 text-green-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" />
+                      Approved
+                    </span>
+                  )}
+                  {complaint.status === "RESOLVED" && (
+                    <span className="ml-auto text-xs font-medium bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      Pending Review
+                    </span>
+                  )}
                 </h2>
-                <div className="space-y-4">
-                  <div className="bg-white rounded-xl p-4 border border-green-100">
-                    <p className="text-sm font-medium text-slate-600 mb-2">Technician&apos;s Report:</p>
+                
+                {/* Resolution Notes from Technician */}
+                {complaint.resolutionNotes && (
+                  <div className="bg-white rounded-xl p-4 border border-slate-200 mb-4">
+                    <p className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      Technician's Resolution Notes
+                    </p>
                     <p className="text-slate-800 whitespace-pre-wrap">{complaint.resolutionNotes}</p>
                     {complaint.resolvedAt && (
-                      <p className="text-xs text-slate-400 mt-2">
+                      <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
                         Resolved on {new Date(complaint.resolvedAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
                     )}
                   </div>
+                )}
 
-                  {/* Proof Photos (After Work) inline with resolution */}
-                  {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
-                    <div className="bg-white rounded-xl p-4 border border-green-100">
-                      <p className="text-sm font-medium text-slate-600 mb-3 flex items-center gap-2">
-                        <Camera className="w-4 h-4 text-green-600" />
-                        Proof Photos ({complaint.afterPhotos.length})
-                      </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {complaint.afterPhotos.map((photo: any, idx: number) => (
+                {/* Proof Photos (After Work) - Show prominently */}
+                {(complaint as any).afterPhotos?.length > 0 && (
+                  <div className="bg-white rounded-xl p-4 border border-green-200 mb-4">
+                    <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-green-600" />
+                      After Work Photos ({complaint.afterPhotos?.length})
+                      <span className="text-xs font-normal text-slate-500 ml-2">(Proof of completion)</span>
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {complaint.afterPhotos?.map((photo: { url?: string; _id?: string }, idx: number) => {
+                        const src = photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`;
+                        return (
                           <a
-                            key={idx}
-                            href={photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`}
+                            key={photo._id || idx}
+                            href={src}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block rounded-lg overflow-hidden border border-slate-200 hover:border-green-400 transition-colors"
+                            className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-green-400 hover:shadow-md transition-all"
                           >
                             <img
-                              src={photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`}
-                              alt={`Proof photo ${idx + 1}`}
-                              className="w-full h-24 object-cover"
+                              src={src}
+                              alt={`After work photo ${idx + 1}`}
+                              className="w-full h-28 object-cover"
                             />
                           </a>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  )}
-                  
-                  {/* Agent Actions - Approve/Reject Resolution */}
-                  {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
-                    <div className="flex gap-3 pt-4 border-t border-green-200">
-                      <Button
-                        className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                        icon={<CheckCircle className="w-4 h-4" />}
-                        onClick={() => setActionModal("approve-resolution")}
-                        isLoading={actionLoading}
-                      >
-                        Approve Resolution
-                      </Button>
-                      <Button
-                        variant="danger"
-                        className="flex-1"
-                        onClick={() => setActionModal("reject-resolution")}
-                      >
-                        Reject Resolution
-                      </Button>
+                  </div>
+                )}
+
+                {/* Before Work Photos - Only for Agent/Admin */}
+                {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (complaint as any).beforePhotos?.length > 0 && (
+                  <div className="bg-white rounded-xl p-4 border border-blue-200 mb-4">
+                    <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-blue-600" />
+                      Before Work Photos ({complaint.beforePhotos?.length})
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {complaint.beforePhotos?.map((photo: { url?: string; _id?: string }, idx: number) => {
+                        const src = photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`;
+                        return (
+                          <a key={photo._id || idx} href={src} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-blue-400 hover:shadow-md transition-all">
+                            <img src={src} alt={`Before work photo ${idx + 1}`} className="w-full h-28 object-cover" />
+                          </a>
+                        );
+                      })}
                     </div>
-                  )}
-                  
-                  {/* Show status for non-agent users */}
-                  {user?.role !== "MUNICIPAL_AGENT" && user?.role !== "DEPARTMENT_MANAGER" && user?.role !== "ADMIN" && (
-                    <div className="flex items-center gap-2 text-sm text-green-700 pt-4 border-t border-green-200">
-                      <Clock className="w-4 h-4" />
-                      <span>Waiting for agent review...</span>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* Agent Actions - Approve/Reject for RESOLVED status */}
+                {complaint.status === "RESOLVED" && (user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                  <div className="flex gap-3 pt-4 border-t border-amber-200">
+                    <button
+                      onClick={async () => {
+                        try {
+                          setActionLoading(true);
+                          const result = await agentService.approveResolution(complaintId);
+                          if (result.success) {
+                            alert("Resolution approved! Complaint has been closed.");
+                            // Refresh page to show updated status
+                            window.location.reload();
+                          } else {
+                            alert(result.message || "Failed to approve resolution");
+                          }
+                        } catch (err) {
+                          console.error("Error approving resolution:", err);
+                          alert("Failed to approve resolution");
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      disabled={actionLoading}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all text-sm font-semibold disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      {actionLoading ? "..." : "Approve"}
+                    </button>
+                    <button
+                      onClick={() => setActionModal("reject-resolution")}
+                      disabled={actionLoading}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-semibold disabled:opacity-50"
+                    >
+                      <X className="w-4 h-4" />
+                      Reject
+                    </button>
+                  </div>
+                )}
               </section>
             )}
 
@@ -1248,6 +1328,13 @@ export default function ComplaintDetailPage() {
                             onClick={() => setActionModal("technician")}
                           >
                             {complaint.assignedTo ? "Change Technician" : "Assign to Repair Team"}
+                          </Button>
+                          <Button
+                            className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                            icon={<AlertTriangle className="w-4 h-4" />}
+                            onClick={() => setActionModal("priority")}
+                          >
+                            Set Priority
                           </Button>
                           {!complaint.assignedTo && (
                             <p className="text-xs text-slate-500 text-center mt-2">
@@ -1701,9 +1788,6 @@ export default function ComplaintDetailPage() {
                     rows={4}
                     placeholder="Explain why this resolution report is being rejected..."
                   />
-                  <p className="text-xs text-slate-500 mt-1">
-                    The complaint will be returned to IN_PROGRESS status with this reason.
-                  </p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -1725,10 +1809,9 @@ export default function ComplaintDetailPage() {
                         setActionLoading(true);
                         const result = await agentService.rejectResolution(complaintId, rejectionReason);
                         if (result.success) {
-                          const updatedResponse = await complaintService.getComplaintDetail(complaintId);
-                          if (updatedResponse.success) setComplaint(processComplaintMedia(updatedResponse.data));
                           setActionModal(null);
                           setRejectionReason("");
+                          window.location.reload();
                         } else {
                           alert(result.message || "Failed to reject resolution");
                         }

@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/main.dart';
 import 'package:smart_city_app/screens/register_screen.dart';
+import 'package:smart_city_app/screens/forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final VoidCallback onLoginSuccess;
+  final void Function(Map<String, dynamic>? user) onLoginSuccess;
 
   const LoginScreen({super.key, required this.onLoginSuccess});
 
@@ -48,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted) {
-        widget.onLoginSuccess();
+        widget.onLoginSuccess(response['user']);
       }
     } on ApiException catch (e) {
       setState(() {
@@ -154,7 +155,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+
+                // Forgot password link
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ForgotPasswordScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text('Forgot Password?'),
+                  ),
+                ),
+                const SizedBox(height: 8),
 
                 // Login button
                 ElevatedButton(
@@ -188,9 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => RegisterScreen(
-                              onRegisterSuccess: widget.onLoginSuccess,
-                            ),
+                            builder: (context) => const RegisterScreen(),
                           ),
                         );
                       },

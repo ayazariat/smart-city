@@ -16,7 +16,7 @@ class AgentComplaintsScreen extends ConsumerStatefulWidget {
 
 class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
   String _statusFilter = 'ALL';
-  List<Department> _departments = [];
+  List<dynamic> _departments = [];
   bool _loadingDepts = false;
 
   @override
@@ -241,13 +241,14 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
                 await ref
                     .read(agentComplaintsProvider.notifier)
                     .validate(complaint.id);
-                if (mounted)
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Complaint validated'),
                       backgroundColor: AppColors.success,
                     ),
                   );
+                }
               },
               icon: const Icon(Icons.check, size: 18),
               label: const Text('Validate'),
@@ -283,13 +284,14 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
                 await ref
                     .read(agentComplaintsProvider.notifier)
                     .assignDepartment(complaint.id, '');
-                if (mounted)
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Complaint closed'),
                       backgroundColor: AppColors.success,
                     ),
                   );
+                }
               },
               icon: const Icon(Icons.archive, size: 18),
               label: const Text('Close'),
@@ -329,13 +331,14 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
               await ref
                   .read(agentComplaintsProvider.notifier)
                   .reject(complaint.id, reasonController.text);
-              if (mounted)
+              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Complaint rejected'),
                     backgroundColor: AppColors.warning,
                   ),
                 );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Reject'),
@@ -359,23 +362,31 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
                   itemCount: _departments.length,
                   itemBuilder: (ctx, i) {
                     final dept = _departments[i];
+                    final deptName = dept is Map
+                        ? (dept['name'] ?? '')
+                        : dept.toString();
+                    final deptDesc = dept is Map
+                        ? (dept['description'] ?? '')
+                        : '';
+                    final deptId = dept is Map
+                        ? (dept['_id'] ?? dept['id'] ?? '')
+                        : '';
                     return ListTile(
-                      title: Text(dept.name),
-                      subtitle: dept.description != null
-                          ? Text(dept.description!)
-                          : null,
+                      title: Text(deptName),
+                      subtitle: deptDesc.isNotEmpty ? Text(deptDesc) : null,
                       onTap: () async {
                         Navigator.pop(ctx);
                         await ref
                             .read(agentComplaintsProvider.notifier)
-                            .assignDepartment(complaint.id, dept.id);
-                        if (mounted)
+                            .assignDepartment(complaint.id, deptId.toString());
+                        if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Assigned to ${dept.name}'),
+                              content: Text('Assigned to $deptName'),
                               backgroundColor: AppColors.success,
                             ),
                           );
+                        }
                       },
                     );
                   },

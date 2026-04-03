@@ -159,8 +159,8 @@ class ComplaintController {
       const currentUserId = req.user.userId?.toString();
       const isOwner = citizenId === currentUserId;
       const isAdminOrAgent = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
-      const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
-      const isTechnician = userRole === "TECHNICIAN" && assignedToId === currentUserId;
+      
+      
 
       // For CITIZEN role - can only see their own complaints
       if (userRole === "CITIZEN" && !isOwner) {

@@ -59,6 +59,8 @@ router.get("/archived", authenticate, async (req, res) => {
     }
     if (req.user.role === 'TECHNICIAN') {
       query.assignedTo = req.user.userId;
+      // Technicians only see CLOSED (resolved and approved), not REJECTED
+      query.status = 'CLOSED';
     }
     if (req.user.role === 'CITIZEN') {
       query.createdBy = req.user.userId;

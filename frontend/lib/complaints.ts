@@ -11,6 +11,8 @@ export const statusConfig: Record<string, { label: string; bgClass: string; text
   RESOLVED:    { label: "RESOLVED",    bgClass: "bg-green-100",  textClass: "text-green-800"  },
   CLOSED:      { label: "CLOSED",      bgClass: "bg-gray-100",   textClass: "text-gray-700"   },
   REJECTED:    { label: "REJECTED",    bgClass: "bg-red-100",    textClass: "text-red-800"    },
+  // Used when agent rejects technician's resolution - status stays IN_PROGRESS but shows special label
+  RESOLUTION_REJECTED: { label: "REWORK NEEDED", bgClass: "bg-red-100", textClass: "text-red-800" },
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {

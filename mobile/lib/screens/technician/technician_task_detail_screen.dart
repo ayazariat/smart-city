@@ -29,13 +29,20 @@ class _TechnicianTaskDetailScreenState
   }
 
   Future<void> _loadTask() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
     try {
-      final task = await _complaintService.getComplaintById(widget.taskId);
+      final taskJson = await _complaintService.getTaskById(widget.taskId);
+      if (!mounted) return;
       setState(() {
-        _task = task;
+        _task = Complaint.fromJson(taskJson);
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

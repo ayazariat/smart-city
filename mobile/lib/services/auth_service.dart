@@ -52,9 +52,9 @@ class AuthService {
       'password': password,
       'fullName': fullName,
       'role': role,
-      if (phone != null) 'phone': phone,
-      if (municipality != null) 'municipality': municipality,
-      if (governorate != null) 'governorate': governorate,
+      'phone': ?phone,
+      'municipality': ?municipality,
+      'governorate': ?governorate,
     });
 
     return User.fromJson(response['user'] ?? {});
@@ -78,10 +78,10 @@ class AuthService {
     String? governorate,
   }) async {
     final response = await _api.put('/auth/profile', {
-      if (fullName != null) 'fullName': fullName,
-      if (phone != null) 'phone': phone,
-      if (municipality != null) 'municipality': municipality,
-      if (governorate != null) 'governorate': governorate,
+      'fullName': ?fullName,
+      'phone': ?phone,
+      'municipality': ?municipality,
+      'governorate': ?governorate,
     });
 
     _currentUser = User.fromJson(response['user'] ?? response);

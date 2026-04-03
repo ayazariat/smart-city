@@ -98,9 +98,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'password': password,
         'fullName': fullName,
         'role': role,
-        if (phone != null) 'phone': phone,
-        if (municipality != null) 'municipality': municipality,
-        if (governorate != null) 'governorate': governorate,
+        'phone': ?phone,
+        'municipality': ?municipality,
+        'governorate': ?governorate,
       });
       state = state.copyWith(isLoading: false);
     } catch (e) {
@@ -128,10 +128,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true);
     try {
       final response = await _api.put('/auth/profile', {
-        if (fullName != null) 'fullName': fullName,
-        if (phone != null) 'phone': phone,
-        if (municipality != null) 'municipality': municipality,
-        if (governorate != null) 'governorate': governorate,
+        'fullName': ?fullName,
+        'phone': ?phone,
+        'municipality': ?municipality,
+        'governorate': ?governorate,
       });
       final user = User.fromJson(response['user'] ?? response);
       state = state.copyWith(user: user, isLoading: false);

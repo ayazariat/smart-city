@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   FileText, CheckCircle, XCircle, Building, TrendingUp,
-  Clock, AlertTriangle, Filter, Download, Search
+  Clock, AlertTriangle, Filter, Download, Search, CheckCircle2, X
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
@@ -41,6 +41,11 @@ export default function AgentComplaintsPage() {
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState<{ departmentId?: string; departmentName?: string; confidence?: number } | null>(null);
+
+  // Resolution review modal states
+  const [reviewTarget, setReviewTarget] = useState<string | null>(null);
+  const [reviewType, setReviewType] = useState<"accept" | "reject" | null>(null);
+  const [resolutionRejectReason, setResolutionRejectReason] = useState("");
 
   // Confirmation modal states
   const [confirmAction, setConfirmAction] = useState<{
@@ -162,6 +167,53 @@ export default function AgentComplaintsPage() {
       console.error("Error assigning:", err);
       const errorObj = err as { message?: string };
       alert(errorObj?.message || "Failed to assign complaint");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle accept resolution
+  const handleAcceptResolution = async () => {
+    if (!reviewTarget) return;
+    setActionLoading(reviewTarget);
+    try {
+      const result = await agentService.approveResolution(reviewTarget);
+      if (result.success) {
+        alert("Resolution approved! Complaint has been closed.");
+        setReviewTarget(null);
+        setReviewType(null);
+        await refreshComplaints();
+      } else {
+        alert(result.message || "Failed to approve resolution");
+      }
+    } catch (err: unknown) {
+      console.error("Error accepting resolution:", err);
+      const errorObj = err as { message?: string };
+      alert(errorObj?.message || "Failed to approve resolution");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle reject resolution
+  const handleRejectResolution = async () => {
+    if (!reviewTarget || !resolutionRejectReason.trim()) return;
+    setActionLoading(reviewTarget);
+    try {
+      const result = await agentService.rejectResolution(reviewTarget, resolutionRejectReason);
+      if (result.success) {
+        alert("Resolution rejected. Complaint returned to IN_PROGRESS.");
+        setReviewTarget(null);
+        setReviewType(null);
+        setResolutionRejectReason("");
+        await refreshComplaints();
+      } else {
+        alert(result.message || "Failed to reject resolution");
+      }
+    } catch (err: unknown) {
+      console.error("Error rejecting resolution:", err);
+      const errorObj = err as { message?: string };
+      alert(errorObj?.message || "Failed to reject resolution");
     } finally {
       setActionLoading(null);
     }
@@ -326,6 +378,7 @@ export default function AgentComplaintsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">At Risk (SLA)</p>
+                <p className="text-xs text-amber-500 mt-1">Close to deadline</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -349,23 +402,27 @@ export default function AgentComplaintsPage() {
 
         {/* Team Performance */}
         <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
-          <h3 className="text-sm font-semibold text-slate-700 mb-4">Team Performance</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">Performance Metrics</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-blue-50 rounded-xl">
               <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
               <p className="text-xs text-slate-500 mt-1">In Progress</p>
+              <p className="text-[10px] text-blue-400">Currently being worked on</p>
             </div>
             <div className="text-center p-3 bg-purple-50 rounded-xl">
               <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
-              <p className="text-xs text-slate-500 mt-1">Avg Days</p>
+              <p className="text-xs text-slate-500 mt-1">Average Days</p>
+              <p className="text-[10px] text-purple-400">Time to process</p>
             </div>
             <div className="text-center p-3 bg-emerald-50 rounded-xl">
               <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
               <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
+              <p className="text-[10px] text-emerald-400">Percentage resolved</p>
             </div>
             <div className="text-center p-3 bg-orange-50 rounded-xl">
               <p className="text-2xl font-bold text-orange-600">{highPriorityCount}</p>
               <p className="text-xs text-slate-500 mt-1">High Priority</p>
+              <p className="text-[10px] text-orange-400">Urgent issues (score 15+)</p>
             </div>
           </div>
           
@@ -555,12 +612,6 @@ export default function AgentComplaintsPage() {
                               : 'Department Assigned'}
                           </div>
                         )}
-                        {complaint.status === "RESOLVED" && (
-                          <div className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-100 text-amber-700 rounded-xl text-sm font-semibold">
-                            <AlertTriangle className="w-4 h-4" />
-                            Resolution Pending Review
-                          </div>
-                        )}
                         <button
                           onClick={() => router.push(`/dashboard/complaints/${id}?from=agent`)}
                           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-all text-sm font-medium"
@@ -639,6 +690,77 @@ export default function AgentComplaintsPage() {
             ))}
           </select>
         </div>
+      </Modal>
+
+      {/* Resolution Review Modal */}
+      <Modal
+        isOpen={reviewTarget !== null && reviewType !== null}
+        onClose={() => { setReviewTarget(null); setReviewType(null); setResolutionRejectReason(""); }}
+        title={reviewType === "accept" ? "Approve Resolution Report" : "Reject Resolution Report"}
+        description={
+          reviewType === "accept" 
+            ? "Are you sure you want to approve this resolution report? The complaint will be closed and the citizen will be notified."
+            : "Please provide a reason for rejecting this resolution report. The technician will be notified and asked to correct the work."
+        }
+        footer={
+          <>
+            <Button 
+              variant="ghost" 
+              onClick={() => { setReviewTarget(null); setReviewType(null); setResolutionRejectReason(""); }} 
+              disabled={actionLoading !== null}
+            >
+              Cancel
+            </Button>
+            {reviewType === "accept" ? (
+              <Button 
+                onClick={handleAcceptResolution} 
+                isLoading={actionLoading !== null}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Approve & Close
+              </Button>
+            ) : (
+              <Button 
+                variant="danger" 
+                onClick={handleRejectResolution} 
+                isLoading={actionLoading !== null}
+                disabled={!resolutionRejectReason.trim()}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Reject & Return
+              </Button>
+            )}
+          </>
+        }
+      >
+        {reviewType === "reject" && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Rejection Reason <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={resolutionRejectReason}
+              onChange={(e) => setResolutionRejectReason(e.target.value)}
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none transition-all"
+              rows={4}
+              placeholder="Explain why this resolution is being rejected (e.g., incomplete work, poor quality photos, etc.)..."
+            />
+          </div>
+        )}
+        {reviewType === "accept" && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircle2 className="w-5 h-5" />
+              <span className="font-medium">This action will:</span>
+            </div>
+            <ul className="mt-2 text-sm text-green-600 space-y-1">
+              <li>• Close the complaint permanently</li>
+              <li>• Notify the citizen that the issue is resolved</li>
+              <li>• Notify the technician that their work was approved</li>
+            </ul>
+          </div>
+        )}
       </Modal>
 
       {/* Validate Confirmation Modal */}

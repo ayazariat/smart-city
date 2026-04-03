@@ -6,6 +6,7 @@ const User = require("../models/User");
 const Department = require("../models/Department");
 const { normalizeMunicipality } = require("../utils/normalize");
 const notificationService = require("../services/notification.service");
+const { calculateSLADeadline } = require("../utils/sla");
 
 // All agent routes require authentication and MUNICIPAL_AGENT role
 
@@ -356,6 +357,16 @@ router.put("/complaints/:id/assign-department", authenticate, authorize("MUNICIP
 
     complaint.assignedDepartment = departmentId;
     
+    // Calculate SLA deadline based on category and urgency when assigned
+    if (!complaint.slaDeadline) {
+      const slaDeadline = calculateSLADeadline(
+        complaint.category,
+        complaint.urgency,
+        new Date()
+      );
+      complaint.slaDeadline = slaDeadline;
+    }
+    
     // If status is VALIDATED and we're assigning department, change to ASSIGNED
     // This is the correct workflow: VALIDATED → department assigned → ASSIGNED (ready for technician)
     if (complaint.status === "VALIDATED") {
@@ -414,7 +425,7 @@ router.get("/departments", authenticate, authorize("MUNICIPAL_AGENT"), async (re
 });
 
 // POST /api/agent/complaints/:id/approve-resolution - Approve technician resolution
-router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNICIPAL_AGENT", "ADMIN"), async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id);
 
@@ -422,12 +433,24 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check municipality
+    // Check municipality - use flexible matching
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
+    const complaintMunicipalityNormalized = complaint.municipalityNormalized || "";
+    const complaintMunicipalityName = complaint.municipalityName || "";
+    const complaintLocationMunicipality = complaint.location?.municipality || "";
+    const complaintLocationCommune = complaint.location?.commune || "";
 
-    if (userMunicipality !== complaintMunicipality) {
+    // Check if any of the complaint's municipality fields match the agent's municipality
+    // Also allow admin to bypass municipality check
+    const municipalityMatch = 
+      req.user.role === "ADMIN" ||
+      userMunicipality === complaintMunicipalityNormalized ||
+      userMunicipality.toLowerCase() === complaintMunicipalityName.toLowerCase() ||
+      userMunicipality.toLowerCase() === complaintLocationMunicipality.toLowerCase() ||
+      userMunicipality.toLowerCase() === complaintLocationCommune.toLowerCase();
+
+    if (!municipalityMatch) {
       return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
     }
 
@@ -435,6 +458,7 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
       return res.status(400).json({ success: false, message: "Only RESOLVED complaints can have their resolution approved" });
     }
 
+    // Simple update - just change status
     complaint.status = "CLOSED";
     complaint.closedAt = new Date();
     complaint.closedBy = req.user.userId;
@@ -448,37 +472,42 @@ router.post("/complaints/:id/approve-resolution", authenticate, authorize("MUNIC
       notes: "Resolution approved"
     });
     
-    await complaint.save();
+    const savedComplaint = await complaint.save();
 
-    // Notify citizen
-    if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
-        type: "closed",
-        title: "Complaint Closed",
-        message: `Your complaint "${complaint.title}" has been resolved and closed.`,
-        complaintId: complaint._id,
-      });
-    }
+    // Send notifications
+    try {
+      const citizenId = typeof complaint.createdBy === 'object' ? complaint.createdBy._id : complaint.createdBy;
+      if (citizenId) {
+        await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
+          type: "closed",
+          title: "Complaint Closed",
+          message: `Your complaint "${complaint.title}" has been resolved and closed.`,
+          complaintId: complaint._id,
+        });
+      }
+    } catch (e) { console.error("Citizen notif error:", e.message); }
 
-    // Notify technician who submitted the resolution
-    if (complaint.assignedTo) {
-      await notificationService.sendNotification(req.app?.get?.('io'), complaint.assignedTo, {
-        type: "resolution_approved",
-        title: "Resolution Approved",
-        message: `Your resolution for "${complaint.title}" has been approved by the agent.`,
-        complaintId: complaint._id,
-      });
-    }
+    try {
+      const techId = typeof complaint.assignedTo === 'object' ? complaint.assignedTo._id : (complaint.assignedTo?._id || complaint.assignedTo);
+      if (techId) {
+        await notificationService.sendNotification(req.app?.get?.('io'), techId, {
+          type: "resolution_approved",
+          title: "Resolution Approved",
+          message: `Your resolution for "${complaint.title}" has been approved by the agent.`,
+          complaintId: complaint._id,
+        });
+      }
+    } catch (e) { console.error("Tech notif error:", e.message); }
 
-    res.json({ success: true, message: "Resolution approved and complaint closed", data: complaint });
+    res.json({ success: true, message: "Resolution approved and complaint closed", data: savedComplaint });
   } catch (error) {
-    console.error("Error approving resolution:", error);
+    console.error("Error approving resolution:", error.message);
     res.status(500).json({ success: false, message: "Failed to approve resolution" });
   }
 });
 
 // POST /api/agent/complaints/:id/reject-resolution - Reject technician resolution
-router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICIPAL_AGENT"), async (req, res) => {
+router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICIPAL_AGENT", "ADMIN"), async (req, res) => {
   try {
     const { rejectionReason } = req.body;
     
@@ -492,12 +521,24 @@ router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICI
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
-    // Check municipality
+    // Check municipality - use flexible matching
     const user = await getAgentMunicipality(req.user.userId);
     const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-    const complaintMunicipality = complaint.municipalityNormalized || normalizeMunicipality(complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || "");
+    const complaintMunicipalityNormalized = complaint.municipalityNormalized || "";
+    const complaintMunicipalityName = complaint.municipalityName || "";
+    const complaintLocationMunicipality = complaint.location?.municipality || "";
+    const complaintLocationCommune = complaint.location?.commune || "";
 
-    if (userMunicipality !== complaintMunicipality) {
+    // Check if any of the complaint's municipality fields match the agent's municipality
+    // Also allow admin to bypass municipality check
+    const municipalityMatch = 
+      req.user.role === "ADMIN" ||
+      userMunicipality === complaintMunicipalityNormalized ||
+      userMunicipality.toLowerCase() === complaintMunicipalityName.toLowerCase() ||
+      userMunicipality.toLowerCase() === complaintLocationMunicipality.toLowerCase() ||
+      userMunicipality.toLowerCase() === complaintLocationCommune.toLowerCase();
+
+    if (!municipalityMatch) {
       return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
     }
 
@@ -521,33 +562,48 @@ router.post("/complaints/:id/reject-resolution", authenticate, authorize("MUNICI
     await complaint.save();
 
     // Notify technician who submitted the resolution
-    if (complaint.assignedTo) {
-      await notificationService.sendNotification(req.app?.get?.('io'), complaint.assignedTo, {
-        type: "resolution_rejected",
-        title: "Resolution Rejected",
-        message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}`,
-        complaintId: complaint._id,
-      });
+    try {
+      const techId = typeof complaint.assignedTo === 'object' ? complaint.assignedTo._id : (complaint.assignedTo?._id || complaint.assignedTo);
+      if (techId) {
+        await notificationService.sendNotification(req.app?.get?.('io'), techId, {
+          type: "resolution_rejected",
+          title: "Resolution Rejected - Action Required",
+          message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}. Please complete the work properly.`,
+          complaintId: complaint._id,
+        });
+      }
+    } catch (notifErr) {
+      console.error("Error sending technician notification:", notifErr);
     }
 
     // Notify citizen that the resolution was rejected and work continues
-    if (complaint.createdBy) {
-      await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
-        type: "resolution_rejected",
-        title: "Resolution Under Review",
-        message: `The proposed resolution for "${complaint.title}" requires additional work. The technician will continue working on it.`,
-        complaintId: complaint._id,
-      });
+    try {
+      const citizenId = typeof complaint.createdBy === 'object' ? complaint.createdBy._id : complaint.createdBy;
+      if (citizenId) {
+        await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
+          type: "resolution_rejected",
+          title: "Resolution Under Review",
+          message: `The proposed resolution for "${complaint.title}" requires additional work. The technician will continue working on it.`,
+          complaintId: complaint._id,
+        });
+      }
+    } catch (notifErr) {
+      console.error("Error sending citizen notification:", notifErr);
     }
 
     // Notify department managers
-    if (complaint.assignedDepartment) {
-      await notificationService.notifyManagersByDepartment(req.app?.get?.('io'), complaint.assignedDepartment, {
-        type: "resolution_rejected",
-        title: "Resolution Rejected",
-        message: `Resolution for "${complaint.title}" was rejected by agent. Reason: ${rejectionReason}`,
-        complaintId: complaint._id,
-      });
+    try {
+      const deptId = typeof complaint.assignedDepartment === 'object' ? complaint.assignedDepartment._id : complaint.assignedDepartment;
+      if (deptId) {
+        await notificationService.notifyManagersByDepartment(req.app?.get?.('io'), deptId, {
+          type: "resolution_rejected",
+          title: "Resolution Rejected",
+          message: `Resolution for "${complaint.title}" was rejected by agent. Reason: ${rejectionReason}`,
+          complaintId: complaint._id,
+        });
+      }
+    } catch (notifErr) {
+      console.error("Error sending manager notification:", notifErr);
     }
 
     res.json({ success: true, message: "Resolution rejected, complaint returned to IN_PROGRESS", data: complaint });

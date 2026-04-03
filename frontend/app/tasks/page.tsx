@@ -200,6 +200,10 @@ export default function TechnicianTasksPage() {
 
   const handleResolve = async () => {
     if (!selectedTask || !resolveNote.trim()) return;
+    if (proofPhotos.length === 0) {
+      showToast("Please add at least one proof photo", "error");
+      return;
+    }
     setActionLoading(true);
     try {
       let photoUrls: string[] = [];
@@ -575,10 +579,14 @@ export default function TechnicianTasksPage() {
             <Button 
               onClick={handleResolve} 
               isLoading={actionLoading} 
-              disabled={!resolveNote.trim() || resolveNote.trim().length < 20}
-              className={resolveNote.trim().length >= 20 ? "bg-green-600 hover:bg-green-700" : ""}
+              disabled={!resolveNote.trim() || resolveNote.trim().length < 20 || proofPhotos.length === 0}
+              className={resolveNote.trim().length >= 20 && proofPhotos.length > 0 ? "bg-green-600 hover:bg-green-700" : ""}
             >
-              {resolveNote.trim().length >= 20 ? "Submit Resolution" : `${20 - resolveNote.trim().length} more chars needed`}
+              {resolveNote.trim().length >= 20 && proofPhotos.length > 0 
+                ? "Submit Resolution" 
+                : proofPhotos.length === 0 
+                  ? "Add proof photo required" 
+                  : `${20 - resolveNote.trim().length} more chars needed`}
             </Button>
           </>
         }
@@ -604,8 +612,12 @@ export default function TechnicianTasksPage() {
             <p className="text-xs text-slate-500 mt-1">{resolveNote.length}/20 characters minimum</p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Proof Photos (recommended)</label>
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-primary/40 transition-colors">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Proof Photos <span className="text-red-500">*</span>
+            </label>
+            <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
+              proofPhotos.length > 0 ? "border-green-300 bg-green-50" : "border-slate-200 hover:border-primary/40"
+            }`}>
               <input 
                 ref={fileInputRef}
                 type="file" 

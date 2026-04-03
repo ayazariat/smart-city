@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/complaint_model.dart';
 import '../services/complaint_service.dart';
 
 // Complaints state
 class ComplaintsState {
-  final List<Complaint> complaints;
+  final List<dynamic> complaints;
   final bool isLoading;
   final String? error;
   final int total;
@@ -21,7 +20,7 @@ class ComplaintsState {
   });
 
   ComplaintsState copyWith({
-    List<Complaint>? complaints,
+    List<dynamic>? complaints,
     bool? isLoading,
     String? error,
     int? total,
@@ -67,16 +66,17 @@ class MyComplaintsNotifier extends StateNotifier<ComplaintsState> {
   }) async {
     state = state.copyWith(isLoading: true);
     try {
-      await _service.createComplaint(
-        title: title,
-        description: description,
-        category: category,
-        municipality: municipality,
-        governorate: governorate,
-        latitude: latitude,
-        longitude: longitude,
-        mediaUrls: mediaUrls,
-      );
+      final data = {
+        'title': title,
+        'description': description,
+        'category': category,
+        'municipality': ?municipality,
+        'governorate': ?governorate,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
+        if (mediaUrls != null && mediaUrls.isNotEmpty) 'media': mediaUrls,
+      };
+      await _service.createComplaint(data);
       await load();
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -95,10 +95,7 @@ class AgentComplaintsNotifier extends StateNotifier<ComplaintsState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final result = await _service.getAgentComplaints(status: status);
-      state = state.copyWith(
-        complaints: result['complaints'],
-        isLoading: false,
-      );
+      state = state.copyWith(complaints: result, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -138,12 +135,15 @@ class TechnicianTasksNotifier extends StateNotifier<ComplaintsState> {
   }
 
   Future<void> startTask(String id, {String? notes}) async {
-    await _service.startTask(id, notes: notes);
+    await _service.startTask(id);
     await load();
   }
 
   Future<void> completeTask(String id, {String? notes}) async {
-    await _service.completeTask(id, notes: notes);
+    final data = {
+      if (notes != null && notes.isNotEmpty) 'resolutionNotes': notes,
+    };
+    await _service.completeTask(id, data);
     await load();
   }
 }
@@ -180,7 +180,7 @@ class PublicComplaintsNotifier extends StateNotifier<ComplaintsState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final complaints = await _service.getPublicComplaints(
-        municipality: municipality,
+        governorate: municipality,
         category: category,
       );
       state = state.copyWith(complaints: complaints, isLoading: false);

@@ -1,5 +1,94 @@
 const mongoose = require("mongoose");
 
+// SLA Configuration by Category and Urgency (in hours)
+// Working days are Mon-Fri, excluding Tunis holidays
+const SLA_CONFIG = {
+  // Routes & Infrastructure
+  ROAD: { LOW: 7 * 24, MEDIUM: 3 * 24, HIGH: 24, URGENT: 4 },
+  // Public Lighting
+  LIGHTING: { LOW: 5 * 24, MEDIUM: 2 * 24, HIGH: 12, URGENT: 2 },
+  // Waste Management
+  WASTE: { LOW: 3 * 24, MEDIUM: 24, HIGH: 6, URGENT: 2 },
+  // Water & Sanitation
+  WATER: { LOW: 7 * 24, MEDIUM: 3 * 24, HIGH: 12, URGENT: 1 },
+  // Public Safety
+  SAFETY: { LOW: 5 * 24, MEDIUM: 48, HIGH: 6, URGENT: 0.5 }, // 30min
+  // Public Property
+  PUBLIC_PROPERTY: { LOW: 10 * 24, MEDIUM: 4 * 24, HIGH: 24, URGENT: 2 },
+  // Green Space & Parks
+  GREEN_SPACE: { LOW: 10 * 24, MEDIUM: 5 * 24, HIGH: 48, URGENT: 1 },
+  // Building & Construction
+  BUILDING: { LOW: 10 * 24, MEDIUM: 5 * 24, HIGH: 48, URGENT: 4 },
+  // Other
+  OTHER: { LOW: 10 * 24, MEDIUM: 5 * 24, HIGH: 48, URGENT: 4 },
+};
+
+// Calculate working days (exclude weekends)
+// Note: For production, add Tunis holidays
+function addWorkingDays(startDate, days) {
+  const result = new Date(startDate);
+  let daysAdded = 0;
+  
+  while (daysAdded < days) {
+    result.setDate(result.getDate() + 1);
+    const day = result.getDay();
+    if (day !== 0 && day !== 6) { // Skip Sun (0) and Sat (6)
+      daysAdded++;
+    }
+  }
+  
+  return result;
+}
+
+// Calculate SLA deadline based on category and urgency
+function calculateSLADeadline(category, urgency, assignedAt) {
+  const categorySLA = SLA_CONFIG[category] || SLA_CONFIG.OTHER;
+  const urgencyKey = urgency?.toUpperCase() || 'MEDIUM';
+  const hours = categorySLA[urgencyKey] || categorySLA.MEDIUM;
+  
+  // Return deadline - for now use calendar hours (can be enhanced to working days)
+  return new Date(assignedAt.getTime() + hours * 60 * 60 * 1000);
+}
+
+// Get SLA status with detailed info
+function getSlaStatus(deadline, createdAt, status) {
+  if (!deadline || status === 'RESOLVED' || status === 'CLOSED') {
+    return { status: 'COMPLETED', progress: 100, remainingHours: 0, isOverdue: false, isAtRisk: false, deadline };
+  }
+  
+  const now = new Date();
+  const deadlineDate = new Date(deadline);
+  const created = createdAt ? new Date(createdAt) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+  
+  const totalMs = deadlineDate - created;
+  const elapsedMs = now - created;
+  
+  if (totalMs <= 0) {
+    return { status: 'OVERDUE', progress: 100, remainingHours: 0, isOverdue: true, isAtRisk: false, deadline: deadlineDate };
+  }
+  
+  const progress = Math.min(100, (elapsedMs / totalMs) * 100);
+  const remainingHours = Math.max(0, (deadlineDate - now) / (1000 * 60 * 60));
+  const isOverdue = now > deadlineDate;
+  const isAtRisk = progress >= 80 && !isOverdue;
+  
+  let slaStatusValue = 'ON_TRACK';
+  if (isOverdue) {
+    slaStatusValue = 'OVERDUE';
+  } else if (isAtRisk) {
+    slaStatusValue = 'AT_RISK';
+  }
+  
+  return {
+    status: slaStatusValue,
+    progress: Math.round(progress),
+    remainingHours: Math.round(remainingHours * 10) / 10,
+    isOverdue,
+    isAtRisk,
+    deadline: deadlineDate,
+  };
+}
+
 const complaintSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
@@ -120,7 +209,7 @@ const complaintSchema = new mongoose.Schema(
     archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     // SLA fields
     slaDeadline: { type: Date },
-    slaStatus: { type: String, enum: ['ON_TRACK', 'AT_RISK', 'OVERDUE'], default: 'ON_TRACK' },
+    slaStatus: { type: String, enum: ['ON_TRACK', 'AT_RISK', 'OVERDUE', 'COMPLETED'], default: 'ON_TRACK' },
     // Resolution tracking
     resolutionNote: String,
     proofPhotos: [String],
@@ -237,34 +326,13 @@ complaintSchema.index({ createdAt: -1 });
 complaintSchema.index({ location: "2dsphere" });
 complaintSchema.index({ isArchived: 1 });
 
-// Method to calculate SLA status
+// Method to calculate SLA status - now uses category-based config
 complaintSchema.methods.calculateSLAStatus = function() {
   if (!this.slaDeadline || this.status === 'RESOLVED' || this.status === 'CLOSED') {
-    return { status: 'COMPLETED', progress: 100, remainingHours: 0 };
+    return { status: 'COMPLETED', progress: 100, remainingHours: 0, isOverdue: false, isAtRisk: false };
   }
   
-  const now = new Date();
-  const deadline = new Date(this.slaDeadline);
-  const created = new Date(this.createdAt);
-  
-  const totalMs = deadline - created;
-  const elapsedMs = now - created;
-  
-  if (totalMs <= 0) {
-    return { status: 'OVERDUE', progress: 100, remainingHours: 0 };
-  }
-  
-  const progress = Math.min(100, (elapsedMs / totalMs) * 100);
-  const remainingHours = Math.max(0, (deadline - now) / (1000 * 60 * 60));
-  
-  let status = 'ON_TRACK';
-  if (progress >= 100) {
-    status = 'OVERDUE';
-  } else if (progress >= 80) {
-    status = 'AT_RISK';
-  }
-  
-  return { status, progress: Math.round(progress), remainingHours: Math.round(remainingHours * 10) / 10 };
+  return getSlaStatus(this.slaDeadline, this.createdAt, this.status);
 };
 
 // Pre-save hook to update SLA status

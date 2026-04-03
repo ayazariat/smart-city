@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { categoryLabels } from "@/lib/complaints";
 import { TUNISIA_GEOGRAPHY } from "@/data/tunisia-geography";
+import type { LucideIcon } from "lucide-react";
 import { 
   TrendingUp, 
   CheckCircle2, 
@@ -94,6 +95,21 @@ interface ComplaintItem {
   media?: Array<{ url?: string; type?: string }>;
 }
 
+type TabId = "overview" | "complaints" | "municipalities";
+
+interface TabDefinition {
+  id: TabId;
+  label: string;
+  icon: LucideIcon;
+}
+
+type ApiMunicipalityStat = Omit<MunicipalityStats, "rank" | "tma" | "overdue">;
+
+type ApiComplaint = ComplaintItem & {
+  confirmations?: Array<unknown>;
+  votes?: Array<unknown>;
+};
+
 const ALL_MUNICIPALITIES = TUNISIA_GEOGRAPHY.flatMap(gov => 
   gov.municipalities.map(mun => ({ name: mun, governorate: gov.governorate }))
 );
@@ -118,9 +134,15 @@ export default function TransparencyPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [activeTab, setActiveTab] = useState<"overview" | "complaints" | "municipalities">("overview");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [expandedComplaint, setExpandedComplaint] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const tabs: TabDefinition[] = [
+    { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "complaints", label: "Complaints", icon: List },
+    { id: "municipalities", label: "Municipalities", icon: Globe }
+  ];
 
   const fetchData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -153,19 +175,19 @@ export default function TransparencyPage() {
       }
       
       if (munData.success) {
-        const rankedMun = munData.data.map((m: any, idx: number) => ({
+        const rankedMun = (munData.data as ApiMunicipalityStat[]).map((m, idx) => ({
           ...m,
           rank: idx + 1,
-          tma: (Math.random() * 5 + 1).toFixed(1),
+          tma: Number((Math.random() * 5 + 1).toFixed(1)),
           overdue: Math.floor(m.total * (1 - m.rate / 100) * 0.2)
         }));
         setMunicipalityStats(rankedMun.slice(0, 12));
       }
       
       if (complaintsData.success && complaintsData.data?.complaints) {
-        const scoredComplaints = complaintsData.data.complaints.map((c: any) => {
-          const confirms = c.confirmationCount || c.confirmations?.length || 0;
-          const upvotes = c.upvoteCount || c.votes?.length || 0;
+        const scoredComplaints = (complaintsData.data.complaints as ApiComplaint[]).map((c) => {
+          const confirms = c.confirmationCount ?? c.confirmations?.length ?? 0;
+          const upvotes = c.upvoteCount ?? c.votes?.length ?? 0;
           return {
             ...c,
             confirmationCount: confirms,
@@ -174,7 +196,7 @@ export default function TransparencyPage() {
             priorityLevel: (c.priorityScore || 0) >= 15 ? 'CRITICAL' : 
                           (c.priorityScore || 0) >= 10 ? 'HIGH' :
                           (c.priorityScore || 0) >= 6 ? 'MEDIUM' : 'LOW'
-          };
+          } as ComplaintItem;
         });
         setComplaints(scoredComplaints);
         setFilteredComplaints(scoredComplaints);
@@ -220,7 +242,7 @@ export default function TransparencyPage() {
 
   const handleUpvote = async (complaintId: string) => {
     if (!token) {
-      router.push(`/login?redirect=/transparency&action=upvote&complaintId=${complaintId}`);
+      router.push(`/login?redirect=/dashboard/complaints/${complaintId}`);
       return;
     }
     try {
@@ -245,7 +267,7 @@ export default function TransparencyPage() {
 
   const handleConfirm = async (complaintId: string) => {
     if (!token) {
-      router.push(`/login?redirect=/transparency&action=confirm&complaintId=${complaintId}`);
+      router.push(`/login?redirect=/dashboard/complaints/${complaintId}`);
       return;
     }
     try {
@@ -355,14 +377,10 @@ export default function TransparencyPage() {
 
           {/* Tab Navigation */}
           <div className="flex items-center gap-1 mt-3 -mb-px overflow-x-auto scrollbar-hide">
-            {[
-              { id: "overview", label: "Overview", icon: BarChart3 },
-              { id: "complaints", label: "Complaints", icon: List },
-              { id: "municipalities", label: "Municipalities", icon: Globe }
-            ].map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-t-xl text-sm font-medium transition-all whitespace-nowrap border-b-2 ${
                   activeTab === tab.id
                     ? "bg-green-50 text-green-700 border-green-600"

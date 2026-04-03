@@ -6,14 +6,41 @@ import Link from "next/link";
 import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
-import { connectSocket, subscribeToNotifications, disconnectSocket } from "@/lib/socket";
+import { connectSocket, subscribeToNotifications } from "@/lib/socket";
 import { agentService } from "@/services/agent.service";
 import { managerService } from "@/services/manager.service";
-import { complaintService } from "@/services/complaint.service";
 import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
 import { categoryLabels } from "@/lib/complaints";
 import { Notification } from "@/types";
+
+interface DashboardStats {
+  total?: number;
+  submitted?: number;
+  pending?: number;
+  assigned?: number;
+  inProgress?: number;
+  resolved?: number;
+  closed?: number;
+  totalOverdue?: number;
+  overdue?: number;
+  resolutionRate?: number;
+  byCategory?: Record<string, number>;
+  [key: string]: unknown;
+}
+
+interface MunicipalityComplaint {
+  _id: string;
+  title: string;
+  description?: string;
+  category: string;
+  status: string;
+  municipalityName?: string;
+  location?: { municipality?: string; address?: string };
+  media?: { url: string; type?: string }[];
+  confirmationCount?: number;
+  upvoteCount?: number;
+}
 
 // Separate component that uses useSearchParams
 function DashboardContent() {
@@ -28,12 +55,12 @@ function DashboardContent() {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   
   // Stats state for agent/manager
-  const [stats, setStats] = useState<any>({});
+  const [stats, setStats] = useState<DashboardStats>({});
   const [byCategory, setByCategory] = useState<Record<string, number>>({});
   const [loadingStats, setLoadingStats] = useState(false);
 
   // Municipality complaints for citizens
-  const [municipalityComplaints, setMunicipalityComplaints] = useState<any[]>([]);
+  const [municipalityComplaints, setMunicipalityComplaints] = useState<MunicipalityComplaint[]>([]);
   const [loadingMunicipalityComplaints, setLoadingMunicipalityComplaints] = useState(false);
 
   // Fetch notifications
@@ -116,8 +143,9 @@ function DashboardContent() {
       }
       
       if (statsRes?.data) {
-        setStats(statsRes.data as any);
-        setByCategory((statsRes.data as any).byCategory || {});
+        const d = statsRes.data as DashboardStats;
+        setStats(d);
+        setByCategory(d.byCategory || {});
       }
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -171,7 +199,7 @@ function DashboardContent() {
       });
       const data = await response.json();
       if (data.success) {
-        setMunicipalityComplaints(prev => prev.map((c: any) => 
+        setMunicipalityComplaints(prev => prev.map(c => 
           c._id === complaintId 
             ? { ...c, upvoteCount: data.voteCount }
             : c
@@ -198,7 +226,7 @@ function DashboardContent() {
       });
       const data = await response.json();
       if (data.success) {
-        setMunicipalityComplaints(prev => prev.map((c: any) => 
+        setMunicipalityComplaints(prev => prev.map(c => 
           c._id === complaintId 
             ? { ...c, confirmationCount: data.confirmationCount }
             : c
@@ -236,6 +264,7 @@ function DashboardContent() {
     if (hydrated && user && token) {
       fetchStats();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
 
   // Fetch municipality complaints for citizens
@@ -244,6 +273,7 @@ function DashboardContent() {
     if (hydrated && user && token && user.role === "CITIZEN") {
       fetchMunicipalityComplaints();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
 
   // Handle magic link verification callback
@@ -763,36 +793,40 @@ function DashboardContent() {
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Total */}
-            <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-              <div className="text-2xl font-bold text-primary mb-1">
+            {/* Total Complaints */}
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+              <div className="text-2xl font-bold text-blue-700 mb-1">
                 {stats.total || 0}
               </div>
-              <div className="text-sm text-slate-600">Total</div>
+              <div className="text-sm text-blue-600 font-medium">Total Complaints</div>
+              <div className="text-xs text-blue-500 mt-1">All submissions</div>
             </div>
             
             {/* In Progress */}
-            <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
-              <div className="text-2xl font-bold text-orange-600 mb-1">
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+              <div className="text-2xl font-bold text-orange-700 mb-1">
                 {stats.inProgress || 0}
               </div>
-              <div className="text-sm text-slate-600">In Progress</div>
+              <div className="text-sm text-orange-600 font-medium">In Progress</div>
+              <div className="text-xs text-orange-500 mt-1">Being worked on</div>
             </div>
             
             {/* Resolved */}
-            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-              <div className="text-2xl font-bold text-green-600 mb-1">
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+              <div className="text-2xl font-bold text-green-700 mb-1">
                 {stats.resolved || 0}
               </div>
-              <div className="text-sm text-slate-600">Resolved</div>
+              <div className="text-sm text-green-600 font-medium">Resolved</div>
+              <div className="text-xs text-green-500 mt-1">Fixed and closed</div>
             </div>
             
             {/* Overdue */}
-            <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-              <div className="text-2xl font-bold text-red-600 mb-1">
+            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+              <div className="text-2xl font-bold text-red-700 mb-1">
                 {stats.totalOverdue || stats.overdue || 0}
               </div>
-              <div className="text-sm text-slate-600">Overdue</div>
+              <div className="text-sm text-red-600 font-medium">Overdue</div>
+              <div className="text-xs text-red-500 mt-1">Past deadline</div>
             </div>
           </div>
 
@@ -801,26 +835,44 @@ function DashboardContent() {
             <div className="mt-6 pt-6 border-t border-slate-100">
               <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-primary" />
-                Complaints by Category
+                Complaints by Category (Type of Issue)
               </h4>
-              <div className="space-y-3">
-                {Object.entries(byCategory).map(([cat, count]: [string, any]) => {
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(byCategory).map(([cat, count]) => {
                   const maxCount = Math.max(...Object.values(byCategory));
-                  const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                  const percentage = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+                  
+                  // Category colors
+                  const categoryColors: Record<string, string> = {
+                    ROAD: "from-gray-600 to-gray-700",
+                    LIGHTING: "from-yellow-500 to-yellow-600",
+                    WASTE: "from-green-500 to-green-600",
+                    WATER: "from-blue-500 to-blue-600",
+                    SAFETY: "from-red-500 to-red-600",
+                    PUBLIC_PROPERTY: "from-purple-500 to-purple-600",
+                    GREEN_SPACE: "from-emerald-500 to-emerald-600",
+                    BUILDING: "from-amber-500 to-amber-600",
+                    NOISE: "from-indigo-500 to-indigo-600",
+                    OTHER: "from-slate-500 to-slate-600",
+                  };
+                  const colorClass = categoryColors[cat] || "from-primary to-primary-700";
                   
                   return (
                     <div key={cat} className="flex items-center gap-3">
-                      <div className="w-32 text-sm font-medium text-slate-700 truncate">
+                      <div className="w-40 text-sm font-medium text-slate-700 truncate">
                         {categoryLabels[cat] || cat}
                       </div>
                       <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-primary rounded-full transition-all duration-500"
+                          className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
                           style={{ width: `${percentage}%` }}
                         />
                       </div>
-                      <div className="w-10 text-sm font-bold text-slate-700 text-right">
+                      <div className="w-12 text-sm font-bold text-slate-700 text-right">
                         {count}
+                      </div>
+                      <div className="w-10 text-xs text-slate-500 text-right">
+                        {percentage}%
                       </div>
                     </div>
                   );
@@ -853,7 +905,7 @@ function DashboardContent() {
             </div>
             
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {municipalityComplaints.slice(0, 6).map((complaint: any) => (
+              {municipalityComplaints.slice(0, 6).map((complaint) => (
                 <div 
                   key={complaint._id}
                   className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow"

@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/screens/verify_email_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
-  final VoidCallback onRegisterSuccess;
-
-  const RegisterScreen({super.key, required this.onRegisterSuccess});
+  const RegisterScreen({super.key});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -73,13 +72,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Registration successful! Please check your email to verify your account.',
-            ),
+            content: Text('Registration successful! Please verify your email.'),
             backgroundColor: AppColors.success,
           ),
         );
-        Navigator.pop(context); // Go back to login
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                VerifyEmailScreen(email: _emailController.text.trim()),
+          ),
+        );
       }
     } on ApiException catch (e) {
       setState(() {

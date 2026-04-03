@@ -279,9 +279,116 @@ class _ManagerDashboardScreenState
                   ),
                 ],
               ),
+              if (complaint.status == 'ASSIGNED' &&
+                  complaint.assignedToName == null) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAssignTechnicianDialog(complaint),
+                    icon: const Icon(Icons.person_add, size: 16),
+                    label: const Text('Assign Technician'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showAssignTechnicianDialog(Complaint complaint) async {
+    List<dynamic> technicians = [];
+    bool loading = true;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          if (loading) {
+            ComplaintService()
+                .getDepartmentTechnicians()
+                .then((techs) {
+                  setDialogState(() {
+                    technicians = techs;
+                    loading = false;
+                  });
+                })
+                .catchError((_) {
+                  setDialogState(() => loading = false);
+                });
+          }
+
+          return AlertDialog(
+            title: const Text('Assign Technician'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : technicians.isEmpty
+                  ? const Text('No technicians available')
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: technicians.length,
+                      itemBuilder: (_, i) {
+                        final tech = technicians[i];
+                        final name =
+                            tech['fullName'] ?? tech['name'] ?? 'Unknown';
+                        final email = tech['email'] ?? '';
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.accent.withAlpha(25),
+                            child: const Icon(
+                              Icons.engineering,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                          title: Text(name),
+                          subtitle: email.isNotEmpty
+                              ? Text(
+                                  email,
+                                  style: const TextStyle(fontSize: 12),
+                                )
+                              : null,
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            try {
+                              final techId = tech['_id'] ?? tech['id'];
+                              await ComplaintService().assignTechnician(
+                                complaint.id,
+                                techId.toString(),
+                              );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Assigned to $name')),
+                                );
+                                _loadData();
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed: $e')),
+                                );
+                              }
+                            }
+                          },
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

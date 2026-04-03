@@ -95,6 +95,48 @@ class ApiClient {
       );
       return _handleResponse(response);
     } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Network error: $e');
+    }
+  }
+
+  // Multipart file upload
+  Future<dynamic> uploadFiles(
+    String endpoint,
+    List<String> filePaths, {
+    String fieldName = 'photos',
+  }) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl$endpoint'),
+      );
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+      for (final path in filePaths) {
+        request.files.add(await http.MultipartFile.fromPath(fieldName, path));
+      }
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      return _handleResponse(response);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Upload failed: $e');
+    }
+  }
+
+  // PATCH request
+  Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: _headers,
+        body: jsonEncode(body),
+      );
+      return _handleResponse(response);
+    } catch (e) {
+      if (e is ApiException) rethrow;
       throw ApiException('Network error: $e');
     }
   }

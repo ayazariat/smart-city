@@ -195,6 +195,14 @@ export default function TechnicianTaskDetailPage() {
     }
   };
 
+  const handleResolveClick = async () => {
+    if (proofPhotos.length === 0) {
+      showToast("Please add at least one proof photo", "error");
+      return;
+    }
+    await handleResolve();
+  };
+
   const getComplaintIdDisplay = (id: string) => {
     return `RC-${id.slice(-6)}`;
   };
@@ -264,14 +272,17 @@ export default function TechnicianTaskDetailPage() {
     textClass: "text-slate-700",
   };
 
+  // Check if this is a rejected resolution case
+  const isReworkNeeded = task.status === "IN_PROGRESS" && (task as any).resolutionRejectionReason;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
         title={`Task ${getComplaintIdDisplay(task._id || task.id || "")}`}
         onBackClick={handleBack}
         rightContent={
-          <span className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}>
-            {status.label}
+          <span className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${isReworkNeeded ? "bg-red-100 text-red-700" : status.bgClass} ${isReworkNeeded ? "" : status.textClass}`}>
+            {isReworkNeeded ? "REWORK NEEDED" : status.label}
           </span>
         }
       />
@@ -379,6 +390,24 @@ export default function TechnicianTaskDetailPage() {
                   <span className="text-xs mt-1 font-medium text-slate-600">Closed</span>
                 </div>
               </div>
+              
+              {/* REWORK NEEDED - Show when resolution was rejected */}
+              {(task as any).resolutionRejectionReason && (
+                <div className="mt-4 pt-4 border-t border-red-200">
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <h3 className="text-red-800 font-semibold flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-5 h-5" />
+                      Resolution Rejected - Action Required
+                    </h3>
+                    <p className="text-red-700 text-sm">
+                      {(task as any).resolutionRejectionReason}
+                    </p>
+                    <p className="text-red-600 text-xs mt-2">
+                      Please review the feedback and complete the work properly before resubmitting.
+                    </p>
+                  </div>
+                </div>
+              )}
               
               {/* SLA Countdown */}
               {task.slaDeadline && (
@@ -638,12 +667,16 @@ export default function TechnicianTaskDetailPage() {
             </Button>
             <Button
               variant="primary"
-              onClick={handleResolve}
+              onClick={handleResolveClick}
               isLoading={actionLoading}
-              disabled={!resolveNote.trim() || resolveNote.trim().length < 10}
+              disabled={!resolveNote.trim() || resolveNote.trim().length < 10 || proofPhotos.length === 0}
               className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
             >
-              Confirm Resolution
+              {proofPhotos.length === 0 
+                ? "Add proof photo required" 
+                : resolveNote.trim().length < 10
+                  ? `${10 - resolveNote.trim().length} more chars needed`
+                  : "Confirm Resolution"}
             </Button>
           </>
         }
@@ -662,8 +695,12 @@ export default function TechnicianTaskDetailPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Proof Photos</label>
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-primary/40 transition-colors">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Proof Photos <span className="text-red-500">*</span>
+            </label>
+            <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${
+              proofPhotos.length > 0 ? "border-green-300 bg-green-50" : "border-slate-200 hover:border-primary/40"
+            }`}>
               <input
                 type="file"
                 multiple
