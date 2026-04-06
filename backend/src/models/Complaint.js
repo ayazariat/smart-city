@@ -95,7 +95,7 @@ const complaintSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: {
       type: String,
-      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"],
+      enum: ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"],
       default: "OTHER",
     },
     status: {
@@ -250,6 +250,13 @@ const complaintSchema = new mongoose.Schema(
       upvotedAt: { type: Date, default: Date.now }
     }],
     upvoteCount: { type: Number, default: 0, min: 0 },
+    // AI fields for BL-24, BL-25, BL-37
+    aiUrgencyPrediction: { type: Object, default: null },
+    aiPredictedUrgency: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', null], default: null },
+    aiDuplicateCheck: { type: Object, default: null },
+    duplicateStatus: { type: String, enum: ['NOT_DUPLICATE', 'POSSIBLE_DUPLICATE', 'PROBABLE_DUPLICATE', 'CONFIRMED_DUPLICATE', null], default: null },
+    duplicateOf: { type: mongoose.Schema.Types.ObjectId, ref: 'Complaint', default: null },
+    finalUrgencyHuman: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', null], default: null },
   },
   { timestamps: true }
 );
@@ -338,8 +345,13 @@ complaintSchema.methods.calculateSLAStatus = function() {
 // Pre-save hook to update SLA status
 complaintSchema.pre('save', async function() {
   if (this.slaDeadline) {
-    const slaStatus = this.calculateSLAStatus();
-    this.slaStatus = slaStatus.status;
+    // If complaint is resolved or closed, mark SLA as completed
+    if (this.status === 'RESOLVED' || this.status === 'CLOSED') {
+      this.slaStatus = 'COMPLETED';
+    } else {
+      const slaStatus = this.calculateSLAStatus();
+      this.slaStatus = slaStatus.status;
+    }
   }
 });
 

@@ -45,8 +45,83 @@ import {
   ChevronDown,
   Phone,
   Mail,
-  Star
+  Star,
+  FileText,
+  Shield,
+  Calendar
 } from "lucide-react";
+
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, ComposedChart, Line, CartesianGrid, XAxis, YAxis, Bar, BarChart, Legend } from "recharts";
+
+const getPhotoUrl = (complaint: ComplaintItem): string | null => {
+  const mediaItem = complaint.media?.[0];
+  if (!mediaItem) return null;
+  const url = typeof mediaItem === 'string' ? mediaItem : mediaItem.url;
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('//')) return 'https:' + url;
+  const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD;
+  if (cloud && !url.includes('/')) {
+    return `https://res.cloudinary.com/${cloud}/image/upload/${url}`;
+  }
+  return url;
+};
+
+const governoratePhotos: Record<string, string> = {
+  "Tunis": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/Tunisia_Medina_of_Tunis.jpg/800px-Tunisia_Medina_of_Tunis.jpg",
+  "Sfax": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Sfax_medina.jpg/800px-Sfax_medina.jpg",
+  "Sousse": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Ribat_of_Sousse.jpg/800px-Ribat_of_Sousse.jpg",
+  "Nabeul": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Nabeul_pottery.jpg/800px-Nabeul_pottery.jpg",
+  "Monastir": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Monastir_Ribat.jpg/800px-Monastir_Ribat.jpg",
+  "Bizerte": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Bizerte_harbor.jpg/800px-Bizerte_harbor.jpg",
+  "Kairouan": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Great_Mosque_of_Kairouan.jpg/800px-Great_Mosque_of_Kairouan.jpg",
+  "Gabès": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Gabes_ochre_city.jpg/800px-Gabes_ochre_city.jpg",
+  "Médenine": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Djerba_Houmt_Souk.jpg/800px-Djerba_Houmt_Souk.jpg",
+  "Ariana": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Ariana_Saida.jpg/800px-Ariana_Saida.jpg",
+  "Ben Arous": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Ben_Arous_Mornag.jpg/800px-Ben_Arous_Mornag.jpg",
+  "Manouba": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Manouba_university.jpg/800px-Manouba_university.jpg",
+  "Béja": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Beja_Casbah.jpg/800px-Beja_Casbah.jpg",
+  "Gafsa": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Gafsa_oasis.jpg/800px-Gafsa_oasis.jpg",
+  "Jendouba": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Tabarka_Aerial.jpg/800px-Tabarka_Aerial.jpg",
+  "Kasserine": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Kasserine_Mountains.jpg/800px-Kasserine_Mountains.jpg",
+  "Kébili": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Douz_oasis.jpg/800px-Douz_oasis.jpg",
+  "Le Kef": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3b/Le_Kef_Casbah.jpg/800px-Le_Kef_Casbah.jpg",
+  "Mahdia": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Mahdia_Coast.jpg/800px-Mahdia_Coast.jpg",
+  "Sidi Bouzid": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Sidi_Bouzid_City.jpg/800px-Sidi_Bouzid_City.jpg",
+  "Siliana": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Siliana_Forest.jpg/800px-Siliana_Forest.jpg",
+  "Tataouine": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Tataouine_Ksar.jpg/800px-Tataouine_Ksar.jpg",
+  "Tozeur": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Tozeur_Palm_Groves.jpg/800px-Tozeur_Palm_Groves.jpg",
+  "Zaghouan": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Zaghouan_Mountain.jpg/800px-Zaghouan_Mountain.jpg",
+  "default": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/Tunisia_Medina_of_Tunis.jpg/800px-Tunisia_Medina_of_Tunis.jpg"
+};
+
+const governorateGradients: Record<string, string> = {
+  "Tunis": "from-blue-900 to-blue-800",
+  "Sfax": "from-amber-900 to-amber-800",
+  "Sousse": "from-cyan-900 to-cyan-800",
+  "Nabeul": "from-orange-900 to-orange-800",
+  "Monastir": "from-indigo-900 to-indigo-800",
+  "Bizerte": "from-slate-900 to-slate-800",
+  "Kairouan": "from-purple-900 to-purple-800",
+  "Gabès": "from-yellow-900 to-yellow-800",
+  "Médenine": "from-teal-900 to-teal-800",
+  "Ariana": "from-green-900 to-green-800",
+  "Ben Arous": "from-lime-900 to-lime-800",
+  "Manouba": "from-emerald-900 to-emerald-800",
+  "Béja": "from-rose-900 to-rose-800",
+  "Gafsa": "from-amber-800 to-orange-900",
+  "Jendouba": "from-green-800 to-emerald-900",
+  "Kasserine": "from-stone-900 to-stone-800",
+  "Kébili": "from-yellow-800 to-amber-900",
+  "Le Kef": "from-zinc-900 to-zinc-800",
+  "Mahdia": "from-sky-900 to-sky-800",
+  "Sidi Bouzid": "from-neutral-900 to-neutral-800",
+  "Siliana": "from-red-900 to-red-800",
+  "Tataouine": "from-orange-800 to-red-900",
+  "Tozeur": "from-yellow-700 to-orange-800",
+  "Zaghouan": "from-cyan-800 to-blue-900",
+  "default": "from-green-900 to-green-800"
+};
 
 interface Stats {
   total: number;
@@ -57,6 +132,13 @@ interface Stats {
   atRisk: number;
   resolutionRate: number;
   avgResolutionDays: number;
+  slaComplianceRate: number;
+  // Trends vs previous period
+  totalTrend: number;
+  resolvedTrend: number;
+  resolutionRateTrend: number;
+  avgResolutionTrend: number;
+  slaComplianceTrend: number;
 }
 
 interface CategoryStats {
@@ -74,6 +156,15 @@ interface MunicipalityStats {
   rank: number;
   tma: number;
   overdue: number;
+  slaCompliance?: number;
+  trend?: number;
+}
+
+interface MonthlyTrend {
+  month: string;
+  submitted: number;
+  resolved: number;
+  avgResolutionDays: number;
 }
 
 interface ComplaintItem {
@@ -126,6 +217,7 @@ export default function TransparencyPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [categoryStats, setCategoryStats] = useState<Record<string, CategoryStats>>({});
   const [municipalityStats, setMunicipalityStats] = useState<MunicipalityStats[]>([]);
+  const [monthlyTrends, setMonthlyTrends] = useState<MonthlyTrend[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [filteredComplaints, setFilteredComplaints] = useState<ComplaintItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +228,10 @@ export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [expandedComplaint, setExpandedComplaint] = useState<string | null>(null);
+  const [zoneStats, setZoneStats] = useState<Record<string, Record<string, number>>>({});
+  const [recurringIssues, setRecurringIssues] = useState<Array<{title: string; category: string; count: number; resolvedCount: number}>>([]);
+  const [allMunicipalityStats, setAllMunicipalityStats] = useState<Array<{name: string; governorate: string; total: number; resolved: number; rate: number}>>([]);
+  const [selectedGovernorate, setSelectedGovernorate] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const tabs: TabDefinition[] = [
@@ -151,17 +247,25 @@ export default function TransparencyPage() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       
-      const [statsRes, catRes, munRes, complaintsRes] = await Promise.all([
+      const [statsRes, catRes, munRes, trendsRes, complaintsRes, zoneRes, recurringRes, allMunRes] = await Promise.all([
         fetch(`${apiUrl}/public/stats?period=${period}`),
         fetch(`${apiUrl}/public/stats/by-category?period=${period}`),
         fetch(`${apiUrl}/public/stats/by-municipality?period=${period}`),
-        fetch(`${apiUrl}/public/complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`)
+        fetch(`${apiUrl}/public/stats/monthly-trends?months=6`),
+        fetch(`${apiUrl}/public/complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`),
+        fetch(`${apiUrl}/public/stats/by-zone?period=${period}`),
+        fetch(`${apiUrl}/public/top-recurring?limit=5`),
+        fetch(`${apiUrl}/public/stats/all-municipalities?period=${period}`)
       ]);
 
       const statsData = await statsRes.json();
       const catData = await catRes.json();
       const munData = await munRes.json();
+      const trendsData = await trendsRes.json();
       const complaintsData = await complaintsRes.json();
+      const zoneData = await zoneRes.json();
+      const recurringData = await recurringRes.json();
+      const allMunData = await allMunRes.json();
 
       if (statsData.success) {
         setStats({
@@ -173,6 +277,10 @@ export default function TransparencyPage() {
       if (catData.success) {
         setCategoryStats(catData.data);
       }
+
+      if (trendsData.success) {
+        setMonthlyTrends(trendsData.data);
+      }
       
       if (munData.success) {
         const rankedMun = (munData.data as ApiMunicipalityStat[]).map((m, idx) => ({
@@ -182,6 +290,23 @@ export default function TransparencyPage() {
           overdue: Math.floor(m.total * (1 - m.rate / 100) * 0.2)
         }));
         setMunicipalityStats(rankedMun.slice(0, 12));
+      }
+
+      if (zoneData.success && zoneData.data) {
+        const zoneObj: Record<string, Record<string, number>> = {};
+        for (const z of zoneData.data) {
+          const { governorate, ...rest } = z;
+          zoneObj[governorate] = rest;
+        }
+        setZoneStats(zoneObj);
+      }
+
+      if (recurringData.success && recurringData.data) {
+        setRecurringIssues(recurringData.data);
+      }
+
+      if (allMunData.success && allMunData.data) {
+        setAllMunicipalityStats(allMunData.data);
       }
       
       if (complaintsData.success && complaintsData.data?.complaints) {
@@ -240,9 +365,13 @@ export default function TransparencyPage() {
     setFilteredComplaints(filtered);
   }, [searchQuery, categoryFilter, complaints, activeTab]);
 
-  const handleUpvote = async (complaintId: string) => {
+  const handleUpvote = async (complaintId: string, status?: string) => {
+    // Only allow upvote for VALIDATED or ASSIGNED complaints
+    if (status && status !== "VALIDATED" && status !== "ASSIGNED") {
+      return;
+    }
     if (!token) {
-      router.push(`/login?redirect=/dashboard/complaints/${complaintId}`);
+      router.push(`/login?redirect=/transparency`);
       return;
     }
     try {
@@ -442,30 +571,153 @@ export default function TransparencyPage() {
                   </div>
 
                   {stats && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                       {[
-                        { label: "Total Complaints", value: stats.total, icon: BarChart3, color: "blue" },
-                        { label: "Resolved", value: stats.resolved, icon: CheckCircle2, color: "green", suffix: `${stats.resolutionRate}%` },
-                        { label: "In Progress", value: stats.inProgress, icon: Clock, color: "amber" },
-                        { label: "At Risk", value: stats.atRisk, icon: AlertTriangle, color: "orange" },
-                        { label: "Overdue", value: stats.overdue, icon: Flame, color: "red" },
-                        { label: "Avg Time", value: `${stats.avgResolutionDays}d`, icon: Timer, color: "purple", isText: true }
+                        { label: "Total Complaints", value: stats.total, icon: FileText, color: "bg-blue-100 text-blue-600", trend: stats.totalTrend },
+                        { label: "Resolved", value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
+                        { label: "In Progress", value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
+                        { label: "Avg Time", value: `${stats.avgResolutionDays}d`, icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
+                        { label: "SLA OK", value: `${stats.slaComplianceRate || 0}%`, icon: Shield, color: "bg-teal-100 text-teal-600", trend: stats.slaComplianceTrend }
                       ].map((stat, idx) => (
                         <div 
                           key={stat.label}
-                          className="bg-slate-50 rounded-2xl p-4 border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+                          className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 shadow-sm"
                           style={{ animationDelay: `${idx * 50}ms` }}
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-slate-500 text-xs">{stat.label}</span>
-                            <stat.icon className={`w-4 h-4 text-${stat.color}-500`} />
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-slate-500 text-xs font-medium">{stat.label}</span>
+                            <div className={`w-10 h-10 rounded-full ${stat.color} flex items-center justify-center`}>
+                              <stat.icon className="w-5 h-5" />
+                            </div>
                           </div>
-                          <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
-                          {stat.suffix && <p className="text-xs text-green-600 mt-1 font-medium">{stat.suffix} success</p>}
+                          <p className="text-3xl font-extrabold text-slate-800">{stat.value}</p>
+                          {stat.suffix && <p className="text-xs text-green-600 mt-1 font-semibold">{stat.suffix} success</p>}
+                          {stat.trend !== undefined && (
+                            <div className={`flex items-center gap-1 mt-2 text-xs ${stat.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {stat.trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                              <span className="font-medium">{stat.trend >= 0 ? '+' : ''}{stat.trend}%</span>
+                              <span className="text-slate-400">vs last</span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
+
+                  {/* Resolution Rate Donut Chart - Improved */}
+                  {stats && (
+                    <div className="mt-8 pt-6 border-t border-slate-100">
+                      <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                        <Target className="w-5 h-5 text-green-600" />
+                        Resolution Rate Overview
+                      </h3>
+                      <div className="flex items-center justify-center gap-12">
+                        <div className="w-56 h-56 min-w-[224px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  { name: 'Resolved', value: stats.resolved, color: '#22c55e' },
+                                  { name: 'In Progress', value: stats.inProgress, color: '#f59e0b' },
+                                  { name: 'Pending', value: stats.pending || 0, color: '#64748b' },
+                                  { name: 'Overdue', value: stats.overdue || 0, color: '#dc2626' }
+                                ]}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={55}
+                                outerRadius={90}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {[
+                                  { name: 'Resolved', value: stats.resolved, color: '#22c55e' },
+                                  { name: 'In Progress', value: stats.inProgress, color: '#f59e0b' },
+                                  { name: 'Pending', value: stats.pending || 0, color: '#64748b' },
+                                  { name: 'Overdue', value: stats.overdue || 0, color: '#dc2626' }
+                                ].map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        {/* Legend with counts */}
+                        <div className="space-y-3">
+                          {[
+                            { label: 'Resolved', value: stats.resolved, color: '#22c55e', bg: 'bg-green-100' },
+                            { label: 'In Progress', value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' },
+                            { label: 'Pending', value: stats.pending || 0, color: '#64748b', bg: 'bg-slate-100' },
+                            { label: 'Overdue', value: stats.overdue || 0, color: '#dc2626', bg: 'bg-red-100' }
+                          ].map((item) => (
+                            <div key={item.label} className="flex items-center gap-3">
+                              <div className={`w-4 h-4 rounded-full ${item.bg}`} style={{ backgroundColor: item.color }} />
+                              <span className="text-sm text-slate-600">{item.label}</span>
+                              <span className="text-sm font-bold text-slate-800">{item.value}</span>
+                            </div>
+                          ))}
+                          <div className="pt-3 border-t">
+                            <p className="text-sm font-bold text-green-600">
+                              {stats.resolutionRate}% Resolution Rate
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Complaints by Category - List with Progress Bars */}
+                  <div className="mt-8 pt-6 border-t border-slate-100">
+                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-green-600" />
+                      Complaints by Category
+                    </h3>
+                    <div className="space-y-4">
+                      {Object.entries(categoryStats)
+                        .sort((a, b) => b[1].total - a[1].total)
+                        .map(([cat, data]) => {
+                          const maxTotal = Math.max(...Object.values(categoryStats).map(d => d.total));
+                          const percentage = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
+                          
+                          const categoryColors: Record<string, string> = {
+                            WASTE: "from-green-500 to-green-600",
+                            ROAD: "from-gray-600 to-gray-700",
+                            LIGHTING: "from-yellow-500 to-yellow-600",
+                            WATER: "from-blue-500 to-blue-600",
+                            SAFETY: "from-red-500 to-red-600",
+                            PUBLIC_PROPERTY: "from-purple-500 to-purple-600",
+                            GREEN_SPACE: "from-emerald-500 to-emerald-600",
+                            OTHER: "from-slate-500 to-slate-600",
+                          };
+                          const colorClass = categoryColors[cat] || "from-primary to-primary-700";
+                          
+                          return (
+                            <div key={cat} className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium text-slate-700 flex items-center gap-2">
+                                  <span className={`w-3 h-3 rounded-full bg-gradient-to-r ${colorClass}`} />
+                                  {categoryLabels[cat] || cat}
+                                </span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-bold text-slate-800">{data.total}</span>
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                    data.rate >= 70 ? 'bg-green-100 text-green-700' : data.rate >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {data.rate || 0}% resolved
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
+                                <div 
+                                  className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Featured Complaints Section */}
@@ -485,21 +737,26 @@ export default function TransparencyPage() {
                   </div>
                   
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {topComplaints.slice(0, 6).map((complaint, idx) => (
+                    {topComplaints.slice(0, 6).map((complaint, idx) => {
+                      const photoUrl = getPhotoUrl(complaint);
+                      return (
                       <div 
                         key={complaint._id}
-                        className="group bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all"
+                        className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer"
                       >
-                        <div className="relative h-32 bg-gradient-to-br from-slate-100 to-slate-50">
-                          {complaint.media?.[0]?.url ? (
+                        <div className="relative h-40 bg-gradient-to-br from-green-50 to-slate-50">
+                          {photoUrl ? (
                             <img 
-                              src={complaint.media[0].url} 
+                              src={photoUrl} 
                               alt={complaint.title}
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-10 h-10 text-slate-300" />
+                            <div className="w-full h-full flex items-center justify-center bg-green-50">
+                              <ImageIcon className="w-10 h-10 text-green-300" />
                             </div>
                           )}
                           <div className="absolute top-2 left-2">
@@ -518,160 +775,344 @@ export default function TransparencyPage() {
                             </span>
                           </div>
                         </div>
-                        <div className="p-3">
-                          <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2">{complaint.title}</h4>
-                          <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
+                        <div className="p-4">
+                          <h4 className="font-semibold text-slate-800 text-sm mb-2 line-clamp-2">{complaint.title}</h4>
+                          <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-green-500" />
                             {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
                           </p>
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleConfirm(complaint._id)}
-                                className="flex items-center gap-1 px-2 py-1 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-xs text-green-600 font-medium transition-colors"
+                                className="flex items-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 border border-green-200 rounded-full text-xs text-green-600 font-medium transition-colors"
                               >
                                 <Check className="w-3 h-3" />
                                 {complaint.confirmationCount || 0}
                               </button>
                               <button
-                                onClick={() => handleUpvote(complaint._id)}
-                                className="flex items-center gap-1 px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-xs text-red-500 font-medium transition-colors"
+                                onClick={() => handleUpvote(complaint._id, complaint.status)}
+                                disabled={complaint.status !== "VALIDATED" && complaint.status !== "ASSIGNED"}
+                                className={`flex items-center gap-1 px-3 py-1.5 border rounded-full text-xs font-medium transition-colors ${
+                                  complaint.status === "VALIDATED" || complaint.status === "ASSIGNED"
+                                    ? "bg-pink-50 hover:bg-pink-100 border-pink-200 text-pink-500"
+                                    : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                                }`}
                               >
                                 <Heart className="w-3 h-3" />
                                 {complaint.upvoteCount || 0}
                               </button>
                             </div>
+                            <Eye className="w-4 h-4 text-slate-400" />
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
 
-                <div className="grid lg:grid-cols-3 gap-8">
-                  {/* Municipal Leaderboard */}
-                  <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
-                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                      <Trophy className="w-5 h-5 text-amber-500" />
-                      Municipal Leaderboard
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-100">
-                            <th className="text-left py-3 px-3 text-slate-500 font-medium">Rank</th>
-                            <th className="text-left py-3 px-3 text-slate-500 font-medium">Municipality</th>
-                            <th className="text-right py-3 px-3 text-slate-500 font-medium">Resolution</th>
-                            <th className="text-right py-3 px-3 text-slate-500 font-medium">TMA</th>
-                            <th className="text-right py-3 px-3 text-slate-500 font-medium">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {municipalityStats.map((mun) => (
-                            <tr key={mun.name} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                              <td className="py-3 px-3">
-                                <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                                  mun.rank === 1 ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-                                  mun.rank === 2 ? 'bg-slate-100 text-slate-600 border border-slate-200' :
-                                  mun.rank === 3 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                                  'bg-slate-50 text-slate-500'
-                                }`}>
-                                  {mun.rank}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 font-medium text-slate-700">{mun.name}</td>
-                              <td className="py-3 px-3 text-right">
-                                <span className={`font-semibold ${
+                {/* Municipal Leaderboard */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    Municipal Leaderboard
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-green-50">
+                          <th className="text-left py-3 px-3 text-green-700 font-medium">Rank</th>
+                          <th className="text-left py-3 px-3 text-green-700 font-medium">Municipality</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">Total</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">Resolved</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">Avg Time</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">SLA OK</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {municipalityStats.map((mun) => (
+                          <tr key={mun.name} className="border-b border-slate-50 hover:bg-green-50/50 transition-colors">
+                            <td className="py-3 px-3">
+                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                                mun.rank === 1 ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                mun.rank === 2 ? 'bg-slate-100 text-slate-600 border border-slate-200' :
+                                mun.rank === 3 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                                'bg-slate-50 text-slate-500'
+                              }`}>
+                                {mun.rank}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 font-medium text-slate-700">{mun.name}</td>
+                            <td className="py-3 px-3 text-right text-slate-600">{mun.total}</td>
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${
+                                      mun.rate >= 70 ? 'bg-green-500' : mun.rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${mun.rate}%` }}
+                                  />
+                                </div>
+                                <span className={`font-semibold w-10 text-right ${
                                   mun.rate >= 70 ? 'text-green-600' : mun.rate >= 50 ? 'text-amber-600' : 'text-red-600'
                                 }`}>
                                   {mun.rate}%
                                 </span>
-                              </td>
-                              <td className="py-3 px-3 text-right text-slate-600">{mun.tma}d</td>
-                              <td className="py-3 px-3 text-right text-slate-500">{mun.total}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Category Stats */}
-                  <div id="categories" className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl scroll-mt-40">
-                    <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                      <Target className="w-5 h-5 text-green-600" />
-                      Category Performance
-                    </h3>
-                    <div className="space-y-4">
-                      {Object.entries(categoryStats)
-                        .filter(([, data]) => data.total > 0)
-                        .slice(0, 6)
-                        .map(([cat, data]) => (
-                          <div key={cat} className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-medium text-slate-700">
-                                {categoryLabels[cat] || cat}
-                              </span>
-                              <span className={`font-bold ${
-                                data.rate >= 70 ? 'text-green-600' : data.rate >= 50 ? 'text-amber-600' : 'text-red-600'
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-right text-slate-600">
+                              <span className={`${
+                                mun.tma <= 3 ? 'text-green-600' : mun.tma <= 7 ? 'text-amber-600' : 'text-red-600'
                               }`}>
-                                {data.rate}%
+                                {mun.tma}d
                               </span>
-                            </div>
-                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full ${
-                                  data.rate >= 70 ? 'bg-green-500' : data.rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: `${data.rate}%` }}
-                              />
-                            </div>
-                            <div className="flex justify-between text-xs text-slate-400">
-                              <span>{data.total} total</span>
-                              <span>{data.resolved} resolved</span>
-                            </div>
-                          </div>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${
+                                      (mun.slaCompliance || 0) >= 70 ? 'bg-green-500' : (mun.slaCompliance || 0) >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${mun.slaCompliance || mun.rate}%` }}
+                                  />
+                                </div>
+                                <span className={`font-semibold w-10 text-right ${
+                                  (mun.slaCompliance || mun.rate) >= 70 ? 'text-green-600' : (mun.slaCompliance || mun.rate) >= 50 ? 'text-amber-600' : 'text-red-600'
+                                }`}>
+                                  {mun.slaCompliance || mun.rate}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
                         ))}
-                    </div>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                {/* Interactive Map */}
+                {/* Monthly Trends Chart */}
                 <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
                   <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <MapPinned className="w-5 h-5 text-blue-500" />
-                    Governorate Overview
+                    <TrendingUp className="w-5 h-5 text-green-600" />
+                    Monthly Trends (Last 6 Months)
                   </h3>
-                  <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+                  {monthlyTrends.length > 0 ? (
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={monthlyTrends}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="month" tick={{fontSize: 12}} stroke="#64748b" />
+                          <YAxis tick={{fontSize: 12}} stroke="#64748b" />
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                          />
+                          <Legend />
+                          <Bar dataKey="submitted" name="Submitted" fill="#86efac" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="resolved" name="Resolved" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                          <Line type="monotone" dataKey="resolved" name="Resolved" stroke="#15803d" strokeWidth={2} dot={{fill: '#15803d', r: 4}} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <TrendingUp className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-400">No trend data available yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Stacked Bar Chart - Governorates by Category */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-green-600" />
+                    Governorates by Category
+                  </h3>
+                  {Object.keys(zoneStats).length > 0 && Object.values(zoneStats).some(v => Object.values(v).reduce((a, b) => a + b, 0) > 0) ? (
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[600px]">
+                        <div className="flex items-center mb-2 ml-24">
+                          <div className="flex-1 grid grid-cols-8 gap-1 text-xs text-center">
+                            {["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"].map((cat) => (
+                              <span key={cat} className="truncate" title={categoryLabels[cat] || cat}>
+                                {categoryLabels[cat]?.split(" ")[0] || cat}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {Object.entries(zoneStats).filter(([, categories]) => Object.values(categories).reduce((a, b) => a + b, 0) > 0).slice(0, 10).map(([gov, categories]) => {
+                            const total = Object.values(categories).reduce((a, b) => a + b, 0);
+                            if (total === 0) return null;
+                            const categoryColorsArr = ["bg-green-500", "bg-gray-600", "bg-yellow-500", "bg-blue-500", "bg-red-500", "bg-purple-500", "bg-emerald-500", "bg-slate-500"];
+                            return (
+                              <div key={gov} className="flex items-center gap-2">
+                                <span className="w-20 text-xs font-medium text-slate-600 truncate" title={gov}>{gov}</span>
+                                <div className="flex-1 h-7 bg-slate-100 rounded-lg overflow-hidden flex">
+                                  {Object.entries(categories).map(([cat, count], idx) => {
+                                    if (count === 0) return null;
+                                    const width = (count / total) * 100;
+                                    return (
+                                      <div
+                                        key={cat}
+                                        className={`${categoryColorsArr[idx]} transition-all hover:opacity-80`}
+                                        style={{ width: `${width}%` }}
+                                        title={`${categoryLabels[cat] || cat}: ${count}`}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                                <span className="w-8 text-xs font-bold text-slate-700 text-right">{total}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t">
+                          {["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"].map((cat, idx) => (
+                            <div key={cat} className="flex items-center gap-1">
+                              <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: ["#22c55e", "#4b5563", "#eab308", "#3b82f6", "#ef4444", "#a855f7", "#10b981", "#64748b"][idx] }} />
+                              <span className="text-xs text-slate-600">{categoryLabels[cat]?.split(" ")[0] || cat}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <BarChart3 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-400">No zone data available yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Top Recurring Issues - Improved */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                    Top Recurring Issues
+                  </h3>
+                  {recurringIssues.length > 0 ? (
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {recurringIssues.map((issue, idx) => (
+                        <div 
+                          key={idx} 
+                          className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-100 hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer"
+                          onClick={() => { setSearchQuery(issue.title.split(' ').slice(0, 3).join(' ')); setActiveTab("complaints"); }}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                issue.resolvedCount > 0 ? 'bg-green-100' : 'bg-amber-100'
+                              }`}>
+                                <AlertTriangle className={`w-4 h-4 ${issue.resolvedCount > 0 ? 'text-green-600' : 'text-amber-600'}`} />
+                              </div>
+                              <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                issue.resolvedCount > 0 ? 'bg-green-500 text-white' : 'bg-amber-500 text-white'
+                              }`}>
+                                {issue.resolvedCount}/{issue.count}
+                              </span>
+                            </div>
+                            <span className="text-3xl font-extrabold text-slate-800">{issue.count}</span>
+                          </div>
+                          <h4 className="font-semibold text-slate-800 text-sm mb-2 line-clamp-2">{issue.title}</h4>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs px-2 py-1 bg-white rounded-lg text-slate-600 border">
+                              {categoryLabels[issue.category] || issue.category}
+                            </span>
+                            <span className="text-xs text-green-600 font-medium">
+                              {issue.resolvedCount > 0 ? 'Partially resolved' : 'Needs attention'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <AlertTriangle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-400">No recurring issues found yet</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Interactive Map with Category Markers */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                      <MapPinned className="w-5 h-5 text-green-600" />
+                      Governorate Overview
+                    </h3>
+                    <select
+                      value={categoryFilter}
+                      onChange={(e) => setCategoryFilter(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700"
+                    >
+                      <option value="">All Categories</option>
+                      {Object.entries(categoryLabels).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                     {TUNISIA_GEOGRAPHY.slice(0, 16).map((gov) => {
                       const govStats = municipalityStats.filter(m => 
                         ALL_MUNICIPALITIES.find(am => am.name === m.name && am.governorate === gov.governorate)
                       );
-                      const total = govStats.reduce((sum, m) => sum + m.total, 0) || Math.floor(Math.random() * 100);
+                      const zoneData = zoneStats[gov.governorate] || {};
+                      
+                      let total = 0;
+                      let filteredCount = 0;
+                      if (categoryFilter && zoneData[categoryFilter] !== undefined) {
+                        filteredCount = zoneData[categoryFilter];
+                        total = filteredCount;
+                      } else {
+                        total = govStats.reduce((sum, m) => sum + m.total, 0) || Object.values(zoneData).reduce((a, b) => a + b, 0);
+                      }
+                      
                       const rate = govStats.length > 0 
                         ? Math.round(govStats.reduce((sum, m) => sum + m.rate, 0) / govStats.length)
                         : Math.floor(Math.random() * 40 + 50);
                       
+                      const intensity = total > 0 ? Math.min(total / 30, 1) : 0;
+                      
                       return (
                         <div 
                           key={gov.governorate}
-                          className={`p-3 rounded-xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-1 ${
-                            rate >= 70 ? 'bg-green-50 border-green-200 hover:border-green-300' :
-                            rate >= 50 ? 'bg-amber-50 border-amber-200 hover:border-amber-300' :
-                            'bg-red-50 border-red-200 hover:border-red-300'
-                          }`}
+                          className="p-2 rounded-xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-1"
+                          style={{ 
+                            backgroundColor: categoryFilter 
+                              ? `rgba(34, 197, 94, ${0.1 + intensity * 0.6})`
+                              : rate >= 70 ? 'bg-green-50 border-green-200 hover:border-green-300' :
+                                rate >= 50 ? 'bg-amber-50 border-amber-200 hover:border-amber-300' :
+                                total > 0 ? 'bg-red-50 border-red-200 hover:border-red-300' :
+                                'bg-slate-50 border-slate-200',
+                            borderColor: rate >= 70 ? 'rgba(34, 197, 94, 0.4)' : rate >= 50 ? 'rgba(245, 158, 11, 0.4)' : total > 0 ? 'rgba(239, 68, 68, 0.4)' : 'rgba(148, 163, 184, 0.3)'
+                          }}
                         >
-                          <p className="font-semibold text-slate-800 text-xs">{gov.governorate}</p>
-                          <p className="text-xs text-slate-500">{total} complaints</p>
-                          <p className={`text-sm font-bold mt-1 ${
-                            rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'
-                          }`}>
-                            {rate}%
-                          </p>
+                          <p className="font-semibold text-slate-800 text-xs truncate">{gov.governorate}</p>
+                          <p className="text-xs text-slate-500">{total} {categoryFilter ? categoryLabels[categoryFilter]?.split(" ")[0] : "complaints"}</p>
+                          {categoryFilter && (
+                            <p className="text-xs font-bold text-green-700 mt-1">{filteredCount}</p>
+                          )}
+                          {!categoryFilter && (
+                            <p className={`text-xs font-bold mt-1 ${
+                              rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : total > 0 ? 'text-red-600' : 'text-slate-400'
+                            }`}>
+                              {rate > 0 ? `${rate}%` : '—'}
+                            </p>
+                          )}
                         </div>
                       );
                     })}
                   </div>
+                  {!categoryFilter && (
+                    <div className="mt-4 pt-3 border-t flex items-center justify-center gap-4 text-xs text-slate-500">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Good (70%+)</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Moderate (50-70%)</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Needs Attention (&lt;50%)</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -721,6 +1162,7 @@ export default function TransparencyPage() {
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredComplaints.map((complaint) => {
                       const isExpanded = expandedComplaint === complaint._id;
+                      const photoUrl = getPhotoUrl(complaint);
                       return (
                       <div 
                         key={complaint._id}
@@ -728,16 +1170,19 @@ export default function TransparencyPage() {
                         onClick={() => setExpandedComplaint(isExpanded ? null : complaint._id)}
                       >
                         {/* Image */}
-                        <div className="relative h-40 bg-gradient-to-br from-slate-100 to-slate-50">
-                          {complaint.media?.[0]?.url ? (
+                        <div className="relative h-40 bg-gradient-to-br from-green-50 to-slate-50">
+                          {photoUrl ? (
                             <img 
-                              src={complaint.media[0].url} 
+                              src={photoUrl} 
                               alt={complaint.title}
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-12 h-12 text-slate-300" />
+                            <div className="w-full h-full flex items-center justify-center bg-green-50">
+                              <ImageIcon className="w-12 h-12 text-green-300" />
                             </div>
                           )}
                           <div className="absolute top-3 left-3">
@@ -760,7 +1205,10 @@ export default function TransparencyPage() {
                         {/* Content */}
                         <div className="p-4">
                           <h4 className="font-semibold text-slate-800 mb-2 line-clamp-2">{complaint.title}</h4>
-                          <p className={`text-xs text-slate-500 mb-3 ${isExpanded ? '' : 'line-clamp-2'}`}>{complaint.description}</p>
+                          <p className={`text-xs text-slate-500 mb-3 ${isExpanded ? '' : 'line-clamp-2'}`}>
+                            {/* Remove phone numbers from public display */}
+                            {(complaint.description || "").replace(/Contact phone:[\s\d+]+/gi, "").trim() || "No description"}
+                          </p>
                           <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
                             {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
@@ -808,8 +1256,13 @@ export default function TransparencyPage() {
                                 Confirm ({complaint.confirmationCount || 0})
                               </button>
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleUpvote(complaint._id); }}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-xs text-red-500 font-medium transition-colors"
+                                onClick={(e) => { e.stopPropagation(); handleUpvote(complaint._id, complaint.status); }}
+                                disabled={complaint.status !== "VALIDATED" && complaint.status !== "ASSIGNED"}
+                                className={`flex items-center gap-1 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                                  complaint.status === "VALIDATED" || complaint.status === "ASSIGNED"
+                                    ? "bg-red-50 hover:bg-red-100 border-red-200 text-red-500"
+                                    : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                                }`}
                               >
                                 <Heart className="w-3 h-3" />
                                 Upvote ({complaint.upvoteCount || 0})
@@ -872,8 +1325,13 @@ export default function TransparencyPage() {
                               {complaint.confirmationCount || 0}
                             </button>
                             <button
-                              onClick={() => handleUpvote(complaint._id)}
-                              className="flex items-center gap-1 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-sm text-red-500 font-medium transition-colors"
+                              onClick={() => handleUpvote(complaint._id, complaint.status)}
+                              disabled={complaint.status !== "VALIDATED" && complaint.status !== "ASSIGNED"}
+                              className={`flex items-center gap-1 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                                complaint.status === "VALIDATED" || complaint.status === "ASSIGNED"
+                                  ? "bg-red-50 hover:bg-red-100 border-red-200 text-red-500"
+                                  : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                              }`}
                             >
                               <Heart className="w-4 h-4" />
                               {complaint.upvoteCount || 0}
@@ -898,18 +1356,28 @@ export default function TransparencyPage() {
             {activeTab === "municipalities" && (
               <div id="municipalities" className="space-y-6 animate-fadeIn scroll-mt-40">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200/50 shadow-xl">
-                  <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <Globe className="w-5 h-5 text-blue-500" />
-                    All Municipalities in Tunisia
-                  </h3>
-                  <p className="text-sm text-slate-500 mb-6">
-                    Browse all {ALL_MUNICIPALITIES.length} municipalities across {TUNISIA_GEOGRAPHY.length} governorates
-                  </p>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                        <Globe className="w-5 h-5 text-green-600" />
+                        All Municipalities in Tunisia
+                      </h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Browse all {ALL_MUNICIPALITIES.length} municipalities across {TUNISIA_GEOGRAPHY.length} governorates
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 px-3 py-1.5 bg-green-50 rounded-lg text-xs text-green-700">
+                        <BarChart3 className="w-3 h-3" />
+                        {allMunicipalityStats.filter(m => m.total > 0).length} active
+                      </div>
+                    </div>
+                  </div>
                   
                   {searchQuery && filteredMunicipalities.length > 0 ? (
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {filteredMunicipalities.map((mun) => {
-                        const munStats = municipalityStats.find(m => m.name === mun.name);
+                        const munStats = allMunicipalityStats.find(m => m.name === mun.name);
                         return (
                           <div 
                             key={`${mun.name}-${mun.governorate}`}
@@ -921,7 +1389,7 @@ export default function TransparencyPage() {
                                 <p className="font-semibold text-slate-800">{mun.name}</p>
                                 <p className="text-xs text-slate-500">{mun.governorate}</p>
                               </div>
-                              {munStats ? (
+                              {munStats && munStats.total > 0 ? (
                                 <div className="text-right">
                                   <span className={`text-sm font-bold ${
                                     munStats.rate >= 70 ? 'text-green-600' :
@@ -939,48 +1407,188 @@ export default function TransparencyPage() {
                         );
                       })}
                     </div>
+                  ) : selectedGovernorate ? (
+                    <div>
+                      <button 
+                        onClick={() => { setSelectedGovernorate(null); setSearchQuery(""); }}
+                        className="flex items-center gap-2 text-green-600 hover:text-green-700 mb-4 font-medium"
+                      >
+                        <ArrowRight className="w-4 h-4 rotate-180" />
+                        Back to Governorates
+                      </button>
+                      {(() => {
+                        const gov = TUNISIA_GEOGRAPHY.find(g => g.governorate === selectedGovernorate);
+                        if (!gov) return null;
+                        const govMunStats = allMunicipalityStats.filter(m => m.governorate === selectedGovernorate);
+                        const total = govMunStats.reduce((sum, m) => sum + m.total, 0);
+                        const resolved = govMunStats.reduce((sum, m) => sum + m.resolved, 0);
+                        const rate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+                        const photoUrl = governoratePhotos[selectedGovernorate] || governoratePhotos["default"];
+                        const gradientClass = governorateGradients[selectedGovernorate] || governorateGradients["default"];
+                        
+                        return (
+                          <div className="space-y-6">
+                            <div className="relative h-56 rounded-2xl overflow-hidden">
+                              <img 
+                                src={photoUrl} 
+                                alt={selectedGovernorate}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                  (e.target as HTMLImageElement).parentElement?.classList.add(...gradientClass.split(' '));
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                              <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between">
+                                <div>
+                                  <h2 className="text-3xl font-bold text-white mb-1">{selectedGovernorate}</h2>
+                                  <p className="text-white/80 text-sm">Governorate of Tunisia</p>
+                                </div>
+                              </div>
+                              <div className="absolute bottom-4 left-6 flex items-center gap-4">
+                                <span className="flex items-center gap-1 text-white/90 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-full">
+                                  <FileText className="w-4 h-4" />
+                                  {total} complaints
+                                </span>
+                                <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                                  rate >= 70 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                }`}>
+                                  {rate}% resolved
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                              <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                                <Trophy className="w-5 h-5" />
+                                Achievements
+                              </h4>
+                              <div className="grid grid-cols-3 gap-4">
+                                <div className="text-center">
+                                  <p className="text-2xl font-bold text-green-600">{resolved}</p>
+                                  <p className="text-xs text-green-700">Resolved</p>
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-2xl font-bold text-green-600">{rate}%</p>
+                                  <p className="text-xs text-green-700">Success Rate</p>
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-2xl font-bold text-green-600">{gov.municipalities.length}</p>
+                                  <p className="text-xs text-green-700">Municipalities</p>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <h4 className="font-semibold text-slate-800 mb-3">Municipalities in {selectedGovernorate}</h4>
+                              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {gov.municipalities.map((mun) => {
+                                  const munStat = allMunicipalityStats.find(m => m.name === mun);
+                                  const munTotal = munStat?.total || 0;
+                                  const munRate = munStat?.rate || 0;
+                                  return (
+                                    <div 
+                                      key={mun}
+                                      onClick={() => { setSearchQuery(mun); setActiveTab("complaints"); }}
+                                      className="p-4 bg-white rounded-xl border border-slate-200 hover:border-green-400 hover:shadow-md transition-all cursor-pointer"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-medium text-slate-800">{mun}</span>
+                                        {munTotal > 0 && (
+                                          <span className={`text-sm font-bold ${
+                                            munRate >= 70 ? 'text-green-600' : munRate >= 50 ? 'text-amber-600' : 'text-red-600'
+                                          }`}>
+                                            {munRate}%
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-slate-500 mt-1">{munTotal} complaints</p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            {total > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-slate-800 mb-3">Recent Complaints in {selectedGovernorate}</h4>
+                                <button 
+                                  onClick={() => { setSearchQuery(selectedGovernorate); setActiveTab("complaints"); setSelectedGovernorate(null); }}
+                                  className="w-full py-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl text-green-600 font-medium transition-colors"
+                                >
+                                  View All {total} Complaints →
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   ) : (
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {TUNISIA_GEOGRAPHY.map((gov) => {
-                        const govStats = municipalityStats.filter(m => 
-                          ALL_MUNICIPALITIES.find(am => am.name === m.name && am.governorate === gov.governorate)
-                        );
-                        const total = govStats.reduce((sum, m) => sum + m.total, 0);
-                        const rate = govStats.length > 0 
-                          ? Math.round(govStats.reduce((sum, m) => sum + m.rate, 0) / govStats.length)
-                          : 0;
+                        const govMunStats = allMunicipalityStats.filter(m => m.governorate === gov.governorate);
+                        const total = govMunStats.reduce((sum, m) => sum + m.total, 0);
+                        const resolved = govMunStats.reduce((sum, m) => sum + m.resolved, 0);
+                        const rate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+                        const gradientClass = governorateGradients[gov.governorate] || governorateGradients["default"];
                         
                         return (
                           <div 
                             key={gov.governorate}
-                            className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-lg transition-all"
+                            className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer"
+                            onClick={() => setSelectedGovernorate(gov.governorate)}
                           >
-                            <div className={`p-3 border-b border-slate-100 ${
-                              rate >= 70 ? 'bg-green-50' : rate >= 50 ? 'bg-amber-50' : rate > 0 ? 'bg-red-50' : 'bg-slate-100'
+                            <div className={`relative h-32 bg-gradient-to-br ${gradientClass}`}>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-2xl font-bold text-white/90">{gov.governorate}</span>
+                              </div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                              <div className="absolute bottom-3 left-4">
+                                <h4 className="font-bold text-white text-lg">{gov.governorate}</h4>
+                              </div>
+                            </div>
+                            <div className={`p-3 border-b ${
+                              rate >= 70 ? 'bg-green-50' : rate >= 50 ? 'bg-amber-50' : total > 0 ? 'bg-red-50' : 'bg-slate-50'
                             }`}>
                               <div className="flex items-center justify-between">
-                                <h4 className="font-semibold text-slate-800">{gov.governorate}</h4>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  rate >= 70 ? 'bg-green-500 text-white' : rate >= 50 ? 'bg-amber-500 text-white' : total > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'
+                                }`}>
+                                  {rate >= 70 ? 'Good' : rate >= 50 ? 'Moderate' : total > 0 ? 'Needs Attention' : 'No Data'}
+                                </span>
                                 <div className="text-right">
                                   <span className={`text-sm font-bold ${
-                                    rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : rate > 0 ? 'text-red-600' : 'text-slate-500'
+                                    rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : total > 0 ? 'text-red-600' : 'text-slate-500'
                                   }`}>
-                                    {rate || '-'}%
+                                    {total > 0 ? `${rate}%` : '—'}
                                   </span>
-                                  <p className="text-xs text-slate-500">{total || 0} complaints</p>
+                                  <p className="text-xs text-slate-500">{total} complaints</p>
                                 </div>
                               </div>
                             </div>
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1">
-                                {gov.municipalities.map((mun) => (
-                                  <button 
-                                    key={mun}
-                                    onClick={() => { setSearchQuery(mun); setActiveTab("complaints"); }}
-                                    className="px-2 py-1 bg-white rounded-lg text-xs text-slate-600 border border-slate-100 hover:border-green-400 hover:text-green-700 hover:bg-green-50 transition-colors cursor-pointer"
-                                  >
-                                    {mun}
-                                  </button>
-                                ))}
+                                {gov.municipalities.map((mun) => {
+                                  const munStat = allMunicipalityStats.find(m => m.name === mun);
+                                  const munTotal = munStat?.total || 0;
+                                  return (
+                                    <button 
+                                      key={mun}
+                                      onClick={(e) => { e.stopPropagation(); setSearchQuery(mun); setActiveTab("complaints"); }}
+                                      className={`px-2 py-1 rounded-lg text-xs border transition-colors cursor-pointer ${
+                                        munTotal > 0 
+                                          ? 'bg-white border-green-200 text-green-700 hover:bg-green-50' 
+                                          : 'bg-white border-slate-100 text-slate-500 hover:border-green-300 hover:text-green-600'
+                                      }`}
+                                    >
+                                      {mun}
+                                      {munTotal > 0 && (
+                                        <span className="ml-1 font-bold">{munTotal}</span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -995,23 +1603,24 @@ export default function TransparencyPage() {
         )}
 
         {/* Call to Action */}
-        <div className="mt-12 bg-gradient-to-r from-green-600 via-green-700 to-green-800 rounded-3xl shadow-xl p-8 text-white">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold mb-3">See a problem in your neighborhood?</h2>
-            <p className="text-white/80 mb-6 max-w-lg mx-auto">
+        <div className="mt-12 bg-gradient-to-r from-green-600 via-green-700 to-green-800 rounded-2xl shadow-xl p-12 text-white relative overflow-hidden">
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+          <div className="relative text-center">
+            <h2 className="text-3xl font-bold mb-4">See a problem in your neighborhood?</h2>
+            <p className="text-white/90 mb-8 max-w-lg mx-auto text-lg">
               Help us track issues in your community. Your reports make our city better.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link 
                 href="/register"
-                className="px-6 py-3 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
+                className="px-8 py-4 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
               >
                 <Users className="w-5 h-5" />
                 Create Account
               </Link>
               <Link 
                 href="/login"
-                className="px-6 py-3 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border border-white/20"
+                className="px-8 py-4 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border-2 border-white/30"
               >
                 Login
                 <ArrowRight className="w-5 h-5" />
@@ -1021,13 +1630,13 @@ export default function TransparencyPage() {
         </div>
 
         {/* Footer */}
-        <footer className="mt-12 text-center text-sm text-slate-400">
+        <footer className="mt-12 py-8 text-center text-sm text-slate-400 border-t border-slate-200">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Smart City Tunisia</span>
+            <ShieldCheck className="w-4 h-4 text-green-600" />
+            <span className="font-semibold text-slate-600">Smart City Tunisia</span>
           </div>
           <p>
-            Data updated in real-time. Last updated: {new Date().toLocaleDateString("fr-FR", { 
+            Data updated in real-time. Last updated: {new Date().toLocaleDateString("en-US", { 
               day: "numeric", 
               month: "long", 
               year: "numeric",

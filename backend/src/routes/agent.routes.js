@@ -86,7 +86,8 @@ router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), async (req
     // Calculate SLA status for each complaint on the fly
     const complaintsResponse = complaints.map(c => {
       const complaint = c.toObject();
-      if (complaint.slaDeadline && !['RESOLVED', 'CLOSED'].includes(complaint.status)) {
+      // Only calculate SLA for unresolved complaints
+      if (complaint.slaDeadline && !['RESOLVED', 'CLOSED', 'REJECTED'].includes(complaint.status)) {
         const now = new Date();
         const deadline = new Date(complaint.slaDeadline);
         const created = new Date(complaint.createdAt);

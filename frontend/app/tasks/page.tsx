@@ -63,7 +63,8 @@ export default function TechnicianTasksPage() {
     assigned: 0,
     inProgress: 0,
     resolved: 0,
-    overdue: 0,
+    closed: 0,
+    totalOverdue: 0,
   });
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -106,7 +107,8 @@ export default function TechnicianTasksPage() {
           assigned: statsResp.data.assigned || 0,
           inProgress: statsResp.data.inProgress || 0,
           resolved: statsResp.data.resolved || 0,
-          overdue: 0,
+          closed: statsResp.data.closed || 0,
+          totalOverdue: statsResp.data.totalOverdue || 0,
         });
       }
     } catch (err) {
@@ -357,11 +359,23 @@ export default function TechnicianTasksPage() {
             </div>
           </div>
 
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-175">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Closed</p>
+                <p className="text-3xl font-bold text-slate-600 mt-1">{stats.closed}</p>
+              </div>
+              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-slate-600" />
+              </div>
+            </div>
+          </div>
+          
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500 font-medium">Overdue</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{stats.overdue}</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-red-600" />

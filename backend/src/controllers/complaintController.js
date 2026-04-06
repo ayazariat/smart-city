@@ -17,7 +17,7 @@ class ComplaintController {
       }
 
       const validCategories = [
-        "ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"
+        "WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"
       ];
       
       if (!validCategories.includes(category)) {
@@ -1063,8 +1063,9 @@ class ComplaintController {
           { $sort: { _id: 1 } },
           { $limit: 6 }
         ]),
-        Complaint.countDocuments({ ...query, slaStatus: "OVERDUE", isArchived: false }),
-        Complaint.countDocuments({ ...query, slaStatus: "AT_RISK", isArchived: false }),
+        // Only count overdue for unresolved complaints (exclude COMPLETED status)
+        Complaint.countDocuments({ ...query, slaStatus: "OVERDUE", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] }, isArchived: false }),
+        Complaint.countDocuments({ ...query, slaStatus: "AT_RISK", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] }, isArchived: false }),
       ]);
 
       const resolvedCount = resolved + closed;

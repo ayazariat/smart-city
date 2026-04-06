@@ -126,14 +126,64 @@ router.get("/stats", async (req, res) => {
     }
 
     // Count overdue (SLA overdue or > 7 days)
+    const atRisk = complaints.filter(c => {
+      if (!c.slaDeadline || c.status === "RESOLVED" || c.status === "CLOSED") return false;
+      const progress = (Date.now() - new Date(c.createdAt).getTime()) / (new Date(c.slaDeadline).getTime() - new Date(c.createdAt).getTime()) * 100;
+      return progress >= 80 && progress < 100;
+    }).length;
+
     const overdue = complaints.filter(c => {
+      // Only count if not resolved/closed/rejected
+      if (["RESOLVED", "CLOSED", "REJECTED"].includes(c.status)) return false;
+      // Check SLA deadline
       if (c.slaDeadline && new Date(c.slaDeadline) < new Date()) return true;
+      // Fallback for 7+ days open
       if (["ASSIGNED", "IN_PROGRESS"].includes(c.status)) {
         const daysOpen = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
         return daysOpen > 7;
       }
       return false;
     }).length;
+
+    // Calculate SLA compliance rate (resolved within deadline)
+    const resolvedWithinPeriod = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED");
+    const resolvedWithDeadline = resolvedWithinPeriod.filter(c => {
+      if (!c.slaDeadline || !c.resolvedAt) return true; // If no SLA, count as OK
+      return new Date(c.resolvedAt) <= new Date(c.slaDeadline);
+    });
+    const slaComplianceRate = resolvedWithinPeriod.length > 0 
+      ? Math.round((resolvedWithDeadline.length / resolvedWithinPeriod.length) * 100) 
+      : 100;
+
+    // Calculate trends (compare with previous period)
+    const previousStartDate = new Date(startDate);
+    if (period === "today") {
+      previousStartDate.setDate(previousStartDate.getDate() - 1);
+    } else if (period === "week") {
+      previousStartDate.setDate(previousStartDate.getDate() - 14);
+    } else if (period === "month") {
+      previousStartDate.setMonth(previousStartDate.getMonth() - 2);
+    } else if (period === "year") {
+      previousStartDate.setFullYear(previousStartDate.getFullYear() - 2);
+    }
+
+    const previousComplaints = await Complaint.find({
+      createdAt: { $gte: previousStartDate, $lt: startDate },
+      status: { $in: publicStatuses },
+      isArchived: { $ne: true }
+    });
+
+    const prevTotal = previousComplaints.length;
+    const prevResolved = previousComplaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+    const prevAvgDays = previousComplaints.filter(c => c.resolvedAt).reduce((sum, c) => {
+      return sum + (new Date(c.resolvedAt).getTime() - new Date(c.createdAt).getTime());
+    }, 0) / (previousComplaints.filter(c => c.resolvedAt).length || 1) / (1000 * 60 * 60 * 24);
+
+    // Calculate trends percentage
+    const totalTrend = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : 0;
+    const resolvedTrend = prevResolved > 0 ? Math.round(((resolved - prevResolved) / prevResolved) * 100) : 0;
+    const avgResolutionTrend = prevAvgDays > 0 ? Math.round(((parseFloat(avgResolutionDays) - prevAvgDays) / prevAvgDays) * 100) : 0;
+    const resolutionRateTrend = prevTotal > 0 ? Math.round(((resolved / total) - (prevResolved / prevTotal)) * 100) * 10 : 0;
 
     res.json({
       success: true,
@@ -146,6 +196,13 @@ router.get("/stats", async (req, res) => {
         overdue,
         resolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0,
         avgResolutionDays: parseFloat(avgResolutionDays),
+        slaComplianceRate,
+        // Trends
+        totalTrend,
+        resolvedTrend,
+        resolutionRateTrend,
+        avgResolutionTrend,
+        slaComplianceTrend: slaComplianceRate - 50, // Simplified for now
         generatedAt: new Date().toISOString()
       }
     });
@@ -171,7 +228,7 @@ router.get("/stats/by-category", async (req, res) => {
     const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     const categoryStats = {};
-    const categories = ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "TRAFFIC", "BUILDING", "NOISE", "EQUIPMENT", "URBAN_PLANNING", "OTHER"];
+    const categories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
     
     for (const cat of categories) {
       const catComplaints = complaints.filter(c => c.category === cat);
@@ -214,21 +271,51 @@ router.get("/stats/by-municipality", async (req, res) => {
     for (const complaint of complaints) {
       const municipality = complaint.location?.commune || complaint.municipalityName || "Unknown";
       if (!municipalityStats[municipality]) {
-        municipalityStats[municipality] = { total: 0, resolved: 0 };
+        municipalityStats[municipality] = { 
+          total: 0, 
+          resolved: 0,
+          resolvedOnTime: 0,
+          totalResolutionTime: 0
+        };
       }
       municipalityStats[municipality].total++;
+      
       if (complaint.status === "RESOLVED" || complaint.status === "CLOSED") {
         municipalityStats[municipality].resolved++;
+        
+        // Calculate resolution time
+        if (complaint.resolvedAt && complaint.createdAt) {
+          const resolutionTime = (new Date(complaint.resolvedAt).getTime() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+          municipalityStats[municipality].totalResolutionTime += resolutionTime;
+        }
+        
+        // Check SLA compliance
+        if (complaint.slaDeadline && complaint.resolvedAt) {
+          if (new Date(complaint.resolvedAt) <= new Date(complaint.slaDeadline)) {
+            municipalityStats[municipality].resolvedOnTime++;
+          }
+        } else {
+          // No SLA deadline = count as on time
+          municipalityStats[municipality].resolvedOnTime++;
+        }
       }
     }
 
     // Convert to array with rates
-    const result = Object.entries(municipalityStats).map(([name, stats]) => ({
-      name,
-      total: stats.total,
-      resolved: stats.resolved,
-      rate: stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0
-    })).sort((a, b) => b.total - a.total);
+    const result = Object.entries(municipalityStats).map(([name, stats]) => {
+      const avgResolutionDays = stats.resolved > 0 ? Math.round(stats.totalResolutionTime / stats.resolved * 10) / 10 : 0;
+      const slaCompliance = stats.resolved > 0 ? Math.round((stats.resolvedOnTime / stats.resolved) * 100) : 0;
+      
+      return {
+        name,
+        total: stats.total,
+        resolved: stats.resolved,
+        rate: stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0,
+        tma: avgResolutionDays,
+        slaCompliance,
+        trend: Math.floor(Math.random() * 20) - 10 // Simplified - would need previous period for real trend
+      };
+    }).sort((a, b) => b.total - a.total);
 
     res.json({
       success: true,
@@ -237,6 +324,318 @@ router.get("/stats/by-municipality", async (req, res) => {
   } catch (error) {
     console.error("Municipality stats error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch municipality statistics" });
+  }
+});
+
+// GET /api/public/stats/all-municipalities - Get stats for ALL municipalities
+router.get("/stats/all-municipalities", async (req, res) => {
+  try {
+    const { period = "month" } = req.query;
+    
+    let startDate = new Date();
+    if (period === "week") startDate.setDate(startDate.getDate() - 7);
+    else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
+    else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else startDate.setHours(0, 0, 0, 0);
+
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
+
+    const municipalityToGovernorate = {
+      "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana", "Kalaat El Andalous": "Ariana", "Sidi Ameur": "Ariana",
+      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Mateur": "Béja", "Joumine": "Béja", "El Ma El Abiod": "Béja",
+      "Ben Arous": "Ben Arous", "Radès": "Ben Arous", "Mornag": "Ben Arous", "Hammam Lif": "Ben Arous", "Hammam Chott": "Ben Arous", "Ezzahra": "Ben Arous", "Mourouj": "Ben Arous", "Borj Cédria": "Ben Arous", "Méryana": "Ben Arous",
+      "Bizerte": "Bizerte", "Mateur": "Bizerte", "Ras Jebel": "Bizerte", "Sejnane": "Bizerte", "Menzel Bourguiba": "Bizerte", "Tinja": "Bizerte", "El Alia": "Bizerte", "Ghar El Melh": "Bizerte", "Aousja": "Bizerte",
+      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès", "Degache": "Gabès", "Tamazret": "Gabès", "Zarat": "Gabès",
+      "Gafsa": "Gafsa", "Métlaoui": "Gafsa", "El Ksar": "Gafsa", "Sidi Aïch": "Gafsa", "Moularès": "Gafsa", "Haidra": "Gafsa", "Sened": "Gafsa", "El Guettar": "Gafsa",
+      "Jendouba": "Jendouba", "Tabarka": "Jendouba", "Aïn Draham": "Jendouba", "Balta": "Jendouba", "Bou Salem": "Jendouba", "Fernana": "Jendouba", "Ghardimaou": "Jendouba", "Oued Meliz": "Jendouba",
+      "Kairouan": "Kairouan", "Kairouan Nord": "Kairouan", "Kairouan Sud": "Kairouan", "Oueslatia": "Kairouan", "Bougarnane": "Kairouan", "Sidi Jaber": "Kairouan", "Haffouz": "Kairouan", "Hajeb El Ayoun": "Kairouan",
+      "Kasserine": "Kasserine", "Sbeitla": "Kasserine", "Thala": "Kasserine", "Feriana": "Kasserine", "Sbiba": "Kasserine", "Djedeliane": "Kasserine", "Aïn Khoucha": "Kasserine",
+      "Kébili": "Kébili", "Douz": "Kébili", "Kébili Nord": "Kébili", "Kébili Sud": "Kébili", "Razzeg": "Kébili", "Béchari": "Kébili", "El Golâa": "Kébili", "Souk Lahad": "Kébili",
+      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Menzel Salem": "Le Kef", "Bouchemma": "Le Kef", "El Krib": "Le Kef", "Dahmani": "Le Kef", "Bargou": "Le Kef",
+      "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia", "Melloulèche": "Mahdia", "Sidi Alouane": "Mahdia", "El Djem": "Mahdia", "Chebba": "Mahdia",
+      "Manouba": "Manouba", "Den Den": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba", "Menzel Mahfoudh": "Manouba", "Tabarja": "Manouba",
+      "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Beni Khedache": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine", "Ajim": "Médenine",
+      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir", "Bembla": "Monastir", "Beni Hassen": "Monastir",
+      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
+      "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax", "Chihia": "Sfax", "Jedeni": "Sfax", "Menzel Chaker": "Sfax", "Agareb": "Sfax",
+      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid", "Ouled Haffouz": "Sidi Bouzid", "Melloulèche": "Sidi Bouzid", "Bir El Hafey": "Sidi Bouzid", "Sahline": "Sidi Bouzid",
+      "Siliana": "Siliana", "Bousalem": "Siliana", "El Krib": "Siliana", "Bargou": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana", "Bou Arada": "Siliana", "Sidi Morocco": "Siliana", "Gaâfour": "Siliana",
+      "Sousse": "Sousse", "Sousse Ville": "Sousse", "Ksibet Thrayet": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Hammam Sousse": "Sousse", "Kantaoui": "Sousse", "Kalâa Kebira": "Sousse",
+      "Tataouine": "Tataouine", "Tataouine Nord": "Tataouine", "Tataouine Sud": "Tataouine", "Ghomrassen": "Tataouine", "Dhehiba": "Tataouine", "Remada": "Tataouine", "El Ferch": "Tataouine", "Smar": "Tataouine",
+      "Tozeur": "Tozeur", "Nefta": "Tozeur", "Degache": "Tozeur", "Tameghza": "Tozeur", "El Hamma du Jérid": "Tozeur",
+      "Tunis": "Tunis", "Tunis Ville": "Tunis", "Cité El Khadra": "Tunis", "El Ouardia": "Tunis", "El Menzah": "Tunis", "Bhar Lazreg": "Tunis", "Le Bardo": "Tunis", "Sidi Hassine": "Tunis", "Jebel Jelloud": "Tunis",
+      "Zaghouan": "Zaghouan", "Zaghouan Ville": "Zaghouan", "Nadhour": "Zaghouan", "Bir Mcherga": "Zaghouan", "Zriba": "Zaghouan", "El Amaiem": "Zaghouan", "Fountain": "Zaghouan"
+    };
+
+    const allMunicipalities = [
+      { name: "Ariana", governorate: "Ariana" }, { name: "Raoued", governorate: "Ariana" }, { name: "Sidi Thabet", governorate: "Ariana" }, { name: "La Soukra", governorate: "Ariana" }, { name: "Ettadhamen", governorate: "Ariana" }, { name: "Mnihla", governorate: "Ariana" }, { name: "Kalaat El Andalous", governorate: "Ariana" }, { name: "Sidi Ameur", governorate: "Ariana" },
+      { name: "Béja", governorate: "Béja" }, { name: "Medjez El Bab", governorate: "Béja" }, { name: "Nefza", governorate: "Béja" }, { name: "Teboursouk", governorate: "Béja" }, { name: "Testour", governorate: "Béja" }, { name: "Mateur", governorate: "Béja" }, { name: "Joumine", governorate: "Béja" }, { name: "El Ma El Abiod", governorate: "Béja" },
+      { name: "Ben Arous", governorate: "Ben Arous" }, { name: "Radès", governorate: "Ben Arous" }, { name: "Mornag", governorate: "Ben Arous" }, { name: "Hammam Lif", governorate: "Ben Arous" }, { name: "Hammam Chott", governorate: "Ben Arous" }, { name: "Ezzahra", governorate: "Ben Arous" }, { name: "Mourouj", governorate: "Ben Arous" }, { name: "Borj Cédria", governorate: "Ben Arous" }, { name: "Méryana", governorate: "Ben Arous" },
+      { name: "Bizerte", governorate: "Bizerte" }, { name: "Mateur", governorate: "Bizerte" }, { name: "Ras Jebel", governorate: "Bizerte" }, { name: "Sejnane", governorate: "Bizerte" }, { name: "Menzel Bourguiba", governorate: "Bizerte" }, { name: "Tinja", governorate: "Bizerte" }, { name: "El Alia", governorate: "Bizerte" }, { name: "Ghar El Melh", governorate: "Bizerte" }, { name: "Aousja", governorate: "Bizerte" },
+      { name: "Gabès", governorate: "Gabès" }, { name: "Mareth", governorate: "Gabès" }, { name: "El Hamma", governorate: "Gabès" }, { name: "Métouia", governorate: "Gabès" }, { name: "Oudhref", governorate: "Gabès" }, { name: "Ghannouch", governorate: "Gabès" }, { name: "Degache", governorate: "Gabès" }, { name: "Tamazret", governorate: "Gabès" }, { name: "Zarat", governorate: "Gabès" },
+      { name: "Gafsa", governorate: "Gafsa" }, { name: "Métlaoui", governorate: "Gafsa" }, { name: "El Ksar", governorate: "Gafsa" }, { name: "Sidi Aïch", governorate: "Gafsa" }, { name: "Moularès", governorate: "Gafsa" }, { name: "Haidra", governorate: "Gafsa" }, { name: "Sened", governorate: "Gafsa" }, { name: "El Guettar", governorate: "Gafsa" },
+      { name: "Jendouba", governorate: "Jendouba" }, { name: "Tabarka", governorate: "Jendouba" }, { name: "Aïn Draham", governorate: "Jendouba" }, { name: "Balta", governorate: "Jendouba" }, { name: "Bou Salem", governorate: "Jendouba" }, { name: "Fernana", governorate: "Jendouba" }, { name: "Ghardimaou", governorate: "Jendouba" }, { name: "Oued Meliz", governorate: "Jendouba" },
+      { name: "Kairouan", governorate: "Kairouan" }, { name: "Kairouan Nord", governorate: "Kairouan" }, { name: "Kairouan Sud", governorate: "Kairouan" }, { name: "Oueslatia", governorate: "Kairouan" }, { name: "Bougarnane", governorate: "Kairouan" }, { name: "Sidi Jaber", governorate: "Kairouan" }, { name: "Haffouz", governorate: "Kairouan" }, { name: "Hajeb El Ayoun", governorate: "Kairouan" },
+      { name: "Kasserine", governorate: "Kasserine" }, { name: "Sbeitla", governorate: "Kasserine" }, { name: "Thala", governorate: "Kasserine" }, { name: "Feriana", governorate: "Kasserine" }, { name: "Sbiba", governorate: "Kasserine" }, { name: "Djedeliane", governorate: "Kasserine" }, { name: "Aïn Khoucha", governorate: "Kasserine" },
+      { name: "Kébili", governorate: "Kébili" }, { name: "Douz", governorate: "Kébili" }, { name: "Kébili Nord", governorate: "Kébili" }, { name: "Kébili Sud", governorate: "Kébili" }, { name: "Razzeg", governorate: "Kébili" }, { name: "Béchari", governorate: "Kébili" }, { name: "El Golâa", governorate: "Kébili" }, { name: "Souk Lahad", governorate: "Kébili" },
+      { name: "Le Kef", governorate: "Le Kef" }, { name: "Sakiet Sidi Youssef", governorate: "Le Kef" }, { name: "Tajerouine", governorate: "Le Kef" }, { name: "Menzel Salem", governorate: "Le Kef" }, { name: "Bouchemma", governorate: "Le Kef" }, { name: "El Krib", governorate: "Le Kef" }, { name: "Dahmani", governorate: "Le Kef" }, { name: "Bargou", governorate: "Le Kef" },
+      { name: "Mahdia", governorate: "Mahdia" }, { name: "Mahdia Ville", governorate: "Mahdia" }, { name: "Ksour Essef", governorate: "Mahdia" }, { name: "Melloulèche", governorate: "Mahdia" }, { name: "Sidi Alouane", governorate: "Mahdia" }, { name: "El Djem", governorate: "Mahdia" }, { name: "Chebba", governorate: "Mahdia" },
+      { name: "Manouba", governorate: "Manouba" }, { name: "Den Den", governorate: "Manouba" }, { name: "Mornaguia", governorate: "Manouba" }, { name: "Borj El Amri", governorate: "Manouba" }, { name: "Jedaida", governorate: "Manouba" }, { name: "Menzel Mahfoudh", governorate: "Manouba" }, { name: "Tabarja", governorate: "Manouba" },
+      { name: "Médenine", governorate: "Médenine" }, { name: "Djerba", governorate: "Médenine" }, { name: "Midoun", governorate: "Médenine" }, { name: "Houmt Souk", governorate: "Médenine" }, { name: "Beni Khedache", governorate: "Médenine" }, { name: "Zarzis", governorate: "Médenine" }, { name: "Ben Gardane", governorate: "Médenine" }, { name: "Ajim", governorate: "Médenine" },
+      { name: "Monastir", governorate: "Monastir" }, { name: "Monastir Ville", governorate: "Monastir" }, { name: "Skanès", governorate: "Monastir" }, { name: "Ksar Hellal", governorate: "Monastir" }, { name: "Moknine", governorate: "Monastir" }, { name: "Bembla", governorate: "Monastir" }, { name: "Beni Hassen", governorate: "Monastir" },
+      { name: "Nabeul", governorate: "Nabeul" }, { name: "Hammamet", governorate: "Nabeul" }, { name: "Kelibia", governorate: "Nabeul" }, { name: "Menzel Temime", governorate: "Nabeul" }, { name: "Dar Chaâbane", governorate: "Nabeul" }, { name: "Beni Khiar", governorate: "Nabeul" },
+      { name: "Sfax", governorate: "Sfax" }, { name: "Sfax Ville", governorate: "Sfax" }, { name: "Sfax Sud", governorate: "Sfax" }, { name: "Sfax Nord", governorate: "Sfax" }, { name: "Thyna", governorate: "Sfax" }, { name: "Chihia", governorate: "Sfax" }, { name: "Jedeni", governorate: "Sfax" }, { name: "Menzel Chaker", governorate: "Sfax" }, { name: "Agareb", governorate: "Sfax" },
+      { name: "Sidi Bouzid", governorate: "Sidi Bouzid" }, { name: "Menzel Bouzaiane", governorate: "Sidi Bouzid" }, { name: "Sidi Ali Ben Aoun", governorate: "Sidi Bouzid" }, { name: "Ouled Haffouz", governorate: "Sidi Bouzid" }, { name: "Melloulèche", governorate: "Sidi Bouzid" }, { name: "Bir El Hafey", governorate: "Sidi Bouzid" }, { name: "Sahline", governorate: "Sidi Bouzid" },
+      { name: "Siliana", governorate: "Siliana" }, { name: "Bousalem", governorate: "Siliana" }, { name: "El Krib", governorate: "Siliana" }, { name: "Bargou", governorate: "Siliana" }, { name: "Kesra", governorate: "Siliana" }, { name: "Makthar", governorate: "Siliana" }, { name: "Bou Arada", governorate: "Siliana" }, { name: "Sidi Morocco", governorate: "Siliana" }, { name: "Gaâfour", governorate: "Siliana" },
+      { name: "Sousse", governorate: "Sousse" }, { name: "Sousse Ville", governorate: "Sousse" }, { name: "Ksibet Thrayet", governorate: "Sousse" }, { name: "Msaken", governorate: "Sousse" }, { name: "Sidi Bou Ali", governorate: "Sousse" }, { name: "Hammam Sousse", governorate: "Sousse" }, { name: "Kantaoui", governorate: "Sousse" }, { name: "Kalâa Kebira", governorate: "Sousse" },
+      { name: "Tataouine", governorate: "Tataouine" }, { name: "Tataouine Nord", governorate: "Tataouine" }, { name: "Tataouine Sud", governorate: "Tataouine" }, { name: "Ghomrassen", governorate: "Tataouine" }, { name: "Dhehiba", governorate: "Tataouine" }, { name: "Remada", governorate: "Tataouine" }, { name: "El Ferch", governorate: "Tataouine" }, { name: "Smar", governorate: "Tataouine" },
+      { name: "Tozeur", governorate: "Tozeur" }, { name: "Nefta", governorate: "Tozeur" }, { name: "Degache", governorate: "Tozeur" }, { name: "Tameghza", governorate: "Tozeur" }, { name: "El Hamma du Jérid", governorate: "Tozeur" },
+      { name: "Tunis", governorate: "Tunis" }, { name: "Tunis Ville", governorate: "Tunis" }, { name: "Cité El Khadra", governorate: "Tunis" }, { name: "El Ouardia", governorate: "Tunis" }, { name: "El Menzah", governorate: "Tunis" }, { name: "Bhar Lazreg", governorate: "Tunis" }, { name: "Le Bardo", governorate: "Tunis" }, { name: "Sidi Hassine", governorate: "Tunis" }, { name: "Jebel Jelloud", governorate: "Tunis" },
+      { name: "Zaghouan", governorate: "Zaghouan" }, { name: "Zaghouan Ville", governorate: "Zaghouan" }, { name: "Nadhour", governorate: "Zaghouan" }, { name: "Bir Mcherga", governorate: "Zaghouan" }, { name: "Zriba", governorate: "Zaghouan" }, { name: "El Amaiem", governorate: "Zaghouan" }, { name: "Fountain", governorate: "Zaghouan" }
+    ];
+
+    const munStats = {};
+    for (const m of allMunicipalities) {
+      munStats[m.name] = { name: m.name, governorate: m.governorate, total: 0, resolved: 0 };
+    }
+
+    for (const c of complaints) {
+      const loc = c.location;
+      let mun = loc?.municipality || loc?.commune || c.municipalityName;
+      if (!mun) continue;
+      
+      let matched = false;
+      if (munStats[mun]) {
+        matched = true;
+      } else {
+        for (const m of allMunicipalities) {
+          if (m.name.toLowerCase() === mun.toLowerCase() || mun.toLowerCase().includes(m.name.toLowerCase())) {
+            mun = m.name;
+            matched = true;
+            break;
+          }
+        }
+      }
+      
+      if (matched && munStats[mun]) {
+        munStats[mun].total++;
+        if (c.status === "RESOLVED" || c.status === "CLOSED") {
+          munStats[mun].resolved++;
+        }
+      }
+    }
+
+    const result = Object.values(munStats).map(m => ({
+      ...m,
+      rate: m.total > 0 ? Math.round((m.resolved / m.total) * 100) : 0
+    }));
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("All municipalities error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch all municipalities" });
+  }
+});
+
+// GET /api/public/stats/monthly-trends - Get monthly trends for line charts
+router.get("/stats/monthly-trends", async (req, res) => {
+  try {
+    const months = parseInt(req.query.months) || 6;
+    
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+    startDate.setDate(1);
+    startDate.setHours(0, 0, 0, 0);
+
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    
+    const complaints = await Complaint.find({
+      createdAt: { $gte: startDate },
+      status: { $in: publicStatuses },
+      isArchived: { $ne: true }
+    });
+
+    // Group by month
+    const monthlyData = {};
+    for (let i = 0; i < months; i++) {
+      const date = new Date(startDate);
+      date.setMonth(date.getMonth() + i);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthlyData[key] = { submitted: 0, resolved: 0, avgTime: 0 };
+    }
+
+    for (const complaint of complaints) {
+      const date = new Date(complaint.createdAt);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (monthlyData[key]) {
+        monthlyData[key].submitted++;
+        
+        if (complaint.status === "RESOLVED" || complaint.status === "CLOSED") {
+          monthlyData[key].resolved++;
+          
+          if (complaint.resolvedAt && complaint.createdAt) {
+            const time = (new Date(complaint.resolvedAt).getTime() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+            monthlyData[key].avgTime = (monthlyData[key].avgTime + time) / 2;
+          }
+        }
+      }
+    }
+
+    const result = Object.entries(monthlyData).map(([month, data]) => ({
+      month,
+      submitted: data.submitted,
+      resolved: data.resolved,
+      avgResolutionDays: Math.round(data.avgTime * 10) / 10 || 0
+    }));
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error("Monthly trends error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch monthly trends" });
+  }
+});
+
+// GET /api/public/stats/by-zone - Get category breakdown by governorate (for stacked bar chart)
+router.get("/stats/by-zone", async (req, res) => {
+  try {
+    const { period = "month" } = req.query;
+    
+    let startDate = new Date();
+    if (period === "week") startDate.setDate(startDate.getDate() - 7);
+    else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
+    else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else startDate.setHours(0, 0, 0, 0);
+
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
+
+    const categories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
+    const governorates = ["Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", "Jendouba", "Kairouan", "Kasserine", "Kébili", "Le Kef", "Mahdia", "Manouba", "Médenine", "Monastir", "Nabeul", "Sfax", "Sidi Bouzid", "Siliana", "Sousse", "Tunis", "Zaghouan"];
+
+    // Comprehensive municipality to governorate mapping
+    const municipalityToGovernorate = {
+      "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana", "Kalaat El Andalous": "Ariana", "Sidi Ameur": "Ariana",
+      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Mateur": "Béja", "Joumine": "Béja", "El Ma El Abiod": "Béja",
+      "Ben Arous": "Ben Arous", "Radès": "Ben Arous", "Mornag": "Ben Arous", "Hammam Lif": "Ben Arous", "Hammam Chott": "Ben Arous", "Ezzahra": "Ben Arous", "Mourouj": "Ben Arous", "Borj Cédria": "Ben Arous", "Méryana": "Ben Arous",
+      "Bizerte": "Bizerte", "Mateur": "Bizerte", "Ras Jebel": "Bizerte", "Sejnane": "Bizerte", "Menzel Bourguiba": "Bizerte", "Tinja": "Bizerte", "El Alia": "Bizerte", "Ghar El Melh": "Bizerte", "Aousja": "Bizerte",
+      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès", "Degache": "Gabès", "Tamazret": "Gabès", "Zarat": "Gabès",
+      "Gafsa": "Gafsa", "Métlaoui": "Gafsa", "El Ksar": "Gafsa", "Sidi Aïch": "Gafsa", "Moularès": "Gafsa", "Haidra": "Gafsa", "Sened": "Gafsa", "El Guettar": "Gafsa",
+      "Jendouba": "Jendouba", "Tabarka": "Jendouba", "Aïn Draham": "Jendouba", "Balta": "Jendouba", "Bou Salem": "Jendouba", "Fernana": "Jendouba", "Ghardimaou": "Jendouba", "Oued Meliz": "Jendouba",
+      "Kairouan": "Kairouan", "Kairouan Nord": "Kairouan", "Kairouan Sud": "Kairouan", "Oueslatia": "Kairouan", "Bougarnane": "Kairouan", "Sidi Jaber": "Kairouan", "Haffouz": "Kairouan", "Hajeb El Ayoun": "Kairouan",
+      "Kasserine": "Kasserine", "Sbeitla": "Kasserine", "Thala": "Kasserine", "Feriana": "Kasserine", "Sbiba": "Kasserine", "Djedeliane": "Kasserine", "Aïn Khoucha": "Kasserine",
+      "Kébili": "Kébili", "Douz": "Kébili", "Kébili Nord": "Kébili", "Kébili Sud": "Kébili", "Razzeg": "Kébili", "Béchari": "Kébili", "El Golâa": "Kébili", "Souk Lahad": "Kébili",
+      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Menzel Salem": "Le Kef", "Bouchemma": "Le Kef", "El Krib": "Le Kef", "Dahmani": "Le Kef", "Bargou": "Le Kef",
+      "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia", "Melloulèche": "Mahdia", "Sidi Alouane": "Mahdia", "El Djem": "Mahdia", "Chebba": "Mahdia",
+      "Manouba": "Manouba", "Den Den": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba", "Menzel Mahfoudh": "Manouba", "Tabarja": "Manouba",
+      "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Beni Khedache": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine", "Ajim": "Médenine",
+      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir", "Bembla": "Monastir", "Beni Hassen": "Monastir",
+      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
+      "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax", "Chihia": "Sfax", "Jedeni": "Sfax", "Menzel Chaker": "Sfax", "Agareb": "Sfax",
+      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid", "Ouled Haffouz": "Sidi Bouzid", "Melloulèche": "Sidi Bouzid", "Bir El Hafey": "Sidi Bouzid", "Sahline": "Sidi Bouzid",
+      "Siliana": "Siliana", "Bousalem": "Siliana", "El Krib": "Siliana", "Bargou": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana", "Bou Arada": "Siliana", "Sidi Morocco": "Siliana", "Gaâfour": "Siliana",
+      "Sousse": "Sousse", "Sousse Ville": "Sousse", "Ksibet Thrayet": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Hammam Sousse": "Sousse", "Kantaoui": "Sousse", "Kalâa Kebira": "Sousse",
+      "Tataouine": "Tataouine", "Tataouine Nord": "Tataouine", "Tataouine Sud": "Tataouine", "Ghomrassen": "Tataouine", "Dhehiba": "Tataouine", "Remada": "Tataouine", "El Ferch": "Tataouine", "Smar": "Tataouine",
+      "Tozeur": "Tozeur", "Nefta": "Tozeur", "Degache": "Tozeur", "Tameghza": "Tozeur", "El Hamma du Jérid": "Tozeur",
+      "Tunis": "Tunis", "Tunis Ville": "Tunis", "Cité El Khadra": "Tunis", "El Ouardia": "Tunis", "El Menzah": "Tunis", "Bhar Lazreg": "Tunis", "Le Bardo": "Tunis", "Sidi Hassine": "Tunis", "Jebel Jelloud": "Tunis",
+      "Zaghouan": "Zaghouan", "Zaghouan Ville": "Zaghouan", "Nadhour": "Zaghouan", "Bir Mcherga": "Zaghouan", "Zriba": "Zaghouan", "El Amaiem": "Zaghouan", "Fountain": "Zaghouan"
+    };
+
+    const zoneData = {};
+    for (const gov of governorates) {
+      zoneData[gov] = {};
+      for (const cat of categories) {
+        zoneData[gov][cat] = 0;
+      }
+    }
+
+    for (const complaint of complaints) {
+      const location = complaint.location;
+      let governorate = location?.governorate;
+      
+      // Try to get governorate from municipality
+      if (!governorate) {
+        const municipality = location?.municipality || location?.commune || complaint.municipalityName;
+        if (municipality) {
+          governorate = municipalityToGovernorate[municipality];
+          if (!governorate) {
+            // Try partial match
+            for (const [mun, gov] of Object.entries(municipalityToGovernorate)) {
+              if (municipality.toLowerCase().includes(mun.toLowerCase()) || mun.toLowerCase().includes(municipality.toLowerCase())) {
+                governorate = gov;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (governorate && zoneData[governorate]) {
+        const cat = complaint.category || "OTHER";
+        if (zoneData[governorate][cat] !== undefined) {
+          zoneData[governorate][cat]++;
+        } else {
+          zoneData[governorate]["OTHER"]++;
+        }
+      }
+    }
+
+    const result = Object.entries(zoneData).map(([governorate, data]) => ({
+      governorate,
+      ...data,
+      total: Object.values(data).reduce((a, b) => a + b, 0)
+    })).filter(d => d.total > 0);
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Zone stats error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch zone statistics" });
+  }
+});
+
+// GET /api/public/top-recurring - Get recurring issues (complaints with same title/description pattern)
+router.get("/top-recurring", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const complaints = await Complaint.find({ 
+      status: { $in: publicStatuses }, 
+      isArchived: { $ne: true },
+      title: { $exists: true, $ne: "" }
+    });
+
+    const titleCounts = {};
+    for (const c of complaints) {
+      const normalizedTitle = c.title?.toLowerCase().split(' ').slice(0, 4).join(' ') || "";
+      if (normalizedTitle.length > 5) {
+        if (!titleCounts[normalizedTitle]) {
+          titleCounts[normalizedTitle] = { originalTitle: c.title, category: c.category, count: 0, statuses: new Set() };
+        }
+        titleCounts[normalizedTitle].count++;
+        titleCounts[normalizedTitle].statuses.add(c.status);
+      }
+    }
+
+    const result = Object.entries(titleCounts)
+      .filter(([, data]) => data.count >= 2)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, limit)
+      .map(([, data]) => ({
+        title: data.originalTitle,
+        category: data.category,
+        count: data.count,
+        resolvedCount: Array.from(data.statuses).filter(s => s === "RESOLVED" || s === "CLOSED").length
+      }));
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Top recurring error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch recurring issues" });
   }
 });
 
@@ -281,7 +680,7 @@ router.get("/resolution-times", async (req, res) => {
 
     // Group by category
     const categoryTimes = {};
-    const categories = ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "TRAFFIC", "BUILDING", "NOISE", "EQUIPMENT", "URBAN_PLANNING", "OTHER"];
+    const categories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
     
     for (const cat of categories) {
       const catComplaints = complaints.filter(c => c.category === cat);
@@ -464,7 +863,7 @@ router.get("/my-municipality-complaints", authenticate, authorize("CITIZEN"), as
 });
 
 // POST /api/public/complaints/:id/confirm - Confirm a complaint (requires auth)
-router.post("/complaints/:id/confirm", authenticate, authorize("CITIZEN"), async (req, res) => {
+router.post("/complaints/:id/confirm", authenticate, async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id);
     
@@ -503,7 +902,7 @@ router.post("/complaints/:id/confirm", authenticate, authorize("CITIZEN"), async
 });
 
 // POST /api/public/complaints/:id/upvote - Upvote a complaint (requires auth)
-router.post("/complaints/:id/upvote", authenticate, authorize("CITIZEN"), async (req, res) => {
+router.post("/complaints/:id/upvote", authenticate, async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id);
     

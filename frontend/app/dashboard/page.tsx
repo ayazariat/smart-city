@@ -3,7 +3,7 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight } from "lucide-react";
+import { LogOut, User, FileText, Plus, Sparkles, Shield, ArrowLeft, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight, TrendingUp, AlertTriangle } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
 import { connectSocket, subscribeToNotifications } from "@/lib/socket";
@@ -13,6 +13,7 @@ import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
 import { categoryLabels } from "@/lib/complaints";
 import { Notification } from "@/types";
+import { getTrendAlerts } from "@/services/complaint.service";
 
 interface DashboardStats {
   total?: number;
@@ -62,6 +63,10 @@ function DashboardContent() {
   // Municipality complaints for citizens
   const [municipalityComplaints, setMunicipalityComplaints] = useState<MunicipalityComplaint[]>([]);
   const [loadingMunicipalityComplaints, setLoadingMunicipalityComplaints] = useState(false);
+
+  // BL-37: Trend alerts for manager/admin
+  const [trendAlerts, setTrendAlerts] = useState<{type: string; severity: string; message: string; recommendation: string}[]>([]);
+  const [loadingTrendAlerts, setLoadingTrendAlerts] = useState(false);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -275,6 +280,29 @@ function DashboardContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
+
+  // BL-37: Fetch trend alerts for manager/admin
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      if (!user || !['DEPARTMENT_MANAGER', 'ADMIN', 'MUNICIPAL_AGENT'].includes(user.role)) {
+        return;
+      }
+      
+      try {
+        setLoadingTrendAlerts(true);
+        const alerts = await getTrendAlerts();
+        setTrendAlerts(alerts);
+      } catch (err) {
+        console.error("Failed to fetch trend alerts:", err);
+      } finally {
+        setLoadingTrendAlerts(false);
+      }
+    };
+    
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 300000); // Refresh every 5 minutes
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Handle magic link verification callback
   useEffect(() => {
@@ -792,14 +820,14 @@ function DashboardContent() {
             )}
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {/* Total Complaints */}
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
               <div className="text-2xl font-bold text-blue-700 mb-1">
                 {stats.total || 0}
               </div>
-              <div className="text-sm text-blue-600 font-medium">Total Complaints</div>
-              <div className="text-xs text-blue-500 mt-1">All submissions</div>
+              <div className="text-sm text-blue-600 font-medium">Total</div>
+              <div className="text-xs text-blue-500 mt-1">All</div>
             </div>
             
             {/* In Progress */}
@@ -808,7 +836,7 @@ function DashboardContent() {
                 {stats.inProgress || 0}
               </div>
               <div className="text-sm text-orange-600 font-medium">In Progress</div>
-              <div className="text-xs text-orange-500 mt-1">Being worked on</div>
+              <div className="text-xs text-orange-500 mt-1">Working</div>
             </div>
             
             {/* Resolved */}
@@ -817,7 +845,16 @@ function DashboardContent() {
                 {stats.resolved || 0}
               </div>
               <div className="text-sm text-green-600 font-medium">Resolved</div>
-              <div className="text-xs text-green-500 mt-1">Fixed and closed</div>
+              <div className="text-xs text-green-500 mt-1">Fixed</div>
+            </div>
+            
+            {/* Closed */}
+            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
+              <div className="text-2xl font-bold text-slate-700 mb-1">
+                {stats.closed || 0}
+              </div>
+              <div className="text-sm text-slate-600 font-medium">Closed</div>
+              <div className="text-xs text-slate-500 mt-1">Completed</div>
             </div>
             
             {/* Overdue */}
@@ -829,6 +866,16 @@ function DashboardContent() {
               <div className="text-xs text-red-500 mt-1">Past deadline</div>
             </div>
           </div>
+
+          {/* High Priority - score 15+ */}
+          {stats.totalOverdue !== undefined && stats.totalOverdue > 0 && (
+            <div className="mt-4 p-4 bg-gradient-to-r from-red-50 to-red-100 rounded-xl border border-red-200">
+              <div className="flex items-center gap-2">
+                <span className="text-red-600 font-bold">High Priority:</span>
+                <span className="text-red-700">{stats.totalOverdue} complaints need immediate attention</span>
+              </div>
+            </div>
+          )}
 
           {/* Category Chart - For roles that have category data */}
           {Object.keys(byCategory).length > 0 && (
@@ -877,6 +924,46 @@ function DashboardContent() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* BL-37: Trend Forecasts Section - For manager/admin */}
+          {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && trendAlerts.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-violet-600" />
+                AI Trend Forecasts — Next 7 Days
+                <span className="text-xs text-slate-500 ml-auto">Updated automatically</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {trendAlerts.slice(0, 6).map((alert, idx) => (
+                  <div 
+                    key={idx}
+                    className={`p-4 rounded-xl border ${
+                      alert.severity === 'HIGH' ? 'bg-red-50 border-red-200' :
+                      alert.severity === 'MEDIUM' ? 'bg-amber-50 border-amber-200' :
+                      'bg-blue-50 border-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      {alert.severity === 'HIGH' ? (
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                      ) : (
+                        <TrendingUp className="w-4 h-4 text-violet-600" />
+                      )}
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        alert.severity === 'HIGH' ? 'bg-red-200 text-red-700' :
+                        alert.severity === 'MEDIUM' ? 'bg-amber-200 text-amber-700' :
+                        'bg-blue-200 text-blue-700'
+                      }`}>
+                        {alert.type.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-700 mb-1">{alert.message}</p>
+                    <p className="text-xs text-slate-500">{alert.recommendation}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}

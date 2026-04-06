@@ -51,6 +51,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
       media,
       isAnonymous,
       ownerName,
+      phone,
     } = req.body;
 
     // Validate required fields
@@ -73,7 +74,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
     }
 
     // Validate category
-    const validCategories = ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
+    const validCategories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
     if (category && !validCategories.includes(category)) {
       return res.status(400).json({ message: "Invalid category" });
     }
@@ -201,6 +202,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
       media: media || [],
       isAnonymous: !!isAnonymous,
       ownerName: !isAnonymous ? ownerName : undefined,
+      phone: phone || undefined,
       keywords,
       createdBy: req.user.userId,
       assignedDepartment,
@@ -209,6 +211,68 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
     });
 
     await complaint.save();
+
+    // === BL-24: Urgency Prediction (non-blocking, async) ===
+    try {
+      const axios = require('axios');
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      
+      const urgencyResult = await axios.post(
+        `${aiServiceUrl}/ai/urgency/predict`,
+        {
+          title: complaint.title,
+          description: complaint.description,
+          category: complaint.category,
+          citizenUrgency: complaint.urgency,
+          municipality: complaint.municipalityName,
+          latitude: complaint.location?.coordinates?.[1],
+          longitude: complaint.location?.coordinates?.[0],
+          confirmationCount: 0,
+          submittedAt: complaint.createdAt
+        },
+        { timeout: 5000 }
+      );
+      
+      if (urgencyResult.data?.success && urgencyResult.data.data) {
+        complaint.aiUrgencyPrediction = urgencyResult.data.data;
+        complaint.aiPredictedUrgency = urgencyResult.data.data.predictedUrgency;
+        await complaint.save();
+      }
+    } catch (urgencyError) {
+      console.error('AI Urgency prediction failed:', urgencyError.message);
+    }
+
+    // === BL-25: Duplicate Detection (non-blocking, async) ===
+    setImmediate(async () => {
+      try {
+        const axios = require('axios');
+        const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+        
+        const dupResult = await axios.post(
+          `${aiServiceUrl}/ai/duplicate/check`,
+          {
+            complaintId: complaint._id.toString(),
+            title: complaint.title,
+            description: complaint.description,
+            category: complaint.category,
+            latitude: complaint.location?.coordinates?.[1],
+            longitude: complaint.location?.coordinates?.[0],
+            municipality: complaint.municipalityName,
+            submittedAt: complaint.createdAt
+          },
+          { timeout: 10000 }
+        );
+        
+        if (dupResult.data?.success && dupResult.data.data) {
+          await Complaint.findByIdAndUpdate(complaint._id, {
+            aiDuplicateCheck: dupResult.data.data,
+            duplicateStatus: dupResult.data.data.duplicateLevel
+          });
+        }
+      } catch (dupError) {
+        console.error('AI Duplicate check failed:', dupError.message);
+      }
+    });
 
     // Notify municipal agents via socket.io
     try {

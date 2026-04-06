@@ -527,8 +527,9 @@ router.get("/stats", authenticate, authorize("DEPARTMENT_MANAGER"), async (req, 
       Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
       Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
       Complaint.countDocuments({ ...baseQuery, status: "REJECTED" }),
-      Complaint.countDocuments({ ...baseQuery, slaStatus: "OVERDUE" }),
-      Complaint.countDocuments({ ...baseQuery, slaStatus: "AT_RISK" }),
+      // Only count overdue for unresolved complaints
+      Complaint.countDocuments({ ...baseQuery, slaStatus: "OVERDUE", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] } }),
+      Complaint.countDocuments({ ...baseQuery, slaStatus: "AT_RISK", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] } }),
       Complaint.aggregate([
         { $match: baseQuery },
         { $group: { _id: "$category", count: { $sum: 1 } } }

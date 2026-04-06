@@ -260,6 +260,12 @@ export default function PublicComplaintDetailPage() {
                 <Clock className="w-4 h-4 text-green-600" />
                 <span>Score: {complaint.priorityScore}</span>
               </div>
+              {complaint.assignedDepartment && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-purple-600" />
+                  <span className="text-purple-600 font-medium">{complaint.assignedDepartment.name || "Assigned"}</span>
+                </div>
+              )}
             </div>
 
             {complaint.description && (

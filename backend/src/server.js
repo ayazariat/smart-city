@@ -8,6 +8,7 @@ const connectDB = require('./config/db');
 connectDB();
 require('./utils/mailer');
 require('./jobs/archive.job');
+require('./jobs/trend-prediction.job');
 
 // Import models to register them with Mongoose
 require('./models/User');

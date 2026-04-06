@@ -161,15 +161,37 @@ export default function ManagerPendingPage() {
     );
   });
 
-  // Calculate statistics
+  // Calculate statistics - ONLY count based on SLA deadline passed
   const overdueCount = complaints.filter(c => {
-    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 7;
+    // Exclude resolved/closed/rejected
+    if (["RESOLVED", "CLOSED", "REJECTED"].includes(c.status)) return false;
+    
+    // ONLY count if SLA deadline is in the past
+    if (c.slaDeadline) {
+      const deadlineDate = new Date(c.slaDeadline);
+      return deadlineDate.getTime() < Date.now();
+    }
+    
+    // No fallback - if no deadline, don't count as overdue
+    return false;
   }).length;
   
   const atRiskCount = complaints.filter(c => {
-    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 4 && daysSinceCreation <= 7;
+    if (["RESOLVED", "CLOSED", "REJECTED"].includes(c.status)) return false;
+    
+    if (c.slaDeadline) {
+      const deadlineDate = new Date(c.slaDeadline);
+      const createdDate = new Date(c.createdAt);
+      const nowDate = new Date();
+      const totalMs = deadlineDate.getTime() - createdDate.getTime();
+      const elapsedMs = nowDate.getTime() - createdDate.getTime();
+      
+      if (totalMs > 0 && elapsedMs > 0) {
+        const progress = (elapsedMs / totalMs) * 100;
+        return progress >= 80 && progress < 100;
+      }
+    }
+    return false;
   }).length;
 
   const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;

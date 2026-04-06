@@ -235,15 +235,38 @@ export default function AgentComplaintsPage() {
     );
   });
 
-  // Calculate statistics
+  // Calculate statistics - ONLY count based on SLA deadline passed
   const overdueCount = complaints.filter(c => {
-    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 7;
+    // Exclude resolved/closed/rejected
+    if (["RESOLVED", "CLOSED", "REJECTED"].includes(c.status)) return false;
+    
+    // ONLY count if SLA deadline is in the past (truly overdue)
+    if (c.slaDeadline) {
+      const deadlineDate = new Date(c.slaDeadline);
+      return deadlineDate.getTime() < Date.now();
+    }
+    
+    // NO fallback - if no deadline, don't count as overdue
+    return false;
   }).length;
   
   const atRiskCount = complaints.filter(c => {
-    const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-    return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 4 && daysSinceCreation <= 7;
+    if (["RESOLVED", "CLOSED", "REJECTED"].includes(c.status)) return false;
+    
+    // Check if close to deadline (within 20% of time remaining)
+    if (c.slaDeadline) {
+      const deadlineDate = new Date(c.slaDeadline);
+      const createdDate = new Date(c.createdAt);
+      const nowDate = new Date();
+      const totalMs = deadlineDate.getTime() - createdDate.getTime();
+      const elapsedMs = nowDate.getTime() - createdDate.getTime();
+      
+      if (totalMs > 0 && elapsedMs > 0) {
+        const progress = (elapsedMs / totalMs) * 100;
+        return progress >= 80 && progress < 100;
+      }
+    }
+    return false;
   }).length;
 
   const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
@@ -604,7 +627,7 @@ export default function AgentComplaintsPage() {
                             Assign Department
                           </button>
                         )}
-                        {complaint.status === "VALIDATED" && complaint.assignedDepartment && (
+                        {complaint.status === "ASSIGNED" && complaint.assignedDepartment && (
                           <div className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-100 text-green-700 rounded-xl text-sm font-semibold">
                             <CheckCircle className="w-4 h-4" />
                             {typeof complaint.assignedDepartment === 'object' && complaint.assignedDepartment.name 

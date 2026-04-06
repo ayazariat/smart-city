@@ -232,6 +232,7 @@ export default function NewComplaintPage() {
 
   // AI suggestion state
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
+  const [aiPredictedUrgency, setAiPredictedUrgency] = useState<{ level: string; confidence: number; explanation: string } | null>(null);
 
   // Check authentication - wait for hydration
   useEffect(() => {
@@ -289,6 +290,39 @@ export default function NewComplaintPage() {
 
     return () => clearTimeout(timer);
   }, [title, description, category]);
+
+  // BL-24: Predict urgency using AI when title/description/category/urgency changes
+  useEffect(() => {
+    if (!title.trim() || !description.trim() || !category) {
+      setAiPredictedUrgency(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const { predictUrgency } = await import("@/services/complaint.service");
+        const result = await predictUrgency(
+          title,
+          description,
+          category,
+          urgency,
+          commune || "Tunis"
+        );
+
+        if (result) {
+          setAiPredictedUrgency({
+            level: result.predictedUrgency,
+            confidence: result.confidenceScore,
+            explanation: result.explanation,
+          });
+        }
+      } catch (err) {
+        console.error("Urgency prediction failed:", err);
+      }
+    }, 1500); // Debounce
+
+    return () => clearTimeout(timer);
+  }, [title, description, category, urgency, commune]);
 
   useEffect(() => {
     if (!category && aiSuggestedCategory) {
@@ -617,11 +651,8 @@ export default function NewComplaintPage() {
         },
         media: media.length > 0 ? media : undefined,
         isAnonymous,
+        phone: !isAnonymous && phone ? phone : undefined,
       };
-
-      if (phone && !isAnonymous) {
-        complaintData.description += `\n\nContact phone: ${phone}`;
-      }
 
       const result = await complaintService.submitComplaint(complaintData);
       const complaintIdValue = result.complaint.id ?? result.complaint._id;
@@ -1035,10 +1066,34 @@ export default function NewComplaintPage() {
                   </span>
                 ))}
               </div>
+              </div>
             </div>
-          </div>
 
-          {/* Date/Time & Phone */}
+            {/* BL-24: AI Urgency Prediction Badge */}
+            {aiPredictedUrgency && (
+              <div className={`rounded-xl p-4 border ${
+                aiPredictedUrgency.level === urgency 
+                  ? 'bg-green-50 border-green-200' 
+                  : aiPredictedUrgency.level === 'CRITICAL' || aiPredictedUrgency.level === 'HIGH'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-blue-50 border-blue-200'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className={`w-4 h-4 ${
+                    aiPredictedUrgency.level === urgency ? 'text-green-600' : 'text-amber-600'
+                  }`} />
+                  <span className="text-sm font-semibold">AI Suggests: {aiPredictedUrgency.level}</span>
+                  <span className="text-xs text-slate-500">({Math.round(aiPredictedUrgency.confidence * 100)}% confidence)</span>
+                </div>
+                {aiPredictedUrgency.level !== urgency && (
+                  <p className="text-xs text-slate-600">
+                    {aiPredictedUrgency.explanation}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Date/Time & Phone */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Date/Time */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">

@@ -173,6 +173,45 @@ export interface Complaint {
     citizenId: string;
     upvotedAt: string;
   }>;
+  // BL-24: AI Urgency Prediction
+  aiUrgencyPrediction?: {
+    predictedUrgency: string;
+    confidenceScore: number;
+    breakdown?: {
+      textScore: number;
+      citizenUrgencyScore: number;
+      categoryBaseScore: number;
+      communityScore?: number;
+      keywordsDetected?: string[];
+      citizenUrgencyInput?: string;
+    };
+    explanation?: string;
+    isRuleBased?: boolean;
+  } | null;
+  aiPredictedUrgency?: string | null;
+  // BL-25: AI Duplicate Detection
+  aiDuplicateCheck?: {
+    isDuplicate: boolean;
+    duplicateLevel: string;
+    topMatches?: Array<{
+      complaintId: string;
+      referenceId: string;
+      title: string;
+      overallScore: number;
+      textScore: number;
+      geoScore: number;
+      categoryScore: number;
+      temporalScore: number;
+      submittedAt: string;
+      status: string;
+    }>;
+    recommendation?: string;
+    humanReviewRequired: boolean;
+  } | null;
+  duplicateStatus?: string | null;
+  duplicateOf?: string | null;
+  // Final human decision (for training)
+  finalUrgencyHuman?: string | null;
 }
 
 export interface CreateComplaintData {

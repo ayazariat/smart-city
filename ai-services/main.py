@@ -1,115 +1,101 @@
 """
 AI Services Main Entry Point
-============================
+=============================
 
-Runs all AI services using uvicorn.
+Smart City Tunisia AI Services using FastAPI.
 
 Usage:
     python main.py
 
-This will start:
-- Category Predictor: http://localhost:8001
-- Keyword Extractor: http://localhost:8002
-- SLA Calculator: http://localhost:8003
+This starts a unified FastAPI server with:
+- Urgency Prediction (BL-24): /ai/urgency/*
+- Duplicate Detection (BL-25): /ai/duplicate/*
+- Trend Prediction (BL-37): /ai/trend/*
+
+Server runs on http://localhost:8000
 """
 
-import subprocess
-import sys
 import os
-import signal
-import time
+import sys
+from pathlib import Path
 
-# ANSI colors for terminal output
-GREEN = "\033[92m"
-YELLOW = "\033[93m"
-RED = "\033[91m"
-RESET = "\033[0m"
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
 
-services = []
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+
+# Import new routers
+from routes.urgency_routes import router as urgency_router
+from routes.duplicate_routes import router as duplicate_router
+from routes.trend_routes import router as trend_router
+
+# Create FastAPI app
+app = FastAPI(
+    title="Smart City Tunisia AI Services",
+    description="AI services for complaint urgency, duplicate detection, and trend prediction",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(urgency_router, prefix="/ai/urgency", tags=["Urgency AI (BL-24)"])
+app.include_router(duplicate_router, prefix="/ai/duplicate", tags=["Duplicate AI (BL-25)"])
+app.include_router(trend_router, prefix="/ai/trend", tags=["Trend AI (BL-37)"])
 
 
-def start_service(script_path: str, port: int, name: str):
-    """Start a service using subprocess"""
-    print(f"{GREEN}Starting {name} on port {port}...{RESET}")
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {
+        "message": "Smart City Tunisia AI Services",
+        "version": "1.0.0",
+        "services": {
+            "urgency_prediction": "/ai/urgency",
+            "duplicate_detection": "/ai/duplicate",
+            "trend_prediction": "/ai/trend"
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Overall health check."""
+    from utils.model_manager import model_exists
     
-    proc = subprocess.Popen(
-        [sys.executable, script_path],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1
-    )
-    
-    services.append({
-        "process": proc,
-        "name": name,
-        "port": port
-    })
-    
-    return proc
-
-
-def main():
-    """Start all AI services"""
-    print(f"{GREEN}=== Smart City Tunisia AI Services ==={RESET}\n")
-    
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    try:
-        # Start Category Predictor
-        start_service(
-            os.path.join(base_dir, "services/category_predictor.py"),
-            8001,
-            "Category Predictor"
-        )
-        time.sleep(1)
-        
-        # Start Keyword Extractor
-        start_service(
-            os.path.join(base_dir, "services/keyword_extractor.py"),
-            8002,
-            "Keyword Extractor"
-        )
-        time.sleep(1)
-        
-        # Start SLA Calculator
-        start_service(
-            os.path.join(base_dir, "services/sla_calculator.py"),
-            8003,
-            "SLA Calculator"
-        )
-        
-        print(f"\n{GREEN}All services started successfully!{RESET}")
-        print(f"\n{YELLOW}Service URLs:{RESET}")
-        print(f"  - Category Predictor: http://localhost:8001")
-        print(f"  - Keyword Extractor:  http://localhost:8002")
-        print(f"  - SLA Calculator:     http://localhost:8003")
-        print(f"\n{YELLOW}Press Ctrl+C to stop all services{RESET}\n")
-        
-        # Wait for all processes
-        while True:
-            time.sleep(1)
-            
-            # Check if any process died
-            for svc in services:
-                retcode = svc["process"].poll()
-                if retcode is not None:
-                    print(f"{RED}Service {svc['name']} died with code {retcode}{RESET}")
-                    
-    except KeyboardInterrupt:
-        print(f"\n{RED}Shutting down services...{RESET}")
-        
-        # Stop all services
-        for svc in services:
-            print(f"Stopping {svc['name']}...")
-            svc["process"].terminate()
-            try:
-                svc["process"].wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                svc["process"].kill()
-        
-        print(f"{GREEN}All services stopped.{RESET}")
+    return {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "models": {
+            "urgency": model_exists("urgency_model.pkl"),
+            "duplicate": False,
+            "trend": False
+        }
+    }
 
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    
+    print("=" * 50)
+    print("Smart City Tunisia - AI Services")
+    print("=" * 50)
+    print("\nStarting unified AI services on port 8000...")
+    print("\nAvailable endpoints:")
+    print("  - Urgency Prediction: http://localhost:8000/ai/urgency")
+    print("  - Duplicate Detection: http://localhost:8000/ai/duplicate")
+    print("  - Trend Prediction:   http://localhost:8000/ai/trend")
+    print("  - Health Check:       http://localhost:8000/health")
+    print("\nPress Ctrl+C to stop\n")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -429,6 +429,57 @@ export const predictCategory = async (text: string): Promise<{
 };
 
 /**
+ * Predict urgency using AI (BL-24)
+ */
+export const predictUrgency = async (
+  title: string,
+  description: string,
+  category: string,
+  citizenUrgency: string,
+  municipality: string
+): Promise<{
+  predictedUrgency: string;
+  confidenceScore: number;
+  breakdown: {
+    textScore: number;
+    citizenUrgencyScore: number;
+    categoryBaseScore: number;
+    keywordsDetected: string[];
+  };
+  explanation: string;
+  agentOverrideAllowed: boolean;
+} | null> => {
+  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+  
+  try {
+    const response = await fetch(`${aiUrl}/ai/urgency/predict`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title,
+        description,
+        category,
+        citizenUrgency,
+        municipality,
+        confirmationCount: 0,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = await response.json();
+    return result.data || null;
+  } catch (error) {
+    console.error("Urgency prediction failed:", error);
+    return null;
+  }
+};
+
+/**
  * Extract keywords using AI
  */
 export const extractKeywords = async (text: string): Promise<{
@@ -529,9 +580,71 @@ export const complaintService = {
   getFullMediaUrl,
   processComplaintMedia,
   predictCategory,
+  predictUrgency,
   extractKeywords,
   confirmComplaint,
   unconfirmComplaint,
   upvoteComplaint,
   removeUpvote,
+};
+
+/**
+ * Get trend forecast (BL-37)
+ */
+export const getTrendForecast = async (
+  municipality: string,
+  category: string,
+  period: number = 7
+): Promise<{
+  expectedTotal: number;
+  dailyForecast: number[];
+  changeVsLastWeek: string;
+  trend: string;
+} | null> => {
+  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+  
+  try {
+    const response = await fetch(
+      `${aiUrl}/ai/trend/forecast?municipality=${encodeURIComponent(municipality)}&category=${encodeURIComponent(category)}&period=${period}`,
+      { method: "GET" }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = await response.json();
+    return result.data || null;
+  } catch (error) {
+    console.error("Trend forecast failed:", error);
+    return null;
+  }
+};
+
+/**
+ * Get all trend alerts (BL-37)
+ */
+export const getTrendAlerts = async (): Promise<{
+  type: string;
+  severity: string;
+  message: string;
+  recommendation: string;
+}[]> => {
+  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+  
+  try {
+    const response = await fetch(`${aiUrl}/ai/trend/alerts`, { 
+      method: "GET",
+      signal: AbortSignal.timeout(3000)
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const result = await response.json();
+    return result.data || [];
+  } catch {
+    return [];
+  }
 };

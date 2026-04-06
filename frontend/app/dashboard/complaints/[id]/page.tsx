@@ -475,14 +475,17 @@ export default function ComplaintDetailPage() {
   // Check if current user is the owner of the complaint
   const isOwner = (() => {
     if (!complaint || !user?.id) return false;
-    const citizenId = typeof complaint.citizen?._id === "string" ? complaint.citizen._id : 
-                      typeof complaint.createdBy === "object" ? complaint.createdBy?._id :
-                      complaint.createdBy;
+    const citizenId = typeof complaint.createdBy === "object" ? complaint.createdBy?._id : complaint.createdBy;
     return citizenId === user.id;
   })();
 
   // Show contact info for agents/managers OR the owner
   const canViewContact = isAgentOrManager || isOwner;
+  
+  // Get citizen info - try createdBy first (for agent/manager view) or citizen (for some views)
+  const citizenInfo = complaint?.createdBy && typeof complaint.createdBy === "object" 
+    ? complaint.createdBy 
+    : (complaint?.citizen as { _id?: string; fullName?: string; email?: string; phone?: string } | null);
 
   const hasLocation = complaint?.location?.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2;
 
@@ -528,15 +531,22 @@ export default function ComplaintDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
-        title={`Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
+        title={complaint.title || `Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
         onBackClick={handleBack}
         rightContent={
-          <span 
-            className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
-            aria-label={`Status: ${status.label}`}
-          >
-            {status.label}
-          </span>
+          <div className="flex items-center gap-3">
+            {complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object' && (
+              <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                {complaint.assignedDepartment.name}
+              </span>
+            )}
+            <span 
+              className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
+              aria-label={`Status: ${status.label}`}
+            >
+              {status.label}
+            </span>
+          </div>
         }
       />
 
@@ -629,6 +639,95 @@ export default function ComplaintDetailPage() {
                 </div>
               </div>
             </section>
+
+            {/* AI Analysis Section (BL-24, BL-25) */}
+            {(complaint.aiUrgencyPrediction || complaint.aiDuplicateCheck) && (
+              <section className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-violet-200">
+                <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🤖</span>
+                  AI Analysis
+                </h2>
+                
+                {/* BL-24: Urgency Prediction */}
+                {complaint.aiUrgencyPrediction && (
+                  <div className="mb-4 p-4 bg-white rounded-xl border border-violet-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700">AI Urgency Prediction</span>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        complaint.aiPredictedUrgency === 'CRITICAL' ? 'bg-red-100 text-red-700' :
+                        complaint.aiPredictedUrgency === 'HIGH' ? 'bg-orange-100 text-orange-700' :
+                        complaint.aiPredictedUrgency === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {complaint.aiPredictedUrgency || 'UNKNOWN'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-violet-500 to-purple-600 rounded-full"
+                          style={{ width: `${(complaint.aiUrgencyPrediction.confidenceScore || 0) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        {Math.round((complaint.aiUrgencyPrediction.confidenceScore || 0) * 100)}% confidence
+                      </span>
+                    </div>
+                    {complaint.aiUrgencyPrediction.breakdown?.keywordsDetected?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {complaint.aiUrgencyPrediction.breakdown.keywordsDetected.slice(0, 5).map((kw: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {complaint.aiUrgencyPrediction.explanation && (
+                      <p className="text-xs text-slate-600 mt-2">{complaint.aiUrgencyPrediction.explanation}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* BL-25: Duplicate Detection */}
+                {complaint.aiDuplicateCheck && (
+                  <div className={`p-4 rounded-xl border ${
+                    complaint.duplicateStatus === 'PROBABLE_DUPLICATE' ? 'bg-orange-50 border-orange-200' :
+                    complaint.duplicateStatus === 'POSSIBLE_DUPLICATE' ? 'bg-yellow-50 border-yellow-200' :
+                    'bg-green-50 border-green-200'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🔁</span>
+                      <span className="text-sm font-medium text-slate-700">Duplicate Check</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        complaint.duplicateStatus === 'PROBABLE_DUPLICATE' ? 'bg-orange-200 text-orange-700' :
+                        complaint.duplicateStatus === 'POSSIBLE_DUPLICATE' ? 'bg-yellow-200 text-yellow-700' :
+                        'bg-green-200 text-green-700'
+                      }`}>
+                        {complaint.duplicateStatus || 'NOT_DUPLICATE'}
+                      </span>
+                    </div>
+                    {complaint.aiDuplicateCheck.topMatches?.length > 0 && (
+                      <div className="space-y-2">
+                        {complaint.aiDuplicateCheck.topMatches.slice(0, 2).map((match: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg">
+                            <div>
+                              <p className="text-sm font-medium text-slate-700">{match.title}</p>
+                              <p className="text-xs text-slate-500">{match.referenceId} • {match.status}</p>
+                            </div>
+                            <span className="text-sm font-semibold text-violet-600">
+                              {Math.round(match.overallScore * 100)}% match
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {complaint.aiDuplicateCheck.recommendation && (
+                      <p className="text-xs text-slate-600 mt-2">{complaint.aiDuplicateCheck.recommendation}</p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* Description */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">
@@ -915,25 +1014,25 @@ export default function ComplaintDetailPage() {
                   <User className="w-4 h-4" />
                   Anonymous Citizen
                 </p>
-              ) : complaint.citizen ? (
+              ) : citizenInfo ? (
                 <div className="space-y-3">
                   <p className="font-semibold text-slate-900 flex items-center gap-2">
                     <User className="w-4 h-4 text-slate-400" />
-                    {complaint.citizen.fullName}
+                    {citizenInfo.fullName || "Citizen"}
                   </p>
-                  {complaint.citizen.email && canViewContact && (
+                  {citizenInfo.email && canViewContact && (
                     <p className="text-sm text-slate-500 flex items-center gap-2">
                       <Mail className="w-4 h-4" />
-                      {complaint.citizen.email}
+                      {citizenInfo.email}
                     </p>
                   )}
-                  {complaint.citizen.phone && canViewContact && (
+                  {citizenInfo.phone && canViewContact && (
                     <p className="text-sm text-slate-500 flex items-center gap-2">
                       <Phone className="w-4 h-4" />
-                      {complaint.citizen.phone}
+                      {citizenInfo.phone}
                     </p>
                   )}
-                  {!canViewContact && (complaint.citizen.email || complaint.citizen.phone) && (
+                  {!canViewContact && (citizenInfo.email || citizenInfo.phone) && (
                     <p className="text-sm text-slate-400 flex items-center gap-2">
                       <Shield className="w-4 h-4" />
                       Contact hidden
