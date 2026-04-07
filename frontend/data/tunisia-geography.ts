@@ -9,99 +9,99 @@ export interface GovernorateData {
 export const TUNISIA_GEOGRAPHY: GovernorateData[] = [
   {
     governorate: "Ariana",
-    municipalities: ["Ariana", "Raoued", "Sidi Thabet", "La Soukra", "Ettadhamen", "Mnihla", "Kalaat El Andalous", "Sidi Ameur"]
+    municipalities: ["Ariana Ville", "Raoued", "Sidi Thabet", "La Soukra", "Ettadhamen", "Mnihla", "Kalâat el-Andalous"]
   },
   {
     governorate: "Béja",
-    municipalities: ["Béja", "Medjez El Bab", "Nefza", "Teboursouk", "Testour", "Mateur", "Joumine", "El Ma El Abiod"]
+    municipalities: ["Béja", "Béja Nord", "Béja Sud", "Amdoun", "Goubellat", "Medjez el-Bab", "Nefza", "Téboursouk", "Testour", "Thibar"]
   },
   {
     governorate: "Ben Arous",
-    municipalities: ["Ben Arous", "Radès", "Mornag", "Hammam Lif", "Hammam Chott", "Ezzahra", "Mourouj", "Borj Cédria", "Méryana"]
+    municipalities: ["Ben Arous", "Bou Mhel el-Bassatine", "El Mourouj", "Ezzahra", "Fouchana", "Hammam Chott", "Hammam Lif", "Khalidia", "Mégrine", "Mohamedia", "Mornag", "Radès"]
   },
   {
     governorate: "Bizerte",
-    municipalities: ["Bizerte", "Mateur", "Ras Jebel", "Sejnane", "Menzel Bourguiba", "Tinja", "El Alia", "Ghar El Melh", "Aousja"]
+    municipalities: ["Bizerte", "Bizerte Nord", "Bizerte Sud", "El Alia", "Ghar el-Melh", "Ghézala", "Joumine", "Mateur", "Menzel Bourguiba", "Menzel Jemil", "Ras Jebel", "Sejnane", "Tinja", "Utique", "Zarzouna"]
   },
   {
     governorate: "Gabès",
-    municipalities: ["Gabès", "Mareth", "El Hamma", "Métouia", "Oudhref", "Ghannouch", "Kébili", "Degache", "Tamazret", "Zarat"]
+    municipalities: ["Gabès Médina", "Gabès Ouest", "Gabès Sud", "El Hamma", "El Metouia", "Ghannouch", "Mareth", "Matmata", "Matmata Nouvelle", "Menzel el-Habib"]
   },
   {
     governorate: "Gafsa",
-    municipalities: ["Gafsa", "Métlaoui", "El Ksar", "Sidi Aïch", "Ouedhref", "Moularès", "Haidra", "Sened", "El Guettar"]
+    municipalities: ["Gafsa", "Gafsa Nord", "Gafsa Sud", "Belkhir", "El Guettar", "El Ksar", "Mdhilla", "Métlaoui", "Moularès", "Redeyef", "Sened", "Sidi Aïch"]
   },
   {
     governorate: "Jendouba",
-    municipalities: ["Jendouba", "Tabarka", "Aïn Draham", "Balta", "Bou Salem", "Fernana", "Ghardimaou", "Oued Meliz", "Joumine"]
+    municipalities: ["Jendouba", "Jendouba Nord", "Aïn Draham", "Balta-Bou Aouane", "Bou Salem", "Fernana", "Ghardimaou", "Oued Meliz", "Tabarka"]
   },
   {
     governorate: "Kairouan",
-    municipalities: ["Kairouan", "Kairouan Nord", "Kairouan Sud", "Oueslatia", "Bougarnane", "Sidi Jaber", "Haffouz", "Hajeb El Ayoun"]
+    municipalities: ["Kairouan", "Kairouan Nord", "Kairouan Sud", "Alâa", "Bou Hajla", "Chebika", "Chrarda", "Haffouz", "Hajeb el-Ayoun", "Nasrallah", "Oueslatia", "Sbikha"]
   },
   {
     governorate: "Kasserine",
-    municipalities: ["Kasserine", "Sbeitla", "Thala", "Feriana", "Sbiba", "Djedeliane", "Aïn Khoucha"]
+    municipalities: ["Kasserine", "Kasserine Nord", "Kasserine Sud", "El Ayoun", "Ezzouhour", "Fériana", "Foussana", "Haïdra", "Hassi el-Ferid", "Jedeliane", "Majel Bel Abbès", "Sbeitla", "Sbiba", "Thala"]
   },
   {
     governorate: "Kébili",
-    municipalities: ["Kébili", "Douz", "Kébili Nord", "Kébili Sud", "Razzeg", "Béchari", "El Golâa", "Souk Lahad"]
+    municipalities: ["Kébili", "Kébili Nord", "Kébili Sud", "Douz", "Douz Nord", "Douz Sud", "Faouar", "Souk el-Ahad"]
   },
   {
     governorate: "Le Kef",
-    municipalities: ["Le Kef", "Sakiet Sidi Youssef", "Tajerouine", "Menzel Salem", "Bouchemma", "El Krib", "Dahmani", "Bargou"]
+    municipalities: ["Le Kef", "Le Kef Est", "Le Kef Ouest", "Dahmani", "El Ksour", "Jérissa", "Kalâa Khasba", "Kalâat Senan", "Nebeur", "Sakiet Sidi Youssef", "Sers", "Tajerouine"]
   },
   {
     governorate: "Mahdia",
-    municipalities: ["Mahdia", "Mahdia Ville", "Ksour Essef", "Melloulèche", "Ouedhref", "Sidi Alouane", "El Djem", "Chebba"]
+    municipalities: ["Mahdia", "Bou Merdes", "Chebba", "Chorbane", "El Jem", "Essouassi", "Hebira", "Ksour Essef", "Melloulèche", "Ouled Chamekh", "Sidi Alouane"]
   },
   {
     governorate: "Manouba",
-    municipalities: ["Manouba", "Den Den", "Mornaguia", "Ouedhref", "Borj El Amri", "Jedaida", "Menzel Mahfoudh", "Tabarja"]
+    municipalities: ["Manouba", "Borj el-Amri", "Djedeida", "Douar Hicher", "El Batan", "Mornaguia", "Oued Ellil", "Tébourba"]
   },
   {
     governorate: "Médenine",
-    municipalities: ["Médenine", "Djerba", "Midoun", "Houmt Souk", "Beni Khedache", "Zarzis", "Ben Gardane", "Ajim"]
+    municipalities: ["Médenine", "Médenine Nord", "Médenine Sud", "Ben Gardane", "Beni Khedache", "Djerba Ajim", "Djerba Houmt Souk", "Djerba Midoun", "Sidi Makhlouf", "Zarzis"]
   },
   {
     governorate: "Monastir",
-    municipalities: ["Monastir", "Monastir Ville", "Skanès", "Ksar Hellal", "Moknine", "Bembla", "Beni Hassen"]
+    municipalities: ["Monastir", "Bekalta", "Bembla", "Beni Hassen", "Jemmal", "Ksar Hellal", "Ksibet el-Médiouni", "Moknine", "Ouerdanine", "Sahline", "Sayada-Lamta-Bou Hajar", "Téboulba", "Zéramdine"]
   },
   {
     governorate: "Nabeul",
-    municipalities: ["Nabeul", "Hammamet", "Kelibia", "Menzel Temime", "Dar Chaâbane", "Beni Khiar"]
+    municipalities: ["Nabeul", "Béni Khalled", "Béni Khiar", "Bou Argoub", "Dar Chaâbane el-Fehri", "El Haouaria", "El Mida", "Grombalia", "Hammamet", "Hammam Ghezèze", "Kelibia", "Korba", "Menzel Bouzelfa", "Menzel Temime", "Slimane", "Soliman", "Takelsa"]
   },
   {
     governorate: "Sfax",
-    municipalities: ["Sfax", "Sfax Ville", "Sfax Sud", "Sfax Nord", "Thyna", "Chihia", "Jedeni", "Menzel Chaker", "Agareb"]
+    municipalities: ["Sfax", "Sfax Ouest", "Sfax Sud", "Agareb", "Bir Ali Ben Khalifa", "El Amra", "El Hencha", "Ghraïba", "Jbeniana", "Kerkennah", "Mahrès", "Menzel Chaker", "Sakiet Eddaïer", "Sakiet Ezzit", "Skhira", "Thyna"]
   },
   {
     governorate: "Sidi Bouzid",
-    municipalities: ["Sidi Bouzid", "Menzel Bouzaiane", "Sidi Ali Ben Aoun", "Ouled Haffouz", "Melloulèche", "Bir El Hafey", "Sahline"]
+    municipalities: ["Sidi Bouzid", "Sidi Bouzid Est", "Sidi Bouzid Ouest", "Bir el-Hafey", "Cebbala Ouled Asker", "Jelma", "Jilma", "Mazzouna", "Meknassy", "Menzel Bouzaiane", "Ouled Haffouz", "Regueb", "Sidi Ali Ben Aoun"]
   },
   {
     governorate: "Siliana",
-    municipalities: ["Siliana", "Bousalem", "El Krib", "Bargou", "Kesra", "Makthar", "Bou Arada", "Sidi Morocco", "Gaâfour"]
+    municipalities: ["Siliana", "Siliana Nord", "Siliana Sud", "Bargou", "Bou Arada", "El Aroussa", "El Krib", "Gaâfour", "Kesra", "Le Sers", "Makthar", "Rouhia"]
   },
   {
     governorate: "Sousse",
-    municipalities: ["Sousse", "Sousse Ville", "Ksibet Thrayet", "Msaken", "Sidi Bou Ali", "Hammam Sousse", "Kantaoui", "Kalâa Kebira"]
+    municipalities: ["Sousse Médina", "Sousse Riadh", "Sousse Jawhara", "Sousse Sidi Abdelhamid", "Akouda", "Bouficha", "Enfida", "Hammam Sousse", "Hergla", "Kalâa Kebira", "Kalâa Sghira", "Kondar", "Ksibet Thrayet", "M'saken", "Sidi Bou Ali", "Sidi el-Héni"]
   },
   {
     governorate: "Tataouine",
-    municipalities: ["Tataouine", "Tataouine Nord", "Tataouine Sud", "Ghomrassen", "Dhehiba", "Remada", "El Ferch", "Smar"]
+    municipalities: ["Tataouine", "Tataouine Nord", "Tataouine Sud", "Bir Lahmar", "Dehiba", "Ghomrassen", "Remada", "Smar"]
   },
   {
     governorate: "Tozeur",
-    municipalities: ["Tozeur", "Nefta", "Degache", "Tameghza", "El Hamma du Jérid", "Kebili"]
+    municipalities: ["Tozeur", "Degache", "Hazoua", "Nefta", "Tameghza"]
   },
   {
     governorate: "Tunis",
-    municipalities: ["Tunis", "Tunis Ville", "Cité El Khadra", "El Ouardia", "El Menzah", "Bhar Lazreg", "Le Bardo", "Sidi Hassine", "Jebel Jelloud"]
+    municipalities: ["Tunis", "Bab Bhar", "Bab Souika", "Carthage", "Cité el-Khadra", "Djebel Jelloud", "El Kabaria", "El Menzah", "El Omrane", "El Omrane Supérieur", "El Ouardia", "Ettahrir", "Ezzouhour", "Hrairia", "La Goulette", "La Marsa", "Le Bardo", "Le Kram", "Séjoumi", "Sidi Hassine", "Sidi el-Béchir"]
   },
   {
     governorate: "Zaghouan",
-    municipalities: ["Zaghouan", "Zaghouan Ville", "Nadhour", "Bir Mcherga", "Zriba", "El Amaiem", "Fountain", "Jedaida"]
+    municipalities: ["Zaghouan", "Bir Mcherga", "El Fahs", "Nadhour", "Saouaf", "Zriba"]
   }
 ];
 

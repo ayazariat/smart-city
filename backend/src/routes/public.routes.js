@@ -91,7 +91,9 @@ router.get("/stats", async (req, res) => {
     
     // Calculate date range based on period
     let startDate = new Date();
-    if (period === "today") {
+    if (period === "all") {
+      startDate = new Date(0);
+    } else if (period === "today") {
       startDate.setHours(0, 0, 0, 0);
     } else if (period === "week") {
       startDate.setDate(startDate.getDate() - 7);
@@ -101,10 +103,39 @@ router.get("/stats", async (req, res) => {
       startDate.setFullYear(startDate.getFullYear() - 1);
     }
 
+    // Municipality to governorate mapping (used for governorate stats)
+    const municipalityToGovernorate = {
+      "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana",
+      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Mateur": "Béja", "Joumine": "Béja",
+      "Ben Arous": "Ben Arous", "Radès": "Ben Arous", "Mornag": "Ben Arous", "Hammam Lif": "Ben Arous", "Hammam Chott": "Ben Arous", "Ezzahra": "Ben Arous", "Mourouj": "Ben Arous",
+      "Bizerte": "Bizerte", "Ras Jebel": "Bizerte", "Sejnane": "Bizerte", "Menzel Bourguiba": "Bizerte", "Tinja": "Bizerte", "El Alia": "Bizerte",
+      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès",
+      "Gafsa": "Gafsa", "Métlaoui": "Gafsa", "El Ksar": "Gafsa", "Sidi Aïch": "Gafsa", "Moularès": "Gafsa",
+      "Jendouba": "Jendouba", "Tabarka": "Jendouba", "Aïn Draham": "Jendouba", "Balta": "Jendouba", "Bou Salem": "Jendouba", "Fernana": "Jendouba",
+      "Kairouan": "Kairouan", "Kairouan Nord": "Kairouan", "Kairouan Sud": "Kairouan", "Oueslatia": "Kairouan",
+      "Kasserine": "Kasserine", "Sbeitla": "Kasserine", "Thala": "Kasserine", "Feriana": "Kasserine",
+      "Kébili": "Kébili", "Douz": "Kébili", "Kébili Nord": "Kébili", "Kébili Sud": "Kébili",
+      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Dahmani": "Le Kef",
+      "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia",
+      "Manouba": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba",
+      "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine",
+      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir",
+      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
+      "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax",
+      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid",
+      "Siliana": "Siliana", "Bousalem": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana",
+      "Sousse": "Sousse", "Sousse Ville": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Hammam Sousse": "Sousse",
+      "Tataouine": "Tataouine", "Tataouine Nord": "Tataouine", "Tataouine Sud": "Tataouine",
+      "Tozeur": "Tozeur", "Nefta": "Tozeur", "Degache": "Tozeur",
+      "Tunis": "Tunis", "Tunis Ville": "Tunis", "Cité El Khadra": "Tunis", "El Ouardia": "Tunis", "El Menzah": "Tunis", "Le Bardo": "Tunis",
+      "Zaghouan": "Zaghouan", "Zaghouan Ville": "Zaghouan", "Nadhour": "Zaghouan"
+    };
+
     // Get complaints within period - only show VALIDATED and above for public
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({
-      createdAt: { $gte: startDate },
+      ...dateFilter,
       status: { $in: publicStatuses },
       isArchived: { $ne: true }
     });
@@ -203,7 +234,40 @@ router.get("/stats", async (req, res) => {
         resolutionRateTrend,
         avgResolutionTrend,
         slaComplianceTrend: slaComplianceRate - 50, // Simplified for now
-        generatedAt: new Date().toISOString()
+        generatedAt: new Date().toISOString(),
+        
+        // Governorate breakdown
+        governorates: (() => {
+          const governorateStats = {};
+          const allGovernorates = ["Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", "Jendouba", "Kairouan", "Kasserine", "Kébili", "Le Kef", "Mahdia", "Manouba", "Médenine", "Monastir", "Nabeul", "Sfax", "Sidi Bouzid", "Siliana", "Sousse", "Tataouine", "Tozeur", "Tunis", "Zaghouan"];
+          
+          for (const gov of allGovernorates) {
+            governorateStats[gov] = { total: 0, resolved: 0 };
+          }
+          
+          for (const c of complaints) {
+            let gov = c.governorate;
+            if (!gov && c.municipalityName) {
+              gov = municipalityToGovernorate[c.municipalityName] || municipalityToGovernorate[c.location?.municipality];
+            }
+            if (gov && governorateStats[gov]) {
+              governorateStats[gov].total++;
+              if (c.status === "RESOLVED" || c.status === "CLOSED") {
+                governorateStats[gov].resolved++;
+              }
+            }
+          }
+          
+          return Object.entries(governorateStats)
+            .filter(([, data]) => data.total > 0)
+            .map(([governorate, data]) => ({
+              governorate,
+              total: data.total,
+              resolved: data.resolved,
+              resolutionRate: data.total > 0 ? Math.round((data.resolved / data.total) * 100) : 0
+            }))
+            .sort((a, b) => b.total - a.total);
+        })()
       }
     });
   } catch (error) {
@@ -221,11 +285,13 @@ router.get("/stats/by-category", async (req, res) => {
     if (period === "week") startDate.setDate(startDate.getDate() - 7);
     else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
     // Only show VALIDATED and above for public
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
+    const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
+    const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     const categoryStats = {};
     const categories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
@@ -259,11 +325,13 @@ router.get("/stats/by-municipality", async (req, res) => {
     if (period === "week") startDate.setDate(startDate.getDate() - 7);
     else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
     // Only show VALIDATED and above for public
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
+    const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
+    const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     // Group by municipality/commune
     const municipalityStats = {};
@@ -336,10 +404,12 @@ router.get("/stats/all-municipalities", async (req, res) => {
     if (period === "week") startDate.setDate(startDate.getDate() - 7);
     else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
+    const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
+    const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     const municipalityToGovernorate = {
       "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana", "Kalaat El Andalous": "Ariana", "Sidi Ameur": "Ariana",
@@ -400,6 +470,9 @@ router.get("/stats/all-municipalities", async (req, res) => {
       munStats[m.name] = { name: m.name, governorate: m.governorate, total: 0, resolved: 0 };
     }
 
+    // Helper: normalize accented chars for matching
+    const normalizeStr = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
     for (const c of complaints) {
       const loc = c.location;
       let mun = loc?.municipality || loc?.commune || c.municipalityName;
@@ -409,8 +482,10 @@ router.get("/stats/all-municipalities", async (req, res) => {
       if (munStats[mun]) {
         matched = true;
       } else {
+        const munNorm = normalizeStr(mun);
         for (const m of allMunicipalities) {
-          if (m.name.toLowerCase() === mun.toLowerCase() || mun.toLowerCase().includes(m.name.toLowerCase())) {
+          const mNorm = normalizeStr(m.name);
+          if (mNorm === munNorm || munNorm.includes(mNorm) || mNorm.includes(munNorm)) {
             mun = m.name;
             matched = true;
             break;
@@ -422,6 +497,15 @@ router.get("/stats/all-municipalities", async (req, res) => {
         munStats[mun].total++;
         if (c.status === "RESOLVED" || c.status === "CLOSED") {
           munStats[mun].resolved++;
+        }
+      } else if (c.governorate) {
+        // Fallback: assign to governorate capital if municipality didn't match
+        const govCapital = allMunicipalities.find(m => m.name === c.governorate && m.governorate === c.governorate);
+        if (govCapital && munStats[govCapital.name]) {
+          munStats[govCapital.name].total++;
+          if (c.status === "RESOLVED" || c.status === "CLOSED") {
+            munStats[govCapital.name].resolved++;
+          }
         }
       }
     }
@@ -509,10 +593,12 @@ router.get("/stats/by-zone", async (req, res) => {
     if (period === "week") startDate.setDate(startDate.getDate() - 7);
     else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-    const complaints = await Complaint.find({ createdAt: { $gte: startDate }, status: { $in: publicStatuses }, isArchived: { $ne: true } });
+    const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
+    const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
     const categories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
     const governorates = ["Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", "Jendouba", "Kairouan", "Kasserine", "Kébili", "Le Kef", "Mahdia", "Manouba", "Médenine", "Monastir", "Nabeul", "Sfax", "Sidi Bouzid", "Siliana", "Sousse", "Tunis", "Zaghouan"];
@@ -555,10 +641,16 @@ router.get("/stats/by-zone", async (req, res) => {
 
     for (const complaint of complaints) {
       const location = complaint.location;
-      let governorate = location?.governorate;
+      // Prefer top-level governorate (clean name), then try location.governorate
+      let governorate = complaint.governorate || location?.governorate;
+      
+      // Clean "Gouvernorat X" prefix if present
+      if (governorate && governorate.startsWith('Gouvernorat ')) {
+        governorate = governorate.replace('Gouvernorat ', '');
+      }
       
       // Try to get governorate from municipality
-      if (!governorate) {
+      if (!governorate || !zoneData[governorate]) {
         const municipality = location?.municipality || location?.commune || complaint.municipalityName;
         if (municipality) {
           governorate = municipalityToGovernorate[municipality];
@@ -614,10 +706,12 @@ router.get("/top-recurring", async (req, res) => {
       const normalizedTitle = c.title?.toLowerCase().split(' ').slice(0, 4).join(' ') || "";
       if (normalizedTitle.length > 5) {
         if (!titleCounts[normalizedTitle]) {
-          titleCounts[normalizedTitle] = { originalTitle: c.title, category: c.category, count: 0, statuses: new Set() };
+          titleCounts[normalizedTitle] = { originalTitle: c.title, category: c.category, count: 0, resolvedCount: 0 };
         }
         titleCounts[normalizedTitle].count++;
-        titleCounts[normalizedTitle].statuses.add(c.status);
+        if (c.status === "RESOLVED" || c.status === "CLOSED") {
+          titleCounts[normalizedTitle].resolvedCount++;
+        }
       }
     }
 
@@ -629,7 +723,7 @@ router.get("/top-recurring", async (req, res) => {
         title: data.originalTitle,
         category: data.category,
         count: data.count,
-        resolvedCount: Array.from(data.statuses).filter(s => s === "RESOLVED" || s === "CLOSED").length
+        resolvedCount: data.resolvedCount
       }));
 
     res.json({ success: true, data: result });
@@ -671,6 +765,7 @@ router.get("/resolution-times", async (req, res) => {
     if (period === "week") startDate.setDate(startDate.getDate() - 7);
     else if (period === "month") startDate.setMonth(startDate.getMonth() - 1);
     else if (period === "year") startDate.setFullYear(startDate.getFullYear() - 1);
+    else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
     const complaints = await Complaint.find({ 

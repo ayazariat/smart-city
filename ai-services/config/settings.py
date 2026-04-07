@@ -114,7 +114,7 @@ TEMPORAL_PROXIMITY = {
 }
 
 # Trend Prediction Settings
-TREND_MIN_HISTORY_DAYS = 30
+TREND_MIN_HISTORY_DAYS = 10
 TREND_FORECAST_DAYS = [7, 30]
 
 # Seasonal Features

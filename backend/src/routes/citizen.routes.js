@@ -190,6 +190,39 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
     const user = await User.findById(req.user.userId).select('municipalityName municipality').lean();
     const userMunicipalityName = user?.municipalityName || location?.municipality || location?.commune || "";
 
+    // Municipality to governorate mapping
+    const municipalityToGovernorate = {
+      "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana",
+      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Mateur": "Béja", "Joumine": "Béja",
+      "Ben Arous": "Ben Arous", "Radès": "Ben Arous", "Mornag": "Ben Arous", "Hammam Lif": "Ben Arous", "Hammam Chott": "Ben Arous", "Ezzahra": "Ben Arous", "Mourouj": "Ben Arous",
+      "Bizerte": "Bizerte", "Ras Jebel": "Bizerte", "Sejnane": "Bizerte", "Menzel Bourguiba": "Bizerte", "Tinja": "Bizerte", "El Alia": "Bizerte",
+      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès",
+      "Gafsa": "Gafsa", "Métlaoui": "Gafsa", "El Ksar": "Gafsa", "Sidi Aïch": "Gafsa", "Moularès": "Gafsa",
+      "Jendouba": "Jendouba", "Tabarka": "Jendouba", "Aïn Draham": "Jendouba", "Balta": "Jendouba", "Bou Salem": "Jendouba", "Fernana": "Jendouba",
+      "Kairouan": "Kairouan", "Kairouan Nord": "Kairouan", "Kairouan Sud": "Kairouan", "Oueslatia": "Kairouan",
+      "Kasserine": "Kasserine", "Sbeitla": "Kasserine", "Thala": "Kasserine", "Feriana": "Kasserine",
+      "Kébili": "Kébili", "Douz": "Kébili", "Kébili Nord": "Kébili", "Kébili Sud": "Kébili",
+      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Dahmani": "Le Kef",
+      "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia", "Melloulèche": "Mahdia",
+      "Manouba": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba",
+      "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine",
+      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir",
+      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
+      "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax",
+      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid",
+      "Siliana": "Siliana", "Bousalem": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana",
+      "Sousse": "Sousse", "Sousse Ville": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Hammam Sousse": "Sousse",
+      "Tataouine": "Tataouine", "Tataouine Nord": "Tataouine", "Tataouine Sud": "Tataouine",
+      "Tozeur": "Tozeur", "Nefta": "Tozeur", "Degache": "Tozeur",
+      "Tunis": "Tunis", "Tunis Ville": "Tunis", "Cité El Khadra": "Tunis", "El Ouardia": "Tunis", "El Menzah": "Tunis", "Le Bardo": "Tunis",
+      "Zaghouan": "Zaghouan", "Zaghouan Ville": "Zaghouan", "Nadhour": "Zaghouan"
+    };
+
+    // Auto-populate governorate from municipality
+    const governorate = municipalityToGovernorate[userMunicipalityName] || 
+                        municipalityToGovernorate[location?.municipality] ||
+                        municipalityToGovernorate[location?.commune] || null;
+
     const complaint = new Complaint({
       title: title.trim(),
       description: description.trim(),
@@ -199,6 +232,7 @@ router.post("/complaints", authenticate, authorize("CITIZEN", "ADMIN"), async (r
       location: Object.keys(geoLocation).length ? geoLocation : {},
       municipalityName: userMunicipalityName,
       municipalityNormalized: normalizeMunicipality(userMunicipalityName),
+      governorate: governorate, // Auto-populate governorate
       media: media || [],
       isAnonymous: !!isAnonymous,
       ownerName: !isAnonymous ? ownerName : undefined,

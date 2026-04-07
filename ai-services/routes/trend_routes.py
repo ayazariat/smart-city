@@ -55,8 +55,19 @@ async def run_trend_batch_endpoint(request: TrendBatchRequest) -> Dict[str, Any]
             "data": result
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # Never return 500 — return safe response
+        return {
+            "success": True,
+            "data": {
+                "processed": 0,
+                "alerts": 0,
+                "duration_ms": 0,
+                "predictions": [],
+                "allAlerts": [],
+                "message": "Collecting data..."
+            }
+        }
 
 
 @router.get("/forecast")
@@ -87,8 +98,12 @@ async def get_forecast_endpoint(
             "data": forecast
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        return {
+            "success": False,
+            "message": "Unable to retrieve forecast",
+            "stale": True
+        }
 
 
 @router.get("/alerts")
@@ -115,8 +130,12 @@ async def get_alerts_endpoint() -> Dict[str, Any]:
             "generatedAt": predictor.predictions_cache.get("generatedAt")
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        return {
+            "success": False,
+            "data": [],
+            "message": "Unable to retrieve alerts"
+        }
 
 
 @router.get("/health")

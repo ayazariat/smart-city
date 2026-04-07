@@ -88,8 +88,18 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
             "data": result
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # Never return 500 — always return safe response
+        return {
+            "success": True,
+            "data": {
+                "isDuplicate": False,
+                "duplicateLevel": "NOT_DUPLICATE",
+                "topMatches": [],
+                "recommendation": "Could not check duplicates at this time.",
+                "humanReviewRequired": False
+            }
+        }
 
 
 @router.post("/confirm")

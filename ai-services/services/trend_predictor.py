@@ -99,6 +99,12 @@ class TrendPredictor:
     def _linear_regression_forecast(self, daily_counts: List[int], days_ahead: int) -> Dict[str, Any]:
         """Simple linear regression for short-term forecast."""
         n = len(daily_counts)
+        if n == 0:
+            return {
+                "expectedTotal": 0,
+                "dailyForecast": [0] * days_ahead,
+                "trend": "STABLE"
+            }
         x = list(range(n))
         y = daily_counts
         
@@ -128,7 +134,7 @@ class TrendPredictor:
     
     def _calculate_change_percentage(self, forecast: List[int], historical_avg: float) -> str:
         """Calculate percentage change vs historical average."""
-        if historical_avg == 0:
+        if historical_avg == 0 or len(forecast) == 0:
             return "+0%"
         
         forecast_avg = sum(forecast) / len(forecast)

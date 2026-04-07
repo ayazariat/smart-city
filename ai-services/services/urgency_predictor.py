@@ -64,9 +64,9 @@ class UrgencyPredictor:
         
         keywords = extract_keywords_by_level(text)
         
-        category_score = CATEGORY_BASE_SCORES.get(category.upper(), 0.3)
+        category_score = CATEGORY_BASE_SCORES.get((category or "OTHER").upper(), 0.3)
         
-        citizen_score = CITIZEN_URGENCY_MAP.get(citizen_urgency.upper(), 0.2)
+        citizen_score = CITIZEN_URGENCY_MAP.get((citizen_urgency or "MEDIUM").upper(), 0.2)
         
         community_score = min(confirmation_count / 20, 1.0)
         
@@ -99,7 +99,7 @@ class UrgencyPredictor:
                 "timeScore": round(time_score, 3),
                 "sensitiveZoneBonus": round(zone_bonus, 3),
                 "keywordsDetected": keywords["critical"] + keywords["high"] + keywords["medium"],
-                "citizenUrgencyInput": citizen_urgency.upper()
+                "citizenUrgencyInput": (citizen_urgency or "MEDIUM").upper()
             },
             "isRuleBased": True
         }
@@ -179,26 +179,36 @@ class UrgencyPredictor:
         if submitted_at is None:
             submitted_at = datetime.now()
         
-        # Use rule-based approach if no trained model
-        if self.model is None or self.vectorizer is None:
+        try:
+            # Use rule-based approach if no trained model
+            if self.model is None or self.vectorizer is None:
+                result = self._calculate_rule_based_score(
+                    title, description, category or "OTHER", citizen_urgency or "MEDIUM",
+                    municipality or "", confirmation_count, submitted_at
+                )
+                result["explanation"] = self._generate_explanation(result)
+                result["agentOverrideAllowed"] = True
+                return result
+            
+            # ML-based prediction (future enhancement)
+            # For now, fall back to rule-based
             result = self._calculate_rule_based_score(
-                title, description, category, citizen_urgency,
-                municipality, confirmation_count, submitted_at
+                title, description, category or "OTHER", citizen_urgency or "MEDIUM",
+                municipality or "", confirmation_count, submitted_at
             )
             result["explanation"] = self._generate_explanation(result)
             result["agentOverrideAllowed"] = True
+        
             return result
-        
-        # ML-based prediction (future enhancement)
-        # For now, fall back to rule-based
-        result = self._calculate_rule_based_score(
-            title, description, category, citizen_urgency,
-            municipality, confirmation_count, submitted_at
-        )
-        result["explanation"] = self._generate_explanation(result)
-        result["agentOverrideAllowed"] = True
-        
-        return result
+        except Exception:
+            return {
+                "predictedUrgency": "MEDIUM",
+                "confidenceScore": 0.3,
+                "breakdown": {},
+                "isRuleBased": True,
+                "explanation": "Fallback prediction due to processing error",
+                "agentOverrideAllowed": True
+            }
     
     def train(self, training_data: list) -> Dict[str, Any]:
         """

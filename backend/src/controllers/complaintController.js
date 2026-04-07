@@ -3,7 +3,7 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const Department = require("../models/Department");
 const { getStatus: getSlaStatus } = require("../utils/slaCalculator");
-const { normalizeMunicipality } = require("../utils/normalize");
+const { normalizeMunicipality, getMunicipalityGovernorate } = require("../utils/normalize");
 
 class ComplaintController {
   // Create new complaint (citizen)
@@ -27,11 +27,14 @@ class ComplaintController {
       const mediaData = media || images || [];
       const normalizedMunicipality = normalizeMunicipality(municipality || "");
 
+      // Auto-populate governorate from municipality if not provided
+      const resolvedGovernorate = governorate || getMunicipalityGovernorate(municipality) || "";
+
       const complaint = new Complaint({
         title,
         description,
         category,
-        governorate: governorate || "",
+        governorate: resolvedGovernorate,
         municipality: municipality || "",
         municipalityName: municipality || "",
         municipalityNormalized: normalizedMunicipality,

@@ -648,3 +648,54 @@ export const getTrendAlerts = async (): Promise<{
     return [];
   }
 };
+
+/**
+ * Check for duplicate complaints (BL-25)
+ */
+export const checkDuplicate = async (
+  title: string,
+  description: string,
+  category: string,
+  municipality: string,
+  latitude?: number,
+  longitude?: number
+): Promise<{
+  isDuplicate: boolean;
+  duplicateLevel: string;
+  topMatches: Array<{
+    complaintId: string;
+    referenceId: string;
+    title: string;
+    overallScore: number;
+    status: string;
+  }>;
+  recommendation: string;
+  humanReviewRequired: boolean;
+} | null> => {
+  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+
+  try {
+    const response = await fetch(`${aiUrl}/ai/duplicate/check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        complaintId: "new",
+        title,
+        description,
+        category,
+        municipality,
+        latitude,
+        longitude,
+        submittedAt: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) return null;
+
+    const result = await response.json();
+    return result.data || null;
+  } catch {
+    return null;
+  }
+};

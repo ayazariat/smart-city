@@ -673,7 +673,7 @@ export default function ComplaintDetailPage() {
                         {Math.round((complaint.aiUrgencyPrediction.confidenceScore || 0) * 100)}% confidence
                       </span>
                     </div>
-                    {complaint.aiUrgencyPrediction.breakdown?.keywordsDetected?.length > 0 && (
+                    {complaint.aiUrgencyPrediction.breakdown && complaint.aiUrgencyPrediction.breakdown.keywordsDetected && complaint.aiUrgencyPrediction.breakdown.keywordsDetected.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {complaint.aiUrgencyPrediction.breakdown.keywordsDetected.slice(0, 5).map((kw: string, i: number) => (
                           <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
@@ -706,9 +706,9 @@ export default function ComplaintDetailPage() {
                         {complaint.duplicateStatus || 'NOT_DUPLICATE'}
                       </span>
                     </div>
-                    {complaint.aiDuplicateCheck.topMatches?.length > 0 && (
+                    {complaint.aiDuplicateCheck.topMatches && complaint.aiDuplicateCheck.topMatches.length > 0 && (
                       <div className="space-y-2">
-                        {complaint.aiDuplicateCheck.topMatches.slice(0, 2).map((match: any, i: number) => (
+                        {complaint.aiDuplicateCheck.topMatches.slice(0, 2).map((match, i) => (
                           <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg">
                             <div>
                               <p className="text-sm font-medium text-slate-700">{match.title}</p>

@@ -73,8 +73,18 @@ async def predict_urgency_endpoint(request: UrgencyPredictionRequest) -> Dict[st
             "data": result
         }
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        # Never return 500 — always return a fallback prediction
+        return {
+            "success": True,
+            "data": {
+                "predictedUrgency": request.citizenUrgency or "MEDIUM",
+                "confidenceScore": 0.3,
+                "explanation": "Fallback prediction used due to processing error",
+                "isRuleBased": True,
+                "isFallback": True
+            }
+        }
 
 
 @router.post("/train")

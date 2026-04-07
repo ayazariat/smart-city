@@ -10,6 +10,7 @@ import {
   X,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Image,
   Video,
   Loader2,
@@ -212,6 +213,16 @@ export default function NewComplaintPage() {
   const [success, setSuccess] = useState(false);
   const [complaintId, setComplaintId] = useState<string | null>(null);
   const [authError, setAuthError] = useState(false);
+
+  // Duplicate check state
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    isDuplicate: boolean;
+    duplicateLevel: string;
+    topMatches: Array<{ complaintId: string; referenceId: string; title: string; overallScore: number; status: string }>;
+    recommendation: string;
+  } | null>(null);
+  const [duplicateChecking, setDuplicateChecking] = useState(false);
+  const [duplicateOverride, setDuplicateOverride] = useState(false);
 
   // Additional fields
   const [incidentDate, setIncidentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -633,6 +644,31 @@ export default function NewComplaintPage() {
     setError(null);
 
     if (!validateForm()) return;
+
+    // BL-25: Check for duplicates before submitting (unless user already overrode)
+    if (!duplicateOverride && category && (commune || detectedCommune)) {
+      setDuplicateChecking(true);
+      try {
+        const { checkDuplicate } = await import("@/services/complaint.service");
+        const dupResult = await checkDuplicate(
+          title.trim(),
+          description.trim(),
+          category as string,
+          commune || detectedCommune || "Tunis",
+          location?.latitude,
+          location?.longitude
+        );
+        if (dupResult && dupResult.isDuplicate && dupResult.topMatches.length > 0) {
+          setDuplicateWarning(dupResult);
+          setDuplicateChecking(false);
+          return; // Don't submit yet — show warning
+        }
+      } catch {
+        // Silently ignore duplicate check errors
+      } finally {
+        setDuplicateChecking(false);
+      }
+    }
 
     setIsSubmitting(true);
 
@@ -1262,6 +1298,63 @@ export default function NewComplaintPage() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* BL-25: Duplicate Warning */}
+          {duplicateWarning && !duplicateOverride && (
+            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                <span className="font-semibold text-amber-800">Possible Duplicate Detected</span>
+                <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  duplicateWarning.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'bg-orange-200 text-orange-700' : 'bg-yellow-200 text-yellow-700'
+                }`}>
+                  {duplicateWarning.duplicateLevel.replace('_', ' ')}
+                </span>
+              </div>
+              {duplicateWarning.topMatches.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {duplicateWarning.topMatches.slice(0, 3).map((match, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-700 truncate">{match.title}</p>
+                        <p className="text-xs text-slate-500">{match.referenceId} &bull; {match.status}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-amber-600 ml-2">
+                        {Math.round(match.overallScore * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {duplicateWarning.recommendation && (
+                <p className="text-sm text-amber-700 mb-3">{duplicateWarning.recommendation}</p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setDuplicateWarning(null); }}
+                  className="flex-1 px-4 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setDuplicateOverride(true); setDuplicateWarning(null); }}
+                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
+                >
+                  Submit Anyway
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Duplicate Checking Spinner */}
+          {duplicateChecking && (
+            <div className="flex items-center gap-2 p-3 bg-violet-50 rounded-xl border border-violet-200">
+              <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
+              <span className="text-sm text-violet-700">Checking for similar complaints...</span>
             </div>
           )}
 
