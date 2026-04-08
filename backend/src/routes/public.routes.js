@@ -119,8 +119,8 @@ router.get("/stats", async (req, res) => {
       "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia",
       "Manouba": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba",
       "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine",
-      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir",
-      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
+      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir", "Bembla": "Monastir",
+      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul", "Béni Khiar": "Nabeul",
       "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax",
       "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid",
       "Siliana": "Siliana", "Bousalem": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana",
@@ -138,7 +138,7 @@ router.get("/stats", async (req, res) => {
       ...dateFilter,
       status: { $in: publicStatuses },
       isArchived: { $ne: true }
-    });
+    }).lean();
 
     // Total counts
     const total = complaints.length;
@@ -247,6 +247,10 @@ router.get("/stats", async (req, res) => {
           
           for (const c of complaints) {
             let gov = c.governorate;
+            if (!gov && c.location?.governorate) {
+              const locGov = c.location.governorate.replace(/^Gouvernorat\s+/i, '');
+              if (governorateStats[locGov]) gov = locGov;
+            }
             if (!gov && c.municipalityName) {
               gov = municipalityToGovernorate[c.municipalityName] || municipalityToGovernorate[c.location?.municipality];
             }
@@ -1032,6 +1036,78 @@ router.post("/complaints/:id/upvote", authenticate, async (req, res) => {
   } catch (error) {
     console.error("Upvote error:", error);
     res.status(500).json({ success: false, message: "Failed to upvote complaint" });
+  }
+});
+
+// ─── PUBLIC COMMENT ─────────────────────────────────────
+router.post("/complaints/:id/comment", authenticate, async (req, res) => {
+  try {
+    const { text, anonymous } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: "Comment text is required" });
+    }
+    if (text.trim().length > 1000) {
+      return res.status(400).json({ success: false, message: "Comment too long (max 1000 characters)" });
+    }
+
+    const complaint = await Complaint.findById(req.params.id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    const comment = {
+      text: text.trim(),
+      author: req.user.userId,
+      authorName: anonymous ? "Anonymous" : req.user.fullName || "Citizen",
+      authorRole: req.user.role || "CITIZEN",
+      type: "PUBLIC",
+      isInternal: false,
+      createdAt: new Date()
+    };
+
+    if (!complaint.comments) {
+      complaint.comments = [];
+    }
+    complaint.comments.push(comment);
+    await complaint.save();
+
+    res.json({
+      success: true,
+      message: "Comment added",
+      data: {
+        text: comment.text,
+        authorName: comment.authorName,
+        createdAt: comment.createdAt
+      }
+    });
+  } catch (error) {
+    console.error("Public comment error:", error);
+    res.status(500).json({ success: false, message: "Failed to add comment" });
+  }
+});
+
+// ─── GET PUBLIC COMMENTS ───────────────────────────────
+router.get("/complaints/:id/comments", async (req, res) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id).select("comments");
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    const publicComments = (complaint.comments || [])
+      .filter(c => c.type === "PUBLIC" && !c.isInternal)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map(c => ({
+        _id: c._id,
+        text: c.text,
+        authorName: c.authorName || "Anonymous",
+        createdAt: c.createdAt
+      }));
+
+    res.json({ success: true, data: publicComments });
+  } catch (error) {
+    console.error("Get comments error:", error);
+    res.status(500).json({ success: false, message: "Failed to get comments" });
   }
 });
 

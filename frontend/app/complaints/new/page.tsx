@@ -32,6 +32,7 @@ import {
   Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import { ComplaintCategory, ComplaintUrgency, ComplaintMedia, CreateComplaintData } from "@/types";
 import { complaintService, uploadMedia, predictCategory } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -802,17 +803,11 @@ export default function NewComplaintPage() {
   }
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-      {/* Header */}
       <div className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-xl">
         <div className="container mx-auto max-w-3xl px-4 py-6">
           <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
             <div className="flex-1">
               <h1 className="text-2xl font-bold">Report an Issue</h1>
               <p className="text-primary-200 text-sm">
@@ -1386,5 +1381,6 @@ export default function NewComplaintPage() {
         </form>
       </div>
     </div>
+    </DashboardLayout>
   );
 }

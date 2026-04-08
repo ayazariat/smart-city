@@ -24,6 +24,7 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { complaintService } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Complaint } from "@/types";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 function ArchivePageContent() {
   const router = useRouter();
@@ -153,7 +154,6 @@ function ArchivePageContent() {
   }
 
   if (!user || !token) {
-    router.push("/");
     return null;
   }
 
@@ -164,11 +164,12 @@ function ArchivePageContent() {
   };
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="Archived Complaints"
         subtitle={`${total} closed/rejected complaints`}
-        backHref="/dashboard"
+        showBackButton={false}
       />
 
       {/* Stats Cards */}
@@ -351,6 +352,7 @@ function ArchivePageContent() {
         )}
       </main>
     </div>
+    </DashboardLayout>
   );
 }
 

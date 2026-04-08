@@ -32,6 +32,7 @@ import { showToast } from "@/components/ui/Toast";
 import { Button, Modal, PageHeader, ConfirmationModal } from "@/components/ui";
 import { categoryLabels } from "@/lib/complaints";
 import { getPhotoCount } from "@/lib/photos";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 const statusConfig: Record<string, { label: string; bgClass: string; textClass: string; borderClass: string }> = {
   ASSIGNED: { label: "Assigned", bgClass: "bg-primary/10", textClass: "text-primary", borderClass: "border-primary/20" },
@@ -102,13 +103,14 @@ export default function TechnicianTasksPage() {
 
       const statsResp = await technicianService.getTechnicianStats();
       if (statsResp.data) {
+        const d = statsResp.data as Record<string, number>;
         setStats({
-          total: statsResp.data.total || 0,
-          assigned: statsResp.data.assigned || 0,
-          inProgress: statsResp.data.inProgress || 0,
-          resolved: statsResp.data.resolved || 0,
-          closed: statsResp.data.closed || 0,
-          totalOverdue: statsResp.data.totalOverdue || 0,
+          total: d.total || 0,
+          assigned: d.assigned || 0,
+          inProgress: d.inProgress || 0,
+          resolved: d.resolved || 0,
+          closed: d.closed || 0,
+          totalOverdue: d.totalOverdue || 0,
         });
       }
     } catch (err) {
@@ -262,11 +264,12 @@ export default function TechnicianTasksPage() {
   if (!user || user.role !== "TECHNICIAN") return null;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="My Tasks"
         subtitle="Manage your assigned work orders"
-        backHref="/dashboard"
+        showBackButton={false}
         rightContent={
           <div className="flex items-center gap-3">
             {/* Notifications */}
@@ -710,5 +713,6 @@ export default function TechnicianTasksPage() {
         isLoading={actionLoading}
       />
     </div>
+    </DashboardLayout>
   );
 }

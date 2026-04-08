@@ -16,6 +16,7 @@ import {
   EmptyState,
   ComplaintCard,
 } from "@/components/ui";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function MyComplaintsPage() {
   const router = useRouter();
@@ -90,11 +91,12 @@ export default function MyComplaintsPage() {
   if (!user || user.role !== "CITIZEN") return null;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="My Complaints"
         subtitle="Track and manage your submitted complaints"
-        backHref="/dashboard"
+        showBackButton={false}
         rightContent={
           <Link
             href="/complaints/new"
@@ -328,6 +330,7 @@ export default function MyComplaintsPage() {
         )}
       </main>
     </div>
+    </DashboardLayout>
   );
 }
 

@@ -41,6 +41,7 @@ import {
   Map as MapIcon,
   BarChart,
   Building,
+  Building2,
   Calendar,
   Menu
 } from "lucide-react";
@@ -222,6 +223,7 @@ export default function TransparencyPage() {
   const [governorateStatsData, setGovernorateStatsData] = useState<Array<{governorate: string; total: number; resolved: number; resolutionRate: number}>>([]);
   const [selectedGovernorate, setSelectedGovernorate] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -472,13 +474,13 @@ export default function TransparencyPage() {
             </div>
 
             {/* Search Bar */}
-            <div className="flex-1 max-w-lg mx-4">
+            <div className="flex-1 max-w-lg mx-2 sm:mx-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search complaints, municipalities, categories..."
+                  placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
@@ -571,18 +573,29 @@ export default function TransparencyPage() {
 
           {/* Bottom actions */}
           <div className="p-4 border-t border-slate-100 space-y-2">
-            <Link 
-              href="/login"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
-            >
-              Login
-            </Link>
-            <Link 
-              href="/register"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
-            >
-              Create Account
-            </Link>
+            {token ? (
+              <Link 
+                href="/dashboard"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
+              >
+                My Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link 
+                  href="/login"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
+                >
+                  Login
+                </Link>
+                <Link 
+                  href="/register"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
+                >
+                  Create Account
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -678,20 +691,20 @@ export default function TransparencyPage() {
 
                 {/* KPI Header */}
                 <div id="metrics" className="bg-white rounded-3xl p-8 border border-slate-200/50 shadow-xl scroll-mt-24">
-                  <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                     <div>
-                      <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                        <Activity className="w-7 h-7 text-green-600" />
+                      <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-3">
+                        <Activity className="w-6 sm:w-7 h-6 sm:h-7 text-green-600" />
                         Live Performance Metrics
                       </h2>
-                      <p className="text-slate-500 mt-1">Real-time municipal performance across Tunisia</p>
+                      <p className="text-slate-500 mt-1 text-sm">Real-time municipal performance across Tunisia</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-full text-sm font-medium border border-green-200">
-                        <Radio className="w-4 h-4 animate-pulse" />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs sm:text-sm font-medium border border-green-200">
+                        <Radio className="w-3 sm:w-4 h-3 sm:h-4 animate-pulse" />
                         Live
                       </span>
-                      <div className="flex gap-1 ml-4">
+                      <div className="flex gap-1">
                         {["today", "week", "month", "year"].map((p) => (
                           <button
                             key={p}
@@ -757,8 +770,9 @@ export default function TransparencyPage() {
                               <Pie
                                 data={[
                                   { name: 'Fixed', value: stats.resolved, color: '#22c55e' },
-                                  { name: 'Being Fixed', value: stats.inProgress, color: '#f59e0b' }
-                                ]}
+                                  { name: 'Being Fixed', value: stats.inProgress, color: '#f59e0b' },
+                                  { name: 'Pending', value: stats.pending, color: '#3b82f6' }
+                                ].filter(d => d.value > 0)}
                                 cx="50%"
                                 cy="50%"
                                 innerRadius={55}
@@ -768,8 +782,9 @@ export default function TransparencyPage() {
                               >
                                 {[
                                   { name: 'Fixed', value: stats.resolved, color: '#22c55e' },
-                                  { name: 'Being Fixed', value: stats.inProgress, color: '#f59e0b' }
-                                ].map((entry, index) => (
+                                  { name: 'Being Fixed', value: stats.inProgress, color: '#f59e0b' },
+                                  { name: 'Pending', value: stats.pending, color: '#3b82f6' }
+                                ].filter(d => d.value > 0).map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
                               </Pie>
@@ -787,7 +802,8 @@ export default function TransparencyPage() {
                         <div className="space-y-3">
                           {[
                             { label: 'Fixed', value: stats.resolved, color: '#22c55e', bg: 'bg-green-100' },
-                            { label: 'Being Fixed', value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' }
+                            { label: 'Being Fixed', value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' },
+                            { label: 'Pending', value: stats.pending, color: '#3b82f6', bg: 'bg-blue-100' }
                           ].map((item) => (
                             <div key={item.label} className="flex items-center gap-3">
                               <div className={`w-4 h-4 rounded-full ${item.bg}`} style={{ backgroundColor: item.color }} />
@@ -826,8 +842,12 @@ export default function TransparencyPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {complaints.filter(c => c.status === 'RESOLVED' || c.status === 'CLOSED').slice(0, 6).map((complaint) => {
                       const photoUrl = complaint.proofPhotos?.[0]?.url || getPhotoUrl(complaint);
-                      const resolvedDate = complaint.resolvedAt || complaint.updatedAt;
-                      const daysToFix = resolvedDate ? Math.max(1, Math.round((new Date(resolvedDate).getTime() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24))) : null;
+                      const resolvedDate = complaint.resolvedAt || complaint.updatedAt || complaint.createdAt;
+                      const resolvedMs = new Date(resolvedDate).getTime();
+                      const createdMs = new Date(complaint.createdAt).getTime();
+                      const daysToFix = (!isNaN(resolvedMs) && !isNaN(createdMs) && resolvedMs > createdMs) 
+                        ? Math.max(1, Math.round((resolvedMs - createdMs) / (1000 * 60 * 60 * 24))) 
+                        : null;
                       return (
                       <div 
                         key={complaint._id}
@@ -883,7 +903,9 @@ export default function TransparencyPage() {
                               </span>
                             </div>
                             <span className="text-xs text-slate-400">
-                              {new Date(resolvedDate).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
+                              {resolvedDate && !isNaN(new Date(resolvedDate).getTime()) 
+                                ? new Date(resolvedDate).toLocaleDateString("en-US", { day: "numeric", month: "short" })
+                                : new Date(complaint.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
                             </span>
                           </div>
                         </div>
@@ -1075,13 +1097,14 @@ export default function TransparencyPage() {
                               }
                               return label;
                             }}
-                            formatter={(value: number, name: string, props: { payload?: { submitted?: number; resolved?: number } }) => {
-                              if (name === 'Problems Fixed' && props.payload) {
-                                const sub = props.payload.submitted || 0;
-                                const rate = sub > 0 ? Math.round((value / sub) * 100) : 0;
-                                return [`${value} (${rate}% rate)`, name];
+                            formatter={(value, name, props) => {
+                              const v = Number(value) || 0;
+                              if (name === 'Problems Fixed' && props?.payload) {
+                                const sub = (props.payload as Record<string, number>).submitted || 0;
+                                const rate = sub > 0 ? Math.round((v / sub) * 100) : 0;
+                                return [`${v} (${rate}% rate)`, name];
                               }
-                              return [value, name];
+                              return [v, String(name)];
                             }}
                           />
                           <Legend />
@@ -1325,7 +1348,7 @@ export default function TransparencyPage() {
                       <div 
                         key={complaint._id}
                         className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer"
-                        onClick={() => router.push(`/transparency/complaints/${complaint._id}`)}
+                        onClick={() => setSelectedComplaint(complaint)}
                       >
                         {/* Header: Location + Date */}
                         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
@@ -1435,7 +1458,7 @@ export default function TransparencyPage() {
                       <div 
                         key={complaint._id}
                         className="group bg-white rounded-xl border border-slate-200 p-4 hover:shadow-lg transition-all cursor-pointer"
-                        onClick={() => router.push(`/transparency/complaints/${complaint._id}`)}
+                        onClick={() => setSelectedComplaint(complaint)}
                       >
                         <div className="flex items-start gap-4">
                           <div className="w-24 h-24 bg-slate-100 rounded-xl overflow-hidden flex-shrink-0">
@@ -1913,75 +1936,256 @@ export default function TransparencyPage() {
         </footer>
       </main>
 
+      {/* Complaint Detail Modal */}
+      {selectedComplaint && (() => {
+        const c = selectedComplaint;
+        const photoUrl = c.proofPhotos?.[0]?.url || getPhotoUrl(c);
+        const statusLabels: Record<string, { label: string; color: string }> = {
+          VALIDATED: { label: "Verified", color: "bg-blue-100 text-blue-700" },
+          ASSIGNED: { label: "Team Assigned", color: "bg-purple-100 text-purple-700" },
+          IN_PROGRESS: { label: "Being Fixed", color: "bg-orange-100 text-orange-700" },
+          RESOLVED: { label: "Fixed", color: "bg-green-100 text-green-700" },
+          CLOSED: { label: "Closed", color: "bg-slate-100 text-slate-700" }
+        };
+        const statusInfo = statusLabels[c.status] || { label: c.status, color: "bg-slate-100 text-slate-600" };
+        const municipality = c.municipalityName || c.location?.municipality || "Unknown";
+        const createdDate = new Date(c.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+        const cleanDesc = (c.description || "")
+          .replace(/Contact\s*phone\s*:?[\s\d+\-]*/gi, "")
+          .replace(/(\+?\d[\d\s\-]{7,})/g, "")
+          .trim();
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedComplaint(null)}>
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              {/* Photo */}
+              <div className="relative h-56 bg-gradient-to-br from-green-50 to-slate-50">
+                {photoUrl ? (
+                  <img src={photoUrl} alt={c.title} className="w-full h-full object-cover rounded-t-2xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-green-50 rounded-t-2xl">
+                    <ImageIcon className="w-12 h-12 text-green-300" />
+                  </div>
+                )}
+                <button onClick={() => setSelectedComplaint(null)} className="absolute top-3 right-3 p-2 bg-black/30 backdrop-blur-sm rounded-full hover:bg-black/50 transition-colors">
+                  <X className="w-4 h-4 text-white" />
+                </button>
+                <div className="absolute top-3 left-3">
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
+                </div>
+              </div>
+              {/* Content */}
+              <div className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">{categoryLabels[c.category] || c.category}</span>
+                  {c.referenceId && <span className="text-xs text-slate-400">#{c.referenceId}</span>}
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">{c.title}</h3>
+                {cleanDesc && <p className="text-sm text-slate-600 mb-4 leading-relaxed">{cleanDesc}</p>}
+                <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
+                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-green-500" />{municipality}</span>
+                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-slate-400" />{createdDate}</span>
+                </div>
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => handleUpvote(c._id, c.status)}
+                      className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-pink-500 transition-colors"
+                    >
+                      <Heart className="w-4 h-4" />
+                      <span>{c.upvoteCount || 0}</span>
+                    </button>
+                    <span className="flex items-center gap-1.5 text-sm text-slate-500">
+                      <Users className="w-4 h-4" />
+                      <span>{c.confirmationCount || 0} confirms</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedComplaint(null); router.push(`/transparency/complaints/${c._id}`); }}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
+                  >
+                    Full Details
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Help Modal */}
       {showHelp && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <HelpCircle className="w-6 h-6 text-green-600" />
-                How Smart City Tunisia Works
-              </h2>
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-emerald-700 p-6 flex items-center justify-between rounded-t-2xl">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <HelpCircle className="w-6 h-6" />
+                  How Smart City Tunisia Works
+                </h2>
+                <p className="text-green-100 text-sm mt-1">A citizen-powered platform for a better Tunisia</p>
+              </div>
               <button 
                 onClick={() => setShowHelp(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5 text-white" />
               </button>
             </div>
-            <div className="p-6 space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-green-600" />
-                  Reporting Issues
-                </h3>
-                <p className="text-slate-600">
-                  Click &quot;Report a Problem&quot; to submit a new complaint. You&apos;ll need to create an account or log in to report issues. Provide as much detail as possible including photos and exact location.
-                </p>
+
+            {/* Steps */}
+            <div className="p-6 space-y-1">
+              {/* Step 1 */}
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">1</div>
+                  <div className="w-0.5 flex-1 bg-green-200 my-1" />
+                </div>
+                <div className="pb-6">
+                  <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-green-600" />
+                    Report a Problem
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Spotted a pothole, broken streetlight, or waste issue? Create an account and submit a report with a photo, location, and description. Our AI automatically categorizes your report and assigns urgency.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">Photo Upload</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">GPS Location</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">AI Categorization</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  Confirming Issues
-                </h3>
-                <p className="text-slate-600">
-                  Help validate complaints by confirming they exist in your area. Confirmed complaints get higher priority. Visit your dashboard after logging in to confirm issues.
-                </p>
+
+              {/* Step 2 */}
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">2</div>
+                  <div className="w-0.5 flex-1 bg-green-200 my-1" />
+                </div>
+                <div className="pb-6">
+                  <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    Community Validation
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Other citizens can confirm the issue exists, boosting its priority. The more confirmations a report gets, the faster it moves up the queue. You can also upvote reports to show support.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">Confirm Issues</span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">Upvote Reports</span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">Priority Boost</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-green-600" />
-                  Tracking Progress
-                </h3>
-                <p className="text-slate-600">
-                  The transparency dashboard shows real-time statistics on complaint resolution across all municipalities. Check the &quot;Recent Resolutions&quot; section to see successfully resolved issues.
-                </p>
+
+              {/* Step 3 */}
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">3</div>
+                  <div className="w-0.5 flex-1 bg-green-200 my-1" />
+                </div>
+                <div className="pb-6">
+                  <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-green-600" />
+                    Municipal Processing
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Municipal agents review and validate reports. A department manager assigns the right team of technicians. Each complaint follows a clear pipeline: Submitted → Validated → Assigned → In Progress → Resolved → Closed.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">Agent Review</span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">Dept. Assignment</span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">Technician Dispatch</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-green-600" />
-                  Municipal Rankings
-                </h3>
-                <p className="text-slate-600">
-                  Municipalities are ranked by resolution rate and response time. The leaderboard shows which areas are performing best at addressing citizen concerns.
-                </p>
+
+              {/* Step 4 */}
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">4</div>
+                  <div className="w-0.5 flex-1 bg-green-200 my-1" />
+                </div>
+                <div className="pb-6">
+                  <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-green-600" />
+                    Track Progress in Real Time
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Follow your complaint through every stage. The transparency dashboard shows live performance metrics, resolution rates, and average fix times. See the &quot;Recent Resolutions&quot; carousel for success stories.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">Live Dashboard</span>
+                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">Status Timeline</span>
+                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">Notifications</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-green-600" />
-                  Explore by Governorate
-                </h3>
-                <p className="text-slate-600">
-                  Browse statistics for each governorate and municipality. Use the search to find specific areas and view their performance metrics.
-                </p>
+
+              {/* Step 5 */}
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">5</div>
+                  <div className="w-0.5 flex-1 bg-green-200 my-1" />
+                </div>
+                <div className="pb-6">
+                  <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-green-600" />
+                    Municipal Rankings &amp; Accountability
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Municipalities are ranked by resolution rate, response speed, and SLA compliance. The leaderboard creates healthy competition and public accountability, motivating faster service.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">Leaderboard</span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">SLA Tracking</span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">Public Data</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 6 */}
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">6</div>
+                </div>
+                <div className="pb-2">
+                  <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-green-600" />
+                    Explore by Governorate
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Browse all 24 governorates and their municipalities. View detailed statistics: total reports, resolution rates, top categories, and trends. Search for any area to see how it performs.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">24 Governorates</span>
+                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">Municipality Stats</span>
+                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">Category Breakdown</span>
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Quick tips */}
+            <div className="mx-6 mb-4 p-4 bg-green-50 rounded-xl border border-green-100">
+              <h4 className="text-sm font-semibold text-green-800 mb-2">💡 Quick Tips</h4>
+              <ul className="text-xs text-green-700 space-y-1">
+                <li>• Take clear photos of the issue for faster processing</li>
+                <li>• Enable GPS for automatic location detection</li>
+                <li>• Confirm reports in your neighborhood to help prioritize them</li>
+                <li>• Check the leaderboard to see how your municipality performs</li>
+              </ul>
+            </div>
+
             <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 p-4 rounded-b-2xl">
               <button 
                 onClick={() => setShowHelp(false)}
-                className="w-full py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+                className="w-full py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors"
               >
-                Got it!
+                Got it, let&apos;s explore!
               </button>
             </div>
           </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { 
   ArrowLeft, 
   MapPin, 
@@ -18,7 +19,16 @@ import {
   ThumbsUp,
   Eye,
   MessageCircle,
-  ExternalLink
+  ExternalLink,
+  Sparkles,
+  X,
+  Menu,
+  Home,
+  List,
+  BarChart3,
+  Search,
+  HelpCircle,
+  Globe
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { categoryLabels } from "@/lib/complaints";
@@ -88,6 +98,9 @@ export default function PublicComplaintDetailPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [comments, setComments] = useState<Array<{ _id: string; text: string; authorName: string; createdAt: string }>>([]);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const fetchComplaint = async () => {
@@ -116,6 +129,25 @@ export default function PublicComplaintDetailPage() {
     if (complaintId) {
       fetchComplaint();
     }
+  }, [complaintId]);
+
+  // Fetch public comments
+  const fetchComments = async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const res = await fetch(`${apiUrl}/public/complaints/${complaintId}/comments`);
+      const data = await res.json();
+      if (data.success) {
+        setComments(data.data || []);
+      }
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    if (complaintId) {
+      fetchComments();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complaintId]);
 
   // Handle action after login redirect
@@ -177,15 +209,23 @@ export default function PublicComplaintDetailPage() {
       return;
     }
     try {
+      setSubmittingComment(true);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      await fetch(`${apiUrl}/public/complaints/${complaintId}/comment`, {
+      const res = await fetch(`${apiUrl}/public/complaints/${complaintId}/comment`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: commentText, anonymous: isAnonymous })
       });
-      setCommentText("");
-    } catch { /* silent */ }
+      const data = await res.json();
+      if (data.success) {
+        setCommentText("");
+        setIsAnonymous(false);
+        await fetchComments();
+      }
+    } catch { /* silent */ } finally {
+      setSubmittingComment(false);
+    }
   };
 
   const nextImage = () => {
@@ -242,26 +282,108 @@ export default function PublicComplaintDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
-      {/* Top Bar */}
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span className="hidden sm:inline">Back</span>
-          </button>
-          <span className="text-sm font-mono text-slate-400">
-            {complaint.referenceId ? `#${complaint.referenceId}` : `#${complaint._id.slice(-6).toUpperCase()}`}
-          </span>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
-            {statusInfo.label}
-          </span>
+      {/* Header — matches transparency page */}
+      <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm ml-0 md:ml-[260px]">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors md:hidden"
+                title="Menu"
+              >
+                <Menu className="w-5 h-5 text-slate-600" />
+              </button>
+              <button
+                onClick={() => router.back()}
+                className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                title="Back"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-600" />
+              </button>
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-bold text-slate-800 leading-tight">Complaint Detail</h1>
+                <p className="text-xs text-slate-500">
+                  {complaint.referenceId ? `#${complaint.referenceId}` : `#${complaint._id.slice(-6).toUpperCase()}`}
+                </p>
+              </div>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
+              {statusInfo.label}
+            </span>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      {/* Sidebar — matches transparency page */}
+      <aside className={`
+        fixed left-0 top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl border-r border-slate-200 z-40
+        transform transition-transform duration-300 ease-in-out shadow-xl md:shadow-sm
+        md:translate-x-0 md:block
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="flex flex-col h-full">
+          <div className="p-5 border-b border-slate-100">
+            <div className="flex items-center justify-between">
+              <Link href="/transparency" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div className="w-9 h-9 bg-gradient-to-br from-green-600 to-emerald-700 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/20">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-800 leading-tight">Smart City</h2>
+                  <p className="text-[10px] text-slate-400 font-medium">Public Dashboard</p>
+                </div>
+              </Link>
+              <button onClick={() => setSidebarOpen(false)} className="p-1.5 hover:bg-slate-100 rounded-lg md:hidden">
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Navigation</p>
+            <Link href="/transparency" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px] transition-all">
+              <Home className="w-[18px] h-[18px] text-slate-400" />
+              <span>Overview</span>
+            </Link>
+            <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-green-50 text-green-700 font-semibold border-l-[3px] border-green-600 pl-[9px]">
+              <Eye className="w-[18px] h-[18px] text-green-600" />
+              <span>Complaint Detail</span>
+            </div>
+            <Link href="/transparency#complaints" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px] transition-all">
+              <List className="w-[18px] h-[18px] text-slate-400" />
+              <span>All Complaints</span>
+            </Link>
+            <Link href="/transparency#governorates" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px] transition-all">
+              <Globe className="w-[18px] h-[18px] text-slate-400" />
+              <span>Governorates</span>
+            </Link>
+          </nav>
+
+          <div className="p-4 border-t border-slate-100 space-y-2">
+            <Link 
+              href="/login"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
+            >
+              Login
+            </Link>
+            <Link 
+              href="/register"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
+            >
+              Create Account
+            </Link>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Main Content */}
+      <div className="ml-0 md:ml-[260px] max-w-6xl mx-auto px-4 md:px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* LEFT COLUMN */}
           <div className="lg:col-span-2 space-y-6">
@@ -377,13 +499,17 @@ export default function PublicComplaintDetailPage() {
               <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
                 <MessageCircle className="w-5 h-5 text-green-600" />
                 Community Comments
+                {comments.length > 0 && (
+                  <span className="ml-auto text-xs font-normal text-slate-400">{comments.length} comment{comments.length !== 1 ? 's' : ''}</span>
+                )}
               </h3>
               {user && token ? (
                 <div className="mb-4">
                   <textarea
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Share your experience..."
+                    placeholder="Share your experience or observation..."
+                    maxLength={1000}
                     className="w-full p-3 border border-slate-200 rounded-xl text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400"
                   />
                   <div className="flex items-center justify-between mt-2">
@@ -393,19 +519,39 @@ export default function PublicComplaintDetailPage() {
                     </label>
                     <button
                       onClick={handleComment}
-                      disabled={!commentText.trim()}
-                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      disabled={!commentText.trim() || submittingComment}
+                      className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                     >
+                      {submittingComment && <Loader2 className="w-3 h-3 animate-spin" />}
                       Post Comment
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-4 bg-slate-50 rounded-xl">
+                <div className="text-center py-4 bg-slate-50 rounded-xl mb-4">
                   <p className="text-sm text-slate-500">
                     <button onClick={() => router.push(`/login?redirect=${encodeURIComponent(`/transparency/complaints/${complaintId}`)}`)} className="text-green-600 hover:text-green-700 font-medium">Sign in</button> to add a comment
                   </p>
                 </div>
+              )}
+
+              {/* Comments list */}
+              {comments.length > 0 ? (
+                <div className="space-y-3 border-t border-slate-100 pt-4">
+                  {comments.map((c) => (
+                    <div key={c._id} className="p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-700">{c.authorName}</span>
+                        <span className="text-xs text-slate-400">
+                          {new Date(c.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600">{c.text}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-3">No comments yet. Be the first to share your thoughts.</p>
               )}
             </div>
           </div>

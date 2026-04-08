@@ -19,6 +19,7 @@ import {
   ComplaintCard,
   Button,
 } from "@/components/ui";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function AdminComplaintsPage() {
   const router = useRouter();
@@ -160,11 +161,12 @@ export default function AdminComplaintsPage() {
   if (!user || user.role !== "ADMIN") return null;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
         title="All Complaints"
         subtitle="System-wide complaint overview"
-        backHref="/dashboard"
+        showBackButton={false}
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
             {filteredComplaints.length} complaints
@@ -409,5 +411,6 @@ export default function AdminComplaintsPage() {
         )}
       </main>
     </div>
+    </DashboardLayout>
   );
 }

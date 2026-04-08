@@ -3,7 +3,7 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { User, FileText, Plus, Sparkles, Shield, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight, TrendingUp, AlertTriangle } from "lucide-react";
+import { User, FileText, Plus, Sparkles, Shield, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight, TrendingUp, AlertTriangle, ArrowLeft, HelpCircle } from "lucide-react";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
@@ -450,69 +450,94 @@ function DashboardContent() {
         onNotificationsClick={() => setShowNotifications(!showNotifications)}
       />
 
-      {/* Notification Dropdown (positioned at top-right, above sidebar z-index) */}
-      {showNotifications && (
-        <div className="fixed top-3 right-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 to-secondary-50">
-            <h3 className="font-semibold text-slate-900">Notifications</h3>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllAsRead}
-                  className="text-xs text-primary hover:text-primary-700 font-medium"
-                >
-                  Mark all read
-                </button>
-              )}
-              <button
-                onClick={() => setShowNotifications(false)}
-                className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4 text-slate-500" />
-              </button>
+      {/* Top Bar — notifications, user info */}
+      <header className="bg-white border-b border-slate-200 shadow-sm ml-0 md:ml-[260px] sticky top-0 z-30">
+        <div className="px-4 md:px-6 py-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-bold text-slate-800">Smart City Tunisia</h1>
+                <p className="text-xs text-slate-500">Dashboard</p>
+              </div>
             </div>
-          </div>
-          <div className="max-h-96 overflow-y-auto">
-            {loadingNotifications ? (
-              <div className="p-8 text-center">
-                <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">
-                <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No notifications yet</p>
-              </div>
-            ) : (
-              notifications.slice(0, 10).map((notification) => (
+            
+            <div className="flex items-center gap-3">
+              {/* Notification Bell */}
+              <div className="relative">
                 <button
-                  key={notification._id}
-                  onClick={() => handleNotificationClick(notification)}
-                  className={`w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${
-                    !notification.isRead ? 'bg-primary/5' : ''
-                  }`}
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
+                  title="Notifications"
                 >
-                  <div className="flex items-start gap-3">
-                    {!notification.isRead && (
-                      <span className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></span>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">
-                        {notification.title}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
-                        {notification.message}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                  <Bell className="w-5 h-5 text-slate-600" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 to-secondary-50">
+                      <h3 className="font-semibold text-slate-900">Notifications</h3>
+                      <div className="flex items-center gap-2">
+                        {unreadCount > 0 && (
+                          <button onClick={handleMarkAllAsRead} className="text-xs text-primary hover:text-primary-700 font-medium">
+                            Mark all read
+                          </button>
+                        )}
+                        <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
+                          <X className="w-4 h-4 text-slate-500" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {loadingNotifications ? (
+                        <div className="p-8 text-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                        </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500">
+                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No notifications yet</p>
+                        </div>
+                      ) : (
+                        notifications.slice(0, 10).map((notification) => (
+                          <button
+                            key={notification._id}
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${!notification.isRead ? 'bg-primary/5' : ''}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              {!notification.isRead && (
+                                <span className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></span>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-slate-900 truncate">{notification.title}</p>
+                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{notification.message}</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
                     </div>
                   </div>
-                </button>
-              ))
-            )}
+                )}
+              </div>
+
+              <div className="hidden md:flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl">
+                <User className="w-4 h-4 text-slate-500" />
+                <span className="text-sm font-medium text-slate-700">{user?.fullName}</span>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </header>
 
       {/* Main Content - offset by sidebar width on desktop */}
       <main className="ml-0 md:ml-[260px] px-4 md:px-6 py-6 md:py-8 max-w-6xl">

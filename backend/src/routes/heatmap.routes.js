@@ -10,8 +10,6 @@ router.get("/", authenticate, async (req, res) => {
     const { category, status, municipality, department } = req.query;
     
     const query = {};
-    
-    // Filter by category if provided
     if (category && category !== 'all') {
       query.category = category;
     }

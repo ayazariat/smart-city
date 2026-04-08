@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 interface ProfileFormData {
   fullName: string;
@@ -35,6 +36,15 @@ function ProfilePage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [resetEmailLoading, setResetEmailLoading] = useState(false);
   const syncRef = useRef(false);
+  const [formData, setFormData] = useState<ProfileFormData>({
+    fullName: "",
+    phone: "",
+    email: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
   // Auth check
   useEffect(() => {
@@ -43,6 +53,42 @@ function ProfilePage() {
       router.push("/");
     }
   }, [hydrated, user, router]);
+
+  // Clear error when component unmounts
+  useEffect(() => {
+    return () => {
+      clearError();
+    };
+  }, [clearError]);
+
+  // Strip +216 from phone if present
+  const stripCountryCode = (phone: string | undefined | null): string => {
+    if (!phone) return "";
+    const digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("216")) {
+      return digits.substring(3);
+    }
+    return digits.slice(-8) || "";
+  };
+
+  // Sync form data from user
+  useEffect(() => {
+    if (user && !isEditing && !syncRef.current) {
+      const timer = setTimeout(() => {
+        setFormData({
+          fullName: user.fullName || "",
+          phone: stripCountryCode(user.phone),
+          email: user.email || "",
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+        syncRef.current = true;
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+     
+  }, [user, isEditing]);
 
   if (!hydrated || !user) {
     return (
@@ -88,60 +134,6 @@ function ProfilePage() {
     }
     return digits.slice(-8) || "Not set";
   };
-
-  // Strip +216 from phone if present
-  const stripCountryCode = (phone: string | undefined | null): string => {
-    if (!phone) return "";
-    const digits = phone.replace(/\D/g, "");
-    if (digits.startsWith("216")) {
-      return digits.substring(3);
-    }
-    return digits.slice(-8) || "";
-  };
-
-  // Initialize form data with persisted user data directly (no API call needed)
-  const [formData, setFormData] = useState<ProfileFormData>({
-    fullName: user?.fullName || "",
-    phone: stripCountryCode(user?.phone),
-    email: user?.email || "",
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-
-  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
-
-  // Clear error when component unmounts
-  useEffect(() => {
-    return () => {
-      clearError();
-    };
-  }, [clearError]);
-
-  // Sync function to update form data from user
-  const syncFormData = () => {
-    if (user && !syncRef.current) {
-      setFormData({
-        fullName: user.fullName || "",
-        phone: user.phone || "",
-        email: user.email || "",
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-      syncRef.current = true;
-    }
-  };
-
-  // Use setTimeout to defer the state update and avoid the lint rule
-  useEffect(() => {
-    if (user && !isEditing && !syncRef.current) {
-      const timer = setTimeout(() => {
-        syncFormData();
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [user, isEditing]);
 
   // Validation functions
   const validateFullName = (value: string): string | undefined => {
@@ -298,19 +290,13 @@ function ProfilePage() {
   };
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 pb-8">
-      {/* Navigation */}
-      <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <Link
-                href="/dashboard"
-                aria-label="Back to dashboard"
-                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />
               </div>
@@ -326,7 +312,7 @@ function ProfilePage() {
             </div>
           </div>
         </div>
-      </nav>
+      </div>
 
       {/* Main Content */}
       <main className="container mx-auto px-4">
@@ -658,6 +644,7 @@ function ProfilePage() {
         )}
       </main>
     </div>
+    </DashboardLayout>
   );
 }
 

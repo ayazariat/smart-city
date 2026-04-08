@@ -19,6 +19,7 @@ import {
   Button,
   ConfirmationModal,
 } from "@/components/ui";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function AgentComplaintsPage() {
   const router = useRouter();
@@ -358,11 +359,12 @@ export default function AgentComplaintsPage() {
   if (!user || user.role !== "MUNICIPAL_AGENT") return null;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="My Actions"
         subtitle={municipalityName ? `Complaints in ${municipalityName}` : "Agent complaint management"}
-        backHref="/dashboard"
+        showBackButton={false}
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
             {filteredComplaints.length} complaints
@@ -813,5 +815,6 @@ export default function AgentComplaintsPage() {
         isLoading={actionLoading !== null}
       />
     </div>
+    </DashboardLayout>
   );
 }

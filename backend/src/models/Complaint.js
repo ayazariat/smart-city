@@ -199,6 +199,10 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    governorate: {
+      type: String,
+      default: "",
+    },
     municipalityNormalized: {
       type: String,
       index: true,

@@ -19,6 +19,7 @@ import {
   Button,
   ConfirmationModal,
 } from "@/components/ui";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import type { BaseComplaint } from "@/components/ui";
 
 interface ManagerComplaint extends BaseComplaint {
@@ -283,11 +284,12 @@ export default function ManagerPendingPage() {
   if (!user || user.role !== "DEPARTMENT_MANAGER") return null;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="All Complaints"
         subtitle={departmentName ? `Complaints in ${departmentName}` : "Manager complaint management"}
-        backHref="/dashboard"
+        showBackButton={false}
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
             {filteredComplaints.length} complaints
@@ -627,5 +629,6 @@ export default function ManagerPendingPage() {
         isLoading={actionLoading !== null}
       />
     </div>
+    </DashboardLayout>
   );
 }
