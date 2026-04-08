@@ -9,10 +9,8 @@
 
 const axios = require('axios');
 
-// Service URLs (configure via environment variables)
-const CATEGORY_SERVICE_URL = process.env.CATEGORY_SERVICE_URL || 'http://localhost:8001';
-const KEYWORD_SERVICE_URL = process.env.KEYWORD_SERVICE_URL || 'http://localhost:8002';
-const SLA_SERVICE_URL = process.env.SLA_SERVICE_URL || 'http://localhost:8003';
+// Service URL (all AI services run on a single FastAPI server)
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 /**
  * Predict category from complaint text
@@ -21,7 +19,7 @@ const SLA_SERVICE_URL = process.env.SLA_SERVICE_URL || 'http://localhost:8003';
  */
 async function predictCategory(description) {
   try {
-    const response = await axios.post(`${CATEGORY_SERVICE_URL}/predict-category`, {
+    const response = await axios.post(`${AI_SERVICE_URL}/predict-category`, {
       text: description
     }, {
       timeout: 10000
@@ -46,7 +44,7 @@ async function predictCategory(description) {
  */
 async function extractKeywords(description) {
   try {
-    const response = await axios.post(`${KEYWORD_SERVICE_URL}/extract-keywords`, {
+    const response = await axios.post(`${AI_SERVICE_URL}/extract-keywords`, {
       text: description
     }, {
       timeout: 10000
@@ -73,7 +71,7 @@ async function extractKeywords(description) {
  */
 async function calculateSLA(category, urgency, createdAt) {
   try {
-    const response = await axios.post(`${SLA_SERVICE_URL}/calculate-sla`, {
+    const response = await axios.post(`${AI_SERVICE_URL}/calculate-sla`, {
       category,
       urgency,
       createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt
@@ -111,10 +109,7 @@ async function processNewComplaint(complaint) {
         const Complaint = require('../models/Complaint');
         await Complaint.findByIdAndUpdate(complaint._id, {
           $set: {
-            'aiData.keywords': keywords.keywords,
-            'aiData.locationKeywords': keywords.locationKeywords,
-            'aiData.urgencyKeywords': keywords.urgencyKeywords,
-            'aiData.similarityHash': keywords.similarityHash
+            keywords: keywords.keywords
           }
         });
       }

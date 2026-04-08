@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Sparkles, X, LayoutDashboard, FileText, Plus, Archive, User,
-  ClipboardList, Wrench, Users, BarChart3, Menu, LogOut
+  ClipboardList, Wrench, Users, BarChart3, Menu, LogOut, Bell, MapPin
 } from "lucide-react";
 
 interface SidebarItem {
@@ -46,6 +46,7 @@ function getSidebarItems(role: string, stats?: DashboardSidebarProps["stats"]): 
       case "CITIZEN":
         return [
           { id: "my-complaints", label: "My Complaints", href: "/my-complaints", icon: FileText },
+          { id: "area-complaints", label: "Your Area", href: "/dashboard#complaints-area", icon: MapPin },
           { id: "new-complaint", label: "New Complaint", href: "/complaints/new", icon: Plus, isAction: true },
         ];
       case "MUNICIPAL_AGENT":
@@ -95,6 +96,8 @@ export default function DashboardSidebar({
   fullName,
   onLogout,
   stats,
+  unreadNotifications,
+  onNotificationsClick,
 }: DashboardSidebarProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
@@ -103,19 +106,38 @@ export default function DashboardSidebar({
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
+    if (href.includes("#")) return pathname === href.split("#")[0];
     return pathname.startsWith(href);
   };
 
   return (
     <>
-      {/* Mobile hamburger */}
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="fixed top-3 left-3 z-50 p-2.5 bg-white border border-slate-200 rounded-xl shadow-lg hover:bg-slate-50 transition-colors md:hidden"
-        title="Menu"
-      >
-        <Menu className="w-5 h-5 text-slate-600" />
-      </button>
+      {/* Mobile top bar */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-3 py-2 bg-white border-b border-slate-200 shadow-sm md:hidden">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+          title="Menu"
+        >
+          <Menu className="w-5 h-5 text-slate-600" />
+        </button>
+        <Link href="/" className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span className="text-sm font-bold text-slate-800">Smart City</span>
+        </Link>
+        <button
+          onClick={onNotificationsClick}
+          className="relative p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+          title="Notifications"
+        >
+          <Bell className="w-5 h-5 text-slate-600" />
+          {(unreadNotifications || 0) > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
+              {(unreadNotifications || 0) > 99 ? "99+" : unreadNotifications}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* Sidebar */}
       <aside
@@ -161,6 +183,18 @@ export default function DashboardSidebar({
                   {getRoleLabel(role)}
                 </span>
               </div>
+              <button
+                onClick={onNotificationsClick}
+                className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4 text-slate-500" />
+                {(unreadNotifications || 0) > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
+                    {(unreadNotifications || 0) > 99 ? "99+" : unreadNotifications}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 

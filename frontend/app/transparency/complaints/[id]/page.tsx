@@ -75,12 +75,12 @@ const statusLabelsMap: Record<string, string> = {
 };
 
 const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED: { label: "📝 Submitted", bgClass: "bg-slate-100", textClass: "text-slate-700" },
-  VALIDATED: { label: "✅ Verified", bgClass: "bg-blue-100", textClass: "text-blue-700" },
-  ASSIGNED: { label: "🔧 Team Assigned", bgClass: "bg-purple-100", textClass: "text-purple-700" },
-  IN_PROGRESS: { label: "🚧 Being Fixed", bgClass: "bg-orange-100", textClass: "text-orange-700" },
-  RESOLVED: { label: "🎉 Fixed", bgClass: "bg-green-100", textClass: "text-green-700" },
-  CLOSED: { label: "✅ Closed", bgClass: "bg-green-100", textClass: "text-green-800" },
+  SUBMITTED: { label: "Submitted", bgClass: "bg-slate-100", textClass: "text-slate-700" },
+  VALIDATED: { label: "Verified", bgClass: "bg-blue-100", textClass: "text-blue-700" },
+  ASSIGNED: { label: "Team Assigned", bgClass: "bg-purple-100", textClass: "text-purple-700" },
+  IN_PROGRESS: { label: "Being Fixed", bgClass: "bg-orange-100", textClass: "text-orange-700" },
+  RESOLVED: { label: "Fixed", bgClass: "bg-green-100", textClass: "text-green-700" },
+  CLOSED: { label: "Closed", bgClass: "bg-green-100", textClass: "text-green-800" },
 };
 
 export default function PublicComplaintDetailPage() {
@@ -98,7 +98,7 @@ export default function PublicComplaintDetailPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState("");
   const [isAnonymous, setIsAnonymous] = useState(false);
-  const [comments, setComments] = useState<Array<{ _id: string; text: string; authorName: string; createdAt: string }>>([]);
+  const [comments, setComments] = useState<Array<{ _id: string; text: string; authorName: string; authorRoleLabel?: string; createdAt: string }>>([]);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -173,7 +173,7 @@ export default function PublicComplaintDetailPage() {
       const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/upvote`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
       });
       const data = await response.json();
       if (data.success && complaint) {
@@ -361,18 +361,29 @@ export default function PublicComplaintDetailPage() {
           </nav>
 
           <div className="p-4 border-t border-slate-100 space-y-2">
-            <Link 
-              href="/login"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
-            >
-              Login
-            </Link>
-            <Link 
-              href="/register"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
-            >
-              Create Account
-            </Link>
+            {token ? (
+              <Link 
+                href="/dashboard"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
+              >
+                My Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link 
+                  href="/login"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
+                >
+                  Login
+                </Link>
+                <Link 
+                  href="/register"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
+                >
+                  Create Account
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </aside>
@@ -541,7 +552,12 @@ export default function PublicComplaintDetailPage() {
                   {comments.map((c) => (
                     <div key={c._id} className="p-3 bg-slate-50 rounded-xl">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-slate-700">{c.authorName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700">{c.authorName}</span>
+                          {c.authorRoleLabel && c.authorRoleLabel !== "Citizen" && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 bg-green-100 text-green-700 rounded">{c.authorRoleLabel}</span>
+                          )}
+                        </div>
                         <span className="text-xs text-slate-400">
                           {new Date(c.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
                         </span>

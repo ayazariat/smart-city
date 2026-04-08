@@ -43,7 +43,8 @@ import {
   Building,
   Building2,
   Calendar,
-  Menu
+  Menu,
+  LayoutDashboard
 } from "lucide-react";
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, ComposedChart, Line, CartesianGrid, XAxis, YAxis, Bar, Legend } from "recharts";
@@ -414,7 +415,10 @@ export default function TransparencyPage() {
       const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/upvote`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        }
       });
       const data = await response.json();
       if (data.success) {
@@ -1195,7 +1199,11 @@ export default function TransparencyPage() {
                     </select>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {TUNISIA_GEOGRAPHY.map((gov) => {
+                    {[...TUNISIA_GEOGRAPHY].sort((a, b) => {
+                      const aData = governorateStatsData.find(g => g.governorate === a.governorate);
+                      const bData = governorateStatsData.find(g => g.governorate === b.governorate);
+                      return (bData?.total || 0) - (aData?.total || 0);
+                    }).map((gov) => {
                       const govData = governorateStatsData.find(g => g.governorate === gov.governorate);
                       const govStats = municipalityStats.filter(m => 
                         ALL_MUNICIPALITIES.find(am => am.name === m.name && am.governorate === gov.governorate)
@@ -1322,11 +1330,11 @@ export default function TransparencyPage() {
                       const photoUrl = getPhotoUrl(complaint);
                       
                       const statusLabels: Record<string, string> = {
-                        VALIDATED: "✅ Verified by municipality",
-                        ASSIGNED: "🔧 Team assigned, work starting soon",
-                        IN_PROGRESS: "🚧 Currently being fixed",
-                        RESOLVED: "🎉 Fixed! Under review",
-                        CLOSED: "✅ Fully resolved"
+                        VALIDATED: "Verified",
+                        ASSIGNED: "Assigned",
+                        IN_PROGRESS: "In Progress",
+                        RESOLVED: "Resolved",
+                        CLOSED: "Closed"
                       };
                       
                       const formattedDate = new Date(complaint.createdAt).toLocaleDateString("en-US", {
@@ -1723,21 +1731,36 @@ export default function TransparencyPage() {
                                   <div className="space-y-2">
                                     {complaints.filter(c => c.location?.municipality && 
                                       ALL_MUNICIPALITIES.find(m => m.name === c.location?.municipality && m.governorate === selectedGovernorate)
-                                    ).slice(0, 3).map((complaint) => (
+                                    ).slice(0, 5).map((complaint) => {
+                                      const cPhoto = getPhotoUrl(complaint);
+                                      return (
                                       <div 
                                         key={complaint._id}
                                         onClick={() => router.push(`/transparency/complaints/${complaint._id}`)}
                                         className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-green-50 cursor-pointer transition-colors"
                                       >
-                                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                          <ImageIcon className="w-5 h-5 text-green-600" />
+                                        <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-green-100 flex items-center justify-center">
+                                          {cPhoto ? (
+                                            /* eslint-disable-next-line @next/next/no-img-element */
+                                            <img src={cPhoto} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                          ) : (
+                                            <ImageIcon className="w-6 h-6 text-green-600" />
+                                          )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                           <p className="text-sm font-medium text-slate-800 truncate">{complaint.title}</p>
                                           <p className="text-xs text-slate-500">{complaint.municipalityName || complaint.location?.municipality} · {new Date(complaint.createdAt).toLocaleDateString()}</p>
+                                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                                            complaint.status === 'RESOLVED' || complaint.status === 'CLOSED' ? 'bg-green-100 text-green-700' :
+                                            complaint.status === 'IN_PROGRESS' ? 'bg-orange-100 text-orange-700' :
+                                            'bg-blue-100 text-blue-700'
+                                          }`}>
+                                            {complaint.status === 'IN_PROGRESS' ? 'In Progress' : complaint.status === 'RESOLVED' ? 'Resolved' : complaint.status === 'CLOSED' ? 'Closed' : complaint.status}
+                                          </span>
                                         </div>
                                       </div>
-                                    ))}
+                                    );
+                                    })}
                                     {total === 0 && (
                                       <p className="text-sm text-slate-500">No recent reports</p>
                                     )}
@@ -1747,11 +1770,12 @@ export default function TransparencyPage() {
                                 {/* Mini Map Placeholder */}
                                 <div>
                                   <h4 className="font-semibold text-slate-800 mb-3">Location</h4>
-                                  <div className="h-40 bg-green-50 rounded-xl flex items-center justify-center border border-green-200">
-                                    <div className="text-center">
-                                      <MapIcon className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                                      <p className="text-sm text-green-700">{selectedGovernorate}</p>
-                                      <p className="text-xs text-green-500">Map view coming soon</p>
+                                  <div className="h-40 bg-green-50 rounded-xl flex items-center justify-center border border-green-200 relative overflow-hidden">
+                                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #22c55e 1px, transparent 0)', backgroundSize: '16px 16px' }} />
+                                    <div className="relative text-center">
+                                      <MapIcon className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                                      <p className="text-base font-semibold text-green-800">{selectedGovernorate}</p>
+                                      <p className="text-xs text-green-600">{gov.municipalities.length} municipalities · {total} reports</p>
                                     </div>
                                   </div>
                                 </div>
@@ -1770,7 +1794,11 @@ export default function TransparencyPage() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {TUNISIA_GEOGRAPHY.map((gov) => {
+                      {[...TUNISIA_GEOGRAPHY].sort((a, b) => {
+                        const aData = governorateStatsData.find(g => g.governorate === a.governorate);
+                        const bData = governorateStatsData.find(g => g.governorate === b.governorate);
+                        return (bData?.total || 0) - (aData?.total || 0);
+                      }).map((gov) => {
                         // Use governorateStatsData (from /stats?period=all) for accurate totals
                         const govDataFromStats = governorateStatsData.find(g => g.governorate === gov.governorate);
                         const govMunStats = allMunicipalityStats.filter(m => m.governorate === gov.governorate);
@@ -1900,20 +1928,41 @@ export default function TransparencyPage() {
               Help us track issues in your community. Your reports make our city better.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              <Link 
-                href="/register"
-                className="px-8 py-4 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
-              >
-                <Users className="w-5 h-5" />
-                Create Account
-              </Link>
-              <Link 
-                href="/login"
-                className="px-8 py-4 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border-2 border-white/30"
-              >
-                Login
-                <ArrowRight className="w-5 h-5" />
-              </Link>
+              {token ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className="px-8 py-4 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
+                  >
+                    <LayoutDashboard className="w-5 h-5" />
+                    My Dashboard
+                  </Link>
+                  <Link
+                    href="/complaints/new"
+                    className="px-8 py-4 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border-2 border-white/30"
+                  >
+                    Report a Problem
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/register"
+                    className="px-8 py-4 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
+                  >
+                    <Users className="w-5 h-5" />
+                    Create Account
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="px-8 py-4 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border-2 border-white/30"
+                  >
+                    Login
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

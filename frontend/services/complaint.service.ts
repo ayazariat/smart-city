@@ -490,7 +490,7 @@ export const extractKeywords = async (text: string): Promise<{
 }> => {
   const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
   
-  const response = await fetch(`${aiUrl}/ai/extract-keywords`, {
+  const response = await fetch(`${aiUrl}/extract-keywords`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

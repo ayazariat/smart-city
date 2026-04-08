@@ -7,44 +7,20 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { PageHeader, LoadingSpinner } from "@/components/ui";
 import { heatmapService, HeatmapPoint } from "@/services/heatmap.service";
 import { categoryLabels } from "@/lib/complaints";
-import { Layers, MapPin, Activity, RefreshCw, TrendingUp, Clock, CheckCircle2, AlertTriangle } from "lucide-react";
+import { MapPin, Activity, RefreshCw, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 const HeatmapMap = dynamic(
   () => import("@/components/complaints/ComplaintHeatmap"),
-  { ssr: false }
+  { ssr: false, loading: () => (
+    <div className="h-[600px] flex items-center justify-center bg-slate-50 rounded-2xl">
+      <div className="text-center">
+        <RefreshCw className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+        <p className="text-sm text-slate-500">Loading map...</p>
+      </div>
+    </div>
+  )}
 );
-
-interface MapBounds {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-}
-
-function MapBoundsHandler({ onBoundsChange }: { onBoundsChange: (bounds: MapBounds) => void }) {
-  const { useMapEvents } = require("react-leaflet");
-  const map = useMapEvents({
-    moveend: () => {
-      const bounds = map.getBounds();
-      onBoundsChange({
-        north: bounds.getNorth(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        west: bounds.getWest(),
-      });
-    },
-    zoomend: () => {
-      const bounds = map.getBounds();
-      onBoundsChange({
-        north: bounds.getNorth(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        west: bounds.getWest(),
-      });
-    },
-  });
-  return null;
-}
 
 export default function HeatmapPage() {
   const router = useRouter();
@@ -141,6 +117,7 @@ export default function HeatmapPage() {
   }
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
         title="Complaint Heatmap"
@@ -256,40 +233,11 @@ export default function HeatmapPage() {
               </button>
             </div>
           </div>
-        ) : data.length === 0 ? (
-          <div className="h-[600px] flex items-center justify-center bg-slate-50 rounded-2xl">
-            <div className="text-center">
-              <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-500">No complaint data for this area</p>
-            </div>
-          </div>
         ) : (
-          <HeatmapMap category={selectedCategory} height="600px" />
+          <HeatmapMap data={data} category={selectedCategory} height="600px" />
         )}
-        
-        {/* Legend */}
-        <div className="p-3 border-t border-slate-100 bg-slate-50 rounded-b-2xl mt-2">
-          <div className="flex items-center gap-4 text-xs text-slate-600">
-            <span className="font-medium">Density:</span>
-            <div className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-              <span>Low</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-lime-500"></span>
-              <span>Medium</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
-              <span>High</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-red-500"></span>
-              <span>Very High</span>
-            </div>
-          </div>
-        </div>
       </main>
     </div>
+    </DashboardLayout>
   );
 }

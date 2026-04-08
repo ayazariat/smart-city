@@ -364,7 +364,7 @@ export default function AgentComplaintsPage() {
       <PageHeader
         title="My Actions"
         subtitle={municipalityName ? `Complaints in ${municipalityName}` : "Agent complaint management"}
-        showBackButton={false}
+        backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
             {filteredComplaints.length} complaints

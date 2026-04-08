@@ -162,11 +162,11 @@ export default function AdminComplaintsPage() {
 
   return (
     <DashboardLayout>
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+    <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="All Complaints"
         subtitle="System-wide complaint overview"
-        showBackButton={false}
+        backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
             {filteredComplaints.length} complaints
@@ -175,57 +175,69 @@ export default function AdminComplaintsPage() {
       />
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Stats Cards */}
+        {/* Stats Cards - Clickable Quick Filters */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+          <button
+            onClick={() => setStatusFilter("")}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${!statusFilter ? 'border-primary ring-2 ring-primary/20' : 'border-slate-200 hover:border-slate-300'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Total Complaints</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{complaints.length}</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total || complaints.length}</p>
               </div>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-slate-600" />
               </div>
             </div>
-          </div>
+          </button>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+          <button
+            onClick={() => setStatusFilter("RESOLVED")}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'RESOLVED' ? 'border-green-500 ring-2 ring-green-200' : 'border-slate-200 hover:border-green-300'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Resolved</p>
-                <p className="text-3xl font-bold text-green-600 mt-1">{complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length}</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{stats.resolved || resolvedCount}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
             </div>
-          </div>
+          </button>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+          <button
+            onClick={() => setStatusFilter("IN_PROGRESS")}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'IN_PROGRESS' ? 'border-amber-500 ring-2 ring-amber-200' : 'border-slate-200 hover:border-amber-300'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">At Risk (SLA)</p>
                 <p className="text-xs text-amber-500 mt-1">Close to deadline</p>
-                <p className="text-3xl font-bold text-amber-600 mt-1">{atRiskCount}</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">{stats.totalAtRisk || atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                 <Clock className="w-6 h-6 text-amber-600" />
               </div>
             </div>
-          </div>
+          </button>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+          <button
+            onClick={() => setStatusFilter("ASSIGNED")}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'ASSIGNED' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 hover:border-red-300'}`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Overdue</p>
                 <p className="text-xs text-red-500 mt-1">Past deadline</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{overdueCount}</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue || overdueCount}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Team Performance */}
@@ -267,99 +279,110 @@ export default function AdminComplaintsPage() {
           </div>
         </div>
 
-        {/* Advanced Filters */}
+        {/* Filters */}
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-100">
           <div className="flex flex-col md:flex-row gap-3 items-center">
             {/* Search */}
             <div className="flex-1 w-full relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search by description or category..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
               />
             </div>
 
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm border rounded-xl transition-all ${showFilters ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
             >
-              <option value="">All Statuses</option>
-              {STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            {/* Governorate Filter */}
-            <select
-              value={governorateFilter}
-              onChange={(e) => setGovernorateFilter(e.target.value)}
-              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-            >
-              <option value="">All Governorates</option>
-              {TUNISIA_GEOGRAPHY.map((gov) => (
-                <option key={gov.governorate} value={gov.governorate}>
-                  {gov.governorate}
-                </option>
-              ))}
-            </select>
-
-            {/* Municipality Filter */}
-            <select
-              value={municipalityFilter}
-              onChange={(e) => setMunicipalityFilter(e.target.value)}
-              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-              disabled={!governorateFilter}
-            >
-              <option value="">All Municipalities</option>
-              {availableMunicipalities.map((mun) => (
-                <option key={mun} value={mun}>
-                  {mun}
-                </option>
-              ))}
-            </select>
-
-            {/* Category Filter */}
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-            >
-              <option value="">All Categories</option>
-              {Object.entries(categoryLabels).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-
-            {/* Priority Filter */}
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-            >
-              <option value="">All Priorities</option>
-              <option value="HIGH">High (≥15)</option>
-              <option value="MEDIUM">Medium (6-14)</option>
-              <option value="LOW">Low (&lt;6)</option>
-            </select>
+              <Filter className="w-4 h-4" />
+              Filters {(governorateFilter || municipalityFilter || categoryFilter || priorityFilter || statusFilter) && (
+                <span className="w-2 h-2 bg-primary rounded-full" />
+              )}
+            </button>
 
             {/* Export Button */}
             <Button onClick={exportCSV} variant="outline" size="sm">
-              Export CSV
+              <Download className="w-4 h-4 mr-1" />
+              CSV
             </Button>
 
-            {/* Results Count */}
             <span className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
               {filteredComplaints.length} results
             </span>
           </div>
+
+          {/* Collapsible Advanced Filters */}
+          {showFilters && (
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 pt-4 border-t border-slate-100 animate-fadeIn">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">All Statuses</option>
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={governorateFilter}
+                onChange={(e) => setGovernorateFilter(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">All Governorates</option>
+                {TUNISIA_GEOGRAPHY.map((gov) => (
+                  <option key={gov.governorate} value={gov.governorate}>
+                    {gov.governorate}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={municipalityFilter}
+                onChange={(e) => setMunicipalityFilter(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                disabled={!governorateFilter}
+              >
+                <option value="">All Municipalities</option>
+                {availableMunicipalities.map((mun) => (
+                  <option key={mun} value={mun}>
+                    {mun}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">All Categories</option>
+                {Object.entries(categoryLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">All Priorities</option>
+                <option value="HIGH">High (≥15)</option>
+                <option value="MEDIUM">Medium (6-14)</option>
+                <option value="LOW">Low (&lt;6)</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* SLA Monitoring Section */}

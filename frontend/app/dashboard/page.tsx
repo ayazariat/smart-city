@@ -3,8 +3,10 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { User, FileText, Plus, Sparkles, Shield, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight, TrendingUp, AlertTriangle, ArrowLeft, HelpCircle } from "lucide-react";
+import { User, FileText, Plus, Sparkles, Shield, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight, TrendingUp, AlertTriangle } from "lucide-react";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import RecentActivities from "@/components/dashboard/RecentActivities";
+import MunicipalityOverview from "@/components/dashboard/MunicipalityOverview";
 import { useAuthStore } from "@/store/useAuthStore";
 import { notificationService } from "@/services/notification.service";
 import { connectSocket, subscribeToNotifications } from "@/lib/socket";
@@ -67,7 +69,7 @@ function DashboardContent() {
 
   // BL-37: Trend alerts for manager/admin
   const [trendAlerts, setTrendAlerts] = useState<{type: string; severity: string; message: string; recommendation: string}[]>([]);
-  const [loadingTrendAlerts, setLoadingTrendAlerts] = useState(false);
+  const [, setLoadingTrendAlerts] = useState(false);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -333,9 +335,9 @@ function DashboardContent() {
   useEffect(() => {
     if (!hydrated) return;
     if (!user) {
-      window.location.href = "/";
+      router.replace("/login");
     }
-  }, [hydrated, user]);
+  }, [hydrated, user, router]);
 
   // Show loading while hydrating
   if (!hydrated) {
@@ -351,18 +353,6 @@ function DashboardContent() {
 
   const handleLogout = () => {
     logout();
-  };
-
-  // Get role display name
-  const getRoleDisplayName = (role: string) => {
-    switch (role) {
-      case "CITIZEN": return "Citizen";
-      case "MUNICIPAL_AGENT": return "Municipal Agent";
-      case "DEPARTMENT_MANAGER": return "Department Manager";
-      case "TECHNICIAN": return "Technician";
-      case "ADMIN": return "Administrator";
-      default: return role;
-    }
   };
 
   // Get role-based dashboard configuration
@@ -451,10 +441,13 @@ function DashboardContent() {
       />
 
       {/* Top Bar — notifications, user info */}
-      <header className="bg-white border-b border-slate-200 shadow-sm ml-0 md:ml-[260px] sticky top-0 z-30">
+      <header className="bg-white border-b border-slate-200 shadow-sm ml-0 md:ml-[260px] sticky top-0 z-30 hidden md:block">
         <div className="px-4 md:px-6 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
               <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-slate-800">Smart City Tunisia</h1>
                 <p className="text-xs text-slate-500">Dashboard</p>
@@ -462,8 +455,8 @@ function DashboardContent() {
             </div>
             
             <div className="flex items-center gap-3">
-              {/* Notification Bell */}
-              <div className="relative">
+              {/* Notification Bell — hidden on mobile as mobile top bar has notifications */}
+              <div className="relative hidden md:block">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
@@ -540,122 +533,100 @@ function DashboardContent() {
       </header>
 
       {/* Main Content - offset by sidebar width on desktop */}
-      <main className="ml-0 md:ml-[260px] px-4 md:px-6 py-6 md:py-8 max-w-6xl">
+      <main className="ml-0 md:ml-[260px] px-4 md:px-6 py-6 md:py-8 max-w-6xl pt-16 md:pt-8">
         {/* Header */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-1">
-            Welcome back, {user?.fullName?.split(' ')[0] || 'User'} 
-          </h2>
-          <p className="text-slate-500">
-            {user?.role === "CITIZEN" ? "Track your complaints and city services" 
-             : user?.role === "TECHNICIAN" ? "Check your assigned tasks and progress"
-             : user?.role === "DEPARTMENT_MANAGER" ? "Oversee department operations"
-             : user?.role === "ADMIN" ? "System overview and management"
-             : "Handle and manage incoming complaints"}
-          </p>
-        </div>
-
-        {/* Main Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Profile Card */}
-          <Link 
-            href="/profile"
-            className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 border border-slate-100 hover:border-primary/20 group cursor-pointer"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <User className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 group-hover:text-primary transition-colors">My Profile</h3>
-            </div>
-              <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-500">Email:</span>
-                <span className="text-sm font-medium text-slate-700">{user?.email}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-500">Role:</span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                  {getRoleDisplayName(user?.role || '')}
-                </span>
-              </div>
-            </div>
-          </Link>
-
-          {/* Admin Panel Card */}
-          {user?.role === "ADMIN" && (
-            <Link 
-              href="/admin/users"
-              className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white cursor-pointer"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Shield className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-semibold">Admin Panel</h3>
-              </div>
-              <p className="text-red-100 mb-4 text-sm">
-                Manage system users and permissions
-              </p>
-              <div className="flex items-center gap-2 text-sm font-medium text-white">
-                User Management →
-              </div>
-            </Link>
-          )}
-
-          {/* Complaints Card - Role-based */}
-          <Link href={dashboardConfig.link} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-attention/10 rounded-xl flex items-center justify-center">
-                <FileText className="w-6 h-6 text-attention" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900">{dashboardConfig.label}</h3>
-            </div>
-            <p className="text-slate-600 mb-4 text-sm">
-              {dashboardConfig.description}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900 mb-1">
+              Welcome back, {user?.fullName?.split(' ')[0] || 'User'} 
+            </h2>
+            <p className="text-slate-500">
+              {user?.role === "CITIZEN" ? "Track your complaints and city services" 
+               : user?.role === "TECHNICIAN" ? "Check your assigned tasks and progress"
+               : user?.role === "DEPARTMENT_MANAGER" ? "Oversee department operations"
+               : user?.role === "ADMIN" ? "System overview and management"
+               : "Handle and manage incoming complaints"}
             </p>
-            <span className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-medium text-sm transition-colors group">
-              View
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </span>
-          </Link>
-
-          {/* Quick Actions Card - Only for CITIZEN role */}
-          {user?.role === "CITIZEN" && dashboardConfig.newComplaintLink && (
-            <Link href={dashboardConfig.newComplaintLink} className="group bg-gradient-to-br from-primary to-primary-700 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 text-white cursor-pointer block">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Plus className="w-6 h-6" />
-                </div>
-                <h3 className="text-lg font-semibold">Quick Actions</h3>
-              </div>
-              <p className="text-primary-100 mb-4 text-sm">
-                Report a new issue in your city
-              </p>
-              <span className="w-full bg-white text-primary px-4 py-2.5 rounded-lg font-medium transition-all duration-200 group-hover:shadow-lg flex items-center justify-center gap-2">
+          </div>
+          {/* Role-specific action buttons */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {user?.role === "CITIZEN" && (
+              <Link href="/complaints/new" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                 <Plus className="w-4 h-4" />
-                {dashboardConfig.newComplaintLabel}
-              </span>
-            </Link>
-          )}
-
-          {/* Archive Card - All roles */}
-          <Link href="/archive" className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 border border-slate-100">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
-                <Archive className="w-6 h-6 text-slate-600" />
+                New Complaint
+              </Link>
+            )}
+            {user?.role === "MUNICIPAL_AGENT" && (
+              <Link href="/agent/complaints" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
+                <FileText className="w-4 h-4" />
+                View Queue
+              </Link>
+            )}
+            {user?.role === "DEPARTMENT_MANAGER" && (
+              <Link href="/manager/pending" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
+                <FileText className="w-4 h-4" />
+                Pending Tasks
+              </Link>
+            )}
+            {user?.role === "TECHNICIAN" && (
+              <Link href="/tasks" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
+                <FileText className="w-4 h-4" />
+                My Tasks
+              </Link>
+            )}
+            {user?.role === "ADMIN" && (
+              <div className="flex items-center gap-2">
+                <Link href="/admin/users" className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
+                  <Shield className="w-4 h-4" />
+                  Admin Panel
+                </Link>
+                <Link href="/admin/complaints" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
+                  <FileText className="w-4 h-4" />
+                  All Complaints
+                </Link>
               </div>
-              <h3 className="text-lg font-semibold text-slate-900">Archive</h3>
-            </div>
-            <p className="text-slate-600 mb-4 text-sm">
-              View closed and rejected complaints
-            </p>
-            <span className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 font-medium text-sm transition-colors group">
-              View Archive
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </span>
-          </Link>
+            )}
+          </div>
         </div>
+
+        {/* Admin System Overview Panel */}
+        {user?.role === "ADMIN" && !loadingStats && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <Link href="/admin/users" className="group bg-gradient-to-br from-violet-500 to-violet-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <User className="w-5 h-5" />
+                </div>
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-violet-100 text-xs font-medium uppercase tracking-wide">User Management</p>
+              <p className="text-2xl font-bold mt-1">Admin Panel</p>
+              <p className="text-violet-200 text-xs mt-1">Manage users, roles & permissions</p>
+            </Link>
+            <Link href="/admin/complaints" className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-blue-100 text-xs font-medium uppercase tracking-wide">System-wide</p>
+              <p className="text-2xl font-bold mt-1">{stats.total || 0} Complaints</p>
+              <p className="text-blue-200 text-xs mt-1">Resolution rate: {stats.resolutionRate || 0}%</p>
+            </Link>
+            <Link href="/archive" className="group bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <p className="text-emerald-100 text-xs font-medium uppercase tracking-wide">Archive</p>
+              <p className="text-2xl font-bold mt-1">{stats.closed || 0} Closed</p>
+              <p className="text-emerald-200 text-xs mt-1">View completed & archived cases</p>
+            </Link>
+          </div>
+        )}
 
         {/* Today's Priorities - Role-specific action summary */}
         {!loadingStats && stats.total !== undefined && (
@@ -671,19 +642,19 @@ function DashboardContent() {
                 <>
                   {(stats.totalOverdue || 0) > 0 && (
                     <Link href="/agent/complaints?status=SUBMITTED" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue} overdue complaint{(stats.totalOverdue || 0) > 1 ? 's' : ''} need attention</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue} overdue complaint{(stats.totalOverdue || 0) > 1 ? 's' : ''} need attention</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.submitted || stats.pending || 0) > 0 && (
                     <Link href="/agent/complaints?status=SUBMITTED" className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200 hover:bg-amber-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-amber-700">📋 {stats.submitted || stats.pending || 0} new complaint{(stats.submitted || stats.pending || 0) > 1 ? 's' : ''} to validate</span>
+                      <span className="text-sm font-medium text-amber-700">{stats.submitted || stats.pending || 0} new complaint{(stats.submitted || stats.pending || 0) > 1 ? 's' : ''} to validate</span>
                       <ArrowRight className="w-4 h-4 text-amber-500" />
                     </Link>
                   )}
                   {(stats.resolved || 0) > 0 && (
                     <Link href="/agent/complaints?status=RESOLVED" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-green-700">✅ {stats.resolved} resolution{(stats.resolved || 0) > 1 ? 's' : ''} awaiting review</span>
+                      <span className="text-sm font-medium text-green-700">{stats.resolved} resolution{(stats.resolved || 0) > 1 ? 's' : ''} awaiting review</span>
                       <ArrowRight className="w-4 h-4 text-green-500" />
                     </Link>
                   )}
@@ -700,19 +671,19 @@ function DashboardContent() {
                 <>
                   {(stats.totalOverdue || stats.overdue || 0) > 0 && (
                     <Link href="/manager/pending" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} in department</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} in department</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.assigned || 0) > 0 && (
                     <Link href="/manager/pending?status=ASSIGNED" className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-200 hover:bg-purple-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-purple-700">👷 {stats.assigned} complaint{(stats.assigned || 0) > 1 ? 's' : ''} need technician assignment</span>
+                      <span className="text-sm font-medium text-purple-700">{stats.assigned} complaint{(stats.assigned || 0) > 1 ? 's' : ''} need technician assignment</span>
                       <ArrowRight className="w-4 h-4 text-purple-500" />
                     </Link>
                   )}
                   {(stats.inProgress || 0) > 0 && (
                     <Link href="/manager/pending?status=IN_PROGRESS" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-blue-700">🔧 {stats.inProgress} complaint{(stats.inProgress || 0) > 1 ? 's' : ''} being worked on by technicians</span>
+                      <span className="text-sm font-medium text-blue-700">{stats.inProgress} complaint{(stats.inProgress || 0) > 1 ? 's' : ''} being worked on by technicians</span>
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
@@ -729,19 +700,19 @@ function DashboardContent() {
                 <>
                   {(stats.assigned || 0) > 0 && (
                     <Link href="/tasks?status=ASSIGNED" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-blue-700">🔧 {stats.assigned} new task{(stats.assigned || 0) > 1 ? 's' : ''} to start</span>
+                      <span className="text-sm font-medium text-blue-700">{stats.assigned} new task{(stats.assigned || 0) > 1 ? 's' : ''} to start</span>
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
                   {(stats.inProgress || 0) > 0 && (
                     <Link href="/tasks?status=IN_PROGRESS" className="flex items-center justify-between p-3 bg-orange-50 rounded-xl border border-orange-200 hover:bg-orange-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-orange-700">🔨 {stats.inProgress} task{(stats.inProgress || 0) > 1 ? 's' : ''} in progress</span>
+                      <span className="text-sm font-medium text-orange-700">{stats.inProgress} task{(stats.inProgress || 0) > 1 ? 's' : ''} in progress</span>
                       <ArrowRight className="w-4 h-4 text-orange-500" />
                     </Link>
                   )}
                   {(stats.totalOverdue || stats.overdue || 0) > 0 && (
                     <Link href="/tasks" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue || stats.overdue} overdue task{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} — resolve ASAP</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} overdue task{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} — resolve ASAP</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
@@ -758,13 +729,13 @@ function DashboardContent() {
                 <>
                   {(stats.totalOverdue || stats.overdue || 0) > 0 && (
                     <Link href="/admin/complaints" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">⚠ {stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} system-wide</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} system-wide</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.total || 0) > 0 && (
                     <Link href="/admin/complaints" className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/10 hover:bg-primary/10 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-primary">📊 {stats.total} total complaints — Resolution rate: {stats.resolutionRate || 0}%</span>
+                      <span className="text-sm font-medium text-primary">{stats.total} total complaints — Resolution rate: {stats.resolutionRate || 0}%</span>
                       <ArrowRight className="w-4 h-4 text-primary" />
                     </Link>
                   )}
@@ -775,13 +746,13 @@ function DashboardContent() {
                 <>
                   {(stats.inProgress || 0) > 0 && (
                     <Link href="/my-complaints" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-blue-700">🔄 {stats.inProgress} of your complaint{(stats.inProgress || 0) > 1 ? 's are' : ' is'} being worked on</span>
+                      <span className="text-sm font-medium text-blue-700">{stats.inProgress} of your complaint{(stats.inProgress || 0) > 1 ? 's are' : ' is'} being worked on</span>
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
                   {(stats.resolved || 0) > 0 && (
                     <Link href="/my-complaints" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-green-700">✅ {stats.resolved} complaint{(stats.resolved || 0) > 1 ? 's' : ''} resolved</span>
+                      <span className="text-sm font-medium text-green-700">{stats.resolved} complaint{(stats.resolved || 0) > 1 ? 's' : ''} resolved</span>
                       <ArrowRight className="w-4 h-4 text-green-500" />
                     </Link>
                   )}
@@ -814,63 +785,208 @@ function DashboardContent() {
             )}
           </div>
           
-          <div className={`grid grid-cols-2 ${user?.role === 'CITIZEN' ? 'md:grid-cols-4' : 'md:grid-cols-5'} gap-4`}>
-            {/* Total Complaints */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-              <div className="text-2xl font-bold text-blue-700 mb-1">
-                {stats.total || 0}
+          {/* Citizen Stats */}
+          {user?.role === 'CITIZEN' && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                <div className="text-sm text-blue-600 font-medium">My Complaints</div>
+                <div className="text-xs text-blue-500 mt-1">Total submitted</div>
               </div>
-              <div className="text-sm text-blue-600 font-medium">Total</div>
-              <div className="text-xs text-blue-500 mt-1">All complaints</div>
-            </div>
-            
-            {/* In Progress */}
-            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
-              <div className="text-2xl font-bold text-orange-700 mb-1">
-                {stats.inProgress || 0}
+              <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
+                <div className="text-2xl font-bold text-amber-700 mb-1">{(stats.submitted || 0) + (stats.pending || 0)}</div>
+                <div className="text-sm text-amber-600 font-medium">Pending</div>
+                <div className="text-xs text-amber-500 mt-1">Awaiting review</div>
               </div>
-              <div className="text-sm text-orange-600 font-medium">In Progress</div>
-              <div className="text-xs text-orange-500 mt-1">Being fixed</div>
-            </div>
-            
-            {/* Resolved */}
-            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-              <div className="text-2xl font-bold text-green-700 mb-1">
-                {stats.resolved || 0}
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                <div className="text-sm text-orange-600 font-medium">In Progress</div>
+                <div className="text-xs text-orange-500 mt-1">Being worked on</div>
               </div>
-              <div className="text-sm text-green-600 font-medium">Resolved</div>
-              <div className="text-xs text-green-500 mt-1">Fixed</div>
-            </div>
-            
-            {/* Closed */}
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
-              <div className="text-2xl font-bold text-slate-700 mb-1">
-                {stats.closed || 0}
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
+                <div className="text-sm text-green-600 font-medium">Resolved</div>
+                <div className="text-xs text-green-500 mt-1">Completed</div>
               </div>
-              <div className="text-sm text-slate-600 font-medium">Closed</div>
-              <div className="text-xs text-slate-500 mt-1">Completed</div>
             </div>
-            
-            {/* Overdue - hidden for Citizens */}
-            {user?.role !== 'CITIZEN' && (
-            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
-              <div className="text-2xl font-bold text-red-700 mb-1">
-                {stats.totalOverdue || stats.overdue || 0}
-              </div>
-              <div className="text-sm text-red-600 font-medium">Overdue</div>
-              <div className="text-xs text-red-500 mt-1">Past deadline</div>
-            </div>
-            )}
-          </div>
+          )}
 
-          {/* High Priority - score 15+ (not shown for citizens) */}
-          {user?.role !== 'CITIZEN' && stats.totalOverdue !== undefined && stats.totalOverdue > 0 && (
-            <div className="mt-4 p-4 bg-gradient-to-r from-red-50 to-red-100 rounded-xl border border-red-200">
-              <div className="flex items-center gap-2">
-                <span className="text-red-600 font-bold">High Priority:</span>
-                <span className="text-red-700">{stats.totalOverdue} complaints need immediate attention</span>
+          {/* Agent Stats */}
+          {user?.role === 'MUNICIPAL_AGENT' && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                  <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                  <div className="text-sm text-blue-600 font-medium">Total</div>
+                  <div className="text-xs text-blue-500 mt-1">All complaints</div>
+                </div>
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
+                  <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || stats.pending || 0}</div>
+                  <div className="text-sm text-amber-600 font-medium">To Validate</div>
+                  <div className="text-xs text-amber-500 mt-1">Needs review</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                  <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
+                  <div className="text-xs text-orange-500 mt-1">Being fixed</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                  <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
+                  <div className="text-sm text-green-600 font-medium">Resolved</div>
+                  <div className="text-xs text-green-500 mt-1">Awaiting closure</div>
+                </div>
+                <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                  <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
+                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
+                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Past deadline</div>
+                </div>
               </div>
-            </div>
+              {stats.resolutionRate !== undefined && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-emerald-800">Resolution Rate</span>
+                    <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
+                  </div>
+                  <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Manager Stats */}
+          {user?.role === 'DEPARTMENT_MANAGER' && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                  <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                  <div className="text-sm text-blue-600 font-medium">Department</div>
+                  <div className="text-xs text-blue-500 mt-1">Total complaints</div>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                  <div className="text-2xl font-bold text-purple-700 mb-1">{stats.assigned || 0}</div>
+                  <div className="text-sm text-purple-600 font-medium">To Assign</div>
+                  <div className="text-xs text-purple-500 mt-1">Needs technician</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                  <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
+                  <div className="text-xs text-orange-500 mt-1">Being worked on</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                  <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
+                  <div className="text-sm text-green-600 font-medium">Resolved</div>
+                  <div className="text-xs text-green-500 mt-1">Awaiting closure</div>
+                </div>
+                <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                  <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
+                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
+                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Past SLA</div>
+                </div>
+              </div>
+              {stats.resolutionRate !== undefined && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-emerald-800">SLA Compliance</span>
+                    <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
+                  </div>
+                  <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Technician Stats */}
+          {user?.role === 'TECHNICIAN' && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                  <div className="text-2xl font-bold text-blue-700 mb-1">{stats.assigned || 0}</div>
+                  <div className="text-sm text-blue-600 font-medium">New Tasks</div>
+                  <div className="text-xs text-blue-500 mt-1">Ready to start</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                  <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
+                  <div className="text-xs text-orange-500 mt-1">Working on</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                  <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
+                  <div className="text-sm text-green-600 font-medium">Completed</div>
+                  <div className="text-xs text-green-500 mt-1">Resolved tasks</div>
+                </div>
+                <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                  <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
+                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
+                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Urgent</div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Admin Stats */}
+          {user?.role === 'ADMIN' && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                  <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                  <div className="text-sm text-blue-600 font-medium">Total</div>
+                  <div className="text-xs text-blue-500 mt-1">All complaints</div>
+                </div>
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
+                  <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || 0}</div>
+                  <div className="text-sm text-amber-600 font-medium">Submitted</div>
+                  <div className="text-xs text-amber-500 mt-1">New / Pending</div>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                  <div className="text-2xl font-bold text-purple-700 mb-1">{stats.assigned || 0}</div>
+                  <div className="text-sm text-purple-600 font-medium">Assigned</div>
+                  <div className="text-xs text-purple-500 mt-1">To departments</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                  <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
+                  <div className="text-xs text-orange-500 mt-1">Being fixed</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                  <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
+                  <div className="text-sm text-green-600 font-medium">Resolved</div>
+                  <div className="text-xs text-green-500 mt-1">Closed cases</div>
+                </div>
+                <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                  <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || 0}</div>
+                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
+                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Past SLA</div>
+                </div>
+              </div>
+              {stats.resolutionRate !== undefined && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-semibold text-emerald-800">Resolution Rate</span>
+                      <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
+                    </div>
+                    <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
+                    </div>
+                  </div>
+                  {(stats.totalOverdue || 0) > 0 && (
+                    <div className="p-4 bg-gradient-to-r from-red-50 to-red-100 rounded-xl border border-red-200">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                        <span className="text-sm font-semibold text-red-700">
+                          {stats.totalOverdue} complaints past SLA deadline
+                        </span>
+                      </div>
+                      <p className="text-xs text-red-500 mt-1">Requires immediate attention</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Category Chart - For roles that have category data */}
@@ -883,7 +999,9 @@ function DashboardContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries(byCategory).map(([cat, count]) => {
                   const maxCount = Math.max(...Object.values(byCategory));
-                  const percentage = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+                  const totalCount = Object.values(byCategory).reduce((sum, c) => sum + c, 0);
+                  const barWidth = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+                  const sharePercent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
                   
                   // Category colors
                   const categoryColors: Record<string, string> = {
@@ -908,14 +1026,14 @@ function DashboardContent() {
                       <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
-                          style={{ width: `${percentage}%` }}
+                          style={{ width: `${barWidth}%` }}
                         />
                       </div>
                       <div className="w-12 text-sm font-bold text-slate-700 text-right">
                         {count}
                       </div>
                       <div className="w-10 text-xs text-slate-500 text-right">
-                        {percentage}%
+                        {sharePercent}%
                       </div>
                     </div>
                   );
@@ -965,78 +1083,142 @@ function DashboardContent() {
           )}
         </div>
 
+        {/* Recent Activities + Municipality Overview — Two column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <RecentActivities
+            notifications={notifications}
+            loading={loadingNotifications}
+            role={user?.role || "CITIZEN"}
+            maxItems={8}
+          />
+          <MunicipalityOverview
+            role={user?.role || "CITIZEN"}
+            userMunicipality={user?.municipalityName || (typeof user?.municipality === 'object' && user?.municipality?.name) || undefined}
+            userGovernorate={user?.governorate}
+          />
+        </div>
+
         {/* Municipality Complaints Section - For CITIZEN role */}
         {user?.role === "CITIZEN" && municipalityComplaints && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
+          <div id="complaints-area" className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-primary" />
+                  <MapPin className="w-5 h-5 text-primary" />
                   Complaints in Your Area
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  Support issues in your municipality by confirming or upvoting
+                  Verify and support issues in your municipality
                 </p>
               </div>
-              <button
-                onClick={fetchMunicipalityComplaints}
-                disabled={loadingMunicipalityComplaints}
-                className="text-sm text-primary hover:text-primary/700 font-medium disabled:opacity-50"
-              >
-                {loadingMunicipalityComplaints ? "Loading..." : "Refresh"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchMunicipalityComplaints}
+                  disabled={loadingMunicipalityComplaints}
+                  className="text-sm text-primary hover:text-primary/80 font-medium disabled:opacity-50"
+                >
+                  {loadingMunicipalityComplaints ? "Loading..." : "Refresh"}
+                </button>
+              </div>
             </div>
             
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {municipalityComplaints.slice(0, 6).map((complaint) => (
-                <div 
-                  key={complaint._id}
-                  className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow"
-                >
-                  <div className="relative h-24 bg-gradient-to-br from-slate-100 to-slate-50">
-                    {complaint.media?.[0]?.url ? (
-                      <img 
-                        src={complaint.media[0].url} 
-                        alt={complaint.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <FileText className="w-8 h-8 text-slate-300" />
+            {municipalityComplaints.length === 0 ? (
+              <div className="text-center py-8">
+                <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">No complaints in your area yet</p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {municipalityComplaints.slice(0, 6).map((complaint) => (
+                  <div
+                    key={complaint._id}
+                    className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group"
+                  >
+                    {/* Image */}
+                    <div className="relative h-28 bg-gradient-to-br from-slate-100 to-slate-50">
+                      {complaint.media?.[0]?.url ? (
+                        <img
+                          src={complaint.media[0].url}
+                          alt={complaint.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <FileText className="w-8 h-8 text-slate-300" />
+                        </div>
+                      )}
+                      <div className="absolute top-2 left-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/90 text-slate-700 shadow-sm">
+                          {categoryLabels[complaint.category] || complaint.category}
+                        </span>
                       </div>
-                    )}
-                    <div className="absolute top-2 left-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-white/90 text-slate-700">
-                        {categoryLabels[complaint.category] || complaint.category}
-                      </span>
+                      <div className="absolute top-2 right-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shadow-sm ${
+                          complaint.status === "RESOLVED" ? "bg-green-100 text-green-700" :
+                          complaint.status === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" :
+                          complaint.status === "ASSIGNED" ? "bg-purple-100 text-purple-700" :
+                          "bg-blue-100 text-blue-700"
+                        }`}>
+                          {complaint.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-3">
+                      <Link href={`/transparency/complaints/${complaint._id}`}>
+                        <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors cursor-pointer">
+                          {complaint.title}
+                        </h4>
+                      </Link>
+                      <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">
+                          {complaint.location?.address || complaint.municipalityName || complaint.location?.municipality || "Unknown location"}
+                        </span>
+                      </p>
+
+                      {/* Confirm + Upvote distinct actions */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleConfirm(complaint._id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
+                          title="I have seen this issue — confirm it is real or still present"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>I&apos;ve seen this</span>
+                          <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                            {complaint.confirmationCount || 0}
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => handleUpvote(complaint._id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium transition-colors"
+                          title="I want this issue prioritized — support solving it quickly"
+                        >
+                          <Heart className="w-3.5 h-3.5" />
+                          <span>Prioritize</span>
+                          <span className="bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                            {complaint.upvoteCount || 0}
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div className="p-3">
-                    <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2">{complaint.title}</h4>
-                    <p className="text-xs text-slate-500 mb-2 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
-                    </p>
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <button
-                        onClick={() => handleConfirm(complaint._id)}
-                        className="flex items-center gap-1 px-2 py-1 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-xs text-green-600 font-medium transition-colors"
-                      >
-                        <CheckCircle className="w-3 h-3" />
-                        {complaint.confirmationCount || 0}
-                      </button>
-                      <button
-                        onClick={() => handleUpvote(complaint._id)}
-                        className="flex items-center gap-1 px-2 py-1 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-xs text-red-500 font-medium transition-colors"
-                      >
-                        <Heart className="w-3 h-3" />
-                        {complaint.upvoteCount || 0}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
+
+            {municipalityComplaints.length > 6 && (
+              <div className="mt-4 text-center">
+                <Link
+                  href="/transparency"
+                  className="text-sm text-primary hover:text-primary/80 font-medium inline-flex items-center gap-1"
+                >
+                  View all complaints <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </main>

@@ -37,6 +37,7 @@ import { Modal } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import { categoryLabels } from "@/lib/complaints";
 import { getPhotoUrl } from "@/lib/photos";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
   ASSIGNED: { label: "ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
@@ -276,6 +277,7 @@ export default function TechnicianTaskDetailPage() {
   const isReworkNeeded = task.status === "IN_PROGRESS" && (task as any).resolutionRejectionReason;
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
         title={`Task ${getComplaintIdDisplay(task._id || task.id || "")}`}
@@ -743,5 +745,6 @@ export default function TechnicianTaskDetailPage() {
         </div>
       </Modal>
     </div>
+    </DashboardLayout>
   );
 }

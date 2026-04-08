@@ -31,6 +31,11 @@ from routes.urgency_routes import router as urgency_router
 from routes.duplicate_routes import router as duplicate_router
 from routes.trend_routes import router as trend_router
 
+# Import service functions for category, keyword, SLA
+from services.category_predictor import predict_category, PredictionRequest as CategoryPredictionRequest
+from services.keyword_extractor import extract_keywords, ExtractionRequest as KeywordExtractionRequest
+from services.sla_calculator import calculate_sla, SLACalculationRequest
+
 # Create FastAPI app
 app = FastAPI(
     title="Smart City Tunisia AI Services",
@@ -81,6 +86,51 @@ async def health_check():
             "duplicate": False,
             "trend": False
         }
+    }
+
+
+# ── Category Prediction (used by ai.service.js) ──
+@app.post("/predict-category", tags=["Category Prediction"])
+async def predict_category_endpoint(request: dict):
+    """Predict complaint category from description."""
+    text = request.get("text") or request.get("description", "")
+    title = request.get("title")
+    result = predict_category(text, title)
+    return {
+        "predicted": result.predicted,
+        "confidence": result.confidence,
+        "alternatives": result.alternatives,
+        "reasoning": result.reasoning,
+    }
+
+
+# ── Keyword Extraction (used by ai.service.js) ──
+@app.post("/extract-keywords", tags=["Keyword Extraction"])
+async def extract_keywords_endpoint(request: dict):
+    """Extract keywords from complaint text."""
+    text = request.get("text") or request.get("description", "")
+    result = extract_keywords(text)
+    return {
+        "keywords": result.keywords,
+        "locationKeywords": result.locationKeywords,
+        "urgencyKeywords": result.urgencyKeywords,
+        "similarityHash": result.similarityHash,
+    }
+
+
+# ── SLA Calculation (used by ai.service.js) ──
+@app.post("/calculate-sla", tags=["SLA Calculator"])
+async def calculate_sla_endpoint(request: SLACalculationRequest):
+    """Calculate SLA deadline based on urgency and category."""
+    from datetime import datetime as dt
+    created = dt.fromisoformat(request.createdAt) if request.createdAt else None
+    result = calculate_sla(request.urgency, request.category, created)
+    return {
+        "deadline": result.deadline,
+        "status": result.status,
+        "remaining_h": result.remaining_h,
+        "urgency": result.urgency,
+        "hours_allocated": result.hours_allocated,
     }
 
 

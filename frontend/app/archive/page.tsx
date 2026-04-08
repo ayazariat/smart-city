@@ -6,14 +6,12 @@ import Link from "next/link";
 import { 
   Archive, 
   Search, 
-  Filter,
   Loader2,
   ArrowLeft,
   Eye,
   ChevronLeft,
   ChevronRight,
   X,
-  FileText,
   CheckCircle,
   XCircle,
 } from "lucide-react";
@@ -38,6 +36,8 @@ function ArchivePageContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [closedCount, setClosedCount] = useState(0);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const limit = 10;
 
   useEffect(() => {
@@ -84,6 +84,22 @@ function ArchivePageContent() {
       fetchArchived();
     }
   }, [token, hydrated, user, page, statusFilter, searchTerm]);
+
+  // Fetch total counts for stats (once, without filters)
+  useEffect(() => {
+    const fetchCounts = async () => {
+      if (!token || !hydrated || !user) return;
+      try {
+        const [closedRes, rejectedRes] = await Promise.all([
+          complaintService.getArchivedComplaints({ filter: "CLOSED", page: 1, limit: 1 }),
+          complaintService.getArchivedComplaints({ filter: "REJECTED", page: 1, limit: 1 }),
+        ]);
+        setClosedCount(closedRes?.total || 0);
+        setRejectedCount(rejectedRes?.total || 0);
+      } catch {}
+    };
+    fetchCounts();
+  }, [token, hydrated, user]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
@@ -157,10 +173,10 @@ function ArchivePageContent() {
     return null;
   }
 
-  const stats = {
-    total: total,
-    closed: complaints.filter(c => c.status === "CLOSED").length,
-    rejected: complaints.filter(c => c.status === "REJECTED").length,
+  const archiveStats = {
+    total: closedCount + rejectedCount,
+    closed: closedCount,
+    rejected: rejectedCount,
   };
 
   return (
@@ -168,48 +184,57 @@ function ArchivePageContent() {
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="Archived Complaints"
-        subtitle={`${total} closed/rejected complaints`}
-        showBackButton={false}
+        subtitle={`${archiveStats.total} closed/rejected complaints`}
+        backHref="/dashboard"
       />
 
       {/* Stats Cards */}
       <div className="max-w-7xl mx-auto px-4 mt-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
+          <button
+            onClick={() => { setStatusFilter(""); setPage(1); }}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${!statusFilter ? 'border-primary ring-2 ring-primary/20' : 'border-slate-200 hover:border-slate-300'} animate-fadeInUp`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500 font-medium">Total Archived</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total}</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">{archiveStats.total}</p>
               </div>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
                 <Archive className="w-6 h-6 text-slate-600" />
               </div>
             </div>
-          </div>
+          </button>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-75">
+          <button
+            onClick={() => { setStatusFilter("CLOSED"); setPage(1); }}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'CLOSED' ? 'border-green-500 ring-2 ring-green-200' : 'border-slate-200 hover:border-green-300'} animate-fadeInUp delay-75`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500 font-medium">Closed</p>
-                <p className="text-3xl font-bold text-green-600 mt-1">{stats.closed}</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{archiveStats.closed}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
             </div>
-          </div>
+          </button>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-150">
+          <button
+            onClick={() => { setStatusFilter("REJECTED"); setPage(1); }}
+            className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'REJECTED' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 hover:border-red-300'} animate-fadeInUp delay-150`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500 font-medium">Rejected</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{stats.rejected}</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{archiveStats.rejected}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
                 <XCircle className="w-6 h-6 text-red-600" />
               </div>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -245,20 +270,6 @@ function ArchivePageContent() {
             </div>
             
             <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="px-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-white"
-              >
-                <option value="">All Status</option>
-                <option value="CLOSED">Closed</option>
-                <option value="REJECTED">Rejected</option>
-              </select>
-              
               {/* Export Buttons */}
               <Button onClick={exportCSV} className="bg-green-600 hover:bg-green-700 text-white">
                 Export CSV

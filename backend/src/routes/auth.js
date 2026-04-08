@@ -39,6 +39,7 @@ router.post("/set-password", authController.setPassword);
 
 // Get current user
 router.get("/me", authenticate, authController.getCurrentUser);
+router.get("/profile", authenticate, authController.getCurrentUser);
 
 // Update profile
 router.put("/profile", authenticate, authController.updateProfile);

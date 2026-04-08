@@ -28,12 +28,12 @@ export const heatmapService = {
     if (params.municipality) queryParams.append('municipality', params.municipality);
     if (params.department) queryParams.append('department', params.department);
     
-    const response = await apiClient.get(`/heatmap?${queryParams.toString()}`) as { data: HeatmapResponse };
-    return response.data;
+    const response = await apiClient.get<HeatmapResponse>(`/heatmap?${queryParams.toString()}`);
+    return response;
   },
   
   getCategories: async (): Promise<{ success: boolean; categories: string[] }> => {
-    const response = await apiClient.get('/heatmap/categories') as { data: { success: boolean; categories: string[] } };
-    return response.data;
+    const response = await apiClient.get<{ success: boolean; categories: string[] }>('/heatmap/categories');
+    return response;
   }
 };

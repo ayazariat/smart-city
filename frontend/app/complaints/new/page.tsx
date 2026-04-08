@@ -245,6 +245,7 @@ export default function NewComplaintPage() {
   // AI suggestion state
   const [isAiSuggesting, setIsAiSuggesting] = useState(false);
   const [aiPredictedUrgency, setAiPredictedUrgency] = useState<{ level: string; confidence: number; explanation: string } | null>(null);
+  const [proactiveDuplicates, setProactiveDuplicates] = useState<Array<{ complaintId: string; referenceId: string; title: string; overallScore: number; status: string }>>([]);
 
   // Check authentication - wait for hydration
   useEffect(() => {
@@ -335,6 +336,37 @@ export default function NewComplaintPage() {
 
     return () => clearTimeout(timer);
   }, [title, description, category, urgency, commune]);
+
+  // BL-25: Proactive duplicate check while typing
+  useEffect(() => {
+    if (!title.trim() || !description.trim() || !category) {
+      setProactiveDuplicates([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const { checkDuplicate } = await import("@/services/complaint.service");
+        const result = await checkDuplicate(
+          title.trim(),
+          description.trim(),
+          category as string,
+          commune || detectedCommune || "Tunis",
+          location?.latitude,
+          location?.longitude
+        );
+        if (result && result.topMatches && result.topMatches.length > 0) {
+          setProactiveDuplicates(result.topMatches.slice(0, 3));
+        } else {
+          setProactiveDuplicates([]);
+        }
+      } catch {
+        setProactiveDuplicates([]);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [title, description, category, commune, detectedCommune, location]);
 
   useEffect(() => {
     if (!category && aiSuggestedCategory) {
@@ -804,21 +836,27 @@ export default function NewComplaintPage() {
 
   return (
     <DashboardLayout>
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-      <div className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-xl">
+    <div className="min-h-screen bg-slate-50/50">
+      <div className="bg-white border-b border-slate-200 shadow-sm">
         <div className="container mx-auto max-w-3xl px-4 py-6">
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.back()}
+              className="w-10 h-10 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-600" />
+            </button>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold">Report an Issue</h1>
-              <p className="text-primary-200 text-sm">
+              <h1 className="text-2xl font-bold text-slate-800">Report an Issue</h1>
+              <p className="text-slate-500 text-sm">
                 Help improve your city - Your voice matters!
               </p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full">
-              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                <span className="text-sm font-bold">{(user?.fullName || "U")[0].toUpperCase()}</span>
+            <div className="hidden sm:flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full">
+              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                <span className="text-sm font-bold text-primary">{(user?.fullName || "U")[0].toUpperCase()}</span>
               </div>
-              <span className="text-sm font-medium">{user?.fullName || "User"}</span>
+              <span className="text-sm font-medium text-slate-700">{user?.fullName || "User"}</span>
             </div>
           </div>
         </div>
@@ -1109,18 +1147,63 @@ export default function NewComplaintPage() {
                     ? 'bg-amber-50 border-amber-200'
                     : 'bg-blue-50 border-blue-200'
               }`}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className={`w-4 h-4 ${
-                    aiPredictedUrgency.level === urgency ? 'text-green-600' : 'text-amber-600'
-                  }`} />
-                  <span className="text-sm font-semibold">AI Suggests: {aiPredictedUrgency.level}</span>
-                  <span className="text-xs text-slate-500">({Math.round(aiPredictedUrgency.confidence * 100)}% confidence)</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className={`w-4 h-4 ${
+                      aiPredictedUrgency.level === urgency ? 'text-green-600' : 'text-amber-600'
+                    }`} />
+                    <span className="text-sm font-semibold text-slate-800">AI Suggested Urgency</span>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    aiPredictedUrgency.level === 'CRITICAL' ? 'bg-red-100 text-red-700' :
+                    aiPredictedUrgency.level === 'HIGH' ? 'bg-orange-100 text-orange-700' :
+                    aiPredictedUrgency.level === 'MEDIUM' ? 'bg-amber-100 text-amber-700' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>
+                    {aiPredictedUrgency.level}
+                  </span>
                 </div>
-                {aiPredictedUrgency.level !== urgency && (
-                  <p className="text-xs text-slate-600">
+                <p className="text-xs text-slate-500 mb-2">
+                  Confidence: {Math.round(aiPredictedUrgency.confidence * 100)}%
+                </p>
+                {aiPredictedUrgency.explanation && aiPredictedUrgency.level !== urgency && (
+                  <p className="text-xs text-slate-600 bg-white/60 rounded-lg p-2">
                     {aiPredictedUrgency.explanation}
                   </p>
                 )}
+                {aiPredictedUrgency.level !== urgency && (
+                  <button
+                    type="button"
+                    onClick={() => setUrgency(aiPredictedUrgency.level as ComplaintUrgency)}
+                    className="mt-2 text-xs text-primary hover:text-primary/80 font-medium"
+                  >
+                    Apply AI suggestion
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* BL-25: Proactive Duplicate Warning */}
+            {proactiveDuplicates.length > 0 && !duplicateOverride && (
+              <div className="rounded-xl p-4 border bg-amber-50 border-amber-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800">Potential Duplicates Detected</span>
+                </div>
+                <div className="space-y-2">
+                  {proactiveDuplicates.map((match, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-700 truncate">{match.title}</p>
+                        <p className="text-xs text-slate-500">{match.referenceId} &bull; {match.status}</p>
+                      </div>
+                      <span className="text-sm font-semibold text-amber-600 ml-2">
+                        {Math.round(match.overallScore * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-600 mt-2">Similar complaints already exist. You can still submit if yours is different.</p>
               </div>
             )}
 

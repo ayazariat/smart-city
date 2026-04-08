@@ -32,6 +32,7 @@ import { Button, PageHeader } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
 import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 type InternalNoteItem = (NonNullable<Complaint["internalNotes"]>[number]) & {
   authorName?: string;
@@ -529,6 +530,7 @@ export default function ComplaintDetailPage() {
   };
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
         title={complaint.title || `Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
@@ -592,6 +594,23 @@ export default function ComplaintDetailPage() {
                 </div>
               </div>
             </section>
+
+            {/* Keywords */}
+            {complaint.keywords && complaint.keywords.length > 0 && (
+              <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+                <h2 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Keywords
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {complaint.keywords.map((kw: string, i: number) => (
+                    <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm font-medium border border-blue-200">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Status Timeline */}
             <section className="bg-gradient-to-r from-primary/5 to-secondary-50 rounded-2xl shadow-lg p-6 border border-primary/10">
@@ -1395,7 +1414,7 @@ export default function ComplaintDetailPage() {
                   {/* VALIDATED - Agent assigns Department, Manager can set Priority, Admin can do everything */}
                   {complaint.status === "VALIDATED" && (
                     <>
-                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && !complaint.assignedDepartment && (
                         <Button
                           className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
                           icon={<Building2 className="w-4 h-4" />}
@@ -1968,5 +1987,6 @@ export default function ComplaintDetailPage() {
         </div>
       )}
     </div>
+    </DashboardLayout>
   );
 }

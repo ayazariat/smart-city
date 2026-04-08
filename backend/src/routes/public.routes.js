@@ -214,7 +214,7 @@ router.get("/stats", async (req, res) => {
     const totalTrend = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : 0;
     const resolvedTrend = prevResolved > 0 ? Math.round(((resolved - prevResolved) / prevResolved) * 100) : 0;
     const avgResolutionTrend = prevAvgDays > 0 ? Math.round(((parseFloat(avgResolutionDays) - prevAvgDays) / prevAvgDays) * 100) : 0;
-    const resolutionRateTrend = prevTotal > 0 ? Math.round(((resolved / total) - (prevResolved / prevTotal)) * 100) * 10 : 0;
+    const resolutionRateTrend = prevTotal > 0 ? Math.round(((resolved / total) - (prevResolved / prevTotal)) * 100) : 0;
 
     res.json({
       success: true,
@@ -233,7 +233,7 @@ router.get("/stats", async (req, res) => {
         resolvedTrend,
         resolutionRateTrend,
         avgResolutionTrend,
-        slaComplianceTrend: slaComplianceRate - 50, // Simplified for now
+        slaComplianceTrend: 0,
         generatedAt: new Date().toISOString(),
         
         // Governorate breakdown
@@ -1055,11 +1055,24 @@ router.post("/complaints/:id/comment", authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
+    // Fetch user to get their actual name
+    const commentUser = await User.findById(req.user.userId).select("fullName role");
+    const roleLabels = {
+      CITIZEN: "Citizen",
+      MUNICIPAL_AGENT: "Municipal Agent",
+      DEPARTMENT_MANAGER: "Dept. Manager",
+      TECHNICIAN: "Technician",
+      ADMIN: "Administrator"
+    };
+    const displayRole = roleLabels[commentUser?.role || req.user.role] || "User";
+    const displayName = anonymous ? "Anonymous" : (commentUser?.fullName || "User");
+
     const comment = {
       text: text.trim(),
       author: req.user.userId,
-      authorName: anonymous ? "Anonymous" : req.user.fullName || "Citizen",
-      authorRole: req.user.role || "CITIZEN",
+      authorName: displayName,
+      authorRole: commentUser?.role || req.user.role || "CITIZEN",
+      authorRoleLabel: displayRole,
       type: "PUBLIC",
       isInternal: false,
       createdAt: new Date()
@@ -1077,6 +1090,7 @@ router.post("/complaints/:id/comment", authenticate, async (req, res) => {
       data: {
         text: comment.text,
         authorName: comment.authorName,
+        authorRoleLabel: comment.authorRoleLabel,
         createdAt: comment.createdAt
       }
     });
@@ -1101,6 +1115,7 @@ router.get("/complaints/:id/comments", async (req, res) => {
         _id: c._id,
         text: c.text,
         authorName: c.authorName || "Anonymous",
+        authorRoleLabel: c.authorRoleLabel || (c.authorRole === "CITIZEN" ? "Citizen" : c.authorRole === "MUNICIPAL_AGENT" ? "Municipal Agent" : c.authorRole === "DEPARTMENT_MANAGER" ? "Dept. Manager" : c.authorRole === "TECHNICIAN" ? "Technician" : c.authorRole === "ADMIN" ? "Administrator" : "User"),
         createdAt: c.createdAt
       }));
 

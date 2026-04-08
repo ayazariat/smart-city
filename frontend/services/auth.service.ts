@@ -204,7 +204,7 @@ export const authService = {
     const { token, refreshToken } = useAuthStore.getState();
     if (!token) throw new Error("No authentication token found");
 
-    const response = await fetch(`${API_URL}/profile`, {
+    const response = await fetch(`${API_URL}/me`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -221,7 +221,7 @@ export const authService = {
           const data = await refreshResponse.json();
           if (data.token) {
             useAuthStore.setState({ token: data.token });
-            const retryResponse = await fetch(`${API_URL}/profile`, {
+            const retryResponse = await fetch(`${API_URL}/me`, {
               method: "GET",
               headers: { Authorization: `Bearer ${data.token}` },
             });

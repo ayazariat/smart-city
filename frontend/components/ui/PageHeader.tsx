@@ -39,7 +39,7 @@ export function PageHeader({
   };
 
   const variants = {
-    default: "bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg",
+    default: "bg-white text-slate-800 border-b border-slate-200 shadow-sm",
     hero: "gradient-hero text-white shadow-2xl relative overflow-hidden",
     minimal: "bg-white text-slate-800 border-b border-slate-200 shadow-sm"
   };
@@ -69,9 +69,9 @@ export function PageHeader({
                 className={`
                   flex items-center justify-center w-10 h-10 rounded-xl
                   transition-all duration-300 hover:scale-110 active:scale-95
-                  ${variant === "minimal" 
-                    ? "bg-slate-100 hover:bg-slate-200 text-slate-600" 
-                    : "bg-white/20 hover:bg-white/30 text-white"
+                  ${variant === "hero" 
+                    ? "bg-white/20 hover:bg-white/30 text-white" 
+                    : "bg-slate-100 hover:bg-slate-200 text-slate-600"
                   }
                 `}
                 aria-label="Go back"
@@ -87,7 +87,7 @@ export function PageHeader({
               </h1>
               {subtitle && (
                 <p className={`text-sm mt-0.5 animate-fadeIn delay-100 ${
-                  variant === "minimal" ? "text-slate-500" : "text-white/70"
+                  variant === "hero" ? "text-white/70" : "text-slate-500"
                 }`}>
                   {subtitle}
                 </p>

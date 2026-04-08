@@ -115,10 +115,6 @@ export const apiClient = {
     }
     
     if (requiresAuth && (!token || !user)) {
-      // Instead of throwing error, redirect to login
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-      }
       throw new Error("Please login to view this content");
     }
 
@@ -175,8 +171,11 @@ export const apiClient = {
     }
 
     if (response.status === 401) {
-      useAuthStore.setState({ user: null, token: null, refreshToken: null });
-      // Don't redirect - let the app handle auth errors gracefully
+      useAuthStore.setState({ user: null, token: null, refreshToken: null, isAuthenticated: false });
+      // Redirect to login so the user knows they need to re-authenticate
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
       throw new Error("Session expired. Please log in again.");
     }
 

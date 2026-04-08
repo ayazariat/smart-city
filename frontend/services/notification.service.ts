@@ -1,5 +1,5 @@
 import { Notification } from "@/types";
-import { clientGet, clientPatch } from "@/lib/api";
+import { clientGet, clientPut } from "@/lib/api";
 
 /**
  * Get notification count
@@ -32,7 +32,7 @@ export const getNotifications = async (): Promise<{ success: boolean; data?: Not
  */
 export const markNotificationAsRead = async (id: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const data = await clientPatch<{ success: boolean }>(`/notifications/${id}/read`);
+    const data = await clientPut<{ success: boolean }>(`/notifications/${id}/read`);
     return data;
   } catch {
     return { success: false, message: "Failed to mark notification as read" };
@@ -44,7 +44,7 @@ export const markNotificationAsRead = async (id: string): Promise<{ success: boo
  */
 export const markAllNotificationsAsRead = async (): Promise<{ success: boolean; message?: string }> => {
   try {
-    const data = await clientPatch<{ success: boolean }>("/notifications/read-all");
+    const data = await clientPut<{ success: boolean }>("/notifications/read-all");
     return data;
   } catch {
     return { success: false, message: "Failed to mark all notifications as read" };

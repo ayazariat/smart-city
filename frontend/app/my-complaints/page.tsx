@@ -20,7 +20,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function MyComplaintsPage() {
   const router = useRouter();
-  const { user, logout, hydrated } = useAuthStore();
+  const { user, hydrated } = useAuthStore();
   const { isHydrated, saveLastPage, getLastPage, clearLastPage } = useLastVisitedPage();
 
   const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -73,6 +73,9 @@ export default function MyComplaintsPage() {
   }, [user, statusFilter, hydrated]);
 
   const filteredComplaints = complaints.filter((c) => {
+    // Exclude CLOSED and ARCHIVED — those belong in the Archive page
+    const status = c.status as string;
+    if (status === "CLOSED" || status === "ARCHIVED") return false;
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -81,11 +84,15 @@ export default function MyComplaintsPage() {
     );
   });
 
-  // Stats
-  const submitted = complaints.filter(c => c.status === "SUBMITTED").length;
-  const inProgress = complaints.filter(c => ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(c.status)).length;
-  const resolved = complaints.filter(c => ["RESOLVED", "CLOSED"].includes(c.status)).length;
-  const total = complaints.length;
+  // Stats (excluding closed/archived)
+  const activeComplaints = complaints.filter(c => {
+    const s = c.status as string;
+    return s !== "CLOSED" && s !== "ARCHIVED";
+  });
+  const submitted = activeComplaints.filter(c => c.status === "SUBMITTED").length;
+  const inProgress = activeComplaints.filter(c => ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(c.status)).length;
+  const resolved = activeComplaints.filter(c => c.status === "RESOLVED").length;
+  const total = activeComplaints.length;
 
   if (!hydrated) return <LoadingSpinner fullScreen />;
   if (!user || user.role !== "CITIZEN") return null;
@@ -96,7 +103,7 @@ export default function MyComplaintsPage() {
       <PageHeader
         title="My Complaints"
         subtitle="Track and manage your submitted complaints"
-        showBackButton={false}
+        backHref="/dashboard"
         rightContent={
           <Link
             href="/complaints/new"

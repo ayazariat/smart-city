@@ -30,7 +30,7 @@ interface ValidationErrors {
 
 function ProfilePage() {
   const router = useRouter();
-  const { user, isLoading, error, updateProfile, changePassword, clearError, hydrated, logout } = useAuthStore();
+  const { user, isLoading, error, updateProfile, changePassword, clearError, hydrated, logout, fetchProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -46,13 +46,21 @@ function ProfilePage() {
   });
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
-  // Auth check
+  // Auth check + fetch fresh profile data (populates department name)
   useEffect(() => {
     if (!hydrated) return;
     if (!user) {
       router.push("/");
     }
   }, [hydrated, user, router]);
+
+  // Fetch fresh profile data on mount
+  useEffect(() => {
+    if (hydrated && user) {
+      fetchProfile();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   // Clear error when component unmounts
   useEffect(() => {
@@ -291,24 +299,30 @@ function ProfilePage() {
 
   return (
     <DashboardLayout>
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 pb-8">
+    <div className="min-h-screen bg-slate-50/50 pb-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg">
+      <div className="bg-white border-b border-slate-200 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                <Sparkles className="w-6 h-6" />
+              <button
+                onClick={() => router.back()}
+                className="w-10 h-10 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-slate-600" />
+              </button>
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-bold">Smart City Tunisia</h1>
-                <p className="text-sm text-primary-100">Profile Settings</p>
+                <h1 className="text-xl font-bold text-slate-800">Smart City Tunisia</h1>
+                <p className="text-sm text-slate-500">Profile Settings</p>
               </div>
             </div>
             
-            <div className="hidden md:flex items-center gap-2 bg-white/10 px-4 py-2.5 rounded-xl backdrop-blur-sm">
-              <User className="w-5 h-5" />
-              <span className="text-sm font-medium">{user.fullName}</span>
+            <div className="hidden md:flex items-center gap-2 bg-slate-100 px-4 py-2.5 rounded-xl">
+              <User className="w-5 h-5 text-slate-600" />
+              <span className="text-sm font-medium text-slate-700">{user.fullName}</span>
             </div>
           </div>
         </div>

@@ -289,7 +289,7 @@ export default function ManagerPendingPage() {
       <PageHeader
         title="All Complaints"
         subtitle={departmentName ? `Complaints in ${departmentName}` : "Manager complaint management"}
-        showBackButton={false}
+        backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
             {filteredComplaints.length} complaints
@@ -503,6 +503,7 @@ export default function ManagerPendingPage() {
                             Assign Technician
                           </button>
                         )}
+                        {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
                         <button
                           onClick={() => {
                             setPriorityTarget(id);
@@ -514,6 +515,7 @@ export default function ManagerPendingPage() {
                           <Flag className="w-4 h-4" />
                           Priority
                         </button>
+                        )}
                         <Link
                           href={`/dashboard/complaints/${id}?from=manager`}
                           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-all text-sm font-medium"

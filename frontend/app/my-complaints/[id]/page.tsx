@@ -23,6 +23,7 @@ import { complaintService } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui";
 import { useLastVisitedPage } from "@/hooks/useLastVisitedPage";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
 
 // Status labels
@@ -287,7 +288,8 @@ export default function MyComplaintDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+    <DashboardLayout>
+    <div className="min-h-screen bg-slate-50/50">
       {/* Delete Confirmation Dialog */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -336,31 +338,31 @@ export default function MyComplaintDetailPage() {
         </div>
       )}
 
-      {/* Header - Green gradient matching dashboard */}
-      <header className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg" role="banner">
+      {/* Header - White design matching dashboard */}
+      <header className="bg-white border-b border-slate-200 shadow-sm" role="banner">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.back()}
-                className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-200 backdrop-blur-sm flex items-center justify-center text-white"
+                className="p-2.5 hover:bg-slate-100 rounded-xl transition-all duration-200 flex items-center justify-center text-slate-600"
                 aria-label="Go back to my complaints"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <div className="h-6 w-px bg-white/30" aria-hidden="true"></div>
+              <div className="h-6 w-px bg-slate-200" aria-hidden="true"></div>
               <div>
-                <h1 className="text-xl font-bold text-white">
+                <h1 className="text-xl font-bold text-slate-800">
                   {complaint.title || `Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
                 </h1>
                 {complaint.department && (
-                  <p className="text-xs text-white/70">Assigned to: {complaint.department.name}</p>
+                  <p className="text-xs text-slate-500">Assigned to: {complaint.department.name}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-3">
               {complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object' && (
-                <span className="px-3 py-1 bg-purple-500/30 text-white rounded-full text-sm font-medium">
+                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
                   {complaint.assignedDepartment.name}
                 </span>
               )}
@@ -375,7 +377,7 @@ export default function MyComplaintDetailPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleEdit}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all duration-200 backdrop-blur-sm font-medium flex items-center gap-2"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all duration-200 font-medium flex items-center gap-2"
                     title="Edit complaint"
                   >
                     <Pencil className="w-4 h-4" />
@@ -383,7 +385,7 @@ export default function MyComplaintDetailPage() {
                   </button>
                   <button
                     onClick={() => setDeleteConfirm(true)}
-                    className="p-2 hover:bg-red-500/20 rounded-lg transition-all duration-200 backdrop-blur-sm text-red-200"
+                    className="p-2 hover:bg-red-50 rounded-lg transition-all duration-200 text-red-500"
                     title="Delete complaint"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -410,14 +412,14 @@ export default function MyComplaintDetailPage() {
                   <button
                     onClick={handleSaveEdit}
                     disabled={isSaving}
-                    className="p-2 hover:bg-green-500/20 rounded-lg transition-all duration-200 backdrop-blur-sm text-green-200 disabled:opacity-50"
+                    className="p-2 hover:bg-green-50 rounded-lg transition-all duration-200 text-green-600 disabled:opacity-50"
                     title="Save changes"
                   >
                     {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   </button>
                   <button
                     onClick={handleCancelEdit}
-                    className="p-2 hover:bg-white/10 rounded-lg transition-all duration-200 backdrop-blur-sm text-white"
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-all duration-200 text-slate-600"
                     title="Cancel"
                   >
                     <X className="w-4 h-4" />
@@ -823,5 +825,6 @@ export default function MyComplaintDetailPage() {
         </div>
       </main>
     </div>
+    </DashboardLayout>
   );
 }

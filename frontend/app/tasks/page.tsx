@@ -269,7 +269,7 @@ export default function TechnicianTasksPage() {
       <PageHeader
         title="My Tasks"
         subtitle="Manage your assigned work orders"
-        showBackButton={false}
+        backHref="/dashboard"
         rightContent={
           <div className="flex items-center gap-3">
             {/* Notifications */}
@@ -557,7 +557,7 @@ export default function TechnicianTasksPage() {
                       {task.status === "IN_PROGRESS" && (
                         <>
                           <button
-                            onClick={() => setConfirmAction({ type: "resolve", target: task })}
+                            onClick={() => { setSelectedTask(task); setResolveModal(true); }}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
                           >
                             <CheckCircle2 className="w-4 h-4" />
@@ -695,23 +695,6 @@ export default function TechnicianTasksPage() {
         isLoading={actionLoading}
       />
 
-      {/* Resolve Confirmation */}
-      <ConfirmationModal
-        isOpen={confirmAction.type === "resolve"}
-        onClose={() => setConfirmAction({ type: null, target: null })}
-        onConfirm={() => {
-          if (confirmAction.target) {
-            setSelectedTask(confirmAction.target);
-          }
-          setConfirmAction({ type: null, target: null });
-          setResolveModal(true);
-        }}
-        title="Submit Resolution"
-        message={`Are you sure you want to submit your resolution report for "${confirmAction.target?.title}"? The agent will review and approve.`}
-        confirmText="Submit Report"
-        variant="success"
-        isLoading={actionLoading}
-      />
     </div>
     </DashboardLayout>
   );

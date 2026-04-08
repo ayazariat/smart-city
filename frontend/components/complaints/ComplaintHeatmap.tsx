@@ -1,123 +1,145 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { MapContainer, TileLayer, useMapEvents, Marker, Popup } from "react-leaflet";
-import MarkerClusterGroup from "react-leaflet-markercluster";
-import { useAuthStore } from "@/store/useAuthStore";
+import { useEffect } from "react";
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
 import { categoryLabels } from "@/lib/complaints";
-import { Layers, RefreshCw } from "lucide-react";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-interface SimplePoint {
+// Fix default marker icon issue in Next.js/Webpack
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+export interface HeatmapDataPoint {
   lat: number;
   lng: number;
-  title?: string;
-  category?: string;
-  status?: string;
+  count: number;
+  categories: string[];
 }
 
 interface ComplaintHeatmapProps {
+  data?: HeatmapDataPoint[];
   category?: string;
-  municipality?: string;
-  roleScope?: "public" | "agent" | "manager" | "admin";
   height?: string;
 }
 
-export default function ComplaintHeatmap({ category, height = "500px" }: ComplaintHeatmapProps) {
-  const { token } = useAuthStore();
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<SimplePoint[]>([]);
-  const [filterCategory, setFilterCategory] = useState(category || "all");
+// Colors based on density
+function getDensityColor(count: number, max: number): string {
+  const ratio = max > 0 ? count / max : 0;
+  if (ratio > 0.75) return "#ef4444"; // red
+  if (ratio > 0.5) return "#f97316";  // orange
+  if (ratio > 0.25) return "#eab308"; // yellow
+  return "#3b82f6";                    // blue
+}
 
-  const fetchData = useCallback(async () => {
-    if (!token) return;
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/complaints?status=VALIDATED&limit=500`,
-        { credentials: "include" }
-      );
-      const result = await response.json();
-      if (result.complaints) {
-        const points: SimplePoint[] = result.complaints
-          .filter((c: any) => c.location?.coordinates?.length >= 2)
-          .map((c: any) => ({
-            lat: c.location.coordinates[0],
-            lng: c.location.coordinates[1],
-            title: c.title,
-            category: c.category,
-            status: c.status,
-          }));
-        setData(points);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, filterCategory]);
+function getDensityRadius(count: number, max: number): number {
+  const ratio = max > 0 ? count / max : 0;
+  return Math.max(8, Math.min(30, 8 + ratio * 22));
+}
+
+// Auto-fit the map to the points
+function FitBounds({ data }: { data: HeatmapDataPoint[] }) {
+  const map = useMap();
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (data.length === 0) return;
+    const bounds = L.latLngBounds(data.map((p) => [p.lat, p.lng]));
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+  }, [data, map]);
 
-  const categories = ["all", "ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
+  return null;
+}
+
+export default function ComplaintHeatmap({ data = [], category, height = "500px" }: ComplaintHeatmapProps) {
+  const filtered = category && category !== "all"
+    ? data.filter((p) => p.categories.includes(category))
+    : data;
+
+  const maxCount = Math.max(...filtered.map((p) => p.count), 1);
+
+  // Tunisia center
+  const defaultCenter: [number, number] = [34.5, 9.5];
 
   return (
-    <div className="h-full w-full flex flex-col" style={{ height }}>
-      <div className="flex items-center justify-between p-4 bg-white border-b border-slate-200">
-        <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-primary" />
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm"
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat === "all" ? "All Categories" : categoryLabels[cat] || cat}
-              </option>
-            ))}
-          </select>
+    <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm" style={{ height }}>
+      <MapContainer
+        center={defaultCenter}
+        zoom={7}
+        style={{ height: "100%", width: "100%" }}
+        scrollWheelZoom={true}
+        zoomControl={true}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {filtered.length > 0 && <FitBounds data={filtered} />}
+
+        {filtered.map((point, idx) => {
+          const color = getDensityColor(point.count, maxCount);
+          const radius = getDensityRadius(point.count, maxCount);
+          return (
+            <CircleMarker
+              key={`${point.lat}-${point.lng}-${idx}`}
+              center={[point.lat, point.lng]}
+              radius={radius}
+              pathOptions={{
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.55,
+                weight: 2,
+                opacity: 0.8,
+              }}
+            >
+              <Popup>
+                <div className="text-sm min-w-[140px]">
+                  <p className="font-bold text-slate-900 mb-1">
+                    {point.count} complaint{point.count > 1 ? "s" : ""}
+                  </p>
+                  {point.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {point.categories.map((cat) => (
+                        <span
+                          key={cat}
+                          className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium"
+                        >
+                          {categoryLabels[cat] || cat}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    {point.lat.toFixed(4)}, {point.lng.toFixed(4)}
+                  </p>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+      </MapContainer>
+
+      {/* Floating legend */}
+      <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-slate-200 px-3 py-2 z-[1000]">
+        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Density</p>
+        <div className="flex items-center gap-2.5 text-[11px] text-slate-600">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Low</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500" /> Med</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> High</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Critical</span>
         </div>
       </div>
 
-      <div className="flex-1 min-h-[400px]">
-        <MapContainer
-          center={[36.8, 10.15]}
-          zoom={10}
-          style={{ height: "100%", width: "100%" }}
-          scrollWheelZoom={true}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          
-          <MarkerClusterGroup>
-            {data
-              .filter(point => filterCategory === "all" || point.category === filterCategory)
-              .map((point, idx) => (
-              <Marker
-                key={idx}
-                position={[point.lat, point.lng]}
-              >
-                <Popup>
-                  <div className="text-sm">
-                    <p className="font-bold">{point.title || "Complaint"}</p>
-                    <p className="text-xs text-slate-500">{categoryLabels[point.category || "OTHER"]}</p>
-                    <p className="text-xs mt-1">{point.status}</p>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MarkerClusterGroup>
-        </MapContainer>
-      </div>
-
-      {loading && (
-        <div className="absolute inset-0 bg-white/50 flex items-center justify-center">
-          <RefreshCw className="w-6 h-6 animate-spin text-primary" />
+      {filtered.length === 0 && (
+        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center z-[1000]">
+          <div className="text-center">
+            <p className="text-sm text-slate-500">No complaint data with coordinates</p>
+            <p className="text-xs text-slate-400 mt-1">Submit complaints with location to see them here</p>
+          </div>
         </div>
       )}
     </div>
