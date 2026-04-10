@@ -259,10 +259,10 @@ export default function AdminComplaintsPage() {
               <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
               <p className="text-[10px] text-emerald-400">Percentage resolved</p>
             </div>
-            <div className="text-center p-3 bg-orange-50 rounded-xl">
-              <p className="text-2xl font-bold text-orange-600">{complaints.filter(c => (c.priorityScore || 0) >= 15).length}</p>
+            <div className="text-center p-3 bg-red-50 rounded-xl">
+              <p className="text-2xl font-bold text-red-600">{complaints.filter(c => (c.priorityScore || 0) >= 15).length}</p>
               <p className="text-xs text-slate-500 mt-1">High Priority</p>
-              <p className="text-[10px] text-orange-400">Urgent issues (score 15+)</p>
+              <p className="text-[10px] text-red-400">Urgent issues (score 15+)</p>
             </div>
           </div>
           
@@ -317,7 +317,7 @@ export default function AdminComplaintsPage() {
 
           {/* Collapsible Advanced Filters */}
           {showFilters && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 pt-4 border-t border-slate-100 animate-fadeIn">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-4 pt-4 border-t border-slate-100 animate-fadeIn">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}

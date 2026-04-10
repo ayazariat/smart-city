@@ -122,7 +122,9 @@ export default function DashboardSidebar({
           <Menu className="w-5 h-5 text-slate-600" />
         </button>
         <Link href="/" className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
+          <div className="w-7 h-7 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center shadow-sm shadow-primary/20">
+            <Sparkles className="w-3.5 h-3.5 text-white" />
+          </div>
           <span className="text-sm font-bold text-slate-800">Smart City</span>
         </Link>
         <button
@@ -154,8 +156,8 @@ export default function DashboardSidebar({
           <div className="p-5 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-                <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-primary" />
+                <div className="w-9 h-9 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
+                  <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-800 leading-tight">Smart City</h2>

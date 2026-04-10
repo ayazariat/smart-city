@@ -57,7 +57,7 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
 
         // Fetch municipality stats and heatmap points in parallel
         const [muniRes, heatmapRes] = await Promise.all([
-          fetch(`${apiUrl}/public/stats/by-municipality?period=month`).then(r => r.json()).catch(() => null),
+          fetch(`${apiUrl}/public/stats/by-municipality?period=all`).then(r => r.json()).catch(() => null),
           heatmapService.getHeatmapData(
             userMunicipality ? { municipality: userMunicipality } : {}
           ).catch(() => null),

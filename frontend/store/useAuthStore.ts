@@ -146,7 +146,7 @@ export const useAuthStore = create<AuthState>()(
         });
         
         // Hard redirect after a brief moment
-        window.location.href = '/';
+        window.location.href = '/login';
         setTimeout(() => window.location.reload(), 100);
       },
 

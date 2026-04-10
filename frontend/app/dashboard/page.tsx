@@ -472,7 +472,7 @@ function DashboardContent() {
 
                 {/* Notifications Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
                     <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 to-secondary-50">
                       <h3 className="font-semibold text-slate-900">Notifications</h3>
                       <div className="flex items-center gap-2">
@@ -814,7 +814,7 @@ function DashboardContent() {
           {/* Agent Stats */}
           {user?.role === 'MUNICIPAL_AGENT' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
                   <div className="text-sm text-blue-600 font-medium">Total</div>
@@ -858,7 +858,7 @@ function DashboardContent() {
           {/* Manager Stats */}
           {user?.role === 'DEPARTMENT_MANAGER' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
                   <div className="text-sm text-blue-600 font-medium">Department</div>

@@ -412,10 +412,10 @@ export default function AgentComplaintsPage() {
             </div>
           </div>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
+          <div className="bg-red-50 rounded-2xl shadow-lg p-5 border border-red-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Overdue</p>
+                <p className="text-sm text-red-600 font-medium">Overdue</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{overdueCount}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -444,10 +444,10 @@ export default function AgentComplaintsPage() {
               <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
               <p className="text-[10px] text-emerald-400">Percentage resolved</p>
             </div>
-            <div className="text-center p-3 bg-orange-50 rounded-xl">
-              <p className="text-2xl font-bold text-orange-600">{highPriorityCount}</p>
+            <div className="text-center p-3 bg-red-50 rounded-xl">
+              <p className="text-2xl font-bold text-red-600">{highPriorityCount}</p>
               <p className="text-xs text-slate-500 mt-1">High Priority</p>
-              <p className="text-[10px] text-orange-400">Urgent issues (score 15+)</p>
+              <p className="text-[10px] text-red-400">Urgent issues (score 15+)</p>
             </div>
           </div>
           

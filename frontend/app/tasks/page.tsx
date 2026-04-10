@@ -374,10 +374,10 @@ export default function TechnicianTasksPage() {
             </div>
           </div>
           
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-200">
+          <div className="bg-red-50 rounded-2xl shadow-lg p-5 border border-red-200 animate-fadeInUp delay-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Overdue</p>
+                <p className="text-sm text-red-600 font-medium">Overdue</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
