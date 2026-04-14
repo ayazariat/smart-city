@@ -16,10 +16,8 @@ import {
   Filter,
   Bell,
   X,
-  User,
   Calendar,
   Building,
-  ChevronRight,
   Eye,
   CheckCircle2,
 } from "lucide-react";
@@ -33,19 +31,20 @@ import { Button, Modal, PageHeader, ConfirmationModal } from "@/components/ui";
 import { categoryLabels } from "@/lib/complaints";
 import { getPhotoCount } from "@/lib/photos";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useTranslation } from "react-i18next";
 
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string; borderClass: string }> = {
-  ASSIGNED: { label: "Assigned", bgClass: "bg-primary/10", textClass: "text-primary", borderClass: "border-primary/20" },
-  IN_PROGRESS: { label: "In Progress", bgClass: "bg-orange-100", textClass: "text-orange-700", borderClass: "border-orange-200" },
-  RESOLVED: { label: "Resolved", bgClass: "bg-green-100", textClass: "text-green-700", borderClass: "border-green-200" },
-  CLOSED: { label: "Closed", bgClass: "bg-slate-100", textClass: "text-slate-600", borderClass: "border-slate-200" },
+const statusConfig: Record<string, { labelKey: string; bgClass: string; textClass: string; borderClass: string }> = {
+  ASSIGNED: { labelKey: "tasks.assigned", bgClass: "bg-primary/10", textClass: "text-primary", borderClass: "border-primary/20" },
+  IN_PROGRESS: { labelKey: "tasks.inProgress", bgClass: "bg-orange-100", textClass: "text-orange-700", borderClass: "border-orange-200" },
+  RESOLVED: { labelKey: "tasks.resolved", bgClass: "bg-green-100", textClass: "text-green-700", borderClass: "border-green-200" },
+  CLOSED: { labelKey: "tasks.closed", bgClass: "bg-slate-100", textClass: "text-slate-600", borderClass: "border-slate-200" },
 };
 
-const urgencyConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  LOW: { label: "Low", bgClass: "bg-green-100", textClass: "text-green-700" },
-  MEDIUM: { label: "Medium", bgClass: "bg-amber-100", textClass: "text-amber-700" },
-  HIGH: { label: "High", bgClass: "bg-orange-100", textClass: "text-orange-700" },
-  URGENT: { label: "Urgent", bgClass: "bg-red-100", textClass: "text-red-700" },
+const urgencyConfig: Record<string, { labelKey: string; bgClass: string; textClass: string }> = {
+  LOW: { labelKey: "tasks.low", bgClass: "bg-green-100", textClass: "text-green-700" },
+  MEDIUM: { labelKey: "tasks.medium", bgClass: "bg-amber-100", textClass: "text-amber-700" },
+  HIGH: { labelKey: "tasks.high", bgClass: "bg-orange-100", textClass: "text-orange-700" },
+  URGENT: { labelKey: "tasks.urgent", bgClass: "bg-red-100", textClass: "text-red-700" },
 };
 
 
@@ -53,6 +52,8 @@ const urgencyConfig: Record<string, { label: string; bgClass: string; textClass:
 export default function TechnicianTasksPage() {
   const router = useRouter();
   const { user, token, hydrated } = useAuthStore();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || "en";
 
   const [tasks, setTasks] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -267,8 +268,8 @@ export default function TechnicianTasksPage() {
     <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
-        title="My Tasks"
-        subtitle="Manage your assigned work orders"
+        title={t("tasks.title")}
+        subtitle={t("tasks.subtitle")}
         backHref="/dashboard"
         rightContent={
           <div className="flex items-center gap-3">
@@ -289,7 +290,7 @@ export default function TechnicianTasksPage() {
               {showNotifications && (
                 <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-scaleIn">
                   <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
-                    <h3 className="font-semibold text-slate-900">Notifications</h3>
+                    <h3 className="font-semibold text-slate-900">{t("tasks.notifications")}</h3>
                     <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
                       <X className="w-4 h-4 text-slate-500" />
                     </button>
@@ -298,7 +299,7 @@ export default function TechnicianTasksPage() {
                     {notifications.length === 0 ? (
                       <div className="p-8 text-center text-slate-500">
                         <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No notifications</p>
+                        <p className="text-sm">{t("tasks.noNotifications")}</p>
                       </div>
                     ) : (
                       notifications.slice(0, 10).map((n) => (
@@ -329,7 +330,7 @@ export default function TechnicianTasksPage() {
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Total Assigned</p>
+                <p className="text-sm text-slate-500 font-medium">{t("tasks.statsTotal")}</p>
                 <p className="text-3xl font-bold text-primary mt-1">{stats.total}</p>
               </div>
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
@@ -341,7 +342,7 @@ export default function TechnicianTasksPage() {
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-75">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">In Progress</p>
+                <p className="text-sm text-slate-500 font-medium">{t("tasks.statsInProgress")}</p>
                 <p className="text-3xl font-bold text-orange-600 mt-1">{stats.inProgress}</p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -353,7 +354,7 @@ export default function TechnicianTasksPage() {
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-150">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Resolved</p>
+                <p className="text-sm text-slate-500 font-medium">{t("tasks.statsResolved")}</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">{stats.resolved}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -365,7 +366,7 @@ export default function TechnicianTasksPage() {
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-175">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500 font-medium">Closed</p>
+                <p className="text-sm text-slate-500 font-medium">{t("tasks.closed")}</p>
                 <p className="text-3xl font-bold text-slate-600 mt-1">{stats.closed}</p>
               </div>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
@@ -377,7 +378,7 @@ export default function TechnicianTasksPage() {
           <div className="bg-red-50 rounded-2xl shadow-lg p-5 border border-red-200 animate-fadeInUp delay-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600 font-medium">Overdue</p>
+                <p className="text-sm text-red-600 font-medium">{t("tasks.statsOverdue")}</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -396,7 +397,7 @@ export default function TechnicianTasksPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search tasks..."
+                placeholder={t("tasks.searchPlaceholder")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
@@ -419,7 +420,7 @@ export default function TechnicianTasksPage() {
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   }`}
                 >
-                  {f === "ALL" ? "All" : f === "ASSIGNED" ? "Assigned" : f === "IN_PROGRESS" ? "In Progress" : "Resolved"}
+                  {f === "ALL" ? t("tasks.all") : f === "ASSIGNED" ? t("tasks.assigned") : f === "IN_PROGRESS" ? t("tasks.inProgress") : t("tasks.resolved")}
                 </button>
               ))}
             </div>
@@ -430,7 +431,7 @@ export default function TechnicianTasksPage() {
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <span className="ml-3 text-slate-600">Loading tasks...</span>
+            <span className="ml-3 text-slate-600">{t("tasks.loading")}</span>
           </div>
         ) : filteredTasks.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-slate-200 animate-fadeIn">
@@ -438,10 +439,10 @@ export default function TechnicianTasksPage() {
               <Wrench className="w-10 h-10 text-slate-400" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">
-              {searchTerm ? "No results found" : "No tasks assigned"}
+              {searchTerm ? t("tasks.noTasks") : t("tasks.noTasks")}
             </h3>
             <p className="text-slate-500">
-              {searchTerm ? "Try adjusting your search" : "You have no pending tasks at the moment"}
+              {searchTerm ? t("tasks.noTasksHint") : t("tasks.noTasksHint")}
             </p>
           </div>
         ) : (
@@ -466,14 +467,14 @@ export default function TechnicianTasksPage() {
                           </span>
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${status.bgClass} ${status.textClass}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${status.textClass.replace('text-', 'bg-')} animate-pulse-soft`} />
-                            {status.label}
+                            {t(status.labelKey)}
                           </span>
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                             {categoryLabels[task.category] || task.category}
                           </span>
                           {urgency && (
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${urgency.bgClass} ${urgency.textClass}`}>
-                              {urgency.label}
+                              {t(urgency.labelKey)}
                             </span>
                           )}
                           {task.priorityScore != null && task.priorityScore >= 15 && (
@@ -519,7 +520,7 @@ export default function TechnicianTasksPage() {
                           )}
                           <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">
                             <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-                            <span>{new Date(task.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short" })}</span>
+                            <span>{new Date(task.createdAt).toLocaleDateString(locale, { day: "numeric", month: "short" })}</span>
                           </div>
                           {task.municipalityName && (
                             <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">
@@ -546,11 +547,11 @@ export default function TechnicianTasksPage() {
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold shadow-lg hover:shadow-xl disabled:opacity-50"
                           >
                             <Play className="w-4 h-4" />
-                            Start Work
+                            {t("tasks.startWork")}
                           </button>
                           <button onClick={() => openTaskDetail(task)} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors text-sm font-medium">
                             <Eye className="w-4 h-4" />
-                            Details
+                            {t("tasks.viewDetails")}
                           </button>
                         </>
                       )}
@@ -561,18 +562,18 @@ export default function TechnicianTasksPage() {
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all text-sm font-semibold shadow-lg hover:shadow-xl"
                           >
                             <CheckCircle2 className="w-4 h-4" />
-                            Mark Resolved
+                            {t("tasks.markResolved")}
                           </button>
                           <button onClick={() => openTaskDetail(task)} className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors text-sm font-medium">
                             <Eye className="w-4 h-4" />
-                            Details
+                            {t("tasks.viewDetails")}
                           </button>
                         </>
                       )}
                       {(task.status === "RESOLVED" || task.status === "CLOSED") && (
                         <button onClick={() => openTaskDetail(task)} className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors text-sm font-medium">
                           <Eye className="w-4 h-4" />
-                          View Details
+                          {t("tasks.viewDetails")}
                         </button>
                       )}
                     </div>

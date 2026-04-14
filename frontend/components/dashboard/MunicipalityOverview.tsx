@@ -8,6 +8,7 @@ import {
   Building2,
 } from "lucide-react";
 import { heatmapService } from "@/services/heatmap.service";
+import { useTranslation } from "react-i18next";
 
 // Dynamic import for the mini map (no SSR for Leaflet)
 const MunicipalityMiniMap = dynamic<{ points: HeatmapPoint[]; municipality?: string }>(
@@ -44,6 +45,7 @@ interface MunicipalityOverviewProps {
 }
 
 export default function MunicipalityOverview({ role, userMunicipality }: MunicipalityOverviewProps) {
+  const { t } = useTranslation();
   const [municipalities, setMunicipalities] = useState<MunicipalityData[]>([]);
   const [heatmapPoints, setHeatmapPoints] = useState<HeatmapPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,17 +58,43 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
         // Fetch municipality stats and heatmap points in parallel
-        const [muniRes, heatmapRes] = await Promise.all([
+        const [muniRes, heatmapRes, complaintsRes] = await Promise.all([
           fetch(`${apiUrl}/public/stats/by-municipality?period=all`).then(r => r.json()).catch(() => null),
           heatmapService.getHeatmapData(
             userMunicipality ? { municipality: userMunicipality } : {}
           ).catch(() => null),
+          // Also fetch individual complaints for better map markers
+          userMunicipality 
+            ? fetch(`${apiUrl}/public/my-municipality-complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`, {
+                headers: { "Content-Type": "application/json" }
+              }).then(r => r.json()).catch(() => null)
+            : Promise.resolve(null),
         ]);
 
         if (muniRes?.success && muniRes.data) {
           setMunicipalities(muniRes.data);
         }
-        if (heatmapRes?.success && heatmapRes.data) {
+        
+        // Build heatmap points from individual complaints if available (more detailed)
+        if (complaintsRes?.success && complaintsRes.complaints?.length > 0) {
+          const complaintPoints: HeatmapPoint[] = complaintsRes.complaints
+            .filter((c: { location?: { coordinates?: number[] } }) => c.location?.coordinates?.length === 2)
+            .map((c: { location: { coordinates: number[] }; category: string; status: string; referenceId?: string; title: string; createdAt: string }) => ({
+              lat: c.location.coordinates[1],
+              lng: c.location.coordinates[0],
+              count: 1,
+              categories: [c.category],
+              status: c.status,
+              referenceId: c.referenceId,
+              title: c.title,
+              createdAt: c.createdAt,
+            }));
+          if (complaintPoints.length > 0) {
+            setHeatmapPoints(complaintPoints);
+          } else if (heatmapRes?.success && heatmapRes.data) {
+            setHeatmapPoints(heatmapRes.data);
+          }
+        } else if (heatmapRes?.success && heatmapRes.data) {
           setHeatmapPoints(heatmapRes.data);
         }
       } catch {
@@ -102,12 +130,12 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <MapPin className="w-5 h-5 text-primary" />
           {role === "ADMIN"
-            ? "Geographic Overview"
+            ? t('municipalityOverview.geographicOverview')
             : role === "CITIZEN"
-            ? "Your Municipality"
+            ? t('municipalityOverview.yourMunicipality')
             : role === "TECHNICIAN"
-            ? "Work Area"
-            : "Municipality Activity"}
+            ? t('municipalityOverview.workArea')
+            : t('municipalityOverview.municipalityActivity')}
         </h3>
       </div>
 
@@ -119,8 +147,8 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
         ) : error || (municipalities.length === 0 && heatmapPoints.length === 0) ? (
           <div className="text-center py-8">
             <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm text-slate-500">No geographic data available</p>
-            <p className="text-xs text-slate-400 mt-1">Municipality data will appear as complaints are submitted</p>
+            <p className="text-sm text-slate-500">{t('municipalityOverview.noData')}</p>
+            <p className="text-xs text-slate-400 mt-1">{t('municipalityOverview.noDataHint')}</p>
           </div>
         ) : (
           <>
@@ -139,15 +167,15 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
                 <div className="grid grid-cols-3 gap-3 mt-3">
                   <div className="text-center">
                     <p className="text-xl font-bold text-slate-800">{userMuni.total}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Total</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{t('municipalityOverview.total')}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xl font-bold text-green-600">{userMuni.rate}%</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Resolution</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{t('municipalityOverview.resolution')}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xl font-bold text-blue-600">{userMuni.tma ?? "—"}</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Avg Days</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{t('municipalityOverview.avgDays')}</p>
                   </div>
                 </div>
               </div>
@@ -164,7 +192,7 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
                 {topGovernorates.length > 0 && (
                   <div className="mb-4">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                      Top Governorates
+                      {t('municipalityOverview.topGovernorates')}
                     </p>
                     <div className="space-y-2">
                       {topGovernorates.map(([gov, data]) => {

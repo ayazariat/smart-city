@@ -14,10 +14,9 @@ import {
   ThumbsUp,
   CheckCircle,
   AlertCircle,
-  MoreHorizontal,
 } from "lucide-react";
 import { statusConfig, categoryLabels, getComplaintIdDisplay } from "@/lib/complaints";
-import { getPhotoUrl, getPhotoCount } from "@/lib/photos";
+import { getPhotoUrl } from "@/lib/photos";
 import { useAuthStore } from "@/store/useAuthStore";
 import { confirmComplaint, unconfirmComplaint, upvoteComplaint, removeUpvote } from "@/services/complaint.service";
 
@@ -61,18 +60,6 @@ interface ComplaintCardProps {
   index?: number;
 }
 
-const statusColors: Record<string, { bg: string; text: string; dot: string }> = {
-  SUBMITTED: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
-  VALIDATED: { bg: "bg-blue-50", text: "text-blue-700", dot: "bg-blue-500" },
-  ASSIGNED: { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500" },
-  IN_PROGRESS: { bg: "bg-orange-50", text: "text-orange-700", dot: "bg-orange-500" },
-  RESOLVED: { bg: "bg-green-50", text: "text-green-700", dot: "bg-green-500" },
-  CLOSED: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" },
-  REJECTED: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500" },
-  // Special status for when agent rejects technician's resolution
-  RESOLUTION_REJECTED: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500" },
-};
-
 const urgencyColors: Record<string, { bg: string; text: string }> = {
   URGENT: { bg: "bg-red-100", text: "text-red-700" },
   HIGH: { bg: "bg-orange-100", text: "text-orange-700" },
@@ -112,9 +99,8 @@ export const ComplaintCard = ({
     label: complaint.status,
     bgClass: "bg-slate-100",
     textClass: "text-slate-600",
+    dotClass: "bg-slate-500",
   };
-
-  const statusStyle = statusColors[displayStatus] ?? { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-500" };
 
   const hasConfirmed = complaint.confirmations?.some(c => c.citizenId === userId);
   const hasUpvoted = complaint.upvotes?.some(u => u.citizenId === userId);
@@ -263,8 +249,8 @@ export const ComplaintCard = ({
               {getComplaintIdDisplay(id)}
             </span>
             
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusStyle.bg} ${statusStyle.text}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot} animate-pulse-soft`} />
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`} />
               {statusCfg.label}
             </span>
             

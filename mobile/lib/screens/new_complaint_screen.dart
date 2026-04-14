@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:smart_city_app/services/api_client.dart';
+import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/main.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 
@@ -20,6 +21,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final ApiClient _apiClient = ApiClient();
+  final ComplaintService _complaintService = ComplaintService();
   final ImagePicker _picker = ImagePicker();
 
   String? _selectedCategory;
@@ -176,7 +178,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
         if (_latitude != null && _longitude != null) 'longitude': _longitude,
       };
 
-      await _apiClient.post('/complaints', body);
+      await _complaintService.createComplaint(body);
 
       if (mounted) {
         widget.onComplaintSubmitted();

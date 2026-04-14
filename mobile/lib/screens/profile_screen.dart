@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:smart_city_app/services/api_client.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/screens/settings_screen.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   final VoidCallback onLogout;
 
   const ProfileScreen({super.key, required this.onLogout});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
-  final ApiClient _apiClient = ApiClient();
-  Map<String, dynamic>? _user;
-  bool _isLoading = true;
-  String? _errorMessage;
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isEditing = false;
+  String? _errorMessage;
 
   // Form controllers
   final _formKey = GlobalKey<FormState>();
@@ -26,33 +25,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfile();
-  }
-
-  Future<void> _loadProfile() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final response = await _apiClient.get('/auth/profile');
-      setState(() {
-        _user = response as Map<String, dynamic>;
-        _fullNameController.text = _user?['fullName'] ?? '';
-        _phoneController.text = _user?['phone'] ?? '';
-        _isLoading = false;
-      });
-    } on ApiException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load profile';
-        _isLoading = false;
-      });
+    final user = ref.read(authProvider).user;
+    if (user != null) {
+      _fullNameController.text = user.fullName;
+      _phoneController.text = user.phone ?? '';
     }
   }
 
@@ -60,36 +36,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
-      _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      await _apiClient.put('/auth/profile', {
-        'fullName': _fullNameController.text,
-        'phone': _phoneController.text.isNotEmpty
+      await ref.read(authProvider.notifier).updateProfile(
+        fullName: _fullNameController.text,
+        phone: _phoneController.text.isNotEmpty
             ? _phoneController.text
             : null,
-      });
+      );
 
       if (mounted) {
         setState(() {
           _isEditing = false;
-          _isLoading = false;
         });
-        _loadProfile();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully!')),
         );
       }
-    } on ApiException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-        _isLoading = false;
-      });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Failed to update profile';
-        _isLoading = false;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -120,6 +88,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+    final isLoading = authState.isLoading;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
@@ -143,9 +115,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      body: _isLoading
+      body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null && _user == null
+          : _errorMessage != null && user == null
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -163,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: _loadProfile,
+                    onPressed: () => ref.invalidate(authProvider),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -210,7 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               )
                             else
                               Text(
-                                _user?['fullName'] ?? 'User',
+                                user?.fullName ?? 'User',
                                 style: const TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.bold,
@@ -228,7 +200,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               child: Text(
                                 _getRoleDisplayName(
-                                  _user?['role'] ?? 'CITIZEN',
+                                  user?.role ?? 'CITIZEN',
                                 ),
                                 style: TextStyle(
                                   color: AppColors.primary,
@@ -263,7 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               leading: const Icon(Icons.email),
                               title: const Text('Email'),
                               subtitle: Text(
-                                _user?['email'] ?? 'Not available',
+                                user?.email ?? 'Not available',
                               ),
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -281,7 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                       keyboardType: TextInputType.phone,
                                     )
-                                  : Text(_user?['phone'] ?? 'Not set'),
+                                  : Text(user?.phone ?? 'Not set'),
                               contentPadding: EdgeInsets.zero,
                             ),
                             const Divider(),
@@ -291,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               leading: const Icon(Icons.location_city),
                               title: const Text('Governorate'),
                               subtitle: Text(
-                                _user?['governorate'] ?? 'Not set',
+                                user?.governorate ?? 'Not set',
                               ),
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -302,7 +274,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               leading: const Icon(Icons.location_on),
                               title: const Text('Municipality'),
                               subtitle: Text(
-                                _user?['municipality'] ?? 'Not set',
+                                user?.municipalityName ?? 'Not set',
                               ),
                               contentPadding: EdgeInsets.zero,
                             ),
@@ -321,8 +293,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 setState(() {
                                   _isEditing = false;
                                   _fullNameController.text =
-                                      _user?['fullName'] ?? '';
-                                  _phoneController.text = _user?['phone'] ?? '';
+                                      user?.fullName ?? '';
+                                  _phoneController.text = user?.phone ?? '';
                                 });
                               },
                               child: const Text('Cancel'),
@@ -341,6 +313,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ],
+
+                    const SizedBox(height: 16),
+                    // Settings
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.settings),
+                        title: const Text('Settings'),
+                        subtitle: const Text('Theme, preferences'),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),

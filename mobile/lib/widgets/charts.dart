@@ -119,7 +119,7 @@ class CategoryBarChart extends StatelessWidget {
                     drawVerticalLine: false,
                     horizontalInterval: maxY > 0 ? maxY / 4 : 1,
                     getDrawingHorizontalLine: (value) =>
-                        FlLine(color: AppColors.border, strokeWidth: 1),
+                        FlLine(color: Colors.grey.shade300, strokeWidth: 1),
                   ),
                   borderData: FlBorderData(show: false),
                   barGroups: entries.asMap().entries.map((entry) {
@@ -208,7 +208,7 @@ class MonthlyLineChart extends StatelessWidget {
                     drawVerticalLine: false,
                     horizontalInterval: maxY > 0 ? maxY / 4 : 1,
                     getDrawingHorizontalLine: (value) =>
-                        FlLine(color: AppColors.border, strokeWidth: 1),
+                        FlLine(color: Colors.grey.shade300, strokeWidth: 1),
                   ),
                   titlesData: FlTitlesData(
                     show: true,

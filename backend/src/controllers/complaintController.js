@@ -165,9 +165,12 @@ class ComplaintController {
       
       
 
-      // For CITIZEN role - can only see their own complaints
+      // For CITIZEN role - can see own complaints OR any complaint with status beyond SUBMITTED
       if (userRole === "CITIZEN" && !isOwner) {
-        return res.status(403).json({ success: false, message: "Access denied - You can only view your own complaints" });
+        const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+        if (!publicStatuses.includes(complaint.status)) {
+          return res.status(403).json({ success: false, message: "Access denied - You can only view your own complaints" });
+        }
       }
 
       // For MUNICIPAL_AGENT - check municipality access

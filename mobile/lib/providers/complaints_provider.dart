@@ -176,11 +176,11 @@ class PublicComplaintsNotifier extends StateNotifier<ComplaintsState> {
 
   PublicComplaintsNotifier(this._service) : super(ComplaintsState());
 
-  Future<void> load({String? municipality, String? category}) async {
+  Future<void> load({String? governorate, String? category}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final complaints = await _service.getPublicComplaints(
-        governorate: municipality,
+        governorate: governorate,
         category: category,
       );
       state = state.copyWith(complaints: complaints, isLoading: false);

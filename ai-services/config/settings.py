@@ -52,27 +52,128 @@ URGENCY_FEATURE_WEIGHTS = {
 
 # Critical Keywords (dangerous terms that raise urgency)
 CRITICAL_KEYWORDS = [
+    # French
     "inondation", "incendie", "accident", "électrocution", "explosion",
     "effondrement", "blessé", "mort", "urgence", "danger", "fuite gaz",
-    "rupture", " effondrement", "urgence", "danger public"
+    "rupture", "danger public",
+    # Arabic
+    "فيضان", "حريق", "حادث", "انهيار", "جريح", "وفاة", "خطر", "تسرب غاز", "طوارئ"
 ]
 
 HIGH_KEYWORDS = [
+    # French
     "canalisation", "fuite eau", "panne totale", "route coupée",
-    "décharge", "eau stagnante", "danger public"
+    "décharge", "eau stagnante",
+    # Arabic
+    "قناة مياه", "تسرب ماء", "انقطاع كامل", "طريق مغلق", "مياه راكدة"
 ]
 
 MEDIUM_KEYWORDS = [
-    "nid de poule", "lampadaire", "ordures", "dégradé", "cassé"
+    # French
+    "nid de poule", "lampadaire", "ordures", "dégradé", "cassé",
+    # Arabic
+    "حفرة", "عمود إنارة", "نفايات", "تدهور", "مكسور"
 ]
 
+# Category Keywords for better category prediction
+CATEGORY_KEYWORDS = {
+    "DECHETS": ["garbage", "waste", "bins", "ordures", "poubelle", "déchets", "نفايات", "قمامة", "زبالة"],
+    "ROUTES": ["pothole", "road", "nid de poule", "route", "chaussée", "trottoir", "طريق", "حفرة", "رصيف"],
+    "EAU": ["water", "fuite", "canalisation", "égout", "assainissement", "ماء", "تسرب", "مياه", "صرف"],
+    "ECLAIRAGE": ["light", "lamp", "éclairage", "lampadaire", "ampoule", "نور", "إنارة", "مصباح"],
+    "SECURITE": ["danger", "unsafe", "accident", "vol", "agression", "خطر", "حادث", "سرقة"],
+    "BIENS_PUBLICS": ["graffiti", "damage", "vandalisme", "banc", "clôture", "تلف", "تخريب"],
+    "AUTRE": []
+}
+
 # Sensitive Zones (municipality → list of zone types)
+# Every municipality with school, hospital, or main road gets zone_bonus = 0.10
 SENSITIVE_ZONES = {
+    # Nabeul Governorate
     "Béni Khiar": ["school_zone", "hospital_zone", "main_road"],
-    "Sousse": ["school_zone", "hospital_zone", "main_road"],
+    "Nabeul": ["school_zone", "hospital_zone", "main_road"],
+    "Hammamet": ["school_zone", "hospital_zone", "main_road"],
+    "Dar Chaâbane": ["school_zone", "main_road"],
+    "Kélibia": ["school_zone", "hospital_zone", "main_road"],
+    "Korba": ["school_zone", "main_road"],
+    "Menzel Temime": ["school_zone", "hospital_zone"],
+    "Grombalia": ["school_zone", "main_road"],
+    "Soliman": ["school_zone", "main_road"],
+    # Tunis Governorate
     "Tunis": ["school_zone", "hospital_zone", "main_road"],
-    "Sfax": ["school_zone", "hospital_zone"],
-    "Kairouan": ["school_zone", "main_road"],
+    "La Marsa": ["school_zone", "hospital_zone", "main_road"],
+    "Carthage": ["school_zone", "main_road"],
+    "Le Bardo": ["school_zone", "hospital_zone", "main_road"],
+    "Le Kram": ["school_zone", "main_road"],
+    "La Goulette": ["school_zone", "main_road"],
+    # Ariana Governorate
+    "Ariana": ["school_zone", "hospital_zone", "main_road"],
+    "La Soukra": ["school_zone", "main_road"],
+    "Raoued": ["school_zone", "main_road"],
+    "Mnihla": ["school_zone", "main_road"],
+    # Ben Arous Governorate
+    "Ben Arous": ["school_zone", "hospital_zone", "main_road"],
+    "Hammam Lif": ["school_zone", "hospital_zone", "main_road"],
+    "Hammam Chott": ["school_zone", "main_road"],
+    "Radès": ["school_zone", "main_road"],
+    "Mohamedia": ["school_zone", "main_road"],
+    "Mégrine": ["school_zone", "main_road"],
+    # Manouba Governorate
+    "Manouba": ["school_zone", "hospital_zone", "main_road"],
+    "Den Den": ["school_zone", "main_road"],
+    "Douar Hicher": ["school_zone", "main_road"],
+    # Sousse Governorate
+    "Sousse": ["school_zone", "hospital_zone", "main_road"],
+    "Msaken": ["school_zone", "hospital_zone", "main_road"],
+    "Kalâa Kebira": ["school_zone", "main_road"],
+    "Hammam Sousse": ["school_zone", "main_road"],
+    "Akouda": ["school_zone", "main_road"],
+    # Sfax Governorate
+    "Sfax": ["school_zone", "hospital_zone", "main_road"],
+    "Sakiet Ezzit": ["school_zone", "main_road"],
+    "Sakiet Eddaïer": ["school_zone", "main_road"],
+    "Thyna": ["school_zone", "main_road"],
+    # Monastir Governorate
+    "Monastir": ["school_zone", "hospital_zone", "main_road"],
+    "Moknine": ["school_zone", "hospital_zone"],
+    "Jemmal": ["school_zone", "main_road"],
+    "Ksar Hellal": ["school_zone", "main_road"],
+    # Mahdia Governorate
+    "Mahdia": ["school_zone", "hospital_zone", "main_road"],
+    "Ksour Essef": ["school_zone", "main_road"],
+    # Kairouan Governorate
+    "Kairouan": ["school_zone", "hospital_zone", "main_road"],
+    # Bizerte Governorate
+    "Bizerte": ["school_zone", "hospital_zone", "main_road"],
+    "Menzel Bourguiba": ["school_zone", "hospital_zone"],
+    # Gabès Governorate
+    "Gabès": ["school_zone", "hospital_zone", "main_road"],
+    # Médenine Governorate
+    "Médenine": ["school_zone", "hospital_zone", "main_road"],
+    "Djerba": ["school_zone", "hospital_zone", "main_road"],
+    "Zarzis": ["school_zone", "main_road"],
+    # Gafsa Governorate
+    "Gafsa": ["school_zone", "hospital_zone", "main_road"],
+    # Tozeur Governorate
+    "Tozeur": ["school_zone", "hospital_zone", "main_road"],
+    # Kébili Governorate
+    "Kébili": ["school_zone", "hospital_zone"],
+    # Kasserine Governorate
+    "Kasserine": ["school_zone", "hospital_zone", "main_road"],
+    # Sidi Bouzid Governorate
+    "Sidi Bouzid": ["school_zone", "hospital_zone", "main_road"],
+    # Béja Governorate
+    "Béja": ["school_zone", "hospital_zone", "main_road"],
+    # Jendouba Governorate
+    "Jendouba": ["school_zone", "hospital_zone", "main_road"],
+    # Le Kef Governorate
+    "Le Kef": ["school_zone", "hospital_zone", "main_road"],
+    # Siliana Governorate
+    "Siliana": ["school_zone", "hospital_zone"],
+    # Zaghouan Governorate
+    "Zaghouan": ["school_zone", "hospital_zone"],
+    # Tataouine Governorate
+    "Tataouine": ["school_zone", "hospital_zone"],
 }
 
 # Duplicate Detection Weights

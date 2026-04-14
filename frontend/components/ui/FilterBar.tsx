@@ -1,5 +1,6 @@
 import { Search, Filter, X } from "lucide-react";
 import { STATUS_OPTIONS } from "@/lib/complaints";
+import { useTranslation } from "react-i18next";
 
 interface FilterBarProps {
   searchTerm: string;
@@ -16,10 +17,11 @@ export const FilterBar = ({
   onSearchChange,
   statusFilter,
   onStatusChange,
-  searchPlaceholder = "Search by description or category...",
+  searchPlaceholder = t("filterBar.searchPlaceholder"),
   statusOptions = [...STATUS_OPTIONS],
   count,
 }: FilterBarProps) => {
+  const { t } = useTranslation();
   return (
     <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200 animate-fadeIn">
       <div className="flex flex-col md:flex-row gap-3 items-center">
@@ -65,7 +67,7 @@ export const FilterBar = ({
                        bg-white transition-all hover:border-primary/50 cursor-pointer
                        shadow-sm font-medium"
           >
-            <option value="">All Statuses</option>
+            <option value="">{t("filterBar.allStatuses")}</option>
             {statusOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -83,14 +85,14 @@ export const FilterBar = ({
               className="px-3 py-2.5 text-xs font-medium text-primary hover:bg-primary/10 
                          rounded-xl transition-colors border border-primary/20"
             >
-              Clear
+              {t("filterBar.clear")}
             </button>
           )}
 
           {count !== undefined && (
             <span className="hidden lg:inline-flex items-center px-3 py-1.5 rounded-full 
                            text-xs font-semibold bg-primary text-white shadow-sm">
-              {count} found
+              {t("filterBar.found", { count })}
             </span>
           )}
         </div>
@@ -99,17 +101,17 @@ export const FilterBar = ({
       {/* Active Filters Indicator */}
       {(searchTerm || statusFilter) && (
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-          <span className="text-xs text-slate-500">Active filters:</span>
+          <span className="text-xs text-slate-500">{t("filterBar.activeFilters")}</span>
           {searchTerm && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary 
                            rounded-full text-xs font-medium">
-              Search: "{searchTerm}"
+              {t("filterBar.search")} "{searchTerm}"
             </span>
           )}
           {statusFilter && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary 
                            rounded-full text-xs font-medium">
-              Status: {statusFilter}
+              {t("filterBar.status")} {statusFilter}
             </span>
           )}
         </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, X, Bell, Check } from "lucide-react";
+import { Loader2, X, Bell, Check, Sparkles, User } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import { notificationService } from "@/services/notification.service";
@@ -25,6 +25,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
 
   useEffect(() => {
     if (hydrated && !user) {
@@ -148,7 +149,46 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         unreadNotifications={unreadCount}
         onNotificationsClick={handleNotificationsClick}
       />
-      <div className="ml-0 md:ml-[260px] pt-14 md:pt-0">
+
+      {/* Top bar */}
+      <header className={`bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 hidden md:block ${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"}`}>
+        <div className="px-4 md:px-6 py-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-bold text-slate-800">Smart City Tunisia</h1>
+                <p className="text-xs text-slate-500">Dashboard</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Notification Bell */}
+              <div className="relative">
+                <button
+                  onClick={handleNotificationsClick}
+                  className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5 text-slate-600" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+              <div className="hidden md:flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl">
+                <User className="w-4 h-4 text-slate-500" />
+                <span className="text-sm font-medium text-slate-700">{user.fullName}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className={`${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"} pt-14 md:pt-0`}>
         {children}
       </div>
 
@@ -156,7 +196,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       {showNotifications && (
         <>
           <div className="fixed inset-0 z-[55]" onClick={() => setShowNotifications(false)} />
-          <div className="fixed left-0 md:left-[260px] top-0 h-full w-full md:w-[360px] bg-white border-r border-slate-200 shadow-xl z-[60] flex flex-col">
+          <div className={`fixed top-0 h-full w-full md:w-[360px] bg-white shadow-xl z-[60] flex flex-col ${isRTL ? "right-0 md:right-[260px] border-l border-slate-200" : "left-0 md:left-[260px] border-r border-slate-200"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-primary" />

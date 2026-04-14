@@ -22,9 +22,10 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+import time
 
 # Import new routers
 from routes.urgency_routes import router as urgency_router
@@ -51,6 +52,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration = int((time.time() - start) * 1000)
+        print(f"[AI] {request.method} {request.url.path} → 500 ({duration}ms)")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=200, content={"success": False, "message": "Internal error"})
+    duration = int((time.time() - start) * 1000)
+    print(f"[AI] {request.method} {request.url.path} → {response.status_code} ({duration}ms)")
+    return response
+
 
 # Include routers
 app.include_router(urgency_router, prefix="/ai/urgency", tags=["Urgency AI (BL-24)"])

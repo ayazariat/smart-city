@@ -16,7 +16,10 @@ import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
 import { categoryLabels } from "@/lib/complaints";
 import { Notification } from "@/types";
-import { getTrendAlerts } from "@/services/complaint.service";
+import { getTrendAlerts, upvoteComplaint, confirmComplaint } from "@/services/complaint.service";
+import TrendForecastChart from "@/components/dashboard/TrendForecastChart";
+import DuplicateStatsCard from "@/components/dashboard/DuplicateStatsCard";
+import { useTranslation } from "react-i18next";
 
 interface DashboardStats {
   total?: number;
@@ -39,6 +42,7 @@ interface MunicipalityComplaint {
   description?: string;
   category: string;
   status: string;
+  createdBy?: string | { _id?: string; id?: string };
   municipalityName?: string;
   location?: { municipality?: string; address?: string };
   media?: { url: string; type?: string }[];
@@ -48,9 +52,11 @@ interface MunicipalityComplaint {
 
 // Separate component that uses useSearchParams
 function DashboardContent() {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, logout, hydrated } = useAuthStore();
+  const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
 
   // Notification state
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -70,6 +76,21 @@ function DashboardContent() {
   // BL-37: Trend alerts for manager/admin
   const [trendAlerts, setTrendAlerts] = useState<{type: string; severity: string; message: string; recommendation: string}[]>([]);
   const [, setLoadingTrendAlerts] = useState(false);
+
+  // Recent resolutions
+  const [recentResolutions, setRecentResolutions] = useState<MunicipalityComplaint[]>([]);
+
+  const getOwnerId = (complaint: MunicipalityComplaint): string | undefined => {
+    if (!complaint.createdBy) return undefined;
+    if (typeof complaint.createdBy === "string") return complaint.createdBy;
+    return complaint.createdBy._id || complaint.createdBy.id;
+  };
+
+  const currentUserId = (() => {
+    if (!user) return undefined;
+    const u = user as { id?: string; _id?: string };
+    return u.id || u._id;
+  })();
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -192,7 +213,11 @@ function DashboardContent() {
       );
       const data = await response.json();
       if (data.success && data.complaints) {
-        setMunicipalityComplaints(data.complaints);
+        const filtered = (data.complaints as MunicipalityComplaint[]).filter((c) => {
+          const ownerId = getOwnerId(c);
+          return !ownerId || !currentUserId || ownerId !== currentUserId;
+        });
+        setMunicipalityComplaints(filtered);
       }
     } catch (err) {
       console.error("Error fetching municipality complaints:", err);
@@ -208,18 +233,18 @@ function DashboardContent() {
       router.push("/login");
       return;
     }
+
+    const target = municipalityComplaints.find((c) => c._id === complaintId);
+    if (target && currentUserId && getOwnerId(target) === currentUserId) {
+      return;
+    }
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/upvote`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" }
-      });
-      const data = await response.json();
+      const data = await upvoteComplaint(complaintId);
       if (data.success) {
         setMunicipalityComplaints(prev => prev.map(c => 
           c._id === complaintId 
-            ? { ...c, upvoteCount: data.voteCount }
+            ? { ...c, upvoteCount: data.upvoteCount ?? (c.upvoteCount || 0) + 1 }
             : c
         ));
       }
@@ -235,18 +260,18 @@ function DashboardContent() {
       router.push("/login");
       return;
     }
+
+    const target = municipalityComplaints.find((c) => c._id === complaintId);
+    if (target && currentUserId && getOwnerId(target) === currentUserId) {
+      return;
+    }
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/confirm`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" }
-      });
-      const data = await response.json();
+      const data = await confirmComplaint(complaintId);
       if (data.success) {
         setMunicipalityComplaints(prev => prev.map(c => 
           c._id === complaintId 
-            ? { ...c, confirmationCount: data.confirmationCount }
+            ? { ...c, confirmationCount: data.confirmationCount ?? (c.confirmationCount || 0) + 1 }
             : c
         ));
       }
@@ -290,6 +315,29 @@ function DashboardContent() {
     const { token } = useAuthStore.getState();
     if (hydrated && user && token && user.role === "CITIZEN") {
       fetchMunicipalityComplaints();
+      // Fetch latest 6 recent resolutions and keep them fresh
+      const fetchRecentResolutions = async () => {
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+          const res = await fetch(
+            `${apiUrl}/public/my-municipality-complaints?limit=6&status=RESOLVED,CLOSED&sort=-updatedAt`,
+            { credentials: "include", headers: { Authorization: `Bearer ${token}` } }
+          );
+          const data = await res.json();
+          if (data.success && data.complaints) {
+            const latest = [...data.complaints]
+              .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+              .slice(0, 6);
+            setRecentResolutions(latest);
+          }
+        } catch (err) {
+          console.error("Error fetching recent resolutions:", err);
+        }
+      };
+
+      fetchRecentResolutions();
+      const interval = setInterval(fetchRecentResolutions, 60000);
+      return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
@@ -358,62 +406,11 @@ function DashboardContent() {
   // Get role-based dashboard configuration
   const getDashboardConfig = () => {
     if (!user) return null;
-    switch (user.role) {
-      case "CITIZEN":
-        return {
-          link: "/my-complaints",
-          label: "My Complaints",
-          description: "View and manage your own complaints",
-          newComplaintLink: "/complaints/new",
-          newComplaintLabel: "New Complaint",
-          statsTitle: "My Complaints Statistics",
-        };
-      case "MUNICIPAL_AGENT":
-        return {
-          link: "/agent/complaints",
-          label: "My Actions",
-          description: "Handle assigned complaints",
-          newComplaintLink: "",
-          newComplaintLabel: "",
-          statsTitle: "Complaints Statistics",
-        };
-      case "DEPARTMENT_MANAGER":
-        return {
-          link: "/manager/pending",
-          label: "To Process",
-          description: "Review department complaints",
-          newComplaintLink: "",
-          newComplaintLabel: "",
-          statsTitle: "Department Complaints Statistics",
-        };
-      case "TECHNICIAN":
-        return {
-          link: "/tasks",
-          label: "My Tasks",
-          description: "View your assigned repairs",
-          newComplaintLink: "",
-          newComplaintLabel: "",
-          statsTitle: "Repair Tasks Statistics",
-        };
-      case "ADMIN":
-        return {
-          link: "/admin/complaints",
-          label: "All Complaints",
-          description: "Full system access",
-          newComplaintLink: "",
-          newComplaintLabel: "",
-          statsTitle: "System Complaints Statistics",
-        };
-      default:
-        return {
-          link: "/my-complaints",
-          label: "My Complaints",
-          description: "View and manage your complaints",
-          newComplaintLink: "/complaints/new",
-          newComplaintLabel: "New Complaint",
-          statsTitle: "Complaints Statistics",
-        };
-    }
+    const role = user.role;
+    return {
+      link: role === "CITIZEN" ? "/my-complaints" : role === "MUNICIPAL_AGENT" ? "/agent/complaints" : role === "DEPARTMENT_MANAGER" ? "/manager/pending" : role === "TECHNICIAN" ? "/tasks" : "/admin/complaints",
+      statsTitle: t(`stats.title.${role}`) || t('stats.title.MUNICIPAL_AGENT'),
+    };
   };
 
   const dashboardConfig = getDashboardConfig();
@@ -441,7 +438,7 @@ function DashboardContent() {
       />
 
       {/* Top Bar — notifications, user info */}
-      <header className="bg-white border-b border-slate-200 shadow-sm ml-0 md:ml-[260px] sticky top-0 z-30 hidden md:block">
+      <header className={`bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 hidden md:block ${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"}`}>
         <div className="px-4 md:px-6 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
@@ -474,11 +471,11 @@ function DashboardContent() {
                 {showNotifications && (
                   <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
                     <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 to-secondary-50">
-                      <h3 className="font-semibold text-slate-900">Notifications</h3>
+                      <h3 className="font-semibold text-slate-900">{t('sidebar.notifications')}</h3>
                       <div className="flex items-center gap-2">
                         {unreadCount > 0 && (
                           <button onClick={handleMarkAllAsRead} className="text-xs text-primary hover:text-primary-700 font-medium">
-                            Mark all read
+                            {t('dashboard.markAllRead')}
                           </button>
                         )}
                         <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
@@ -494,7 +491,7 @@ function DashboardContent() {
                       ) : notifications.length === 0 ? (
                         <div className="p-8 text-center text-slate-500">
                           <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No notifications yet</p>
+                          <p className="text-sm">{t('dashboard.noNotifications')}</p>
                         </div>
                       ) : (
                         notifications.slice(0, 10).map((notification) => (
@@ -533,19 +530,15 @@ function DashboardContent() {
       </header>
 
       {/* Main Content - offset by sidebar width on desktop */}
-      <main className="ml-0 md:ml-[260px] px-4 md:px-6 py-6 md:py-8 max-w-6xl pt-16 md:pt-8">
+      <main className={`${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"} px-4 md:px-6 py-6 md:py-8 max-w-6xl pt-16 md:pt-8`}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h2 className="text-3xl font-bold text-slate-900 mb-1">
-              Welcome back, {user?.fullName?.split(' ')[0] || 'User'} 
+              {t('dashboard.welcomeBack', { name: user?.fullName?.split(' ')[0] || 'User' })}
             </h2>
             <p className="text-slate-500">
-              {user?.role === "CITIZEN" ? "Track your complaints and city services" 
-               : user?.role === "TECHNICIAN" ? "Check your assigned tasks and progress"
-               : user?.role === "DEPARTMENT_MANAGER" ? "Oversee department operations"
-               : user?.role === "ADMIN" ? "System overview and management"
-               : "Handle and manage incoming complaints"}
+              {t(`dashboard.subtitle.${user?.role}`) || t('dashboard.subtitle.MUNICIPAL_AGENT')}
             </p>
           </div>
           {/* Role-specific action buttons */}
@@ -553,36 +546,36 @@ function DashboardContent() {
             {user?.role === "CITIZEN" && (
               <Link href="/complaints/new" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                 <Plus className="w-4 h-4" />
-                New Complaint
+                {t('dashboard.buttons.newComplaint')}
               </Link>
             )}
             {user?.role === "MUNICIPAL_AGENT" && (
               <Link href="/agent/complaints" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                 <FileText className="w-4 h-4" />
-                View Queue
+                {t('dashboard.buttons.viewQueue')}
               </Link>
             )}
             {user?.role === "DEPARTMENT_MANAGER" && (
               <Link href="/manager/pending" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                 <FileText className="w-4 h-4" />
-                Pending Tasks
+                {t('dashboard.buttons.pendingTasks')}
               </Link>
             )}
             {user?.role === "TECHNICIAN" && (
               <Link href="/tasks" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                 <FileText className="w-4 h-4" />
-                My Tasks
+                {t('dashboard.buttons.myTasks')}
               </Link>
             )}
             {user?.role === "ADMIN" && (
               <div className="flex items-center gap-2">
                 <Link href="/admin/users" className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                   <Shield className="w-4 h-4" />
-                  Admin Panel
+                  {t('dashboard.buttons.adminPanel')}
                 </Link>
                 <Link href="/admin/complaints" className="inline-flex items-center gap-2 bg-primary hover:bg-primary-700 text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-md hover:shadow-lg text-sm">
                   <FileText className="w-4 h-4" />
-                  All Complaints
+                  {t('dashboard.buttons.allComplaints')}
                 </Link>
               </div>
             )}
@@ -599,9 +592,9 @@ function DashboardContent() {
                 </div>
                 <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <p className="text-violet-100 text-xs font-medium uppercase tracking-wide">User Management</p>
-              <p className="text-2xl font-bold mt-1">Admin Panel</p>
-              <p className="text-violet-200 text-xs mt-1">Manage users, roles & permissions</p>
+              <p className="text-violet-100 text-xs font-medium uppercase tracking-wide">{t('adminOverview.userManagement')}</p>
+              <p className="text-2xl font-bold mt-1">{t('adminOverview.adminPanel')}</p>
+              <p className="text-violet-200 text-xs mt-1">{t('adminOverview.manageUsers')}</p>
             </Link>
             <Link href="/admin/complaints" className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
               <div className="flex items-center justify-between mb-3">
@@ -610,9 +603,9 @@ function DashboardContent() {
                 </div>
                 <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <p className="text-blue-100 text-xs font-medium uppercase tracking-wide">System-wide</p>
-              <p className="text-2xl font-bold mt-1">{stats.total || 0} Complaints</p>
-              <p className="text-blue-200 text-xs mt-1">Resolution rate: {stats.resolutionRate || 0}%</p>
+              <p className="text-blue-100 text-xs font-medium uppercase tracking-wide">{t('adminOverview.systemWide')}</p>
+              <p className="text-2xl font-bold mt-1">{stats.total || 0} {t('adminOverview.complaints')}</p>
+              <p className="text-blue-200 text-xs mt-1">{t('adminOverview.resolutionRate', { rate: stats.resolutionRate || 0 })}</p>
             </Link>
             <Link href="/archive" className="group bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
               <div className="flex items-center justify-between mb-3">
@@ -621,9 +614,9 @@ function DashboardContent() {
                 </div>
                 <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <p className="text-emerald-100 text-xs font-medium uppercase tracking-wide">Archive</p>
-              <p className="text-2xl font-bold mt-1">{stats.closed || 0} Closed</p>
-              <p className="text-emerald-200 text-xs mt-1">View completed & archived cases</p>
+              <p className="text-emerald-100 text-xs font-medium uppercase tracking-wide">{t('adminOverview.archive')}</p>
+              <p className="text-2xl font-bold mt-1">{stats.closed || 0} {t('adminOverview.closed')}</p>
+              <p className="text-emerald-200 text-xs mt-1">{t('adminOverview.viewArchived')}</p>
             </Link>
           </div>
         )}
@@ -633,8 +626,8 @@ function DashboardContent() {
           <div className="bg-gradient-to-br from-white to-primary/5 rounded-2xl shadow-lg p-6 border border-primary/10 mb-8">
             <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
-              Today&apos;s Priorities
-              <span className="ml-auto text-xs text-slate-400 font-normal">Updated just now</span>
+              {t('priorities.title')}
+              <span className="ml-auto text-xs text-slate-400 font-normal">{t('priorities.updatedNow')}</span>
             </h3>
             <div className="space-y-3">
               {/* Agent priorities */}
@@ -642,26 +635,26 @@ function DashboardContent() {
                 <>
                   {(stats.totalOverdue || 0) > 0 && (
                     <Link href="/agent/complaints?status=SUBMITTED" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue} overdue complaint{(stats.totalOverdue || 0) > 1 ? 's' : ''} need attention</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue} {t('priorities.overdueNeedAttention')}</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.submitted || stats.pending || 0) > 0 && (
                     <Link href="/agent/complaints?status=SUBMITTED" className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200 hover:bg-amber-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-amber-700">{stats.submitted || stats.pending || 0} new complaint{(stats.submitted || stats.pending || 0) > 1 ? 's' : ''} to validate</span>
+                      <span className="text-sm font-medium text-amber-700">{stats.submitted || stats.pending || 0} {t('priorities.newToValidate')}</span>
                       <ArrowRight className="w-4 h-4 text-amber-500" />
                     </Link>
                   )}
                   {(stats.resolved || 0) > 0 && (
                     <Link href="/agent/complaints?status=RESOLVED" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-green-700">{stats.resolved} resolution{(stats.resolved || 0) > 1 ? 's' : ''} awaiting review</span>
+                      <span className="text-sm font-medium text-green-700">{stats.resolved} {t('priorities.resolutionsAwaiting')}</span>
                       <ArrowRight className="w-4 h-4 text-green-500" />
                     </Link>
                   )}
                   {(stats.totalOverdue || 0) === 0 && (stats.submitted || stats.pending || 0) === 0 && (stats.resolved || 0) === 0 && (
                     <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <CheckCircle className="w-5 h-5 text-green-600" />
-                      <span className="text-sm font-medium text-green-700">All clear! No urgent actions required.</span>
+                      <span className="text-sm font-medium text-green-700">{t('priorities.allClearAgent')}</span>
                     </div>
                   )}
                 </>
@@ -671,26 +664,26 @@ function DashboardContent() {
                 <>
                   {(stats.totalOverdue || stats.overdue || 0) > 0 && (
                     <Link href="/manager/pending" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} in department</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} {t('priorities.overdueInDepartment')}</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.assigned || 0) > 0 && (
                     <Link href="/manager/pending?status=ASSIGNED" className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-200 hover:bg-purple-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-purple-700">{stats.assigned} complaint{(stats.assigned || 0) > 1 ? 's' : ''} need technician assignment</span>
+                      <span className="text-sm font-medium text-purple-700">{stats.assigned} {t('priorities.needAssignment')}</span>
                       <ArrowRight className="w-4 h-4 text-purple-500" />
                     </Link>
                   )}
                   {(stats.inProgress || 0) > 0 && (
                     <Link href="/manager/pending?status=IN_PROGRESS" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-blue-700">{stats.inProgress} complaint{(stats.inProgress || 0) > 1 ? 's' : ''} being worked on by technicians</span>
+                      <span className="text-sm font-medium text-blue-700">{stats.inProgress} {t('priorities.beingWorked')}</span>
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
                   {(stats.totalOverdue || stats.overdue || 0) === 0 && (stats.assigned || 0) === 0 && (stats.inProgress || 0) === 0 && (
                     <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <CheckCircle className="w-5 h-5 text-green-600" />
-                      <span className="text-sm font-medium text-green-700">All clear! Department operations on track.</span>
+                      <span className="text-sm font-medium text-green-700">{t('priorities.allClearManager')}</span>
                     </div>
                   )}
                 </>
@@ -700,26 +693,26 @@ function DashboardContent() {
                 <>
                   {(stats.assigned || 0) > 0 && (
                     <Link href="/tasks?status=ASSIGNED" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-blue-700">{stats.assigned} new task{(stats.assigned || 0) > 1 ? 's' : ''} to start</span>
+                      <span className="text-sm font-medium text-blue-700">{stats.assigned} {t('priorities.newTasks')}</span>
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
                   {(stats.inProgress || 0) > 0 && (
                     <Link href="/tasks?status=IN_PROGRESS" className="flex items-center justify-between p-3 bg-orange-50 rounded-xl border border-orange-200 hover:bg-orange-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-orange-700">{stats.inProgress} task{(stats.inProgress || 0) > 1 ? 's' : ''} in progress</span>
+                      <span className="text-sm font-medium text-orange-700">{stats.inProgress} {t('priorities.tasksInProgress')}</span>
                       <ArrowRight className="w-4 h-4 text-orange-500" />
                     </Link>
                   )}
                   {(stats.totalOverdue || stats.overdue || 0) > 0 && (
                     <Link href="/tasks" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} overdue task{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} — resolve ASAP</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} {t('priorities.overdueTasks')}</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.assigned || 0) === 0 && (stats.inProgress || 0) === 0 && (
                     <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <CheckCircle className="w-5 h-5 text-green-600" />
-                      <span className="text-sm font-medium text-green-700">No pending tasks. Great work!</span>
+                      <span className="text-sm font-medium text-green-700">{t('priorities.noPendingTasks')}</span>
                     </div>
                   )}
                 </>
@@ -729,13 +722,13 @@ function DashboardContent() {
                 <>
                   {(stats.totalOverdue || stats.overdue || 0) > 0 && (
                     <Link href="/admin/complaints" className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} overdue complaint{(stats.totalOverdue || stats.overdue || 0) > 1 ? 's' : ''} system-wide</span>
+                      <span className="text-sm font-medium text-red-700">{stats.totalOverdue || stats.overdue} {t('priorities.overdueSystemWide')}</span>
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
                   {(stats.total || 0) > 0 && (
                     <Link href="/admin/complaints" className="flex items-center justify-between p-3 bg-primary/5 rounded-xl border border-primary/10 hover:bg-primary/10 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-primary">{stats.total} total complaints — Resolution rate: {stats.resolutionRate || 0}%</span>
+                      <span className="text-sm font-medium text-primary">{stats.total} {t('priorities.totalComplaints', { rate: stats.resolutionRate || 0 })}</span>
                       <ArrowRight className="w-4 h-4 text-primary" />
                     </Link>
                   )}
@@ -746,19 +739,19 @@ function DashboardContent() {
                 <>
                   {(stats.inProgress || 0) > 0 && (
                     <Link href="/my-complaints" className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-blue-700">{stats.inProgress} of your complaint{(stats.inProgress || 0) > 1 ? 's are' : ' is'} being worked on</span>
+                      <span className="text-sm font-medium text-blue-700">{stats.inProgress} {t('priorities.beingWorkedCitizen')}</span>
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
                   {(stats.resolved || 0) > 0 && (
                     <Link href="/my-complaints" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-green-700">{stats.resolved} complaint{(stats.resolved || 0) > 1 ? 's' : ''} resolved</span>
+                      <span className="text-sm font-medium text-green-700">{stats.resolved} {t('priorities.complaintsResolved')}</span>
                       <ArrowRight className="w-4 h-4 text-green-500" />
                     </Link>
                   )}
                   {(stats.inProgress || 0) === 0 && (stats.resolved || 0) === 0 && (stats.total || 0) === 0 && (
                     <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <span className="text-sm font-medium text-slate-600">No complaints submitted yet. <Link href="/complaints/new" className="text-primary hover:underline">Submit your first complaint →</Link></span>
+                      <span className="text-sm font-medium text-slate-600">{t('priorities.noComplaints')} <Link href="/complaints/new" className="text-primary hover:underline">{t('priorities.submitFirst')}</Link></span>
                     </div>
                   )}
                 </>
@@ -790,23 +783,23 @@ function DashboardContent() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                 <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                <div className="text-sm text-blue-600 font-medium">My Complaints</div>
-                <div className="text-xs text-blue-500 mt-1">Total submitted</div>
+                <div className="text-sm text-blue-600 font-medium">{t('stats.myComplaints')}</div>
+                <div className="text-xs text-blue-500 mt-1">{t('stats.totalSubmitted')}</div>
               </div>
               <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
                 <div className="text-2xl font-bold text-amber-700 mb-1">{(stats.submitted || 0) + (stats.pending || 0)}</div>
-                <div className="text-sm text-amber-600 font-medium">Pending</div>
-                <div className="text-xs text-amber-500 mt-1">Awaiting review</div>
+                <div className="text-sm text-amber-600 font-medium">{t('stats.pending')}</div>
+                <div className="text-xs text-amber-500 mt-1">{t('stats.awaitingReview')}</div>
               </div>
               <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
                 <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                <div className="text-sm text-orange-600 font-medium">In Progress</div>
-                <div className="text-xs text-orange-500 mt-1">Being worked on</div>
+                <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                <div className="text-xs text-orange-500 mt-1">{t('stats.beingWorked')}</div>
               </div>
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
                 <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
-                <div className="text-sm text-green-600 font-medium">Resolved</div>
-                <div className="text-xs text-green-500 mt-1">Completed</div>
+                <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                <div className="text-xs text-green-500 mt-1">{t('stats.completed')}</div>
               </div>
             </div>
           )}
@@ -817,34 +810,34 @@ function DashboardContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                  <div className="text-sm text-blue-600 font-medium">Total</div>
-                  <div className="text-xs text-blue-500 mt-1">All complaints</div>
+                  <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
+                  <div className="text-xs text-blue-500 mt-1">{t('stats.allComplaints')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
                   <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || stats.pending || 0}</div>
-                  <div className="text-sm text-amber-600 font-medium">To Validate</div>
-                  <div className="text-xs text-amber-500 mt-1">Needs review</div>
+                  <div className="text-sm text-amber-600 font-medium">{t('stats.toValidate')}</div>
+                  <div className="text-xs text-amber-500 mt-1">{t('stats.needsReview')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
                   <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
-                  <div className="text-xs text-orange-500 mt-1">Being fixed</div>
+                  <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                  <div className="text-xs text-orange-500 mt-1">{t('stats.beingFixed')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
-                  <div className="text-sm text-green-600 font-medium">Resolved</div>
-                  <div className="text-xs text-green-500 mt-1">Awaiting closure</div>
+                  <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                  <div className="text-xs text-green-500 mt-1">{t('stats.awaitingClosure')}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
-                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Past deadline</div>
+                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastDeadline')}</div>
                 </div>
               </div>
               {stats.resolutionRate !== undefined && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-emerald-800">Resolution Rate</span>
+                    <span className="text-sm font-semibold text-emerald-800">{t('stats.resolutionRate')}</span>
                     <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
                   </div>
                   <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
@@ -861,34 +854,34 @@ function DashboardContent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                  <div className="text-sm text-blue-600 font-medium">Department</div>
-                  <div className="text-xs text-blue-500 mt-1">Total complaints</div>
+                  <div className="text-sm text-blue-600 font-medium">{t('stats.department')}</div>
+                  <div className="text-xs text-blue-500 mt-1">{t('stats.totalComplaints')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
                   <div className="text-2xl font-bold text-purple-700 mb-1">{stats.assigned || 0}</div>
-                  <div className="text-sm text-purple-600 font-medium">To Assign</div>
-                  <div className="text-xs text-purple-500 mt-1">Needs technician</div>
+                  <div className="text-sm text-purple-600 font-medium">{t('stats.toAssign')}</div>
+                  <div className="text-xs text-purple-500 mt-1">{t('stats.needsTechnician')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
                   <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
-                  <div className="text-xs text-orange-500 mt-1">Being worked on</div>
+                  <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                  <div className="text-xs text-orange-500 mt-1">{t('stats.beingWorked')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
-                  <div className="text-sm text-green-600 font-medium">Resolved</div>
-                  <div className="text-xs text-green-500 mt-1">Awaiting closure</div>
+                  <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                  <div className="text-xs text-green-500 mt-1">{t('stats.awaitingClosure')}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
-                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Past SLA</div>
+                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastSLA')}</div>
                 </div>
               </div>
               {stats.resolutionRate !== undefined && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-emerald-800">SLA Compliance</span>
+                    <span className="text-sm font-semibold text-emerald-800">{t('stats.slaCompliance')}</span>
                     <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
                   </div>
                   <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
@@ -905,23 +898,23 @@ function DashboardContent() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.assigned || 0}</div>
-                  <div className="text-sm text-blue-600 font-medium">New Tasks</div>
-                  <div className="text-xs text-blue-500 mt-1">Ready to start</div>
+                  <div className="text-sm text-blue-600 font-medium">{t('stats.newTasks')}</div>
+                  <div className="text-xs text-blue-500 mt-1">{t('stats.readyToStart')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
                   <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
-                  <div className="text-xs text-orange-500 mt-1">Working on</div>
+                  <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                  <div className="text-xs text-orange-500 mt-1">{t('stats.workingOn')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
-                  <div className="text-sm text-green-600 font-medium">Completed</div>
-                  <div className="text-xs text-green-500 mt-1">Resolved tasks</div>
+                  <div className="text-sm text-green-600 font-medium">{t('stats.completed')}</div>
+                  <div className="text-xs text-green-500 mt-1">{t('stats.resolvedTasks')}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
-                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Urgent</div>
+                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.urgent')}</div>
                 </div>
               </div>
             </>
@@ -933,40 +926,40 @@ function DashboardContent() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                  <div className="text-sm text-blue-600 font-medium">Total</div>
-                  <div className="text-xs text-blue-500 mt-1">All complaints</div>
+                  <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
+                  <div className="text-xs text-blue-500 mt-1">{t('stats.allComplaints')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
                   <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || 0}</div>
-                  <div className="text-sm text-amber-600 font-medium">Submitted</div>
-                  <div className="text-xs text-amber-500 mt-1">New / Pending</div>
+                  <div className="text-sm text-amber-600 font-medium">{t('stats.submitted')}</div>
+                  <div className="text-xs text-amber-500 mt-1">{t('stats.newPending')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
                   <div className="text-2xl font-bold text-purple-700 mb-1">{stats.assigned || 0}</div>
-                  <div className="text-sm text-purple-600 font-medium">Assigned</div>
-                  <div className="text-xs text-purple-500 mt-1">To departments</div>
+                  <div className="text-sm text-purple-600 font-medium">{t('stats.assigned')}</div>
+                  <div className="text-xs text-purple-500 mt-1">{t('stats.toDepartments')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
                   <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                  <div className="text-sm text-orange-600 font-medium">In Progress</div>
-                  <div className="text-xs text-orange-500 mt-1">Being fixed</div>
+                  <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                  <div className="text-xs text-orange-500 mt-1">{t('stats.beingFixed')}</div>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
                   <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
-                  <div className="text-sm text-green-600 font-medium">Resolved</div>
-                  <div className="text-xs text-green-500 mt-1">Closed cases</div>
+                  <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                  <div className="text-xs text-green-500 mt-1">{t('stats.closedCases')}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>Overdue</div>
-                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>Past SLA</div>
+                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastSLA')}</div>
                 </div>
               </div>
               {stats.resolutionRate !== undefined && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-emerald-800">Resolution Rate</span>
+                      <span className="text-sm font-semibold text-emerald-800">{t('stats.resolutionRate')}</span>
                       <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
                     </div>
                     <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
@@ -978,10 +971,10 @@ function DashboardContent() {
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-red-600" />
                         <span className="text-sm font-semibold text-red-700">
-                          {stats.totalOverdue} complaints past SLA deadline
+                          {stats.totalOverdue} {t('stats.pastSLADeadline')}
                         </span>
                       </div>
-                      <p className="text-xs text-red-500 mt-1">Requires immediate attention</p>
+                      <p className="text-xs text-red-500 mt-1">{t('priorities.requiresAttention')}</p>
                     </div>
                   )}
                 </div>
@@ -994,7 +987,7 @@ function DashboardContent() {
             <div className="mt-6 pt-6 border-t border-slate-100">
               <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-primary" />
-                Complaints by Category (Type of Issue)
+                {t('stats.byCategory')}
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries(byCategory).map(([cat, count]) => {
@@ -1047,8 +1040,8 @@ function DashboardContent() {
             <div className="mt-6 pt-6 border-t border-slate-100">
               <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-violet-600" />
-                AI Trend Forecasts — Next 7 Days
-                <span className="text-xs text-slate-500 ml-auto">Updated automatically</span>
+                {t('trends.title')}
+                <span className="text-xs text-slate-500 ml-auto">{t('trends.subtitle')}</span>
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {trendAlerts.slice(0, 6).map((alert, idx) => (
@@ -1086,8 +1079,6 @@ function DashboardContent() {
         {/* Recent Activities + Municipality Overview — Two column layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <RecentActivities
-            notifications={notifications}
-            loading={loadingNotifications}
             role={user?.role || "CITIZEN"}
             maxItems={8}
           />
@@ -1098,6 +1089,17 @@ function DashboardContent() {
           />
         </div>
 
+        {/* AI Insight Widgets — For manager/admin/agent */}
+        {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <TrendForecastChart
+              municipality={user?.municipalityName || (typeof user?.municipality === "object" ? user?.municipality?.name : "") || ""}
+              category=""
+            />
+            <DuplicateStatsCard />
+          </div>
+        )}
+
         {/* Municipality Complaints Section - For CITIZEN role */}
         {user?.role === "CITIZEN" && municipalityComplaints && (
           <div id="complaints-area" className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
@@ -1105,10 +1107,10 @@ function DashboardContent() {
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-primary" />
-                  Complaints in Your Area
+                  {t('municipality.title')}
                 </h3>
                 <p className="text-sm text-slate-500 mt-1">
-                  Verify and support issues in your municipality
+                  {t('municipality.subtitle')}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1117,7 +1119,7 @@ function DashboardContent() {
                   disabled={loadingMunicipalityComplaints}
                   className="text-sm text-primary hover:text-primary/80 font-medium disabled:opacity-50"
                 >
-                  {loadingMunicipalityComplaints ? "Loading..." : "Refresh"}
+                  {loadingMunicipalityComplaints ? t('common.loading') : t('common.refresh')}
                 </button>
               </div>
             </div>
@@ -1125,14 +1127,15 @@ function DashboardContent() {
             {municipalityComplaints.length === 0 ? (
               <div className="text-center py-8">
                 <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-500">No complaints in your area yet</p>
+                <p className="text-sm text-slate-500">{t('municipality.noComplaints')}</p>
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {municipalityComplaints.slice(0, 6).map((complaint) => (
                   <div
                     key={complaint._id}
-                    className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group"
+                    className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
+                    onClick={() => router.push(`/dashboard/complaints/${complaint._id}`)}
                   >
                     {/* Image */}
                     <div className="relative h-28 bg-gradient-to-br from-slate-100 to-slate-50">
@@ -1166,11 +1169,9 @@ function DashboardContent() {
 
                     {/* Content */}
                     <div className="p-3">
-                      <Link href={`/transparency/complaints/${complaint._id}`}>
-                        <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors cursor-pointer">
-                          {complaint.title}
-                        </h4>
-                      </Link>
+                      <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                        {complaint.title}
+                      </h4>
                       <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
                         <MapPin className="w-3 h-3 flex-shrink-0" />
                         <span className="truncate">
@@ -1178,31 +1179,32 @@ function DashboardContent() {
                         </span>
                       </p>
 
-                      {/* Confirm + Upvote distinct actions */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                        <button
-                          onClick={() => handleConfirm(complaint._id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
-                          title="I have seen this issue — confirm it is real or still present"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>I&apos;ve seen this</span>
-                          <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
-                            {complaint.confirmationCount || 0}
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => handleUpvote(complaint._id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium transition-colors"
-                          title="I want this issue prioritized — support solving it quickly"
-                        >
-                          <Heart className="w-3.5 h-3.5" />
-                          <span>Prioritize</span>
-                          <span className="bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
-                            {complaint.upvoteCount || 0}
-                          </span>
-                        </button>
-                      </div>
+                      {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED" || complaint.status === "IN_PROGRESS") && (
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleConfirm(complaint._id); }}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
+                            title={t('municipality.confirmTitle')}
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>{t('municipality.confirmBtn')}</span>
+                            <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                              {complaint.confirmationCount || 0}
+                            </span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleUpvote(complaint._id); }}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium transition-colors"
+                            title={t('municipality.prioritizeTitle')}
+                          >
+                            <Heart className="w-3.5 h-3.5" />
+                            <span>{t('municipality.prioritizeBtn')}</span>
+                            <span className="bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                              {complaint.upvoteCount || 0}
+                            </span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1212,13 +1214,69 @@ function DashboardContent() {
             {municipalityComplaints.length > 6 && (
               <div className="mt-4 text-center">
                 <Link
-                  href="/transparency"
+                  href="/complaints"
                   className="text-sm text-primary hover:text-primary/80 font-medium inline-flex items-center gap-1"
                 >
-                  View all complaints <ArrowRight className="w-3 h-3" />
+                  {t('municipality.viewAll')} <ArrowRight className="w-3 h-3" />
                 </Link>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Recent Resolutions — For CITIZEN role */}
+        {user?.role === "CITIZEN" && recentResolutions.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  {t('dashboard.recentResolutions')}
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  {t('dashboard.recentResolutionsSubtitle')}
+                </p>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recentResolutions.map((complaint) => (
+                <Link
+                  key={complaint._id}
+                  href={`/dashboard/complaints/${complaint._id}`}
+                  className="bg-green-50/50 rounded-xl border border-green-100 overflow-hidden hover:shadow-md transition-shadow group"
+                >
+                  <div className="relative h-28 bg-gradient-to-br from-green-50 to-slate-50">
+                    {complaint.media?.[0]?.url ? (
+                      <img
+                        src={complaint.media[0].url}
+                        alt={complaint.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <CheckCircle className="w-8 h-8 text-green-200" />
+                      </div>
+                    )}
+                    <div className="absolute top-2 right-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 shadow-sm">
+                        {complaint.status === "CLOSED" ? "CLOSED" : "RESOLVED"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-green-700 transition-colors">
+                      {complaint.title}
+                    </h4>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">
+                        {complaint.location?.address || complaint.municipalityName || "Unknown location"}
+                      </span>
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
       </main>

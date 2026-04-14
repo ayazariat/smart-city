@@ -31,7 +31,11 @@ import {
   Globe
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, statusConfig as sharedStatusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { apiClient } from "@/services/api.client";
+import { getPhotoUrl } from "@/lib/photos";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+import { useTranslation } from "react-i18next";
 
 interface ComplaintMedia {
   url: string;
@@ -65,22 +69,19 @@ interface Complaint {
 }
 
 const statusSteps = ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-const statusLabelsMap: Record<string, string> = {
-  SUBMITTED: "Submitted",
-  VALIDATED: "Verified by municipality",
-  ASSIGNED: "Team assigned",
-  IN_PROGRESS: "Work in progress",
-  RESOLVED: "Fixed — under review",
-  CLOSED: "Fully resolved"
-};
 
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED: { label: "Submitted", bgClass: "bg-slate-100", textClass: "text-slate-700" },
-  VALIDATED: { label: "Verified", bgClass: "bg-blue-100", textClass: "text-blue-700" },
-  ASSIGNED: { label: "Team Assigned", bgClass: "bg-purple-100", textClass: "text-purple-700" },
-  IN_PROGRESS: { label: "Being Fixed", bgClass: "bg-orange-100", textClass: "text-orange-700" },
-  RESOLVED: { label: "Fixed", bgClass: "bg-green-100", textClass: "text-green-700" },
-  CLOSED: { label: "Closed", bgClass: "bg-green-100", textClass: "text-green-800" },
+const resolveMediaUrl = (url?: string): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+
+  if (url.startsWith("/uploads/")) {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    const origin = apiUrl.replace(/\/api\/?$/, "");
+    return `${origin}${url}`;
+  }
+
+  return getPhotoUrl(url);
 };
 
 export default function PublicComplaintDetailPage() {
@@ -89,6 +90,8 @@ export default function PublicComplaintDetailPage() {
   const searchParams = useSearchParams();
   const complaintId = params.id as string;
   const actionParam = searchParams.get("action");
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || "en";
   
   const { user, token, hydrated } = useAuthStore();
   
@@ -169,15 +172,13 @@ export default function PublicComplaintDetailPage() {
       return;
     }
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/upvote`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
-      });
-      const data = await response.json();
+      const data = await apiClient.post<{ success: boolean; upvoteCount?: number; voteCount?: number }>(
+        `/public/complaints/${complaintId}/upvote`,
+        {}
+      );
+      const nextVotes = data.upvoteCount ?? data.voteCount ?? 0;
       if (data.success && complaint) {
-        setComplaint({ ...complaint, upvoteCount: data.voteCount });
+        setComplaint({ ...complaint, upvoteCount: nextVotes });
       }
     } catch { /* silent */ }
   };
@@ -189,15 +190,15 @@ export default function PublicComplaintDetailPage() {
       return;
     }
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/citizen/complaints/${complaintId}/confirm`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
-      });
-      const data = await response.json();
+      const data = await apiClient.post<{ success: boolean; confirmationCount?: number }>(
+        `/citizen/complaints/${complaintId}/confirm`,
+        {}
+      );
       if (data.success && complaint) {
-        setComplaint({ ...complaint, confirmationCount: (complaint.confirmationCount || 0) + 1 });
+        setComplaint({
+          ...complaint,
+          confirmationCount: data.confirmationCount ?? (complaint.confirmationCount || 0) + 1,
+        });
       }
     } catch { /* silent */ }
   };
@@ -249,7 +250,7 @@ export default function PublicComplaintDetailPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-slate-50">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
-          <p className="text-slate-600">Loading complaint...</p>
+          <p className="text-slate-600">{t("publicComplaint.loading")}</p>
         </div>
       </div>
     );
@@ -262,23 +263,24 @@ export default function PublicComplaintDetailPage() {
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-8 h-8 text-red-500" />
           </div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Complaint Not Found</h2>
-          <p className="text-slate-600 mb-6">{error || "This complaint may not be public yet."}</p>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">{t("publicComplaint.notFound")}</h2>
+          <p className="text-slate-600 mb-6">{error || t("publicComplaint.notPublicYet")}</p>
           <button
             onClick={() => router.push("/transparency")}
             className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
           >
-            Back to Dashboard
+            {t("publicComplaint.backToDashboard")}
           </button>
         </div>
       </div>
     );
   }
 
-  const statusInfo = statusConfig[complaint.status] || { label: complaint.status, bgClass: "bg-slate-100", textClass: "text-slate-700" };
+  const statusInfo = sharedStatusConfig[complaint.status] || { label: complaint.status, bgClass: "bg-slate-100", textClass: "text-slate-700", dotClass: "bg-slate-500" };
   const currentStepIndex = statusSteps.indexOf(complaint.status);
   const municipality = complaint.municipalityName || complaint.location?.municipality || "Unknown";
   const governorate = complaint.location?.governorate || "";
+  const canEngage = ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(complaint.status);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
@@ -290,27 +292,30 @@ export default function PublicComplaintDetailPage() {
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors md:hidden"
-                title="Menu"
+                title={t("publicComplaint.menu")}
               >
                 <Menu className="w-5 h-5 text-slate-600" />
               </button>
               <button
                 onClick={() => router.back()}
                 className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
-                title="Back"
+                title={t("publicComplaint.back")}
               >
                 <ArrowLeft className="w-5 h-5 text-slate-600" />
               </button>
               <div className="hidden sm:block">
-                <h1 className="text-lg font-bold text-slate-800 leading-tight">Complaint Detail</h1>
+                <h1 className="text-lg font-bold text-slate-800 leading-tight">{t("publicComplaint.complaintDetail")}</h1>
                 <p className="text-xs text-slate-500">
-                  {complaint.referenceId ? `#${complaint.referenceId}` : `#${complaint._id.slice(-6).toUpperCase()}`}
+                  {complaint.referenceId ? `#${complaint.referenceId}` : getComplaintIdDisplay(complaint._id)}
                 </p>
               </div>
             </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
-              {statusInfo.label}
-            </span>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
+                {statusInfo.label}
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -330,8 +335,8 @@ export default function PublicComplaintDetailPage() {
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-800 leading-tight">Smart City</h2>
-                  <p className="text-[10px] text-slate-400 font-medium">Public Dashboard</p>
+                  <h2 className="text-sm font-bold text-slate-800 leading-tight">{t("publicComplaint.smartCity")}</h2>
+                  <p className="text-[10px] text-slate-400 font-medium">{t("publicComplaint.publicDashboard")}</p>
                 </div>
               </Link>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5 hover:bg-slate-100 rounded-lg md:hidden">
@@ -341,22 +346,22 @@ export default function PublicComplaintDetailPage() {
           </div>
 
           <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Navigation</p>
+            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{t("publicComplaint.navigation")}</p>
             <Link href="/transparency" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px] transition-all">
               <Home className="w-[18px] h-[18px] text-slate-400" />
-              <span>Overview</span>
+              <span>{t("publicComplaint.overview")}</span>
             </Link>
             <div className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-green-50 text-green-700 font-semibold border-l-[3px] border-green-600 pl-[9px]">
               <Eye className="w-[18px] h-[18px] text-green-600" />
-              <span>Complaint Detail</span>
+              <span>{t("publicComplaint.complaintDetail")}</span>
             </div>
             <Link href="/transparency#complaints" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px] transition-all">
               <List className="w-[18px] h-[18px] text-slate-400" />
-              <span>All Complaints</span>
+              <span>{t("publicComplaint.allComplaints")}</span>
             </Link>
             <Link href="/transparency#governorates" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px] transition-all">
               <Globe className="w-[18px] h-[18px] text-slate-400" />
-              <span>Governorates</span>
+              <span>{t("publicComplaint.governorates")}</span>
             </Link>
           </nav>
 
@@ -374,13 +379,13 @@ export default function PublicComplaintDetailPage() {
                   href="/login"
                   className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
                 >
-                  Login
+                  {t("publicComplaint.login")}
                 </Link>
                 <Link 
                   href="/register"
                   className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
                 >
-                  Create Account
+                  {t("publicComplaint.createAccount")}
                 </Link>
               </>
             )}
@@ -402,11 +407,17 @@ export default function PublicComplaintDetailPage() {
             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
               {complaint.media && complaint.media.length > 0 ? (
                 <div className="relative h-72 md:h-96 bg-slate-100">
-                  <img
-                    src={complaint.media[currentImageIndex]?.url}
-                    alt={complaint.title}
-                    className="w-full h-full object-cover"
-                  />
+                  {resolveMediaUrl(complaint.media[currentImageIndex]?.url) ? (
+                    <img
+                      src={resolveMediaUrl(complaint.media[currentImageIndex]?.url) || ""}
+                      alt={complaint.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-100 to-green-50">
+                      <Building2 className="w-12 h-12 text-green-300" />
+                    </div>
+                  )}
                   {complaint.media.length > 1 && (
                     <>
                       <button onClick={prevImage} className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow-lg hover:bg-white">
@@ -455,7 +466,7 @@ export default function PublicComplaintDetailPage() {
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h3 className="text-base font-semibold text-slate-800 mb-3 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-green-600" />
-                Location
+                {t("publicComplaint.location")}
               </h3>
               <div className="flex flex-wrap gap-4 text-sm text-slate-600">
                 <span>{municipality}{governorate ? `, ${governorate}` : ""}</span>
@@ -470,7 +481,7 @@ export default function PublicComplaintDetailPage() {
                   className="inline-flex items-center gap-1 mt-3 text-sm text-green-600 hover:text-green-700 font-medium"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Open in Google Maps
+                  {t("publicComplaint.openInGoogleMaps")}
                 </a>
               )}
             </div>
@@ -480,26 +491,33 @@ export default function PublicComplaintDetailPage() {
               <div className="bg-green-50 rounded-2xl border border-green-200 p-6">
                 <h3 className="text-base font-semibold text-green-800 mb-3 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-green-600" />
-                  Resolution Report
+                  {t("publicComplaint.resolutionReport")}
                 </h3>
-                <p className="text-sm text-green-700 mb-2">Issue resolved by municipal team.</p>
+                <p className="text-sm text-green-700 mb-2">{t("publicComplaint.resolvedByTeam")}</p>
                 {complaint.resolutionNote && (
                   <p className="text-sm text-green-800 bg-white rounded-lg p-3 border border-green-200 mb-3">{complaint.resolutionNote}</p>
                 )}
                 {complaint.resolvedAt && (
                   <p className="text-xs text-green-600">
-                    Resolved on {new Date(complaint.resolvedAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
+                    {t("publicComplaint.resolvedOn", { date: new Date(complaint.resolvedAt).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" }) })}
                     {complaint.createdAt && (() => {
                       const days = Math.round((new Date(complaint.resolvedAt!).getTime() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-                      return ` · Fixed in ${days} day${days !== 1 ? 's' : ''}`;
+                      return ` · ${t("publicComplaint.fixedInDays", { n: days })}`;
                     })()}
                   </p>
                 )}
                 {complaint.proofPhotos && complaint.proofPhotos.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
-                    {complaint.proofPhotos.map((photo, idx) => (
-                      <img key={idx} src={photo.url} alt="Resolution proof" className="w-full h-32 object-cover rounded-lg" />
-                    ))}
+                    {complaint.proofPhotos.map((photo, idx) => {
+                      const proofUrl = resolveMediaUrl(photo.url);
+                      return proofUrl ? (
+                        <img key={idx} src={proofUrl} alt="Resolution proof" className="w-full h-32 object-cover rounded-lg" />
+                      ) : (
+                        <div key={idx} className="w-full h-32 bg-slate-100 rounded-lg flex items-center justify-center">
+                          <Building2 className="w-8 h-8 text-slate-300" />
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -509,9 +527,9 @@ export default function PublicComplaintDetailPage() {
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
                 <MessageCircle className="w-5 h-5 text-green-600" />
-                Community Comments
+                {t("publicComplaint.communityComments")}
                 {comments.length > 0 && (
-                  <span className="ml-auto text-xs font-normal text-slate-400">{comments.length} comment{comments.length !== 1 ? 's' : ''}</span>
+                  <span className="ml-auto text-xs font-normal text-slate-400">{t("publicComplaint.commentCount", { n: comments.length })}</span>
                 )}
               </h3>
               {user && token ? (
@@ -519,14 +537,14 @@ export default function PublicComplaintDetailPage() {
                   <textarea
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Share your experience or observation..."
+                    placeholder={t("publicComplaint.commentPlaceholder")}
                     maxLength={1000}
                     className="w-full p-3 border border-slate-200 rounded-xl text-sm resize-none h-20 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400"
                   />
                   <div className="flex items-center justify-between mt-2">
                     <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
                       <input type="checkbox" checked={isAnonymous} onChange={(e) => setIsAnonymous(e.target.checked)} className="rounded border-slate-300" />
-                      Post anonymously
+                      {t("publicComplaint.postAnonymously")}
                     </label>
                     <button
                       onClick={handleComment}
@@ -534,14 +552,14 @@ export default function PublicComplaintDetailPage() {
                       className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                     >
                       {submittingComment && <Loader2 className="w-3 h-3 animate-spin" />}
-                      Post Comment
+                      {t("publicComplaint.postComment")}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-4 bg-slate-50 rounded-xl mb-4">
                   <p className="text-sm text-slate-500">
-                    <button onClick={() => router.push(`/login?redirect=${encodeURIComponent(`/transparency/complaints/${complaintId}`)}`)} className="text-green-600 hover:text-green-700 font-medium">Sign in</button> to add a comment
+                    <button onClick={() => router.push(`/login?redirect=${encodeURIComponent(`/transparency/complaints/${complaintId}`)}`)} className="text-green-600 hover:text-green-700 font-medium">{t("publicComplaint.signIn")}</button> {t("publicComplaint.toAddComment")}
                   </p>
                 </div>
               )}
@@ -559,7 +577,7 @@ export default function PublicComplaintDetailPage() {
                           )}
                         </div>
                         <span className="text-xs text-slate-400">
-                          {new Date(c.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}
+                          {new Date(c.createdAt).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" })}
                         </span>
                       </div>
                       <p className="text-sm text-slate-600">{c.text}</p>
@@ -567,7 +585,7 @@ export default function PublicComplaintDetailPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 text-center py-3">No comments yet. Be the first to share your thoughts.</p>
+                <p className="text-sm text-slate-400 text-center py-3">{t("publicComplaint.noComments")}</p>
               )}
             </div>
           </div>
@@ -579,7 +597,7 @@ export default function PublicComplaintDetailPage() {
               <div className="space-y-3 text-sm">
                 <div className="flex items-center gap-3 text-slate-600">
                   <Calendar className="w-4 h-4 text-green-600 flex-shrink-0" />
-                  <span>Reported {new Date(complaint.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}</span>
+                  <span>{t("publicComplaint.reported", { date: new Date(complaint.createdAt).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" }) })}</span>
                 </div>
                 <div className="flex items-center gap-3 text-slate-600">
                   <MapPin className="w-4 h-4 text-green-600 flex-shrink-0" />
@@ -587,14 +605,14 @@ export default function PublicComplaintDetailPage() {
                 </div>
                 <div className="flex items-center gap-3 text-slate-600">
                   <Clock className="w-4 h-4 text-green-600 flex-shrink-0" />
-                  <span>{Math.round((Date.now() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days ago</span>
+                  <span>{t("publicComplaint.daysAgo", { n: Math.round((Date.now() - new Date(complaint.createdAt).getTime()) / (1000 * 60 * 60 * 24)) })}</span>
                 </div>
               </div>
             </div>
 
             {/* Status Timeline */}
             <div className="bg-white rounded-2xl shadow-md p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Status Timeline</h3>
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">{t("publicComplaint.statusTimeline")}</h3>
               <div className="space-y-0">
                 {statusSteps.map((step, idx) => {
                   const isCompleted = idx <= currentStepIndex;
@@ -615,10 +633,10 @@ export default function PublicComplaintDetailPage() {
                       </div>
                       <div className="pb-6">
                         <p className={`text-sm font-medium ${isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>
-                          {statusLabelsMap[step]}
+                          {t(`publicComplaint.statusLabels.${step}`)}
                         </p>
                         {historyEntry && (
-                          <p className="text-xs text-slate-400">{new Date(historyEntry.timestamp).toLocaleDateString("en-US", { day: "numeric", month: "short" })}</p>
+                          <p className="text-xs text-slate-400">{new Date(historyEntry.timestamp).toLocaleDateString(locale, { day: "numeric", month: "short" })}</p>
                         )}
                       </div>
                     </div>
@@ -629,39 +647,46 @@ export default function PublicComplaintDetailPage() {
 
             {/* Engagement Stats & Actions */}
             <div className="bg-white rounded-2xl shadow-md p-5">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Community Engagement</h3>
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">{t("publicComplaint.communityEngagement")}</h3>
               <div className="grid grid-cols-3 gap-2 mb-4">
                 <div className="text-center p-2 bg-pink-50 rounded-xl">
                   <Heart className="w-4 h-4 text-pink-500 mx-auto mb-1" />
                   <p className="text-lg font-bold text-slate-800">{complaint.upvoteCount || 0}</p>
-                  <p className="text-[10px] text-slate-500">Likes</p>
+                  <p className="text-[10px] text-slate-500">{t("publicComplaint.likes")}</p>
                 </div>
                 <div className="text-center p-2 bg-green-50 rounded-xl">
                   <ThumbsUp className="w-4 h-4 text-green-500 mx-auto mb-1" />
                   <p className="text-lg font-bold text-slate-800">{complaint.confirmationCount || 0}</p>
-                  <p className="text-[10px] text-slate-500">Confirms</p>
+                  <p className="text-[10px] text-slate-500">{t("publicComplaint.confirms")}</p>
                 </div>
                 <div className="text-center p-2 bg-blue-50 rounded-xl">
                   <Eye className="w-4 h-4 text-blue-500 mx-auto mb-1" />
                   <p className="text-lg font-bold text-slate-800">—</p>
-                  <p className="text-[10px] text-slate-500">Views</p>
+                  <p className="text-[10px] text-slate-500">{t("publicComplaint.views")}</p>
                 </div>
               </div>
               <div className="space-y-2">
                 <button
                   onClick={(e) => { e.preventDefault(); handleUpvote(); }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-600 font-medium rounded-xl text-sm transition-colors"
+                  disabled={!canEngage}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-600 font-medium rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Heart className="w-4 h-4" />
-                  Like This Report
+                  {t("publicComplaint.likeReport")}
                 </button>
                 <button
                   onClick={(e) => { e.preventDefault(); handleConfirm(); }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-600 font-medium rounded-xl text-sm transition-colors"
+                  disabled={!canEngage}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-600 font-medium rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ThumbsUp className="w-4 h-4" />
-                  Confirm This Issue
+                  {t("publicComplaint.confirmIssue")}
                 </button>
+                {!canEngage && (
+                  <p className="text-xs text-slate-500 text-center pt-1">
+                    {t("publicComplaint.actionsDisabled")}
+                  </p>
+                )}
               </div>
             </div>
           </div>

@@ -36,63 +36,24 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { ComplaintCategory, ComplaintUrgency, ComplaintMedia, CreateComplaintData } from "@/types";
 import { complaintService, uploadMedia, predictCategory } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
+import { useTranslation } from "react-i18next";
 
 type CategoryConfig = {
   value: ComplaintCategory;
-  label: string;
-  description: string;
+  labelKey: string;
+  descKey: string;
   icon: typeof MapPin;
 };
 
 const CATEGORIES: CategoryConfig[] = [
-  {
-    value: "WASTE",
-    label: "Waste & Cleanliness",
-    description: "Garbage, overflowing bins, illegal dumps, street cleaning.",
-    icon: Trash2,
-  },
-  {
-    value: "ROAD",
-    label: "Roads & Traffic",
-    description: "Damaged roads, sidewalks, parking, traffic signs or signals.",
-    icon: TrafficCone,
-  },
-  {
-    value: "LIGHTING",
-    label: "Street Lighting",
-    description: "Broken lamps, dark streets, flashing or unstable lights.",
-    icon: Lightbulb,
-  },
-  {
-    value: "WATER",
-    label: "Water & Drainage",
-    description: "Leaks, flooded areas, blocked drains, sewage issues.",
-    icon: Droplets,
-  },
-  {
-    value: "SAFETY",
-    label: "Public Safety & Noise",
-    description: "Dangerous situations, accidents, noise, unsafe areas.",
-    icon: ShieldAlert,
-  },
-  {
-    value: "PUBLIC_PROPERTY",
-    label: "Public Property",
-    description: "Municipal buildings, public furniture, monuments.",
-    icon: Building2,
-  },
-  {
-    value: "GREEN_SPACE",
-    label: "Parks & Green Spaces",
-    description: "Parks, gardens, trees, green areas maintenance.",
-    icon: TreePine,
-  },
-  {
-    value: "OTHER",
-    label: "Other",
-    description: "Anything that does not fit in the other categories.",
-    icon: Tag,
-  },
+  { value: "WASTE", labelKey: "categories.waste", descKey: "categories.wasteDesc", icon: Trash2 },
+  { value: "ROAD", labelKey: "categories.roads", descKey: "categories.roadsDesc", icon: TrafficCone },
+  { value: "LIGHTING", labelKey: "categories.lighting", descKey: "categories.lightingDesc", icon: Lightbulb },
+  { value: "WATER", labelKey: "categories.water", descKey: "categories.waterDesc", icon: Droplets },
+  { value: "SAFETY", labelKey: "categories.safety", descKey: "categories.safetyDesc", icon: ShieldAlert },
+  { value: "PUBLIC_PROPERTY", labelKey: "categories.property", descKey: "categories.propertyDesc", icon: Building2 },
+  { value: "GREEN_SPACE", labelKey: "categories.parks", descKey: "categories.parksDesc", icon: TreePine },
+  { value: "OTHER", labelKey: "categories.other", descKey: "categories.otherDesc", icon: Tag },
 ];
 
 const detectCategory = (title: string, description: string): ComplaintCategory => {
@@ -188,6 +149,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
 };
 
 export default function NewComplaintPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -256,10 +218,10 @@ export default function NewComplaintPage() {
 
   // Urgency levels
   const urgencyLevels: { value: ComplaintUrgency; label: string; color: string; time: string }[] = [
-    { value: "LOW", label: "Low", color: "bg-green-500", time: "Not urgent" },
-    { value: "MEDIUM", label: "Medium", color: "bg-yellow-500", time: "This week" },
-    { value: "HIGH", label: "High", color: "bg-orange-500", time: "Within 48h" },
-    { value: "URGENT", label: "Urgent", color: "bg-red-500", time: "Immediate" },
+    { value: "LOW", label: t('urgency.LOW'), color: "bg-green-500", time: t('urgency.lowDesc') },
+    { value: "MEDIUM", label: t('urgency.MEDIUM'), color: "bg-yellow-500", time: t('urgency.mediumDesc') },
+    { value: "HIGH", label: t('urgency.HIGH'), color: "bg-orange-500", time: t('urgency.highDesc') },
+    { value: "URGENT", label: t('urgency.CRITICAL'), color: "bg-red-500", time: t('urgency.criticalDesc') },
   ];
 
   // Default to Tunis coordinates
@@ -729,7 +691,7 @@ export default function NewComplaintPage() {
       setSuccess(true);
     } catch (err) {
       console.error("Complaint submission error:", err);
-      const rawMessage = err instanceof Error ? err.message : "Failed to submit complaint";
+      const rawMessage = err instanceof Error ? err.message : t('complaint.errors.submitFailed');
       const normalized = rawMessage.toLowerCase();
 
       // Handle invalid/expired token or unauthorized uniformly
@@ -740,10 +702,10 @@ export default function NewComplaintPage() {
         normalized.includes("jwt") ||
         (normalized.includes("expired") && normalized.includes("session"))
       ) {
-        setError("Your session has expired. Please sign in again to submit a complaint.");
+        setError(t('complaint.errors.sessionExpired'));
         setTimeout(() => router.push("/"), 2500);
       } else if (normalized.includes("403") || normalized.includes("access denied")) {
-        setError("You don't have permission to submit complaints. Your account may not be a citizen account. Please contact support.");
+        setError(t('complaint.errors.noPermission'));
       } else {
         setError(`We couldn't submit your complaint right now. Please try again in a moment. Error: ${rawMessage}`);
       }
@@ -758,7 +720,7 @@ export default function NewComplaintPage() {
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">Loading...</p>
+          <p className="text-slate-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -772,10 +734,10 @@ export default function NewComplaintPage() {
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Shield className="w-8 h-8 text-red-500" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Authentication Required</h2>
-          <p className="text-slate-600 mb-6">Please log in to submit a complaint.</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">{t('complaint.authRequired.title')}</h2>
+          <p className="text-slate-600 mb-6">{t('complaint.authRequired.message')}</p>
           <Link href="/">
-            <Button>Sign In</Button>
+            <Button>{t('complaint.authRequired.signIn')}</Button>
           </Link>
         </div>
       </div>
@@ -791,17 +753,17 @@ export default function NewComplaintPage() {
             <CheckCircle className="w-10 h-10 text-success-600" />
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">
-            Complaint Submitted!
+            {t('complaint.success.title')}
           </h2>
           <p className="text-slate-600 mb-2">
-            Your complaint has been submitted successfully.
+            {t('complaint.success.message')}
           </p>
           <p className="text-sm text-slate-500 mb-6">
-            Reference ID: <span className="font-mono font-bold text-primary">{complaintId}</span>
+            {t('complaint.success.referenceId')} <span className="font-mono font-bold text-primary">{complaintId}</span>
           </p>
           <div className="space-y-3">
             <Button onClick={() => router.push("/dashboard")} fullWidth>
-              Back to Dashboard
+              {t('complaint.success.backDashboard')}
             </Button>
             <Button
               onClick={() => {
@@ -826,7 +788,7 @@ export default function NewComplaintPage() {
               variant="outline"
               fullWidth
             >
-              Submit Another Complaint
+              {t('complaint.success.submitAnother')}
             </Button>
           </div>
         </div>
@@ -847,9 +809,9 @@ export default function NewComplaintPage() {
               <ArrowLeft className="w-5 h-5 text-slate-600" />
             </button>
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-slate-800">Report an Issue</h1>
+              <h1 className="text-2xl font-bold text-slate-800">{t('complaint.title')}</h1>
               <p className="text-slate-500 text-sm">
-                Help improve your city - Your voice matters!
+                {t('complaint.subtitle')}
               </p>
             </div>
             <div className="hidden sm:flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full">
@@ -885,7 +847,7 @@ export default function NewComplaintPage() {
                   className="text-sm text-primary hover:underline flex items-center gap-1"
                 >
                   <Maximize2 className="w-3 h-3" />
-                  Full Screen
+                  {t('complaint.fullScreen')}
                 </button>
               )}
             </div>
@@ -895,7 +857,7 @@ export default function NewComplaintPage() {
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Enter address manually (e.g., Rue de la République, Tunis)"
+              placeholder={t('complaint.addressPlaceholder')}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all mb-4 bg-slate-50/50"
             />
 
@@ -917,7 +879,7 @@ export default function NewComplaintPage() {
                   <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg border border-slate-200 shadow-sm">
                     <p className="text-[10px] font-medium text-slate-600 flex items-center gap-1">
                       <MapPin className="w-3 h-3 text-primary" />
-                      Click on the map to set location
+                      {t('complaint.clickMap')}
                     </p>
                   </div>
                 </div>
@@ -927,18 +889,18 @@ export default function NewComplaintPage() {
             {/* Governorate / Commune */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Governorate</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">{t('complaint.governorate')}</label>
                 <div className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-700">
-                  {governorate || "Will be detected from your GPS"}
+                  {governorate || t('complaint.governorateHint')}
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Municipality</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">{t('complaint.municipalityLabel')}</label>
                 <input
                   type="text"
                   value={commune}
                   onChange={(e) => setCommune(e.target.value)}
-                  placeholder={detectedCommune || "e.g., Beni Khiar"}
+                  placeholder={detectedCommune || t('complaint.municipalityPlaceholder')}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50 text-sm"
                 />
               </div>
@@ -960,7 +922,7 @@ export default function NewComplaintPage() {
                 ) : (
                   <MapPin className="w-4 h-4 mr-2" />
                 )}
-                {locationLoading ? "Detecting..." : locationMode === 'gps' ? "GPS Location" : "Use My GPS"}
+                {locationLoading ? t('complaint.detecting') : locationMode === 'gps' ? t('complaint.gpsLocation') : t('complaint.useGPS')}
               </Button>
               <Button
                 type="button"
@@ -969,7 +931,7 @@ export default function NewComplaintPage() {
                 className="flex-1"
               >
                 {showMap ? <Minimize2 className="w-4 h-4 mr-2" /> : <Maximize2 className="w-4 h-4 mr-2" />}
-                {showMap ? "Hide Map" : "Select on Map"}
+                {showMap ? t('complaint.hideMap') : t('complaint.selectOnMap')}
               </Button>
             </div>
 
@@ -986,7 +948,7 @@ export default function NewComplaintPage() {
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <span className="text-xs text-slate-500 block">Commune</span>
+                  <span className="text-xs text-slate-500 block">{t('complaint.commune')}</span>
                   <span className="text-sm font-semibold text-primary">{commune || detectedCommune}</span>
                 </div>
                 <button
@@ -1006,38 +968,38 @@ export default function NewComplaintPage() {
           {/* Title */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Title <span className="text-red-500">*</span>
+              {t('complaint.titleLabel')} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Brief summary of the issue..."
+              placeholder={t('complaint.titlePlaceholder')}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
               maxLength={150}
               required
             />
             <p className="text-xs text-slate-400 mt-2 text-right">
-              {title.length}/150 characters
+              {t('complaint.titleCounter', { n: title.length })}
             </p>
           </div>
 
           {/* Description */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Description <span className="text-red-500">*</span>
+              {t('complaint.descLabel')} <span className="text-red-500">*</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the issue in detail. Include relevant details like location, time, and any other information that might help us resolve this faster..."
+              placeholder={t('complaint.descPlaceholder')}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50 resize-none"
               rows={5}
               maxLength={1000}
               required
             />
             <p className="text-xs text-slate-400 mt-2 text-right">
-              {description.length}/1000 characters (minimum 20)
+              {t('complaint.descCounter', { n: description.length })}
             </p>
           </div>
 
@@ -1045,12 +1007,12 @@ export default function NewComplaintPage() {
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-semibold text-slate-700">
-                Category <span className="text-red-500">*</span>
+                {t('complaint.categoryLabel')} <span className="text-red-500">*</span>
               </label>
               {isAiSuggesting && (
                 <span className="text-xs text-primary flex items-center gap-1">
                   <Sparkles className="w-3 h-3 animate-pulse" />
-                  AI analyzing your text...
+                  {t('complaint.aiAnalyzing')}
                 </span>
               )}
             </div>
@@ -1081,16 +1043,16 @@ export default function NewComplaintPage() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-slate-800">{cat.label}</span>
+                        <span className="text-xs font-semibold text-slate-800">{t(cat.labelKey)}</span>
                         {isSuggested && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                             <Sparkles className="w-3 h-3" />
-                            Suggested
+                            {t('complaint.aiSuggested')}
                           </span>
                         )}
                       </div>
                       <p className="mt-0.5 text-[11px] leading-snug text-slate-500 line-clamp-2">
-                        {cat.description}
+                        {t(cat.descKey)}
                       </p>
                     </div>
                   </button>
@@ -1102,7 +1064,7 @@ export default function NewComplaintPage() {
           {/* Urgency Slider */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <label className="block text-sm font-semibold text-slate-700 mb-4">
-              Urgency Level <span className="text-red-500">*</span>
+              {t('complaint.urgencyLabel')} <span className="text-red-500">*</span>
             </label>
             
             <div className="relative mb-4">
@@ -1152,7 +1114,7 @@ export default function NewComplaintPage() {
                     <Sparkles className={`w-4 h-4 ${
                       aiPredictedUrgency.level === urgency ? 'text-green-600' : 'text-amber-600'
                     }`} />
-                    <span className="text-sm font-semibold text-slate-800">AI Suggested Urgency</span>
+                    <span className="text-sm font-semibold text-slate-800">{t('complaint.suggestedUrgency')}</span>
                   </div>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                     aiPredictedUrgency.level === 'CRITICAL' ? 'bg-red-100 text-red-700' :
@@ -1163,21 +1125,14 @@ export default function NewComplaintPage() {
                     {aiPredictedUrgency.level}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mb-2">
-                  Confidence: {Math.round(aiPredictedUrgency.confidence * 100)}%
-                </p>
-                {aiPredictedUrgency.explanation && aiPredictedUrgency.level !== urgency && (
-                  <p className="text-xs text-slate-600 bg-white/60 rounded-lg p-2">
-                    {aiPredictedUrgency.explanation}
-                  </p>
-                )}
+                <p className="text-xs text-slate-500 mb-2">{t('complaint.suggestionHint')}</p>
                 {aiPredictedUrgency.level !== urgency && (
                   <button
                     type="button"
                     onClick={() => setUrgency(aiPredictedUrgency.level as ComplaintUrgency)}
                     className="mt-2 text-xs text-primary hover:text-primary/80 font-medium"
                   >
-                    Apply AI suggestion
+                    {t('complaint.applySuggestion')}
                   </button>
                 )}
               </div>
@@ -1188,7 +1143,7 @@ export default function NewComplaintPage() {
               <div className="rounded-xl p-4 border bg-amber-50 border-amber-200">
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm font-semibold text-amber-800">Potential Duplicates Detected</span>
+                  <span className="text-sm font-semibold text-amber-800">{t('complaint.duplicateWarning')}</span>
                 </div>
                 <div className="space-y-2">
                   {proactiveDuplicates.map((match, i) => (
@@ -1203,7 +1158,7 @@ export default function NewComplaintPage() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-amber-600 mt-2">Similar complaints already exist. You can still submit if yours is different.</p>
+                <p className="text-xs text-amber-600 mt-2">{t('complaint.duplicateHint')}</p>
               </div>
             )}
 
@@ -1214,7 +1169,7 @@ export default function NewComplaintPage() {
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 <span className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-slate-500" />
-                  Incident Date/Time
+                  {t('complaint.dateTime')}
                 </span>
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -1245,18 +1200,18 @@ export default function NewComplaintPage() {
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 <span className="flex items-center gap-2">
                   <Phone className="w-4 h-4 text-slate-500" />
-                  Phone (for follow-up)
+                  {t('complaint.phone')}
                 </span>
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
-                  +216
+                  {t('complaint.phonePrefix')}
                 </span>
                 <input
                   type="tel"
                   value={phone}
                   onChange={handlePhoneChange}
-                  placeholder="98765432"
+                  placeholder={t('complaint.phonePlaceholder')}
                   maxLength={8}
                   className={`w-full pl-14 pr-4 py-2.5 rounded-xl border transition-all bg-slate-50/50 ${
                     phoneError
@@ -1270,7 +1225,7 @@ export default function NewComplaintPage() {
               )}
               {!phoneError && phone.length > 0 && phone.length < 8 && (
                 <p className="text-xs text-slate-400 mt-1.5">
-                  Format: 8 chiffres (ex: 98765432)
+                  {t('complaint.phoneInvalid')}
                 </p>
               )}
             </div>
@@ -1287,18 +1242,18 @@ export default function NewComplaintPage() {
               />
               <span className="flex items-center gap-2 text-slate-700">
                 <EyeOff className="w-5 h-5 text-slate-400" />
-                <span className="font-medium">Submit anonymously</span>
+                <span className="font-medium">{t('complaint.anonymous')}</span>
               </span>
             </label>
             <p className="mt-1 ml-9 text-xs text-slate-400">
-              Your identity will not be shown in the public complaint
+              {t('complaint.anonymousHint')}
             </p>
           </div>
 
           {/* Media Upload */}
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-5">
             <label className="block text-sm font-semibold text-slate-700 mb-3">
-              Photos (1-5, max 10MB each) <span className="text-red-500">*</span>
+              {t('complaint.photosLabel')} <span className="text-red-500">*</span>
             </label>
 
             <input
@@ -1317,7 +1272,7 @@ export default function NewComplaintPage() {
               className="flex items-center gap-2"
             >
               <Upload className="w-4 h-4" />
-              {media.length >= 5 ? "Maximum reached" : "Add Photos/Videos"}
+              {media.length >= 5 ? t('complaint.maxReached') : t('complaint.addPhotos')}
             </Button>
 
             {media.length > 0 && (
@@ -1355,7 +1310,7 @@ export default function NewComplaintPage() {
             )}
 
             <p className="text-xs text-slate-400 mt-3">
-              📷 {media.length}/5 photos added - Click to preview
+              📷 {t('complaint.photosCounter', { n: media.length })}
             </p>
           </div>
 
@@ -1384,7 +1339,7 @@ export default function NewComplaintPage() {
             <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <span className="font-semibold text-amber-800">Possible Duplicate Detected</span>
+                <span className="font-semibold text-amber-800">{t('complaint.duplicateModal.title')}</span>
                 <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-semibold ${
                   duplicateWarning.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'bg-orange-200 text-orange-700' : 'bg-yellow-200 text-yellow-700'
                 }`}>
@@ -1415,14 +1370,14 @@ export default function NewComplaintPage() {
                   onClick={() => { setDuplicateWarning(null); }}
                   className="flex-1 px-4 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors"
                 >
-                  Cancel
+                  {t('complaint.duplicateModal.cancel')}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setDuplicateOverride(true); setDuplicateWarning(null); }}
                   className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
                 >
-                  Submit Anyway
+                  {t('complaint.duplicateModal.submitAnyway')}
                 </button>
               </div>
             </div>
@@ -1432,7 +1387,7 @@ export default function NewComplaintPage() {
           {duplicateChecking && (
             <div className="flex items-center gap-2 p-3 bg-violet-50 rounded-xl border border-violet-200">
               <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
-              <span className="text-sm text-violet-700">Checking for similar complaints...</span>
+              <span className="text-sm text-violet-700">{t('complaint.checkingDuplicates')}</span>
             </div>
           )}
 
@@ -1440,7 +1395,7 @@ export default function NewComplaintPage() {
           <div className="flex gap-4 pt-4">
             <Link href="/dashboard" className="flex-1">
               <Button type="button" variant="outline" size="lg" fullWidth>
-                Cancel
+                {t('complaint.duplicateModal.cancel')}
               </Button>
             </Link>
             <Button
@@ -1452,11 +1407,11 @@ export default function NewComplaintPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Submitting...
+                  {t('complaint.submitting')}
                 </>
               ) : (
                 <>
-                  Submit Complaint
+                  {t('complaint.submitBtn')}
                 </>
               )}
             </Button>

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/screens/login_screen.dart';
 import 'package:smart_city_app/screens/home_screen.dart';
-import 'package:smart_city_app/services/api_client.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
+import 'package:smart_city_app/providers/theme_provider.dart';
 
 // Theme colors matching web (Civic Green)
 class AppColors {
@@ -32,14 +33,17 @@ void main() {
   runApp(const ProviderScope(child: SmartCityApp()));
 }
 
-class SmartCityApp extends StatelessWidget {
+class SmartCityApp extends ConsumerWidget {
   const SmartCityApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+
     return MaterialApp(
       title: 'Smart City Tunisia',
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primary,
@@ -76,76 +80,82 @@ class SmartCityApp extends StatelessWidget {
           ),
         ),
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.primary,
+          brightness: Brightness.dark,
+          primary: AppColors.primaryLight,
+          error: AppColors.urgent,
+        ),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF0A1628),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF112240),
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        cardTheme: const CardThemeData(
+          color: Color(0xFF112240),
+          elevation: 2,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryLight,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.primaryLight, width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xFF112240),
+          indicatorColor: AppColors.primaryLight.withAlpha(40),
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: Color(0xFF112240),
+        ),
+      ),
       home: const AuthWrapper(),
     );
   }
 }
 
-// Auth wrapper to check login status
-class AuthWrapper extends StatefulWidget {
+// Auth wrapper using Riverpod authProvider
+class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
   @override
-  State<AuthWrapper> createState() => _AuthWrapperState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
 
-class _AuthWrapperState extends State<AuthWrapper> {
-  final ApiClient _apiClient = ApiClient();
-  bool _isLoading = true;
-  bool _isAuthenticated = false;
-  Map<String, dynamic>? _userData;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAuthStatus();
-  }
-
-  Future<void> _checkAuthStatus() async {
-    await _apiClient.loadTokens();
-    if (_apiClient.isAuthenticated) {
-      try {
-        final res = await _apiClient.get('/auth/me');
-        _userData = res['data'] ?? res['user'] ?? res;
-      } catch (_) {
-        _apiClient.clearTokens();
-      }
-    }
-    setState(() {
-      _isAuthenticated = _apiClient.isAuthenticated && _userData != null;
-      _isLoading = false;
-    });
-  }
-
-  void _onLoginSuccess(Map<String, dynamic>? user) {
-    setState(() {
-      _userData = user;
-      _isAuthenticated = true;
-    });
-  }
-
-  void _onLogout() {
-    _apiClient.clearTokens();
-    setState(() {
-      _isAuthenticated = false;
-      _userData = null;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (authState.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_isAuthenticated) {
+    if (authState.isAuthenticated && authState.user != null) {
       return HomeScreen(
-        onLogout: _onLogout,
-        userRole: _userData?['role'] ?? 'CITIZEN',
-        userName: _userData?['fullName'] ?? '',
+        onLogout: () => ref.read(authProvider.notifier).logout(),
+        userRole: authState.user!.role,
+        userName: authState.user!.fullName,
       );
     }
 
-    return LoginScreen(onLoginSuccess: _onLoginSuccess);
+    return LoginScreen(
+      onLoginSuccess: (_) {
+        // Auth state is managed by Riverpod — no manual setState needed
+      },
+    );
   }
 }

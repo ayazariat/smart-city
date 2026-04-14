@@ -24,23 +24,15 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { Button } from "@/components/ui";
 import { useLastVisitedPage } from "@/hooks/useLastVisitedPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
-
-// Status labels
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED: { label: "SUBMITTED", bgClass: "bg-yellow-100", textClass: "text-yellow-800" },
-  VALIDATED: { label: "VALIDATED", bgClass: "bg-blue-100", textClass: "text-blue-800" },
-  ASSIGNED: { label: "ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
-  IN_PROGRESS: { label: "IN PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
-  RESOLVED: { label: "RESOLVED", bgClass: "bg-green-100", textClass: "text-green-800" },
-  CLOSED: { label: "CLOSED", bgClass: "bg-gray-100", textClass: "text-gray-800" },
-  REJECTED: { label: "REJECTED", bgClass: "bg-red-100", textClass: "text-red-800" },
-};
+import { categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { useTranslation } from "react-i18next";
 
 export default function MyComplaintDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user, token, hydrated } = useAuthStore();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || "en";
   const complaintId = params.id as string;
   const { isHydrated, saveLastPage, getLastPage } = useLastVisitedPage();
 
@@ -105,16 +97,16 @@ export default function MyComplaintDetailPage() {
         if (response.complaint) {
           setComplaint(response.complaint);
         } else {
-          setError("Complaint not found");
+          setError(t("complaintDetail.errorNotFound"));
         }
       } catch (err: unknown) {
         const apiError = err as { response?: { status?: number; data?: { message?: string } } };
         if (apiError.response?.status === 403) {
-          setError(apiError.response.data?.message || "Access denied. You can only view your own complaints.");
+          setError(apiError.response.data?.message || t("complaintDetail.errorOwnOnly"));
         } else if (apiError.response?.status === 404) {
-          setError("Complaint not found");
+          setError(t("complaintDetail.errorNotFound"));
         } else {
-          setError("Error loading complaint");
+          setError(t("complaintDetail.errorLoading"));
         }
       } finally {
         setLoading(false);
@@ -124,7 +116,7 @@ export default function MyComplaintDetailPage() {
     if (complaintId && token) {
       fetchComplaintDetail();
     }
-  }, [complaintId, token]);
+  }, [complaintId, token, t]);
 
   // Update edit data when complaint loads
   useEffect(() => {
@@ -173,8 +165,8 @@ export default function MyComplaintDetailPage() {
         setComplaint(response.complaint);
         setIsEditing(false);
       }
-    } catch (err: unknown) {
-      setError("Failed to update complaint. Please try again.");
+    } catch {
+      setError(t("complaintDetail.errorUpdate"));
     } finally {
       setIsSaving(false);
     }
@@ -187,8 +179,8 @@ export default function MyComplaintDetailPage() {
     try {
       await complaintService.deleteComplaint(complaintId);
       router.push("/my-complaints");
-    } catch (err: unknown) {
-      setError("Failed to delete complaint. Please try again.");
+    } catch {
+      setError(t("complaintDetail.errorDelete"));
       setDeleteConfirm(false);
     } finally {
       setIsDeleting(false);
@@ -204,15 +196,11 @@ export default function MyComplaintDetailPage() {
       if (response.success) {
         setComplaint(response.data);
       }
-    } catch (err: unknown) {
-      setError("Failed to confirm resolution. Please try again.");
+    } catch {
+      setError(t("complaintDetail.errorConfirm"));
     } finally {
       setConfirmLoading(false);
     }
-  };
-
-  const getComplaintIdDisplay = (id: string) => {
-    return `RC-${id.slice(-6)}`;
   };
 
   const hasLocation = complaint && (
@@ -294,9 +282,9 @@ export default function MyComplaintDetailPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Confirm Delete</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("complaintDetail.confirmDeleteTitle")}</h3>
             <p className="text-gray-600 mb-4">
-              Are you sure you want to delete this complaint? This action cannot be undone.
+              {t("complaintDetail.confirmDeleteBody")}
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -304,14 +292,14 @@ export default function MyComplaintDetailPage() {
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                 disabled={isDeleting}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? "Deleting..." : "Delete"}
+                {isDeleting ? t("complaintDetail.deleting") : t("common.delete")}
               </button>
             </div>
           </div>
@@ -353,10 +341,10 @@ export default function MyComplaintDetailPage() {
               <div className="h-6 w-px bg-slate-200" aria-hidden="true"></div>
               <div>
                 <h1 className="text-xl font-bold text-slate-800">
-                  {complaint.title || `Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
+                  {complaint.title || `${t("complaintDetail.complaint")} ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
                 </h1>
                 {complaint.department && (
-                  <p className="text-xs text-slate-500">Assigned to: {complaint.department.name}</p>
+                  <p className="text-xs text-slate-500">{t("complaintDetail.assignedTo")}: {complaint.department.name}</p>
                 )}
               </div>
             </div>
@@ -381,7 +369,7 @@ export default function MyComplaintDetailPage() {
                     title="Edit complaint"
                   >
                     <Pencil className="w-4 h-4" />
-                    Edit
+                    {t("complaintDetail.edit")}
                   </button>
                   <button
                     onClick={() => setDeleteConfirm(true)}
@@ -404,7 +392,7 @@ export default function MyComplaintDetailPage() {
                   ) : (
                     <CheckCircle2 className="w-4 h-4" />
                   )}
-                  Confirm Resolution
+                  {t("complaintDetail.confirmResolution")}
                 </button>
               )}
               {isEditing && (
@@ -439,19 +427,19 @@ export default function MyComplaintDetailPage() {
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="basic-info-title">
               <h2 id="basic-info-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
-                Main Information
+                {t("complaintDetail.mainInformation")}
               </h2>
               
               {/* Title */}
               <div className="bg-slate-50 rounded-xl p-4 mb-4">
-                <label className="block text-sm font-medium text-slate-500 mb-2">Title</label>
+                <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.title")}</label>
                 {isEditing ? (
                   <input
                     type="text"
                     value={editData.title}
                     onChange={(e) => setEditData({ ...editData, title: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
-                    placeholder="Complaint title"
+                    placeholder={t("complaintDetail.titlePlaceholder")}
                   />
                 ) : (
                   <span className="text-lg font-semibold text-slate-900">{complaint.title}</span>
@@ -460,20 +448,20 @@ export default function MyComplaintDetailPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-2">Category</label>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   {isEditing ? (
                     <select
                       value={editData.category}
                       onChange={(e) => setEditData({ ...editData, category: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                     >
-                      <option value="ROAD">Roads & Infrastructure</option>
-                      <option value="LIGHTING">Public Lighting</option>
-                      <option value="WASTE">Waste Management</option>
-                      <option value="WATER">Water & Sanitation</option>
-                      <option value="SAFETY">Public Equipment</option>
-                      <option value="PUBLIC_PROPERTY">Urban Planning</option>
-                      <option value="OTHER">Other</option>
+                      <option value="ROAD">{categoryLabels.ROAD}</option>
+                      <option value="LIGHTING">{categoryLabels.LIGHTING}</option>
+                      <option value="WASTE">{categoryLabels.WASTE}</option>
+                      <option value="WATER">{categoryLabels.WATER}</option>
+                      <option value="SAFETY">{categoryLabels.SAFETY}</option>
+                      <option value="PUBLIC_PROPERTY">{categoryLabels.PUBLIC_PROPERTY}</option>
+                      <option value="OTHER">{categoryLabels.OTHER}</option>
                     </select>
                   ) : (
                     <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
@@ -482,37 +470,37 @@ export default function MyComplaintDetailPage() {
                   )}
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-2">Priority</label>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.priority")}</label>
                   {isEditing ? (
                     <select
                       value={editData.urgency}
                       onChange={(e) => setEditData({ ...editData, urgency: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                     >
-                      <option value="LOW">Low</option>
-                      <option value="MEDIUM">Medium</option>
-                      <option value="HIGH">High</option>
-                      <option value="URGENT">Urgent</option>
+                      <option value="LOW">{t("complaintDetail.low")}</option>
+                      <option value="MEDIUM">{t("complaintDetail.medium")}</option>
+                      <option value="HIGH">{t("complaintDetail.high")}</option>
+                      <option value="URGENT">{t("complaintDetail.urgent")}</option>
                     </select>
                   ) : (
                     <span className="text-lg font-semibold text-orange-600">
-                      {complaint.urgency || "Medium"}
+                      {complaint.urgency || t("complaintDetail.medium")}
                     </span>
                   )}
                 </div>
               </div>
               <div className="mt-4 bg-slate-50 rounded-xl p-4">
-                <label className="block text-sm font-medium text-slate-500 mb-2">Phone</label>
+                <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.phone")}</label>
                 {isEditing ? (
                   <input
                     type="tel"
                     value={editData.phone}
                     onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                    placeholder="Contact phone number"
+                    placeholder={t("complaintDetail.phonePlaceholder")}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                   />
                 ) : (
-                  <span className="text-slate-700">{complaint.phone || "Not provided"}</span>
+                  <span className="text-slate-700">{complaint.phone || t("complaintDetail.notProvided")}</span>
                 )}
               </div>
             </section>
@@ -521,7 +509,7 @@ export default function MyComplaintDetailPage() {
             <section className="bg-gradient-to-r from-primary/5 to-secondary-50 rounded-2xl shadow-lg p-6 border border-primary/10">
               <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
-                Status Timeline
+                {t("complaintDetail.statusTimeline")}
               </h2>
               <div className="flex items-center justify-between relative">
                 <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-200 rounded-full -translate-y-1/2"></div>
@@ -534,31 +522,31 @@ export default function MyComplaintDetailPage() {
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${complaint.status !== 'SUBMITTED' && complaint.status !== 'REJECTED' ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Submitted</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.submitted")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${complaint.status !== 'SUBMITTED' && complaint.status !== 'REJECTED' ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Validated</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.validated")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(complaint.status) ? 'bg-purple-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Assigned</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.assigned")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(complaint.status) ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <Clock className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">In Progress</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.inProgress")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['RESOLVED', 'CLOSED'].includes(complaint.status) ? 'bg-green-600 text-white' : complaint.status === 'REJECTED' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     {complaint.status === 'REJECTED' ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">{complaint.status === 'REJECTED' ? 'Rejected' : 'Resolved'}</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{complaint.status === 'REJECTED' ? t("complaintDetail.rejected") : t("complaintDetail.resolved")}</span>
                 </div>
               </div>
             </section>
@@ -568,7 +556,7 @@ export default function MyComplaintDetailPage() {
               <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="history-title">
                 <h2 id="history-title" className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Clock className="w-5 h-5 text-primary" />
-                  History
+                  {t("complaintDetail.history")}
                 </h2>
                 <div className="space-y-4">
                   {complaint.statusHistory.map((entry, idx) => (
@@ -605,7 +593,7 @@ export default function MyComplaintDetailPage() {
 
             {/* Description */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">
-              <h2 id="description-title" className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
+              <h2 id="description-title" className="text-lg font-semibold text-gray-900 mb-4">{t("complaintDetail.description")}</h2>
               {isEditing ? (
                 <textarea
                   value={editData.description}
@@ -631,7 +619,7 @@ export default function MyComplaintDetailPage() {
                               <Phone className="w-5 h-5 text-primary" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Phone</p>
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("complaintDetail.contactPhone")}</p>
                               <p className="text-lg font-bold text-primary">{contactPhone}</p>
                             </div>
                           </div>
@@ -645,12 +633,12 @@ export default function MyComplaintDetailPage() {
 
             {/* Location */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="location-title">
-              <h2 id="location-title" className="text-lg font-semibold text-gray-900 mb-4">Location</h2>
+              <h2 id="location-title" className="text-lg font-semibold text-gray-900 mb-4">{t("complaintDetail.location")}</h2>
               {!hasLocation ? (
                 <div className="h-64 bg-red-50 rounded-lg flex items-center justify-center border-2 border-red-200 border-dashed">
                   <div className="text-center">
                     <MapPin className="w-12 h-12 mx-auto mb-2 text-red-400" />
-                    <p className="text-red-600 font-medium">Location not provided</p>
+                    <p className="text-red-600 font-medium">{t("complaintDetail.locationNotProvided")}</p>
                     {complaint.location?.address && <p className="text-sm text-gray-600">{complaint.location.address}</p>}
                   </div>
                 </div>
@@ -703,7 +691,7 @@ export default function MyComplaintDetailPage() {
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
                   </svg>
-                  Open in Google Maps
+                  {t("complaintDetail.openInGoogleMaps")}
                 </a>
               )}
             </section>
@@ -711,11 +699,11 @@ export default function MyComplaintDetailPage() {
             {/* Media */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="media-title">
               <h2 id="media-title" className="text-lg font-semibold text-gray-900 mb-4">
-                Photos ({complaint.media?.length || 0})
+                {t("complaintDetail.photos")} ({complaint.media?.length || 0})
               </h2>
               {!complaint.media || complaint.media.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                  <p>No photos provided</p>
+                  <p>{t("complaintDetail.noPhotos")}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -759,6 +747,7 @@ export default function MyComplaintDetailPage() {
               >
                 <img
                   src={fullscreenPhoto}
+                  alt=""
                   style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8 }}
                   onClick={e => e.stopPropagation()}
                 />
@@ -773,7 +762,7 @@ export default function MyComplaintDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
                 <h2 id="department-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-primary" />
-                  Department
+                  {t("complaintDetail.department")}
                 </h2>
                 <p className="font-semibold text-slate-900">{complaint.department.name}</p>
               </section>
@@ -783,13 +772,13 @@ export default function MyComplaintDetailPage() {
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="dates-title">
               <h2 id="dates-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-primary" />
-                Dates
+                {t("complaintDetail.dates")}
               </h2>
               <dl className="space-y-3 text-sm">
                 <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                  <dt className="text-slate-500">Created:</dt>
+                  <dt className="text-slate-500">{t("complaintDetail.created")}:</dt>
                   <dd className="text-slate-900 font-medium">
-                    {new Date(complaint.createdAt).toLocaleDateString("en-US", {
+                    {new Date(complaint.createdAt).toLocaleDateString(locale, {
                       day: "numeric",
                       month: "long",
                       year: "numeric",
@@ -798,9 +787,9 @@ export default function MyComplaintDetailPage() {
                 </div>
                 {complaint.updatedAt && complaint.updatedAt !== complaint.createdAt && (
                   <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                    <dt className="text-slate-500">Modified:</dt>
+                    <dt className="text-slate-500">{t("complaintDetail.updated")}:</dt>
                     <dd className="text-slate-900 font-medium">
-                      {new Date(complaint.updatedAt).toLocaleDateString("en-US", {
+                      {new Date(complaint.updatedAt).toLocaleDateString(locale, {
                         day: "numeric",
                         month: "long",
                         year: "numeric",
@@ -816,7 +805,7 @@ export default function MyComplaintDetailPage() {
               <section className="bg-red-50 rounded-2xl shadow-lg p-6 border border-red-200" aria-labelledby="rejection-title">
                 <h2 id="rejection-title" className="text-lg font-semibold text-red-900 mb-2 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5" />
-                  Rejection Reason
+                  {t("complaintDetail.rejectionReason")}
                 </h2>
                 <p className="text-red-800">{complaint.rejectionReason}</p>
               </section>

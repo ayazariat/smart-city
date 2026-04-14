@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/main.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
@@ -14,7 +15,7 @@ class ComplaintsScreen extends StatefulWidget {
 }
 
 class _ComplaintsScreenState extends State<ComplaintsScreen> {
-  final ApiClient _apiClient = ApiClient();
+  final ComplaintService _complaintService = ComplaintService();
   List<dynamic> _complaints = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -32,9 +33,9 @@ class _ComplaintsScreenState extends State<ComplaintsScreen> {
     });
 
     try {
-      final response = await _apiClient.get('/complaints/my-complaints');
+      final complaints = await _complaintService.getMyComplaints();
       setState(() {
-        _complaints = response as List<dynamic>;
+        _complaints = complaints;
         _isLoading = false;
       });
     } on ApiException catch (e) {

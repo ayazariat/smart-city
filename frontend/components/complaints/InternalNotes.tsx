@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type NoteType = "NOTE" | "BLOCAGE" | "PUBLIC";
 
@@ -22,6 +23,7 @@ interface InternalNotesProps {
 
 const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, onAdd }) => {
   const [noteText, setNoteText] = useState("");
+  const { t } = useTranslation();
 
   const add = (type: NoteType) => {
     if (!noteText.trim()) return;
@@ -52,7 +54,7 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
         leftBorderColor: "border-l-orange-500",
         badgeBg: "bg-orange-500",
         badgeColor: "text-white",
-        label: "Blocker"
+        label: t("notes.blocker")
       };
     }
     if (type === "PUBLIC") {
@@ -62,7 +64,7 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
         leftBorderColor: "border-l-blue-500",
         badgeBg: "bg-blue-500",
         badgeColor: "text-white",
-        label: "Sent to Citizen"
+        label: t("notes.sentToCitizen")
       };
     }
     return {
@@ -71,7 +73,7 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
       leftBorderColor: "border-l-slate-400",
       badgeBg: "bg-slate-400",
       badgeColor: "text-white",
-      label: "Internal Note"
+      label: t("notes.internalNote")
     };
   };
 
@@ -114,14 +116,14 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
         <div className="mt-4 space-y-3">
           <textarea
             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-            placeholder="Add an internal note (only visible to staff)..."
+            placeholder={t("notes.placeholder")}
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
             rows={3}
             maxLength={500}
           />
           <p className="text-xs text-slate-500">
-            Private - visible to agents, managers, and admins only. Max 500 characters.
+            {t("notes.helperText")}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -129,14 +131,14 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
               disabled={!noteText.trim()}
               className="px-3 py-1.5 bg-slate-600 text-white text-xs font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Add Internal Note
+              {t("notes.addNote")}
             </button>
             <button
               onClick={() => add("PUBLIC")}
               disabled={!noteText.trim()}
               className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              Send to Citizen
+              {t("notes.sendToCitizen")}
             </button>
             {["TECHNICIAN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN"].includes(userRole) && (
               <button
@@ -144,7 +146,7 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
                 disabled={!noteText.trim()}
                 className="px-3 py-1.5 bg-orange-600 text-white text-xs font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Report Blocker
+                {t("notes.reportBlocker")}
               </button>
             )}
           </div>

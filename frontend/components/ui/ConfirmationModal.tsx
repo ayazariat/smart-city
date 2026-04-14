@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -22,13 +23,16 @@ export function ConfirmationModal({
   onConfirm,
   title,
   message,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
+  confirmText,
+  cancelText,
   variant = "danger",
   isLoading = false,
   requireReason = false,
   reasonPlaceholder = "Enter reason...",
 }: ConfirmationModalProps) {
+  const { t } = useTranslation();
+  const resolvedConfirmText = confirmText || t('common.confirm');
+  const resolvedCancelText = cancelText || t('common.cancel');
   if (!isOpen) return null;
 
   const styles = {
@@ -82,7 +86,7 @@ export function ConfirmationModal({
             disabled={isLoading}
             className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
           >
-            {cancelText}
+            {resolvedCancelText}
           </button>
           <button
             onClick={onConfirm}
@@ -92,12 +96,12 @@ export function ConfirmationModal({
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Processing...
+                {t('common.processing')}
               </>
             ) : (
               <>
                 <CheckCircle className="w-4 h-4" />
-                {confirmText}
+                {resolvedConfirmText}
               </>
             )}
           </button>

@@ -12,8 +12,10 @@ import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
 import { clearClientAuthTokens } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 function LoginForm() {
+  const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const activatedParam = useMemo(
@@ -27,7 +29,7 @@ function LoginForm() {
   });
   const [localError, setLocalError] = useState("");
   const [successMessage, setSuccessMessage] = useState(() =>
-    activatedParam ? "Account activated! You can now login." : ""
+    activatedParam ? t('login.activated') : ""
   );
 
   useEffect(() => {
@@ -66,7 +68,7 @@ function LoginForm() {
     if (recaptchaEnabled) {
       const freshToken = await refreshRecaptchaToken();
       if (!freshToken) {
-        setLocalError("Failed to complete security check. Please refresh and try again.");
+        setLocalError(t('login.captchaFailed'));
         return;
       }
       captchaToken = freshToken;
@@ -81,7 +83,7 @@ function LoginForm() {
       const redirectTo = searchParams.get('redirect') || '/dashboard';
       router.replace(redirectTo);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Login failed");
+      setLocalError(err instanceof Error ? err.message : t('login.loginFailed'));
     }
   };
 
@@ -99,10 +101,10 @@ function LoginForm() {
               </div>
             </Link>
             <h1 className="text-3xl font-bold text-slate-900 mb-2 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-primary-900">
-              Smart City Tunisia
+              {t('login.title')}
             </h1>
             <p className="text-slate-600">
-              Sign in to manage city services
+              {t('login.subtitle')}
             </p>
             <div className="mt-3">
               <Link 
@@ -110,7 +112,7 @@ function LoginForm() {
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-green-50/80 text-green-700 border border-green-200/60 hover:bg-green-100 transition-colors text-sm font-medium shadow-sm"
               >
                 <BarChart3 className="w-4 h-4" />
-                View Public Statistics
+                {t('login.publicStats')}
               </Link>
             </div>
           </div>
@@ -136,12 +138,12 @@ function LoginForm() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="animate-slideInLeft delay-300">
                 <Input
-                  label="Email"
+                  label={t('login.email')}
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="your@email.com"
+                  placeholder={t('login.emailPlaceholder')}
                   icon={<Mail size={18} />}
                   required
                 />
@@ -149,12 +151,12 @@ function LoginForm() {
 
               <div className="animate-slideInLeft delay-400">
                 <Input
-                  label="Password"
+                  label={t('login.password')}
                   type="password"
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="Enter your password"
+                  placeholder={t('login.passwordPlaceholder')}
                   icon={<Lock size={18} />}
                   required
                 />
@@ -167,14 +169,14 @@ function LoginForm() {
                     className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary focus:ring-offset-0 transition-all duration-200 cursor-pointer"
                   />
                   <span className="text-slate-600 group-hover:text-slate-900 transition-colors">
-                    Remember me
+                    {t('login.rememberMe')}
                   </span>
                 </label>
                 <a 
                   href="/forgot-password" 
                   className="text-primary hover:text-primary-700 font-medium transition-all duration-200 hover:underline"
                 >
-                  Forgot password?
+                  {t('login.forgotPassword')}
                 </a>
               </div>
 
@@ -186,7 +188,7 @@ function LoginForm() {
                   size="lg"
                   className="group"
                 >
-                  Sign In
+                  {t('login.signIn')}
                 </Button>
               </div>
 
@@ -197,12 +199,12 @@ function LoginForm() {
 
             <div className="mt-6 pt-6 border-t border-slate-100 animate-fadeIn delay-500">
               <p className="text-center text-sm text-slate-600">
-                Don&apos;t have an account?{" "}
+                {t('login.noAccount')}{" "}
                 <Link 
                   href="/register" 
                   className="text-primary hover:text-primary-700 font-semibold transition-all duration-200 hover:underline"
                 >
-                  Create account
+                  {t('login.createAccount')}
                 </Link>
               </p>
             </div>

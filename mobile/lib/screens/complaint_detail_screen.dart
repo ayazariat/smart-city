@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/main.dart';
 
-class ComplaintDetailScreen extends StatefulWidget {
+class ComplaintDetailScreen extends ConsumerStatefulWidget {
   final String complaintId;
 
   const ComplaintDetailScreen({super.key, required this.complaintId});
 
   @override
-  State<ComplaintDetailScreen> createState() => _ComplaintDetailScreenState();
+  ConsumerState<ComplaintDetailScreen> createState() =>
+      _ComplaintDetailScreenState();
 }
 
-class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
+class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   final ComplaintService _complaintService = ComplaintService();
-  final ApiClient _apiClient = ApiClient();
 
   Map<String, dynamic>? _complaint;
-  Map<String, dynamic>? _currentUser;
   bool _isLoading = true;
   String? _error;
 
@@ -29,14 +30,11 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
   Future<void> _loadData() async {
     try {
-      final results = await Future.wait([
-        _complaintService.getComplaintById(widget.complaintId),
-        _apiClient.get('/auth/me'),
-      ]);
+      final complaint = await _complaintService.getComplaintById(
+        widget.complaintId,
+      );
       setState(() {
-        _complaint = results[0] as Map<String, dynamic>;
-        final meRes = results[1] as Map<String, dynamic>;
-        _currentUser = meRes['data'] ?? meRes;
+        _complaint = complaint;
         _isLoading = false;
       });
     } catch (e) {
@@ -48,7 +46,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   }
 
   String get _baseUrl => ApiClient.baseUrl.replaceAll('/api', '');
-  String get _userRole => _currentUser?['role'] ?? '';
+  String get _userRole => ref.read(authProvider).user?.role ?? '';
   String get _status => _complaint?['status'] ?? '';
 
   Color _getStatusColor(String status) {

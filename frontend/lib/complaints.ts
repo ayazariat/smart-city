@@ -3,16 +3,15 @@
  * Single source of truth used across all complaint-related pages.
  */
 
-export const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED:   { label: "SUBMITTED",   bgClass: "bg-yellow-100", textClass: "text-yellow-800" },
-  VALIDATED:   { label: "VALIDATED",   bgClass: "bg-blue-100",   textClass: "text-blue-800"   },
-  ASSIGNED:    { label: "ASSIGNED",    bgClass: "bg-purple-100", textClass: "text-purple-800" },
-  IN_PROGRESS: { label: "IN PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
-  RESOLVED:    { label: "RESOLVED",    bgClass: "bg-green-100",  textClass: "text-green-800"  },
-  CLOSED:      { label: "CLOSED",      bgClass: "bg-gray-100",   textClass: "text-gray-700"   },
-  REJECTED:    { label: "REJECTED",    bgClass: "bg-red-100",    textClass: "text-red-800"    },
-  // Used when agent rejects technician's resolution - status stays IN_PROGRESS but shows special label
-  RESOLUTION_REJECTED: { label: "REWORK NEEDED", bgClass: "bg-red-100", textClass: "text-red-800" },
+export const statusConfig: Record<string, { label: string; bgClass: string; textClass: string; dotClass: string }> = {
+  SUBMITTED:   { label: "Submitted",   bgClass: "bg-amber-50",  textClass: "text-amber-700",  dotClass: "bg-amber-500"  },
+  VALIDATED:   { label: "Validated",   bgClass: "bg-blue-50",   textClass: "text-blue-700",   dotClass: "bg-blue-500"   },
+  ASSIGNED:    { label: "Assigned",    bgClass: "bg-purple-50", textClass: "text-purple-700", dotClass: "bg-purple-500" },
+  IN_PROGRESS: { label: "In Progress", bgClass: "bg-orange-50", textClass: "text-orange-700", dotClass: "bg-orange-500" },
+  RESOLVED:    { label: "Resolved",    bgClass: "bg-green-50",  textClass: "text-green-700",  dotClass: "bg-green-500"  },
+  CLOSED:      { label: "Closed",      bgClass: "bg-slate-100", textClass: "text-slate-600",  dotClass: "bg-slate-500"  },
+  REJECTED:    { label: "Rejected",    bgClass: "bg-red-50",    textClass: "text-red-700",    dotClass: "bg-red-500"    },
+  RESOLUTION_REJECTED: { label: "Rework Needed", bgClass: "bg-red-50", textClass: "text-red-700", dotClass: "bg-red-500" },
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {

@@ -12,6 +12,7 @@ import 'package:smart_city_app/screens/manager/manager_dashboard_screen.dart';
 import 'package:smart_city_app/screens/technician/technician_tasks_screen.dart';
 import 'package:smart_city_app/screens/admin/admin_users_screen.dart';
 import 'package:smart_city_app/providers/notifications_provider.dart';
+import 'package:smart_city_app/providers/theme_provider.dart';
 import 'package:smart_city_app/services/api_client.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -249,6 +250,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: Text(_getAppBarTitle()),
         centerTitle: true,
         actions: [
+          // Dark mode toggle
+          IconButton(
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            onPressed: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+            tooltip: 'Toggle Theme',
+          ),
           Stack(
             children: [
               IconButton(

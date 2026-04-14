@@ -48,14 +48,21 @@ import {
 } from "lucide-react";
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, ComposedChart, Line, CartesianGrid, XAxis, YAxis, Bar, Legend } from "recharts";
+import { useTranslation } from "react-i18next";
+import { apiClient } from "@/services/api.client";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
-const getPhotoUrl = (complaint: ComplaintItem): string | null => {
+const getPhotoUrl = (complaint: ComplaintItem, explicitUrl?: string): string | null => {
   const mediaItem = complaint.media?.[0];
-  if (!mediaItem) return null;
-  const url = typeof mediaItem === 'string' ? mediaItem : mediaItem.url;
+  const url = explicitUrl || (typeof mediaItem === 'string' ? mediaItem : mediaItem?.url);
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.startsWith('//')) return 'https:' + url;
+  if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const origin = apiUrl.replace(/\/api\/?$/, '');
+    return url.startsWith('/') ? `${origin}${url}` : `${origin}/${url}`;
+  }
   const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD;
   if (cloud && !url.includes('/')) {
     return `https://res.cloudinary.com/${cloud}/image/upload/${url}`;
@@ -203,6 +210,7 @@ const calculateSocialScore = (confirms: number, upvotes: number): number => {
 };
 
 export default function TransparencyPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { hydrated, token } = useAuthStore();
   const [stats, setStats] = useState<Stats | null>(null);
@@ -232,17 +240,18 @@ export default function TransparencyPage() {
   const overviewSectionIds = ["metrics", "resolutions", "leaderboard", "categories", "trends", "governorates"];
 
   const sidebarItems = [
-    { id: "metrics", label: "Overview", icon: Home, view: "overview" as const },
-    { id: "resolutions", label: "Recent Resolutions", icon: CheckCircle2, view: "overview" as const },
-    { id: "leaderboard", label: "Leaderboard", icon: Trophy, view: "overview" as const },
-    { id: "categories", label: "Category Performance", icon: BarChart, view: "overview" as const },
-    { id: "trends", label: "Monthly Trends", icon: Calendar, view: "overview" as const },
-    { id: "governorates", label: "Governorate Overview", icon: Globe, view: "overview" as const },
-    { id: "complaints", label: "All Complaints", icon: List, view: "complaints" as const },
-    { id: "municipalities", label: "Municipalities", icon: Building, view: "municipalities" as const },
+    { id: "metrics", label: t('transparency.overview'), icon: Home, view: "overview" as const },
+    { id: "resolutions", label: t('transparency.recentResolutions'), icon: CheckCircle2, view: "overview" as const },
+    { id: "leaderboard", label: t('transparency.leaderboard'), icon: Trophy, view: "overview" as const },
+    { id: "categories", label: t('transparency.categoryPerformance'), icon: BarChart, view: "overview" as const },
+    { id: "trends", label: t('transparency.monthlyTrends'), icon: Calendar, view: "overview" as const },
+    { id: "governorates", label: t('transparency.governorateOverview'), icon: Globe, view: "overview" as const },
+    { id: "complaints", label: t('transparency.allComplaints'), icon: List, view: "complaints" as const },
+    { id: "municipalities", label: t('transparency.municipalities'), icon: Building, view: "municipalities" as const },
   ];
 
   const [activeSection, setActiveSection] = useState("metrics");
+  const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
 
   // IntersectionObserver: highlight active sidebar item based on scroll (overview sections only)
   useEffect(() => {
@@ -411,20 +420,15 @@ export default function TransparencyPage() {
       return;
     }
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/public/complaints/${complaintId}/upvote`, {
-        method: "POST",
-        credentials: "include",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      });
-      const data = await response.json();
+      const data = await apiClient.post<{ success: boolean; upvoteCount?: number; voteCount?: number }>(
+        `/public/complaints/${complaintId}/upvote`,
+        {}
+      );
+      const nextVotes = data.upvoteCount ?? data.voteCount ?? 0;
       if (data.success) {
         setComplaints(prev => prev.map(c => 
           c._id === complaintId 
-            ? { ...c, upvoteCount: data.voteCount, socialScore: calculateSocialScore(c.confirmationCount, data.voteCount) }
+            ? { ...c, upvoteCount: nextVotes, socialScore: calculateSocialScore(c.confirmationCount, nextVotes) }
             : c
         ));
       }
@@ -445,7 +449,7 @@ export default function TransparencyPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-slate-50">
         <div className="text-center">
           <Loader2 className="w-16 h-16 animate-spin text-green-600 mx-auto mb-4" />
-          <p className="text-slate-500 text-lg">Loading dashboard...</p>
+          <p className="text-slate-500 text-lg">{t('transparency.loadingDashboard')}</p>
         </div>
       </div>
     );
@@ -462,7 +466,7 @@ export default function TransparencyPage() {
               <button
                 onClick={() => setSidebarOpen(true)}
                 className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors md:hidden"
-                title="Menu"
+                title={t('transparency.header.menu')}
               >
                 <Menu className="w-5 h-5 text-slate-600" />
               </button>
@@ -472,8 +476,8 @@ export default function TransparencyPage() {
                 </div>
               </div>
               <div className="hidden sm:block">
-                <h1 className="text-lg font-bold text-slate-800 leading-tight">Smart City Tunisia</h1>
-                <p className="text-xs text-slate-500">Public Transparency Dashboard</p>
+                <h1 className="text-lg font-bold text-slate-800 leading-tight">{t('transparency.header.smartCity')}</h1>
+                <p className="text-xs text-slate-500">{t('transparency.title')}</p>
               </div>
             </div>
 
@@ -484,7 +488,7 @@ export default function TransparencyPage() {
                 <input
                   ref={searchInputRef}
                   type="text"
-                  placeholder="Search..."
+                  placeholder={t('transparency.header.search')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
@@ -501,10 +505,11 @@ export default function TransparencyPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
+              <ThemeToggle />
               <button
                 onClick={() => setShowHelp(true)}
                 className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
-                title="Help"
+                title={t('transparency.header.help')}
               >
                 <HelpCircle className="w-4 h-4 text-slate-600" />
               </button>
@@ -515,10 +520,11 @@ export default function TransparencyPage() {
 
       {/* Sidebar */}
       <aside className={`
-        fixed left-0 top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl border-r border-slate-200 z-40
+        fixed top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl z-40
         transform transition-transform duration-300 ease-in-out shadow-xl md:shadow-sm
         md:translate-x-0 md:block
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isRTL ? 'right-0 border-l border-slate-200' : 'left-0 border-r border-slate-200'}
+        ${sidebarOpen ? 'translate-x-0' : isRTL ? 'translate-x-full' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
           {/* Sidebar Header / Branding */}
@@ -530,7 +536,7 @@ export default function TransparencyPage() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-800 leading-tight">Smart City</h2>
-                  <p className="text-[10px] text-slate-400 font-medium">Public Dashboard</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{t('transparency.publicDashboard')}</p>
                 </div>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5 hover:bg-slate-100 rounded-lg md:hidden">
@@ -541,7 +547,7 @@ export default function TransparencyPage() {
 
           {/* Sidebar navigation */}
           <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Navigation</p>
+            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{t('transparency.nav')}</p>
             {sidebarItems.map((item) => {
               const isActive = item.view === "overview"
                 ? activeView === "overview" && activeSection === item.id
@@ -582,7 +588,7 @@ export default function TransparencyPage() {
                 href="/dashboard"
                 className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
               >
-                My Dashboard
+                {t('transparency.myDashboard')}
               </Link>
             ) : (
               <>
@@ -590,13 +596,13 @@ export default function TransparencyPage() {
                   href="/login"
                   className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-medium hover:from-green-700 hover:to-emerald-700 transition-all shadow-md shadow-green-500/20"
                 >
-                  Login
+                  {t('transparency.login')}
                 </Link>
                 <Link 
                   href="/register"
                   className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm text-slate-500 hover:text-green-600 hover:bg-slate-50 rounded-xl transition-colors"
                 >
-                  Create Account
+                  {t('transparency.createAccount')}
                 </Link>
               </>
             )}
@@ -612,12 +618,12 @@ export default function TransparencyPage() {
         />
       )}
 
-      <main className="relative max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 ml-0 md:ml-[260px]">
+      <main className={`relative max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 ${isRTL ? 'mr-0 md:mr-[260px]' : 'ml-0 md:ml-[260px]'}`}>
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
               <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
-              <p className="text-slate-500">Loading dashboard...</p>
+              <p className="text-slate-500">{t('transparency.loadingDashboard')}</p>
             </div>
           </div>
         ) : (
@@ -635,10 +641,10 @@ export default function TransparencyPage() {
                     {/* Left column (60%) */}
                     <div className="md:col-span-3">
                       <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-3">
-                        See Something? Report It.
+                        {t('transparency.hero.title')}
                       </h2>
                       <p className="text-green-100 text-lg max-w-xl">
-                        Help us improve our city. Report infrastructure issues, road damage, waste problems, and more. Your reports make our communities safer and cleaner.
+                        {t('transparency.hero.subtitle')}
                       </p>
                       <div className="flex gap-3 mt-6">
                         <button 
@@ -646,28 +652,28 @@ export default function TransparencyPage() {
                           className="inline-flex items-center gap-2 px-6 py-3 bg-white text-green-700 font-semibold rounded-xl hover:bg-green-50 transition-all shadow-lg hover:shadow-xl"
                         >
                           <FileText className="w-5 h-5" />
-                          Report a Problem
+                          {t('transparency.hero.reportBtn')}
                         </button>
                         <button
                           onClick={() => setActiveView("complaints")}
                           className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all border border-white/30"
                         >
                           <Eye className="w-5 h-5" />
-                          Browse Reports
+                          {t('transparency.hero.browseBtn')}
                         </button>
                       </div>
                     </div>
                     {/* Right column (40%) — All-time stats card */}
                     <div className="md:col-span-2">
                       <div className="bg-white/95 backdrop-blur rounded-2xl p-5 shadow-xl space-y-3">
-                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">All-Time Stats</p>
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{t('transparency.hero.allTimeStats')}</p>
                         <div className="flex items-center gap-4 p-3 bg-blue-50 rounded-xl">
                           <div className="w-11 h-11 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                             <FileText className="w-5 h-5 text-blue-600" />
                           </div>
                           <div>
                             <p className="text-2xl font-extrabold text-slate-800">{allTimeStats?.total ?? '---'}</p>
-                            <p className="text-xs text-slate-500">Total Reports</p>
+                            <p className="text-xs text-slate-500">{t('transparency.hero.totalReports')}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4 p-3 bg-green-50 rounded-xl">
@@ -676,7 +682,7 @@ export default function TransparencyPage() {
                           </div>
                           <div>
                             <p className="text-2xl font-extrabold text-slate-800">{allTimeStats?.resolved ?? '---'}</p>
-                            <p className="text-xs text-slate-500">Problems Fixed</p>
+                            <p className="text-xs text-slate-500">{t('transparency.hero.problemsFixed')}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4 p-3 bg-teal-50 rounded-xl">
@@ -685,7 +691,7 @@ export default function TransparencyPage() {
                           </div>
                           <div>
                             <p className="text-2xl font-extrabold text-slate-800">{allTimeStats?.slaComplianceRate ?? 0}%</p>
-                            <p className="text-xs text-slate-500">Resolved On Time</p>
+                            <p className="text-xs text-slate-500">{t('transparency.hero.resolvedOnTime')}</p>
                           </div>
                         </div>
                       </div>
@@ -699,14 +705,14 @@ export default function TransparencyPage() {
                     <div>
                       <h2 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-3">
                         <Activity className="w-6 sm:w-7 h-6 sm:h-7 text-green-600" />
-                        Live Performance Metrics
+                        {t('transparency.metrics.title')}
                       </h2>
-                      <p className="text-slate-500 mt-1 text-sm">Real-time municipal performance across Tunisia</p>
+                      <p className="text-slate-500 mt-1 text-sm">{t('transparency.metrics.subtitle')}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs sm:text-sm font-medium border border-green-200">
                         <Radio className="w-3 sm:w-4 h-3 sm:h-4 animate-pulse" />
-                        Live
+                        {t('transparency.metrics.live')}
                       </span>
                       <div className="flex gap-1">
                         {["today", "week", "month", "year"].map((p) => (
@@ -719,7 +725,7 @@ export default function TransparencyPage() {
                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                             }`}
                           >
-                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                            {t(`transparency.metrics.${p}`)}
                           </button>
                         ))}
                       </div>
@@ -729,11 +735,11 @@ export default function TransparencyPage() {
                   {stats && (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                       {[
-                        { label: "Total Reports", value: allTimeStats?.total ?? stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
-                        { label: "Problems Fixed", value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
-                        { label: "Being Fixed Now", value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
-                        { label: "Avg Fix Time", value: `${stats.avgResolutionDays}d`, icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
-                        { label: "Resolved On Time", value: `${stats.slaComplianceRate || 0}%`, icon: Shield, color: "bg-teal-100 text-teal-600", trend: stats.slaComplianceTrend }
+                        { label: t('transparency.metrics.totalReports'), value: allTimeStats?.total ?? stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
+                        { label: t('transparency.metrics.problemsFixed'), value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
+                        { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
+                        { label: t('transparency.metrics.avgFixTime'), value: `${stats.avgResolutionDays}d`, icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
+                        { label: t('transparency.metrics.resolvedOnTime'), value: `${stats.slaComplianceRate || 0}%`, icon: Shield, color: "bg-teal-100 text-teal-600", trend: stats.slaComplianceTrend }
                       ].map((stat, idx) => (
                         <div 
                           key={stat.label}
@@ -752,7 +758,7 @@ export default function TransparencyPage() {
                             <div className={`flex items-center gap-1 mt-2 text-xs ${stat.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {stat.trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                               <span className="font-medium">{stat.trend >= 0 ? '+' : ''}{stat.trend}%</span>
-                              <span className="text-slate-400">vs last</span>
+                              <span className="text-slate-400">{t('transparency.metrics.vsLast')}</span>
                             </div>
                           )}
                         </div>
@@ -765,7 +771,7 @@ export default function TransparencyPage() {
                     <div className="mt-8 pt-6 border-t border-slate-100">
                       <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                         <Target className="w-5 h-5 text-green-600" />
-                        Resolution Status
+                        {t('transparency.metrics.resolutionStatus')}
                       </h3>
                       <div className="flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12">
                         <div className="w-56 h-56 min-w-[224px] relative">
@@ -773,9 +779,9 @@ export default function TransparencyPage() {
                             <PieChart>
                               <Pie
                                 data={[
-                                  { name: 'Fixed', value: stats.resolved, color: '#22c55e' },
-                                  { name: 'Being Fixed', value: stats.inProgress, color: '#f59e0b' },
-                                  { name: 'Pending', value: stats.pending, color: '#3b82f6' }
+                                  { name: t('transparency.metrics.fixed'), value: stats.resolved, color: '#22c55e' },
+                                  { name: t('transparency.metrics.beingFixed'), value: stats.inProgress, color: '#f59e0b' },
+                                  { name: t('transparency.metrics.pending'), value: stats.pending, color: '#3b82f6' }
                                 ].filter(d => d.value > 0)}
                                 cx="50%"
                                 cy="50%"
@@ -785,9 +791,9 @@ export default function TransparencyPage() {
                                 dataKey="value"
                               >
                                 {[
-                                  { name: 'Fixed', value: stats.resolved, color: '#22c55e' },
-                                  { name: 'Being Fixed', value: stats.inProgress, color: '#f59e0b' },
-                                  { name: 'Pending', value: stats.pending, color: '#3b82f6' }
+                                  { name: t('transparency.metrics.fixed'), value: stats.resolved, color: '#22c55e' },
+                                  { name: t('transparency.metrics.beingFixed'), value: stats.inProgress, color: '#f59e0b' },
+                                  { name: t('transparency.metrics.pending'), value: stats.pending, color: '#3b82f6' }
                                 ].filter(d => d.value > 0).map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
@@ -798,16 +804,16 @@ export default function TransparencyPage() {
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div className="text-center">
                               <p className="text-2xl font-extrabold text-green-600">{stats.resolutionRate}%</p>
-                              <p className="text-[10px] text-slate-400 font-medium">Resolved</p>
+                              <p className="text-[10px] text-slate-400 font-medium">{t('common.resolved')}</p>
                             </div>
                           </div>
                         </div>
                         {/* Legend with counts */}
                         <div className="space-y-3">
                           {[
-                            { label: 'Fixed', value: stats.resolved, color: '#22c55e', bg: 'bg-green-100' },
-                            { label: 'Being Fixed', value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' },
-                            { label: 'Pending', value: stats.pending, color: '#3b82f6', bg: 'bg-blue-100' }
+                            { label: t('transparency.metrics.fixed'), value: stats.resolved, color: '#22c55e', bg: 'bg-green-100' },
+                            { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' },
+                            { label: t('transparency.metrics.pending'), value: stats.pending, color: '#3b82f6', bg: 'bg-blue-100' }
                           ].map((item) => (
                             <div key={item.label} className="flex items-center gap-3">
                               <div className={`w-4 h-4 rounded-full ${item.bg}`} style={{ backgroundColor: item.color }} />
@@ -817,7 +823,7 @@ export default function TransparencyPage() {
                           ))}
                           <div className="pt-3 border-t">
                             <p className="text-sm font-bold text-green-600">
-                              {stats.resolutionRate}% Resolution Rate
+                              {stats.resolutionRate}% {t('transparency.metrics.resolutionRate')}
                             </p>
                           </div>
                         </div>
@@ -832,20 +838,20 @@ export default function TransparencyPage() {
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                       <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      Recent Resolutions
+                      {t('transparency.resolutions.title')}
                     </h3>
                     <button
                       onClick={() => setActiveView("complaints")}
                       className="flex items-center gap-1 text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
                     >
-                      View All Complaints
+                      {t('transparency.resolutions.viewAll')}
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {complaints.filter(c => c.status === 'RESOLVED' || c.status === 'CLOSED').slice(0, 6).map((complaint) => {
-                      const photoUrl = complaint.proofPhotos?.[0]?.url || getPhotoUrl(complaint);
+                      const photoUrl = getPhotoUrl(complaint, complaint.proofPhotos?.[0]?.url) || getPhotoUrl(complaint);
                       const resolvedDate = complaint.resolvedAt || complaint.updatedAt || complaint.createdAt;
                       const resolvedMs = new Date(resolvedDate).getTime();
                       const createdMs = new Date(complaint.createdAt).getTime();
@@ -876,7 +882,7 @@ export default function TransparencyPage() {
                           <div className="absolute top-2 left-2">
                             <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-green-500 text-white flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" />
-                              Resolved
+                              {t('transparency.resolutions.resolved')}
                             </span>
                           </div>
                           <div className="absolute top-2 right-2">
@@ -887,15 +893,15 @@ export default function TransparencyPage() {
                         </div>
                         <div className="p-4">
                           <h4 className="font-semibold text-slate-800 text-sm mb-2 line-clamp-2">
-                            {categoryLabels[complaint.category] || complaint.category} resolved in {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
+                            {categoryLabels[complaint.category] || complaint.category} {t('transparency.resolutions.resolvedIn', { municipality: complaint.municipalityName || complaint.location?.municipality || t('transparency.resolutions.unknown') })}
                           </h4>
                           <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                             <MapPin className="w-3 h-3 text-green-500" />
-                            <span>{complaint.municipalityName || complaint.location?.municipality || "Unknown"}</span>
+                            <span>{complaint.municipalityName || complaint.location?.municipality || t('transparency.resolutions.unknown')}</span>
                             {daysToFix && (
                               <>
                                 <span className="mx-0.5">·</span>
-                                <span className="text-green-600 font-medium">Fixed in {daysToFix}d</span>
+                                <span className="text-green-600 font-medium">{t('transparency.resolutions.fixedIn', { n: daysToFix })}</span>
                               </>
                             )}
                           </div>
@@ -903,13 +909,13 @@ export default function TransparencyPage() {
                             <div className="flex items-center gap-2">
                               <span className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs text-blue-600 font-medium">
                                 <ThumbsUp className="w-3 h-3" />
-                                {complaint.upvoteCount || 0} likes
+                                {complaint.upvoteCount || 0} {t('transparency.resolutions.likes')}
                               </span>
                             </div>
                             <span className="text-xs text-slate-400">
                               {resolvedDate && !isNaN(new Date(resolvedDate).getTime()) 
-                                ? new Date(resolvedDate).toLocaleDateString("en-US", { day: "numeric", month: "short" })
-                                : new Date(complaint.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short" })}
+                                ? new Date(resolvedDate).toLocaleDateString(undefined, { day: "numeric", month: "short" })
+                                : new Date(complaint.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
                             </span>
                           </div>
                         </div>
@@ -923,18 +929,18 @@ export default function TransparencyPage() {
                 <div id="leaderboard" className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl scroll-mt-40">
                   <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Trophy className="w-5 h-5 text-amber-500" />
-                    Municipal Leaderboard
+                    {t('transparency.leaderboardSection.title')}
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-green-50">
-                          <th className="text-left py-3 px-3 text-green-700 font-medium">Rank</th>
-                          <th className="text-left py-3 px-3 text-green-700 font-medium">Municipality</th>
-                          <th className="text-right py-3 px-3 text-green-700 font-medium">Total</th>
-                          <th className="text-right py-3 px-3 text-green-700 font-medium">Resolved</th>
-                          <th className="text-right py-3 px-3 text-green-700 font-medium">Avg Fix Time</th>
-                          <th className="text-right py-3 px-3 text-green-700 font-medium">On-Time</th>
+                          <th className="text-left py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.rank')}</th>
+                          <th className="text-left py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.municipality')}</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.total')}</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.resolved')}</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.avgFixTime')}</th>
+                          <th className="text-right py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.onTime')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1004,7 +1010,7 @@ export default function TransparencyPage() {
                 <div id="categories" className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl scroll-mt-40">
                   <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <BarChart3 className="w-5 h-5 text-green-600" />
-                    Complaints by Category
+                    {t('transparency.categorySection.title')}
                   </h3>
                   <div className="space-y-4">
                     {Object.entries(categoryStats)
@@ -1037,7 +1043,7 @@ export default function TransparencyPage() {
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                                   data.rate >= 70 ? 'bg-green-100 text-green-700' : data.rate >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                                 }`}>
-                                  {data.rate || 0}% resolved
+                                  {data.rate || 0}% {t('transparency.categorySection.resolved')}
                                 </span>
                               </div>
                             </div>
@@ -1058,7 +1064,7 @@ export default function TransparencyPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                       <TrendingUp className="w-5 h-5 text-green-600" />
-                      Monthly Trends (Last 6 Months)
+                      {t('transparency.trendsSection.title')}
                     </h3>
                     {monthlyTrends.length >= 2 && (() => {
                       const curr = monthlyTrends[monthlyTrends.length - 1];
@@ -1067,7 +1073,7 @@ export default function TransparencyPage() {
                       return (
                         <span className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ${change >= 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
                           {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {change >= 0 ? '+' : ''}{change}% vs last month
+                          {change >= 0 ? '+' : ''}{change}% {t('transparency.trendsSection.vsLastMonth')}
                         </span>
                       );
                     })()}
@@ -1112,15 +1118,15 @@ export default function TransparencyPage() {
                             }}
                           />
                           <Legend />
-                          <Bar dataKey="submitted" name="Reports Submitted" fill="#A5D6A7" opacity={0.7} radius={[4, 4, 0, 0]} />
-                          <Line type="monotone" dataKey="resolved" name="Problems Fixed" stroke="#2E7D32" strokeWidth={3} dot={{fill: '#2E7D32', r: 4}} />
+                          <Bar dataKey="submitted" name={t('transparency.trendsSection.reportsSubmitted')} fill="#A5D6A7" opacity={0.7} radius={[4, 4, 0, 0]} />
+                          <Line type="monotone" dataKey="resolved" name={t('transparency.trendsSection.problemsFixed')} stroke="#2E7D32" strokeWidth={3} dot={{fill: '#2E7D32', r: 4}} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (
                     <div className="text-center py-12">
                       <TrendingUp className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      <p className="text-slate-400">No trend data available yet</p>
+                      <p className="text-slate-400">{t('transparency.trendsSection.noData')}</p>
                     </div>
                   )}
                 </div>
@@ -1129,9 +1135,9 @@ export default function TransparencyPage() {
                 <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl">
                   <h3 className="text-lg font-semibold text-slate-800 mb-1 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-amber-500" />
-                    Most Reported Issues
+                    {t('transparency.recurring.title')}
                   </h3>
-                  <p className="text-sm text-slate-500 mb-4">Recurring problems reported multiple times in your area</p>
+                  <p className="text-sm text-slate-500 mb-4">{t('transparency.recurring.subtitle')}</p>
                   {recurringIssues.length > 0 ? (
                     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {recurringIssues.map((issue, idx) => {
@@ -1139,12 +1145,12 @@ export default function TransparencyPage() {
                         const someResolved = issue.resolvedCount > 0 && issue.resolvedCount < issue.count;
                         const noneResolved = issue.resolvedCount === 0;
                         const statusBadge = allResolved
-                          ? { label: "All Fixed", cls: "bg-green-100 text-green-700" }
+                          ? { label: t('transparency.recurring.allFixed'), cls: "bg-green-100 text-green-700" }
                           : someResolved
-                          ? { label: `Partially Fixed (${issue.resolvedCount} of ${issue.count})`, cls: "bg-amber-100 text-amber-700" }
+                          ? { label: t('transparency.recurring.partiallyFixed', { resolved: issue.resolvedCount, total: issue.count }), cls: "bg-amber-100 text-amber-700" }
                           : noneResolved && issue.count > 0
-                          ? { label: "Needs Attention", cls: "bg-red-100 text-red-700" }
-                          : { label: "Being Addressed", cls: "bg-blue-100 text-blue-700" };
+                          ? { label: t('transparency.recurring.needsAttention'), cls: "bg-red-100 text-red-700" }
+                          : { label: t('transparency.recurring.beingAddressed'), cls: "bg-blue-100 text-blue-700" };
 
                         return (
                           <div 
@@ -1161,7 +1167,7 @@ export default function TransparencyPage() {
                               </span>
                             </div>
                             <h4 className="font-semibold text-slate-800 text-sm mb-3 line-clamp-2">{issue.title}</h4>
-                            <p className="text-xs text-slate-500 mb-2">{issue.count} reports, {issue.resolvedCount} resolved</p>
+                            <p className="text-xs text-slate-500 mb-2">{t('transparency.recurring.reportsResolved', { count: issue.count, resolved: issue.resolvedCount })}</p>
                             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                               <div 
                                 className={`h-full rounded-full transition-all duration-500 ${allResolved ? 'bg-green-500' : someResolved ? 'bg-amber-500' : 'bg-red-400'}`}
@@ -1175,7 +1181,7 @@ export default function TransparencyPage() {
                   ) : (
                     <div className="text-center py-12">
                       <AlertTriangle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      <p className="text-slate-400">No recurring issues found yet</p>
+                      <p className="text-slate-400">{t('transparency.recurring.noIssues')}</p>
                     </div>
                   )}
                 </div>
@@ -1185,14 +1191,14 @@ export default function TransparencyPage() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                       <MapPinned className="w-5 h-5 text-green-600" />
-                      Governorate Overview
+                      {t('transparency.governorates.title')}
                     </h3>
                     <select
                       value={categoryFilter}
                       onChange={(e) => setCategoryFilter(e.target.value)}
                       className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700"
                     >
-                      <option value="">All Categories</option>
+                      <option value="">{t('transparency.governorates.allCategories')}</option>
                       {Object.entries(categoryLabels).map(([key, label]) => (
                         <option key={key} value={key}>{label}</option>
                       ))}
@@ -1224,7 +1230,7 @@ export default function TransparencyPage() {
                         : 0);
                       
                       const badgeClass = rate >= 70 ? 'bg-green-100 text-green-700' : rate >= 50 ? 'bg-amber-100 text-amber-700' : total > 0 ? 'bg-red-100 text-red-700' : '';
-                      const badgeLabel = rate >= 70 ? 'Good' : rate >= 50 ? 'Moderate' : total > 0 ? 'Needs Attention' : '';
+                      const badgeLabel = rate >= 70 ? t('transparency.governorates.good') : rate >= 50 ? t('transparency.governorates.moderate') : total > 0 ? t('transparency.governorates.needsAttention') : '';
                       const borderClass = categoryFilter 
                         ? 'border-green-200 bg-green-50'
                         : rate >= 70 ? 'border-green-200 bg-green-50/50 hover:border-green-300' 
@@ -1246,7 +1252,7 @@ export default function TransparencyPage() {
                           </div>
                           {total > 0 ? (
                             <>
-                              <p className="text-xs text-slate-500 mb-2">{total} {categoryFilter ? categoryLabels[categoryFilter]?.split(" ")[0] : "reports"}</p>
+                              <p className="text-xs text-slate-500 mb-2">{total} {categoryFilter ? categoryLabels[categoryFilter]?.split(" ")[0] : t('transparency.governorates.reports')}</p>
                               {!categoryFilter && (
                                 <>
                                   <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
@@ -1260,13 +1266,13 @@ export default function TransparencyPage() {
                                   <p className={`text-xs font-bold mt-1 ${
                                     rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'
                                   }`}>
-                                    {rate}% resolved
+                                    {rate}% {t('transparency.governorates.resolved')}
                                   </p>
                                 </>
                               )}
                             </>
                           ) : (
-                            <p className="text-xs text-slate-400">No reports yet</p>
+                            <p className="text-xs text-slate-400">{t('transparency.governorates.noReports')}</p>
                           )}
                         </div>
                       );
@@ -1274,9 +1280,9 @@ export default function TransparencyPage() {
                   </div>
                   {!categoryFilter && (
                     <div className="mt-4 pt-3 border-t flex items-center justify-center gap-4 text-xs text-slate-500">
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Good (70%+)</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Moderate (50-70%)</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Needs Attention (&lt;50%)</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> {t('transparency.governorates.legendGood')}</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> {t('transparency.governorates.legendModerate')}</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> {t('transparency.governorates.legendBad')}</span>
                     </div>
                   )}
                 </div>
@@ -1291,14 +1297,14 @@ export default function TransparencyPage() {
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="flex items-center gap-2">
                       <FilterIcon className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-500">Filters:</span>
+                      <span className="text-sm text-slate-500">{t('transparency.governorates.filters')}</span>
                     </div>
                     <select
                       value={categoryFilter}
                       onChange={(e) => setCategoryFilter(e.target.value)}
                       className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20"
                     >
-                      <option value="">All Categories</option>
+                      <option value="">{t('transparency.governorates.allCategories')}</option>
                       {Object.entries(categoryLabels).map(([key, label]) => (
                         <option key={key} value={key}>{label}</option>
                       ))}
@@ -1318,7 +1324,7 @@ export default function TransparencyPage() {
                       </button>
                     </div>
                     <span className="text-sm text-slate-500">
-                      {filteredComplaints.length} complaints found
+                      {filteredComplaints.length} {t('transparency.complaintsView.found', { n: filteredComplaints.length }).split(' ').slice(1).join(' ')}
                     </span>
                   </div>
                 </div>
@@ -1337,13 +1343,13 @@ export default function TransparencyPage() {
                         CLOSED: "Closed"
                       };
                       
-                      const formattedDate = new Date(complaint.createdAt).toLocaleDateString("en-US", {
+                      const formattedDate = new Date(complaint.createdAt).toLocaleDateString(undefined, {
                         day: "numeric",
                         month: "short",
                         year: "numeric"
                       });
                       
-                      const municipality = complaint.municipalityName || complaint.location?.municipality || "Unknown location";
+                      const municipality = complaint.municipalityName || complaint.location?.municipality || t('transparency.complaintsView.unknown');
                       
                       // Clean description: remove phone numbers and "Contact phone:" text
                       const cleanDescription = (complaint.description || "")
@@ -1406,7 +1412,7 @@ export default function TransparencyPage() {
                         <div className="p-4">
                           <h4 className="font-semibold text-slate-800 mb-2 line-clamp-2">{complaint.title}</h4>
                           <p className={`text-sm text-slate-500 mb-3 line-clamp-2`}>
-                            {cleanDescription || "No description"}
+                            {cleanDescription || t('transparency.complaintsView.noDescription')}
                           </p>
                            
                           {/* Action buttons - Like, Comment, Views */}
@@ -1449,14 +1455,14 @@ export default function TransparencyPage() {
                       const photoUrl = getPhotoUrl(complaint);
                       
                       const statusLabels: Record<string, string> = {
-                        VALIDATED: "Verified",
-                        ASSIGNED: "Assigned",
-                        IN_PROGRESS: "In Progress",
-                        RESOLVED: "Resolved",
-                        CLOSED: "Closed"
+                        VALIDATED: t('transparency.complaintsView.verified'),
+                        ASSIGNED: t('transparency.complaintsView.assigned'),
+                        IN_PROGRESS: t('transparency.complaintsView.inProgress'),
+                        RESOLVED: t('transparency.complaintsView.resolved'),
+                        CLOSED: t('transparency.complaintsView.closed')
                       };
                       
-                      const formattedDate = new Date(complaint.createdAt).toLocaleDateString("en-US", {
+                      const formattedDate = new Date(complaint.createdAt).toLocaleDateString(undefined, {
                         day: "numeric",
                         month: "short",
                         year: "numeric"
@@ -1482,7 +1488,7 @@ export default function TransparencyPage() {
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-xs text-slate-500 flex items-center gap-1">
                                 <MapPin className="w-3 h-3" />
-                                {complaint.municipalityName || complaint.location?.municipality || "Unknown"}
+                                {complaint.municipalityName || complaint.location?.municipality || t('transparency.complaintsView.unknown')}
                                 <span className="mx-1">·</span>
                                 {formattedDate}
                               </span>
@@ -1492,7 +1498,7 @@ export default function TransparencyPage() {
                             </div>
                             <h4 className="font-semibold text-slate-800 mb-1">{complaint.title}</h4>
                             <p className="text-sm text-slate-500 line-clamp-1 mb-2">
-                              {(complaint.description || "").replace(/Contact\s*phone\s*:?[\s\d+\-]*/gi, "").replace(/(\+?\d[\d\s\-]{7,})/g, "").trim() || "No description"}
+                              {(complaint.description || "").replace(/Contact\s*phone\s*:?[\s\d+\-]*/gi, "").replace(/(\+?\d[\d\s\-]{7,})/g, "").trim() || t('transparency.complaintsView.noDescription')}
                             </p>
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded">
@@ -1519,7 +1525,7 @@ export default function TransparencyPage() {
                 {filteredComplaints.length === 0 && (
                   <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
                     <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-500">No complaints found matching your criteria</p>
+                    <p className="text-slate-500">{t('transparency.complaintsView.noMatch')}</p>
                   </div>
                 )}
                 </div>
@@ -1536,13 +1542,13 @@ export default function TransparencyPage() {
                         All Municipalities in Tunisia
                       </h3>
                       <p className="text-sm text-slate-500 mt-1">
-                        Browse all {ALL_MUNICIPALITIES.length} municipalities across {TUNISIA_GEOGRAPHY.length} governorates
+                        {t('transparency.municipalitiesView.subtitle', { municipalities: ALL_MUNICIPALITIES.length, governorates: TUNISIA_GEOGRAPHY.length })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1 px-3 py-1.5 bg-green-50 rounded-lg text-xs text-green-700">
                         <BarChart3 className="w-3 h-3" />
-                        {allMunicipalityStats.filter(m => m.total > 0).length} active
+                        {allMunicipalityStats.filter(m => m.total > 0).length} {t('transparency.municipalitiesView.active')}
                       </div>
                     </div>
                   </div>
@@ -1570,10 +1576,10 @@ export default function TransparencyPage() {
                                   }`}>
                                     {munStats.rate}%
                                   </span>
-                                  <p className="text-xs text-slate-400">{munStats.total} complaints</p>
+                                  <p className="text-xs text-slate-400">{munStats.total} {t('transparency.municipalitiesView.complaints')}</p>
                                 </div>
                               ) : (
-                                <span className="text-xs text-slate-400">No data</span>
+                                <span className="text-xs text-slate-400">{t('transparency.municipalitiesView.noData')}</span>
                               )}
                             </div>
                           </div>
@@ -1587,7 +1593,7 @@ export default function TransparencyPage() {
                         className="flex items-center gap-2 text-green-600 hover:text-green-700 mb-4 font-medium"
                       >
                         <ArrowRight className="w-4 h-4 rotate-180" />
-                        Back to Governorates
+                        {t('transparency.govDetail.back')}
                       </button>
                       {(() => {
                         const gov = TUNISIA_GEOGRAPHY.find(g => g.governorate === selectedGovernorate);
@@ -1620,18 +1626,18 @@ export default function TransparencyPage() {
                               <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between">
                                 <div>
                                   <h2 className="text-3xl font-bold text-white mb-1">{selectedGovernorate}</h2>
-                                  <p className="text-white/80 text-sm">Governorate of Tunisia</p>
+                                  <p className="text-white/80 text-sm">{t('transparency.govDetail.ofTunisia')}</p>
                                 </div>
                               </div>
                               <div className="absolute bottom-4 left-6 flex items-center gap-4">
                                 <span className="flex items-center gap-1 text-white/90 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-full">
                                   <FileText className="w-4 h-4" />
-                                  {total} complaints
+                                  {t('transparency.govDetail.complaints', { n: total })}
                                 </span>
                                 <span className={`px-3 py-1 rounded-full text-sm font-bold ${
                                   rate >= 70 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
                                 }`}>
-                                  {rate}% resolved
+                                  {t('transparency.govDetail.resolved', { n: rate })}
                                 </span>
                               </div>
                             </div>
@@ -1639,20 +1645,20 @@ export default function TransparencyPage() {
                             <div className="bg-green-50 rounded-xl p-4 border border-green-200">
                               <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
                                 <Trophy className="w-5 h-5" />
-                                Achievements
+                                {t('transparency.govDetail.achievements')}
                               </h4>
                               <div className="grid grid-cols-3 gap-4">
                                 <div className="text-center">
                                   <p className="text-2xl font-bold text-green-600">{resolved}</p>
-                                  <p className="text-xs text-green-700">Resolved</p>
+                                  <p className="text-xs text-green-700">{t('transparency.govDetail.resolvedLabel')}</p>
                                 </div>
                                 <div className="text-center">
                                   <p className="text-2xl font-bold text-green-600">{rate}%</p>
-                                  <p className="text-xs text-green-700">Success Rate</p>
+                                  <p className="text-xs text-green-700">{t('transparency.govDetail.successRate')}</p>
                                 </div>
                                 <div className="text-center">
                                   <p className="text-2xl font-bold text-green-600">{gov.municipalities.length}</p>
-                                  <p className="text-xs text-green-700">Municipalities</p>
+                                  <p className="text-xs text-green-700">{t('transparency.govDetail.municipalitiesLabel')}</p>
                                 </div>
                               </div>
                             </div>
@@ -1662,7 +1668,7 @@ export default function TransparencyPage() {
                               <div className="bg-white rounded-xl p-4 border border-slate-200">
                                 <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
                                   <BarChart3 className="w-5 h-5 text-green-600" />
-                                  Complaints by Category
+                                  {t('transparency.govDetail.categoryTitle')}
                                 </h4>
                                 <div className="flex h-4 rounded-full overflow-hidden bg-slate-100 mb-3">
                                   {categoryKeys.map((cat, idx) => {
@@ -1695,7 +1701,7 @@ export default function TransparencyPage() {
                             )}
                             
                             <div>
-                              <h4 className="font-semibold text-slate-800 mb-3">Municipalities in {selectedGovernorate}</h4>
+                              <h4 className="font-semibold text-slate-800 mb-3">{t('transparency.govDetail.municipalitiesIn', { name: selectedGovernorate })}</h4>
                               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {gov.municipalities.map((mun) => {
                                   const munStat = allMunicipalityStats.find(m => m.name === mun);
@@ -1717,7 +1723,7 @@ export default function TransparencyPage() {
                                           </span>
                                         )}
                                       </div>
-                                      <p className="text-xs text-slate-500 mt-1">{munTotal} complaints</p>
+                                      <p className="text-xs text-slate-500 mt-1">{munTotal} {t('transparency.municipalitiesView.complaints')}</p>
                                     </div>
                                   );
                                 })}
@@ -1727,7 +1733,7 @@ export default function TransparencyPage() {
                             {total > 0 && (
                               <div className="space-y-4">
                                 <div>
-                                  <h4 className="font-semibold text-slate-800 mb-3">Recent Reports in {selectedGovernorate}</h4>
+                                  <h4 className="font-semibold text-slate-800 mb-3">{t('transparency.govDetail.recentReports', { name: selectedGovernorate })}</h4>
                                   <div className="space-y-2">
                                     {complaints.filter(c => c.location?.municipality && 
                                       ALL_MUNICIPALITIES.find(m => m.name === c.location?.municipality && m.governorate === selectedGovernorate)
@@ -1755,27 +1761,27 @@ export default function TransparencyPage() {
                                             complaint.status === 'IN_PROGRESS' ? 'bg-orange-100 text-orange-700' :
                                             'bg-blue-100 text-blue-700'
                                           }`}>
-                                            {complaint.status === 'IN_PROGRESS' ? 'In Progress' : complaint.status === 'RESOLVED' ? 'Resolved' : complaint.status === 'CLOSED' ? 'Closed' : complaint.status}
+                                            {complaint.status === 'IN_PROGRESS' ? t('transparency.govDetail.inProgress') : complaint.status === 'RESOLVED' ? t('transparency.complaintsView.resolved') : complaint.status === 'CLOSED' ? t('transparency.complaintsView.closed') : complaint.status}
                                           </span>
                                         </div>
                                       </div>
                                     );
                                     })}
                                     {total === 0 && (
-                                      <p className="text-sm text-slate-500">No recent reports</p>
+                                      <p className="text-sm text-slate-500">{t('transparency.govDetail.noRecentReports')}</p>
                                     )}
                                   </div>
                                 </div>
                                 
                                 {/* Mini Map Placeholder */}
                                 <div>
-                                  <h4 className="font-semibold text-slate-800 mb-3">Location</h4>
+                                  <h4 className="font-semibold text-slate-800 mb-3">{t('transparency.govDetail.locationTitle')}</h4>
                                   <div className="h-40 bg-green-50 rounded-xl flex items-center justify-center border border-green-200 relative overflow-hidden">
                                     <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #22c55e 1px, transparent 0)', backgroundSize: '16px 16px' }} />
                                     <div className="relative text-center">
                                       <MapIcon className="w-8 h-8 text-green-500 mx-auto mb-2" />
                                       <p className="text-base font-semibold text-green-800">{selectedGovernorate}</p>
-                                      <p className="text-xs text-green-600">{gov.municipalities.length} municipalities · {total} reports</p>
+                                      <p className="text-xs text-green-600">{t('transparency.govDetail.municipalitiesReports', { municipalities: gov.municipalities.length, reports: total })}</p>
                                     </div>
                                   </div>
                                 </div>
@@ -1784,7 +1790,7 @@ export default function TransparencyPage() {
                                   onClick={() => { setSearchQuery(selectedGovernorate || ''); setSelectedGovernorate(null); setActiveView("complaints"); }}
                                   className="w-full py-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-xl text-green-600 font-medium transition-colors"
                                 >
-                                  View All {total} Complaints →
+                                  {t('transparency.govDetail.viewAll', { n: total })}
                                 </button>
                               </div>
                             )}
@@ -1842,7 +1848,7 @@ export default function TransparencyPage() {
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   rate >= 70 ? 'bg-green-500 text-white' : rate >= 50 ? 'bg-amber-500 text-white' : total > 0 ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'
                                 }`}>
-                                  {rate >= 70 ? 'Good' : rate >= 50 ? 'Moderate' : total > 0 ? 'Needs Attention' : 'No Data'}
+                                  {rate >= 70 ? t('transparency.govCards.good') : rate >= 50 ? t('transparency.govCards.moderate') : total > 0 ? t('transparency.govCards.needsAttention') : t('transparency.govCards.noData')}
                                 </span>
                                 <div className="text-right">
                                   <span className={`text-sm font-bold ${
@@ -1850,7 +1856,7 @@ export default function TransparencyPage() {
                                   }`}>
                                     {total > 0 ? `${rate}%` : '—'}
                                   </span>
-                                  <p className="text-xs text-slate-500">{total} complaints</p>
+                                  <p className="text-xs text-slate-500">{t('transparency.govCards.complaints', { n: total })}</p>
                                 </div>
                               </div>
                             </div>
@@ -1923,9 +1929,9 @@ export default function TransparencyPage() {
         <div className="mt-12 bg-gradient-to-r from-green-600 via-green-700 to-green-800 rounded-2xl shadow-xl p-12 text-white relative overflow-hidden">
           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
           <div className="relative text-center">
-            <h2 className="text-3xl font-bold mb-4">See a problem in your neighborhood?</h2>
+            <h2 className="text-3xl font-bold mb-4">{t('transparency.cta.title')}</h2>
             <p className="text-white/90 mb-8 max-w-lg mx-auto text-lg">
-              Help us track issues in your community. Your reports make our city better.
+              {t('transparency.cta.subtitle')}
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {token ? (
@@ -1935,13 +1941,13 @@ export default function TransparencyPage() {
                     className="px-8 py-4 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
                   >
                     <LayoutDashboard className="w-5 h-5" />
-                    My Dashboard
+                    {t('transparency.myDashboard')}
                   </Link>
                   <Link
                     href="/complaints/new"
                     className="px-8 py-4 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border-2 border-white/30"
                   >
-                    Report a Problem
+                    {t('transparency.hero.reportBtn')}
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                 </>
@@ -1952,13 +1958,13 @@ export default function TransparencyPage() {
                     className="px-8 py-4 bg-white text-green-600 font-semibold rounded-xl hover:bg-white/90 transition-all flex items-center gap-2 shadow-lg"
                   >
                     <Users className="w-5 h-5" />
-                    Create Account
+                    {t('transparency.createAccount')}
                   </Link>
                   <Link
                     href="/login"
                     className="px-8 py-4 bg-white/10 backdrop-blur text-white font-semibold rounded-xl hover:bg-white/20 transition-all flex items-center gap-2 border-2 border-white/30"
                   >
-                    Login
+                    {t('transparency.login')}
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                 </>
@@ -1971,10 +1977,10 @@ export default function TransparencyPage() {
         <footer className="mt-12 py-8 text-center text-sm text-slate-400 border-t border-slate-200">
           <div className="flex items-center justify-center gap-2 mb-2">
             <ShieldCheck className="w-4 h-4 text-green-600" />
-            <span className="font-semibold text-slate-600">Smart City Tunisia</span>
+            <span className="font-semibold text-slate-600">{t('transparency.footer.smartCity')}</span>
           </div>
           <p>
-            Data updated in real-time. Last updated: {new Date().toLocaleDateString("en-US", { 
+            {t('transparency.footer.lastUpdated')} {new Date().toLocaleDateString(undefined, { 
               day: "numeric", 
               month: "long", 
               year: "numeric",
@@ -1988,17 +1994,17 @@ export default function TransparencyPage() {
       {/* Complaint Detail Modal */}
       {selectedComplaint && (() => {
         const c = selectedComplaint;
-        const photoUrl = c.proofPhotos?.[0]?.url || getPhotoUrl(c);
+        const photoUrl = getPhotoUrl(c, c.proofPhotos?.[0]?.url) || getPhotoUrl(c);
         const statusLabels: Record<string, { label: string; color: string }> = {
-          VALIDATED: { label: "Verified", color: "bg-blue-100 text-blue-700" },
-          ASSIGNED: { label: "Team Assigned", color: "bg-purple-100 text-purple-700" },
-          IN_PROGRESS: { label: "Being Fixed", color: "bg-orange-100 text-orange-700" },
-          RESOLVED: { label: "Fixed", color: "bg-green-100 text-green-700" },
-          CLOSED: { label: "Closed", color: "bg-slate-100 text-slate-700" }
+          VALIDATED: { label: t('transparency.modal.verified'), color: "bg-blue-100 text-blue-700" },
+          ASSIGNED: { label: t('transparency.modal.teamAssigned'), color: "bg-purple-100 text-purple-700" },
+          IN_PROGRESS: { label: t('transparency.modal.beingFixed'), color: "bg-orange-100 text-orange-700" },
+          RESOLVED: { label: t('transparency.modal.fixed'), color: "bg-green-100 text-green-700" },
+          CLOSED: { label: t('transparency.modal.closed'), color: "bg-slate-100 text-slate-700" }
         };
         const statusInfo = statusLabels[c.status] || { label: c.status, color: "bg-slate-100 text-slate-600" };
-        const municipality = c.municipalityName || c.location?.municipality || "Unknown";
-        const createdDate = new Date(c.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+        const municipality = c.municipalityName || c.location?.municipality || t('transparency.complaintsView.unknown');
+        const createdDate = new Date(c.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
         const cleanDesc = (c.description || "")
           .replace(/Contact\s*phone\s*:?[\s\d+\-]*/gi, "")
           .replace(/(\+?\d[\d\s\-]{7,})/g, "")
@@ -2046,14 +2052,14 @@ export default function TransparencyPage() {
                     </button>
                     <span className="flex items-center gap-1.5 text-sm text-slate-500">
                       <Users className="w-4 h-4" />
-                      <span>{c.confirmationCount || 0} confirms</span>
+                      <span>{c.confirmationCount || 0} {t('transparency.modal.confirms')}</span>
                     </span>
                   </div>
                   <button
                     onClick={() => { setSelectedComplaint(null); router.push(`/transparency/complaints/${c._id}`); }}
                     className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
                   >
-                    Full Details
+                    {t('transparency.modal.fullDetails')}
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -2072,9 +2078,9 @@ export default function TransparencyPage() {
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <HelpCircle className="w-6 h-6" />
-                  How Smart City Tunisia Works
+                  {t('transparency.help.title')}
                 </h2>
-                <p className="text-green-100 text-sm mt-1">A citizen-powered platform for a better Tunisia</p>
+                <p className="text-green-100 text-sm mt-1">{t('transparency.help.subtitle')}</p>
               </div>
               <button 
                 onClick={() => setShowHelp(false)}
@@ -2095,15 +2101,15 @@ export default function TransparencyPage() {
                 <div className="pb-6">
                   <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                     <FileText className="w-4 h-4 text-green-600" />
-                    Report a Problem
+                    {t('transparency.help.step1Title')}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Spotted a pothole, broken streetlight, or waste issue? Create an account and submit a report with a photo, location, and description. Our AI automatically categorizes your report and assigns urgency.
+                    {t('transparency.help.step1Desc')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">Photo Upload</span>
-                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">GPS Location</span>
-                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">AI Categorization</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">{t('transparency.help.step1Badge1')}</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">{t('transparency.help.step1Badge2')}</span>
+                    <span className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full">{t('transparency.help.step1Badge3')}</span>
                   </div>
                 </div>
               </div>
@@ -2117,15 +2123,15 @@ export default function TransparencyPage() {
                 <div className="pb-6">
                   <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    Community Validation
+                    {t('transparency.help.step2Title')}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Other citizens can confirm the issue exists, boosting its priority. The more confirmations a report gets, the faster it moves up the queue. You can also upvote reports to show support.
+                    {t('transparency.help.step2Desc')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">Confirm Issues</span>
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">Upvote Reports</span>
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">Priority Boost</span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">{t('transparency.help.step2Badge1')}</span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">{t('transparency.help.step2Badge2')}</span>
+                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full">{t('transparency.help.step2Badge3')}</span>
                   </div>
                 </div>
               </div>
@@ -2139,15 +2145,15 @@ export default function TransparencyPage() {
                 <div className="pb-6">
                   <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                     <Building2 className="w-4 h-4 text-green-600" />
-                    Municipal Processing
+                    {t('transparency.help.step3Title')}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Municipal agents review and validate reports. A department manager assigns the right team of technicians. Each complaint follows a clear pipeline: Submitted → Validated → Assigned → In Progress → Resolved → Closed.
+                    {t('transparency.help.step3Desc')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">Agent Review</span>
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">Dept. Assignment</span>
-                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">Technician Dispatch</span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">{t('transparency.help.step3Badge1')}</span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">{t('transparency.help.step3Badge2')}</span>
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full">{t('transparency.help.step3Badge3')}</span>
                   </div>
                 </div>
               </div>
@@ -2161,15 +2167,15 @@ export default function TransparencyPage() {
                 <div className="pb-6">
                   <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                     <Eye className="w-4 h-4 text-green-600" />
-                    Track Progress in Real Time
+                    {t('transparency.help.step4Title')}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Follow your complaint through every stage. The transparency dashboard shows live performance metrics, resolution rates, and average fix times. See the &quot;Recent Resolutions&quot; carousel for success stories.
+                    {t('transparency.help.step4Desc')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">Live Dashboard</span>
-                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">Status Timeline</span>
-                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">Notifications</span>
+                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">{t('transparency.help.step4Badge1')}</span>
+                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">{t('transparency.help.step4Badge2')}</span>
+                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-full">{t('transparency.help.step4Badge3')}</span>
                   </div>
                 </div>
               </div>
@@ -2183,15 +2189,15 @@ export default function TransparencyPage() {
                 <div className="pb-6">
                   <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                     <Trophy className="w-4 h-4 text-green-600" />
-                    Municipal Rankings &amp; Accountability
+                    {t('transparency.help.step5Title')}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Municipalities are ranked by resolution rate, response speed, and SLA compliance. The leaderboard creates healthy competition and public accountability, motivating faster service.
+                    {t('transparency.help.step5Desc')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">Leaderboard</span>
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">SLA Tracking</span>
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">Public Data</span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">{t('transparency.help.step5Badge1')}</span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">{t('transparency.help.step5Badge2')}</span>
+                    <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full">{t('transparency.help.step5Badge3')}</span>
                   </div>
                 </div>
               </div>
@@ -2204,15 +2210,15 @@ export default function TransparencyPage() {
                 <div className="pb-2">
                   <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                     <Globe className="w-4 h-4 text-green-600" />
-                    Explore by Governorate
+                    {t('transparency.help.step6Title')}
                   </h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    Browse all 24 governorates and their municipalities. View detailed statistics: total reports, resolution rates, top categories, and trends. Search for any area to see how it performs.
+                    {t('transparency.help.step6Desc')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">24 Governorates</span>
-                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">Municipality Stats</span>
-                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">Category Breakdown</span>
+                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">{t('transparency.help.step6Badge1')}</span>
+                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">{t('transparency.help.step6Badge2')}</span>
+                    <span className="px-2 py-0.5 bg-cyan-50 text-cyan-700 text-xs rounded-full">{t('transparency.help.step6Badge3')}</span>
                   </div>
                 </div>
               </div>
@@ -2220,12 +2226,12 @@ export default function TransparencyPage() {
 
             {/* Quick tips */}
             <div className="mx-6 mb-4 p-4 bg-green-50 rounded-xl border border-green-100">
-              <h4 className="text-sm font-semibold text-green-800 mb-2">💡 Quick Tips</h4>
+              <h4 className="text-sm font-semibold text-green-800 mb-2">{t('transparency.help.tipsTitle')}</h4>
               <ul className="text-xs text-green-700 space-y-1">
-                <li>• Take clear photos of the issue for faster processing</li>
-                <li>• Enable GPS for automatic location detection</li>
-                <li>• Confirm reports in your neighborhood to help prioritize them</li>
-                <li>• Check the leaderboard to see how your municipality performs</li>
+                <li>• {t('transparency.help.tip1')}</li>
+                <li>• {t('transparency.help.tip2')}</li>
+                <li>• {t('transparency.help.tip3')}</li>
+                <li>• {t('transparency.help.tip4')}</li>
               </ul>
             </div>
 
@@ -2234,7 +2240,7 @@ export default function TransparencyPage() {
                 onClick={() => setShowHelp(false)}
                 className="w-full py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition-colors"
               >
-                Got it, let&apos;s explore!
+                {t('transparency.help.gotIt')}
               </button>
             </div>
           </div>

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:smart_city_app/services/api_client.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/main.dart';
 import 'package:smart_city_app/screens/register_screen.dart';
 import 'package:smart_city_app/screens/forgot_password_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  final void Function(Map<String, dynamic>? user) onLoginSuccess;
+class LoginScreen extends ConsumerStatefulWidget {
+  final void Function(Map<String, dynamic>? user)? onLoginSuccess;
 
-  const LoginScreen({super.key, required this.onLoginSuccess});
+  const LoginScreen({super.key, this.onLoginSuccess});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final ApiClient _apiClient = ApiClient();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -38,26 +38,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final response = await _apiClient.post('/auth/login', {
-        'email': _emailController.text.trim(),
-        'password': _passwordController.text,
-      });
-
-      await _apiClient.setTokens(
-        response['accessToken'],
-        response['refreshToken'],
-      );
-
-      if (mounted) {
-        widget.onLoginSuccess(response['user']);
-      }
-    } on ApiException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-      });
+      await ref
+          .read(authProvider.notifier)
+          .login(_emailController.text.trim(), _passwordController.text);
+      // Riverpod updates the state — AuthWrapper will rebuild automatically
     } catch (e) {
       setState(() {
-        _errorMessage = 'An unexpected error occurred. Please try again.';
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
       if (mounted) {

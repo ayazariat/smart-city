@@ -1,17 +1,23 @@
 import { Complaint, CreateComplaintData, ComplaintCategory, ComplaintUrgency, ComplaintLocation, ComplaintMedia, Comment } from "@/types";
 import { apiClient } from "./api.client";
-import { useAuthStore } from "@/store/useAuthStore";
 
-// Cloudinary base URL for media files - used for prepending to relative paths
-// This should be configured in your .env.local
-// Example: NEXT_PUBLIC_CLOUDINARY_BASE_URL=https://res.cloudinary.com/your-cloud-name/image/upload
-const getCloudinaryBaseUrl = (): string => {
-  // Try environment variable first
-  const envUrl = process.env.NEXT_PUBLIC_CLOUDINARY_BASE_URL;
-  if (envUrl) return envUrl;
-  
-  // Default - will be replaced with actual uploaded URL
-  return "";
+const getAiServiceUrl = (): string => {
+  const raw = (process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000").trim();
+  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+};
+
+const fetchAi = async (path: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const aiUrl = getAiServiceUrl();
+    return await fetch(`${aiUrl}${path}`, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 /**
@@ -449,10 +455,8 @@ export const predictUrgency = async (
   explanation: string;
   agentOverrideAllowed: boolean;
 } | null> => {
-  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
-  
   try {
-    const response = await fetch(`${aiUrl}/ai/urgency/predict`, {
+    const response = await fetchAi(`/ai/urgency/predict`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -488,15 +492,23 @@ export const extractKeywords = async (text: string): Promise<{
   urgencyKeywords: string[];
   similarityHash: string;
 }> => {
-  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
-  
-  const response = await fetch(`${aiUrl}/extract-keywords`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ text }),
-  });
+  let response: Response;
+  try {
+    response = await fetchAi(`/extract-keywords`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text }),
+    }, 4000);
+  } catch {
+    return {
+      keywords: [],
+      locationKeywords: [],
+      urgencyKeywords: [],
+      similarityHash: "",
+    };
+  }
 
   if (!response.ok) {
     return {
@@ -601,12 +613,11 @@ export const getTrendForecast = async (
   changeVsLastWeek: string;
   trend: string;
 } | null> => {
-  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
-  
   try {
-    const response = await fetch(
-      `${aiUrl}/ai/trend/forecast?municipality=${encodeURIComponent(municipality)}&category=${encodeURIComponent(category)}&period=${period}`,
-      { method: "GET" }
+    const response = await fetchAi(
+      `/ai/trend/forecast?municipality=${encodeURIComponent(municipality)}&category=${encodeURIComponent(category)}&period=${period}`,
+      { method: "GET" },
+      4000
     );
 
     if (!response.ok) {
@@ -630,13 +641,8 @@ export const getTrendAlerts = async (): Promise<{
   message: string;
   recommendation: string;
 }[]> => {
-  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
-  
   try {
-    const response = await fetch(`${aiUrl}/ai/trend/alerts`, { 
-      method: "GET",
-      signal: AbortSignal.timeout(3000)
-    });
+    const response = await fetchAi(`/ai/trend/alerts`, { method: "GET" }, 3000);
 
     if (!response.ok) {
       return [];
@@ -672,10 +678,8 @@ export const checkDuplicate = async (
   recommendation: string;
   humanReviewRequired: boolean;
 } | null> => {
-  const aiUrl = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
-
   try {
-    const response = await fetch(`${aiUrl}/ai/duplicate/check`, {
+    const response = await fetchAi(`/ai/duplicate/check`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -688,13 +692,30 @@ export const checkDuplicate = async (
         longitude,
         submittedAt: new Date().toISOString(),
       }),
-      signal: AbortSignal.timeout(5000),
-    });
+    }, 5000);
 
     if (!response.ok) return null;
 
     const result = await response.json();
     return result.data || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Get duplicate detection stats from AI service
+ */
+export const getDuplicateStats = async (): Promise<{
+  total_checked: number;
+  duplicates_found_today: number;
+  merge_rate: number;
+} | null> => {
+  try {
+    const response = await fetchAi(`/ai/duplicate/stats`, { method: "GET" }, 3000);
+    if (!response.ok) return null;
+    const result = await response.json();
+    return result.data || result;
   } catch {
     return null;
   }

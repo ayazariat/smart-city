@@ -10,7 +10,6 @@ import {
   Building2,
   UserCog,
   MessageSquare,
-  ArrowLeft,
   Calendar,
   Phone,
   Mail,
@@ -31,8 +30,10 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { Button, PageHeader } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
-import { categoryLabels, CATEGORY_LABELS } from "@/lib/complaints";
+import { categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import AIAnalysisCard from "@/components/dashboard/AIAnalysisCard";
+import { useTranslation } from "react-i18next";
 
 type InternalNoteItem = (NonNullable<Complaint["internalNotes"]>[number]) & {
   authorName?: string;
@@ -66,25 +67,6 @@ const categoryToDepartmentMap: Record<string, string[]> = {
   OTHER: ["General", "Infrastructure"],
 };
 
-// Status labels (as per BL-16 specifications)
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  SUBMITTED: { label: "SUBMITTED", bgClass: "bg-yellow-100", textClass: "text-yellow-800" },
-  VALIDATED: { label: "VALIDATED", bgClass: "bg-blue-100", textClass: "text-blue-800" },
-  ASSIGNED: { label: "ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
-  IN_PROGRESS: { label: "IN PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
-  RESOLVED: { label: "RESOLVED", bgClass: "bg-green-100", textClass: "text-green-800" },
-  CLOSED: { label: "CLOSED", bgClass: "bg-gray-100", textClass: "text-gray-800" },
-  REJECTED: { label: "REJECTED", bgClass: "bg-red-100", textClass: "text-red-800" },
-};
-
-// Urgency labels
-const urgencyLabels: Record<string, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
-  URGENT: "Urgent",
-};
-
 export default function ComplaintDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -92,6 +74,8 @@ export default function ComplaintDetailPage() {
   const { user } = useAuthStore();
   const complaintId = params.id as string;
   const fromParam = searchParams.get("from");
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || "en";
 
   // Smart back navigation
   const handleBack = () => {
@@ -112,7 +96,6 @@ export default function ComplaintDetailPage() {
   const [departments, setDepartments] = useState<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>>([]);
   const [technicians, setTechnicians] = useState<Array<{_id: string; fullName: string; email?: string}>>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("");
-  const [suggestedDepartment, setSuggestedDepartment] = useState<string>("");
   const [selectedTechnician, setSelectedTechnician] = useState<string>("");
   const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
   const [selectedUrgency, setSelectedUrgency] = useState<string>("");
@@ -237,7 +220,7 @@ export default function ComplaintDetailPage() {
             setInternalNotes(processedComplaint.internalNotes as InternalNoteItem[]);
           }
         } else {
-          setError("Complaint not found");
+          setError(t("complaintDetail.errorNotFound"));
         }
       } catch (err: unknown) {
         console.error("Error fetching complaint:", err);
@@ -246,25 +229,25 @@ export default function ComplaintDetailPage() {
         if (err && typeof err === 'object' && 'status' in err) {
           const apiError = err as { status: number; message?: string };
           if (apiError.status === 403) {
-            setError(apiError.message || "Access denied. You don't have permission to view this complaint.");
+            setError(apiError.message || t("complaintDetail.errorAccessDenied"));
           } else if (apiError.status === 404) {
-            setError("Complaint not found");
+            setError(t("complaintDetail.errorNotFound"));
           } else if (apiError.status === 401) {
-            setError("Session expired. Please login again.");
+            setError(t("complaintDetail.errorSessionExpired"));
           } else {
-            setError(apiError.message || "Error loading complaint");
+            setError(apiError.message || t("complaintDetail.errorLoading"));
           }
         } else if (err instanceof Error) {
           // Check for specific error messages
           if (err.message?.toLowerCase().includes("access denied")) {
             setError(err.message);
           } else if (err.message?.toLowerCase().includes("login")) {
-            setError("Session expired. Please login again.");
+            setError(t("complaintDetail.errorSessionExpired"));
           } else {
-            setError(err.message || "Error loading complaint");
+            setError(err.message || t("complaintDetail.errorLoading"));
           }
         } else {
-          setError("Error loading complaint");
+          setError(t("complaintDetail.errorLoading"));
         }
       } finally {
         setLoading(false);
@@ -274,7 +257,7 @@ export default function ComplaintDetailPage() {
     if (complaintId) {
       fetchComplaintDetail();
     }
-  }, [complaintId]);
+  }, [complaintId, t]);
 
   // Fetch departments when opening department modal
   useEffect(() => {
@@ -311,10 +294,6 @@ export default function ComplaintDetailPage() {
     };
     fetchDepartments();
   }, [actionModal, user?.role]);
-
-  const getComplaintIdDisplay = (id: string) => {
-    return `RC-${id.slice(-6)}`;
-  };
 
   const getUrgencyValue = (urgency: string | number): number => {
     if (typeof urgency === "number") return urgency;
@@ -458,7 +437,7 @@ export default function ComplaintDetailPage() {
       }
     } catch (err) {
       console.error("Error assigning technician:", err);
-      alert("Failed to assign technician. Please try again.");
+      alert(t("complaintDetail.failedAssignTechnician"));
     } finally {
       setActionLoading(false);
     }
@@ -468,6 +447,7 @@ export default function ComplaintDetailPage() {
     user?.role === "MUNICIPAL_AGENT" ||
     user?.role === "DEPARTMENT_MANAGER" ||
     user?.role === "ADMIN";
+  const canSeeAiInsights = user?.role !== "CITIZEN";
 
   // Check if current user is a technician assigned to this complaint
   const isAssignedTechnician = user?.role === "TECHNICIAN" && 
@@ -489,21 +469,26 @@ export default function ComplaintDetailPage() {
     : (complaint?.citizen as { _id?: string; fullName?: string; email?: string; phone?: string } | null);
 
   const hasLocation = complaint?.location?.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2;
+  const afterPhotos = complaint?.afterPhotos || [];
+  const beforePhotos = complaint?.beforePhotos || [];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center" role="status" aria-live="polite">
+      <DashboardLayout>
+      <div className="min-h-screen flex items-center justify-center" role="status" aria-live="polite">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" aria-hidden="true"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+          <p className="mt-4 text-slate-600">{t("common.loading")}</p>
         </div>
       </div>
+      </DashboardLayout>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <DashboardLayout>
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md">
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" role="alert">
             {error}
@@ -512,10 +497,11 @@ export default function ComplaintDetailPage() {
             variant="primary"
             onClick={handleBack}
           >
-            Back
+            {t("common.back")}
           </Button>
         </div>
       </div>
+      </DashboardLayout>
     );
   }
 
@@ -525,15 +511,15 @@ export default function ComplaintDetailPage() {
 
   const status = statusConfig[complaint.status] || {
     label: complaint.status,
-    bgClass: "bg-gray-100",
-    textClass: "text-gray-800",
+    bgClass: "bg-slate-100",
+    textClass: "text-slate-800",
   };
 
   return (
     <DashboardLayout>
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
       <PageHeader
-        title={complaint.title || `Complaint ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
+        title={complaint.title || `${t("complaintDetail.complaint")} ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
         onBackClick={handleBack}
         rightContent={
           <div className="flex items-center gap-3">
@@ -544,7 +530,7 @@ export default function ComplaintDetailPage() {
             )}
             <span 
               className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
-              aria-label={`Status: ${status.label}`}
+              aria-label={`${t("complaintDetail.status")}: ${status.label}`}
             >
               {status.label}
             </span>
@@ -560,18 +546,18 @@ export default function ComplaintDetailPage() {
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="basic-info-title">
               <h2 id="basic-info-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
-                Main Information
+                {t("complaintDetail.mainInformation")}
               </h2>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-2">Category</label>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
                     {categoryLabels[complaint.category] || complaint.category}
                   </span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-2">Urgency</label>
-                  <div className="flex items-center gap-2" role="group" aria-label={`Urgency: ${getUrgencyValue(complaint.urgency)} out of 5`}>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.urgency")}</label>
+                  <div className="flex items-center gap-2" role="group" aria-label={`${t("complaintDetail.urgency")}: ${getUrgencyValue(complaint.urgency)} / 5`}>
                     <div className="flex gap-1" aria-hidden="true">
                       {[1, 2, 3, 4, 5].map((level) => (
                         <div
@@ -588,7 +574,7 @@ export default function ComplaintDetailPage() {
                       {getUrgencyValue(complaint.urgency)}
                     </span>
                     <span className="text-sm text-slate-500">
-                      ({urgencyLabels[complaint.urgency as string] || "Medium"})
+                      ({t(`complaintDetail.${(complaint.urgency as string || "MEDIUM").toLowerCase()}`) || complaint.urgency})
                     </span>
                   </div>
                 </div>
@@ -600,7 +586,7 @@ export default function ComplaintDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
                 <h2 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary" />
-                  Keywords
+                  {t("complaintDetail.keywords")}
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {complaint.keywords.map((kw: string, i: number) => (
@@ -616,7 +602,7 @@ export default function ComplaintDetailPage() {
             <section className="bg-gradient-to-r from-primary/5 to-secondary-50 rounded-2xl shadow-lg p-6 border border-primary/10">
               <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
-                Status Timeline
+                {t("complaintDetail.statusTimeline")}
               </h2>
               <div className="flex items-center justify-between relative">
                 {/* Progress line */}
@@ -630,48 +616,48 @@ export default function ComplaintDetailPage() {
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${complaint.status !== 'SUBMITTED' && complaint.status !== 'REJECTED' ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Submitted</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.submitted")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${complaint.status !== 'SUBMITTED' && complaint.status !== 'REJECTED' ? 'bg-blue-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Validated</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.validated")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(complaint.status) ? 'bg-purple-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <UserCog className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Assigned</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.assigned")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(complaint.status) ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <Clock className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">In Progress</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("complaintDetail.inProgress")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['RESOLVED', 'CLOSED'].includes(complaint.status) ? 'bg-green-600 text-white' : complaint.status === 'REJECTED' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     {complaint.status === 'REJECTED' ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">{complaint.status === 'REJECTED' ? 'Rejected' : 'Resolved'}</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{complaint.status === 'REJECTED' ? t("complaintDetail.rejected") : t("complaintDetail.resolved")}</span>
                 </div>
               </div>
             </section>
 
             {/* AI Analysis Section (BL-24, BL-25) */}
-            {(complaint.aiUrgencyPrediction || complaint.aiDuplicateCheck) && (
+            {canSeeAiInsights && (complaint.aiUrgencyPrediction || complaint.aiDuplicateCheck) && (
               <section className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-violet-200">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <span className="text-2xl">🤖</span>
-                  AI Analysis
+                  {t("complaintDetail.aiAnalysis")}
                 </h2>
                 
                 {/* BL-24: Urgency Prediction */}
                 {complaint.aiUrgencyPrediction && (
                   <div className="mb-4 p-4 bg-white rounded-xl border border-violet-100">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-slate-700">AI Urgency Prediction</span>
+                      <span className="text-sm font-medium text-slate-700">{t("complaintDetail.aiUrgencyPrediction")}</span>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         complaint.aiPredictedUrgency === 'CRITICAL' ? 'bg-red-100 text-red-700' :
                         complaint.aiPredictedUrgency === 'HIGH' ? 'bg-orange-100 text-orange-700' :
@@ -692,7 +678,7 @@ export default function ComplaintDetailPage() {
                         {Math.round((complaint.aiUrgencyPrediction.confidenceScore || 0) * 100)}% confidence
                       </span>
                     </div>
-                    {complaint.aiUrgencyPrediction.breakdown && complaint.aiUrgencyPrediction.breakdown.keywordsDetected && complaint.aiUrgencyPrediction.breakdown.keywordsDetected.length > 0 && (
+                    {complaint.aiUrgencyPrediction?.breakdown?.keywordsDetected && complaint.aiUrgencyPrediction.breakdown.keywordsDetected.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {complaint.aiUrgencyPrediction.breakdown.keywordsDetected.slice(0, 5).map((kw: string, i: number) => (
                           <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
@@ -716,7 +702,7 @@ export default function ComplaintDetailPage() {
                   }`}>
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-lg">🔁</span>
-                      <span className="text-sm font-medium text-slate-700">Duplicate Check</span>
+                      <span className="text-sm font-medium text-slate-700">{t("complaintDetail.duplicateCheck")}</span>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                         complaint.duplicateStatus === 'PROBABLE_DUPLICATE' ? 'bg-orange-200 text-orange-700' :
                         complaint.duplicateStatus === 'POSSIBLE_DUPLICATE' ? 'bg-yellow-200 text-yellow-700' :
@@ -750,25 +736,25 @@ export default function ComplaintDetailPage() {
 
             {/* Description */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">
-              <h2 id="description-title" className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
-              <p className="text-gray-800 whitespace-pre-wrap">{complaint.description}</p>
+              <h2 id="description-title" className="text-lg font-semibold text-slate-900 mb-4">{t("complaintDetail.description")}</h2>
+              <p className="text-slate-800 whitespace-pre-wrap">{complaint.description}</p>
             </section>
 
             {/* Location */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="location-title">
-              <h2 id="location-title" className="text-lg font-semibold text-gray-900 mb-4">Location</h2>
+              <h2 id="location-title" className="text-lg font-semibold text-slate-900 mb-4">{t("complaintDetail.location")}</h2>
               {!hasLocation ? (
                 <div className="h-64 bg-red-50 rounded-lg flex items-center justify-center border-2 border-red-200 border-dashed">
                   <div className="text-center">
                     <svg className="w-12 h-12 mx-auto mb-2 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                    <p className="text-red-600 font-medium">Missing location ⚠️</p>
-                    {complaint.location?.address && <p className="text-sm text-gray-600">{complaint.location.address}</p>}
+                    <p className="text-red-600 font-medium">{t("complaintDetail.locationMissing")}</p>
+                    {complaint.location?.address && <p className="text-sm text-slate-600">{complaint.location.address}</p>}
                   </div>
                 </div>
               ) : (
-                <div className="h-64 bg-gray-100 rounded-lg overflow-hidden">
+                <div className="h-64 bg-slate-100 rounded-lg overflow-hidden">
                   {complaint.location && complaint.location.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2 && (
                     <iframe
                       title={`Map of complaint at ${complaint.location.address || 'this location'}`}
@@ -801,30 +787,30 @@ export default function ComplaintDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                   🏛️ {complaint.location?.commune}{complaint.location?.commune && complaint.location?.governorate && ` (Gouvernorat ${complaint.location.governorate})`} 📍 {complaint.location.address}
-                  <span className="text-xs bg-primary/10 px-2 py-1 rounded">Open in Maps</span>
+                  <span className="text-xs bg-primary/10 px-2 py-1 rounded">{t("complaintDetail.openInMaps")}</span>
                 </a>
               )}
             </section>
 
             {/* Media */}
             <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="media-title">
-              <h2 id="media-title" className="text-lg font-semibold text-gray-900 mb-4">
-                Photos ({complaint.media?.length || 0})
+              <h2 id="media-title" className="text-lg font-semibold text-slate-900 mb-4">
+                {t("complaintDetail.photos")} ({complaint.media?.length || 0})
               </h2>
               {!complaint.media || complaint.media.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-                  <svg className="w-12 h-12 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
+                  <svg className="w-12 h-12 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <p>No photos provided</p>
+                  <p>{t("complaintDetail.noPhotos")}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {complaint.media.map((item, index) => (
                     <div key={`media-${index}`} className="relative group">
                       {mediaErrors[index] ? (
-                        <div className="w-full h-32 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <div className="w-full h-32 bg-slate-200 rounded-lg flex items-center justify-center">
+                          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                           </svg>
                         </div>
@@ -861,8 +847,8 @@ export default function ComplaintDetailPage() {
             {/* Before Photos (Technician) - Hide when resolved/closed (shown in Resolution Report instead) */}
             {complaint.beforePhotos && complaint.beforePhotos.length > 0 && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
               <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500" aria-labelledby="before-photos-title">
-                <h2 id="before-photos-title" className="text-lg font-semibold text-gray-900 mb-4">
-                  Before Work Photos ({complaint.beforePhotos.length})
+                <h2 id="before-photos-title" className="text-lg font-semibold text-slate-900 mb-4">
+                  {t("complaintDetail.beforeWorkPhotos")} ({complaint.beforePhotos.length})
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {complaint.beforePhotos.map((item, index) => (
@@ -889,7 +875,7 @@ export default function ComplaintDetailPage() {
                         </a>
                       )}
                       {item.takenAt && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-500 mt-1">
                           {new Date(item.takenAt).toLocaleDateString("fr-FR", {
                             day: "numeric",
                             month: "short",
@@ -907,8 +893,8 @@ export default function ComplaintDetailPage() {
             {/* After Photos (Technician) - Hide when resolved/closed (shown in Resolution Report instead) */}
             {complaint.afterPhotos && complaint.afterPhotos.length > 0 && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
               <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500" aria-labelledby="after-photos-title">
-                <h2 id="after-photos-title" className="text-lg font-semibold text-gray-900 mb-4">
-                  After Work Photos ({complaint.afterPhotos.length})
+                <h2 id="after-photos-title" className="text-lg font-semibold text-slate-900 mb-4">
+                  {t("complaintDetail.afterWorkPhotos")} ({complaint.afterPhotos.length})
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {complaint.afterPhotos.map((item, index) => (
@@ -935,7 +921,7 @@ export default function ComplaintDetailPage() {
                         </a>
                       )}
                       {item.takenAt && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-500 mt-1">
                           {new Date(item.takenAt).toLocaleDateString("fr-FR", {
                             day: "numeric",
                             month: "short",
@@ -953,8 +939,8 @@ export default function ComplaintDetailPage() {
             {/* Timeline/History */}
             {complaint.history && complaint.history.length > 0 && (
               <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="timeline-title">
-                <h2 id="timeline-title" className="text-lg font-semibold text-gray-900 mb-4">
-                  History
+                <h2 id="timeline-title" className="text-lg font-semibold text-slate-900 mb-4">
+                  {t("complaintDetail.history")}
                 </h2>
                 <Timeline history={complaint.history} />
               </section>
@@ -963,8 +949,8 @@ export default function ComplaintDetailPage() {
             {/* Comments */}
             {complaint.publicComments && complaint.publicComments.length > 0 && (
               <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="comments-title">
-                <h2 id="comments-title" className="text-lg font-semibold text-gray-900 mb-4">
-                  Commentaires ({complaint.publicComments.length})
+                <h2 id="comments-title" className="text-lg font-semibold text-slate-900 mb-4">
+                  {t("complaintDetail.comments")} ({complaint.publicComments.length})
                 </h2>
                 <div className="space-y-4">
                   {complaint.publicComments.map((comment: PublicComment, idx: number) => {
@@ -977,18 +963,18 @@ export default function ComplaintDetailPage() {
                           hour: "2-digit",
                           minute: "2-digit",
                         })
-                      : "Date inconnue";
+                      : t("complaintDetail.dateUnknown");
                     return (
                       <div key={comment._id || idx} className="border-b pb-4 last:border-0">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-gray-900">
-                            {comment.author?.fullName || comment.author?.name || "Utilisateur"}
+                          <span className="font-medium text-slate-900">
+                            {comment.author?.fullName || comment.author?.name || t("complaintDetail.citizen")}
                           </span>
-                          <time className="text-sm text-gray-500" dateTime={commentDate || undefined}>
+                          <time className="text-sm text-slate-500" dateTime={commentDate || undefined}>
                             {formattedDate}
                           </time>
                         </div>
-                        <p className="text-gray-700">{comment.content || comment.text}</p>
+                        <p className="text-slate-700">{comment.content || comment.text}</p>
                       </div>
                     );
                   })}
@@ -999,9 +985,9 @@ export default function ComplaintDetailPage() {
             {/* Internal Notes - Only for staff */}
             {isAgentOrManager && (
               <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="notes-title">
-                <h2 id="notes-title" className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h2 id="notes-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
-                  Internal Notes
+                  {t("complaintDetail.internalNotes")}
                 </h2>
                 <InternalNotes
                   notes={internalNotes.map((n: InternalNoteItem) => ({
@@ -1022,22 +1008,38 @@ export default function ComplaintDetailPage() {
 
           {/* Sidebar */}
           <aside className="space-y-6" role="complementary" aria-label="Additional information">
+            {/* AI Analysis */}
+            {canSeeAiInsights && (
+              <AIAnalysisCard
+                complaintId={complaint._id || complaintId}
+                title={complaint.title || ""}
+                description={complaint.description || ""}
+                category={complaint.category || ""}
+                municipality={
+                  typeof complaint.municipality === "object"
+                    ? complaint.municipality?.name || ""
+                    : complaint.municipalityName || ""
+                }
+                currentUrgency={complaint.urgency as string || "MEDIUM"}
+              />
+            )}
+
             {/* Citizen Info */}
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="citizen-title">
               <h2 id="citizen-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <User className="w-5 h-5 text-primary" />
-                Citizen
+                  {t("complaintDetail.citizen")}
               </h2>
               {complaint.isAnonymous ? (
                 <p className="text-slate-500 italic flex items-center gap-2">
                   <User className="w-4 h-4" />
-                  Anonymous Citizen
+                  {t("complaintDetail.anonymousCitizen")}
                 </p>
               ) : citizenInfo ? (
                 <div className="space-y-3">
                   <p className="font-semibold text-slate-900 flex items-center gap-2">
                     <User className="w-4 h-4 text-slate-400" />
-                    {citizenInfo.fullName || "Citizen"}
+                    {citizenInfo.fullName || t("complaintDetail.citizen")}
                   </p>
                   {citizenInfo.email && canViewContact && (
                     <p className="text-sm text-slate-500 flex items-center gap-2">
@@ -1054,12 +1056,12 @@ export default function ComplaintDetailPage() {
                   {!canViewContact && (citizenInfo.email || citizenInfo.phone) && (
                     <p className="text-sm text-slate-400 flex items-center gap-2">
                       <Shield className="w-4 h-4" />
-                      Contact hidden
+                      {t("complaintDetail.contactHidden")}
                     </p>
                   )}
                 </div>
               ) : (
-                <p className="text-slate-500">Information not available</p>
+                <p className="text-slate-500">{t("complaintDetail.infoNotAvailable")}</p>
               )}
             </section>
 
@@ -1068,7 +1070,7 @@ export default function ComplaintDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
                 <h2 id="department-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-primary" />
-                  Department
+                  {t("complaintDetail.department")}
                 </h2>
                 <p className="font-semibold text-slate-900">{complaint.department.name}</p>
               </section>
@@ -1079,13 +1081,13 @@ export default function ComplaintDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="assigned-title">
                 <h2 id="assigned-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <UserCog className="w-5 h-5 text-primary" />
-                  Assigned to
+                  {t("complaintDetail.assignedTo")}
                 </h2>
                 {complaint.assignedTo && (
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-900 flex items-center gap-2">
                       <User className="w-4 h-4 text-slate-400" />
-                      {typeof complaint.assignedTo === 'object' ? complaint.assignedTo.fullName : 'Technician Assigned'}
+                      {typeof complaint.assignedTo === 'object' ? complaint.assignedTo.fullName : t("complaintDetail.technicianAssigned")}
                     </p>
                     {typeof complaint.assignedTo === 'object' && complaint.assignedTo.email && (
                       <p className="text-sm text-slate-500 flex items-center gap-2">
@@ -1098,7 +1100,7 @@ export default function ComplaintDetailPage() {
                 {complaint.assignedTeam && typeof complaint.assignedTeam === 'object' && (
                   <div className="mt-3 pt-3 border-t border-slate-200">
                     <p className="text-sm font-medium text-slate-700 mb-2">
-                      Repair Team: {complaint.assignedTeam.name || 'Team Assigned'}
+                      {t("complaintDetail.repairTeam")}: {complaint.assignedTeam.name || t("complaintDetail.teamAssigned")}
                     </p>
                     {complaint.assignedTeam.members && Array.isArray(complaint.assignedTeam.members) && (
                       <div className="space-y-1">
@@ -1121,17 +1123,17 @@ export default function ComplaintDetailPage() {
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="dates-title">
               <h2 id="dates-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-primary" />
-                Dates
+                {t("complaintDetail.dates")}
               </h2>
               <dl className="space-y-3 text-sm">
                 <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
                   <dt className="text-slate-500 flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    Created:
+                    {t("complaintDetail.created")}:
                   </dt>
                   <dd className="text-slate-900 font-medium">
                     <time dateTime={complaint.createdAt}>
-                      {new Date(complaint.createdAt).toLocaleDateString("en-US", {
+                      {new Date(complaint.createdAt).toLocaleDateString(locale, {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
@@ -1143,11 +1145,11 @@ export default function ComplaintDetailPage() {
                   <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
                     <dt className="text-slate-500 flex items-center gap-2">
                       <Clock className="w-4 h-4" />
-                      Updated:
+                      {t("complaintDetail.updated")}:
                     </dt>
                     <dd className="text-slate-900 font-medium">
                       <time dateTime={complaint.updatedAt}>
-                        {new Date(complaint.updatedAt).toLocaleDateString("fr-FR", {
+                        {new Date(complaint.updatedAt).toLocaleDateString(locale, {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
@@ -1160,11 +1162,11 @@ export default function ComplaintDetailPage() {
                   <div className="flex justify-between items-center p-2 bg-green-50 rounded-lg">
                     <dt className="text-green-600 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4" />
-                      Resolved:
+                      {t("complaintDetail.resolved")}:
                     </dt>
                     <dd className="text-green-700 font-medium">
                       <time dateTime={complaint.resolvedAt}>
-                        {new Date(complaint.resolvedAt).toLocaleDateString("fr-FR", {
+                        {new Date(complaint.resolvedAt).toLocaleDateString(locale, {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
@@ -1181,7 +1183,7 @@ export default function ComplaintDetailPage() {
               <section className="bg-red-50 rounded-2xl shadow-lg p-6 border border-red-200" aria-labelledby="rejection-title">
                 <h2 id="rejection-title" className="text-lg font-semibold text-red-900 mb-2 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5" />
-                  Motif de rejet
+                  {t("complaintDetail.rejectionReason")}
                 </h2>
                 <p className="text-red-800">{complaint.rejectionReason}</p>
               </section>
@@ -1200,13 +1202,13 @@ export default function ComplaintDetailPage() {
                   {complaint.status === "CLOSED" && (
                     <span className="ml-auto text-xs font-medium bg-green-200 text-green-800 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <CheckCircle className="w-3 h-3" />
-                      Approved
+                      {t("complaintDetail.approved")}
                     </span>
                   )}
                   {complaint.status === "RESOLVED" && (
                     <span className="ml-auto text-xs font-medium bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3" />
-                      Pending Review
+                      {t("complaintDetail.pendingReview")}
                     </span>
                   )}
                 </h2>
@@ -1216,31 +1218,31 @@ export default function ComplaintDetailPage() {
                   <div className="bg-white rounded-xl p-4 border border-slate-200 mb-4">
                     <p className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                       <FileText className="w-4 h-4 text-primary" />
-                      Technician's Resolution Notes
+                      {t("complaintDetail.techResolutionNotes")}
                     </p>
                     <p className="text-slate-800 whitespace-pre-wrap">{complaint.resolutionNotes}</p>
                     {complaint.resolvedAt && (
                       <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
-                        Resolved on {new Date(complaint.resolvedAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {t("complaintDetail.resolvedOn")} {new Date(complaint.resolvedAt).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
                     )}
                   </div>
                 )}
 
                 {/* Proof Photos (After Work) - Show prominently */}
-                {(complaint as any).afterPhotos?.length > 0 && (
+                {afterPhotos.length > 0 && (
                   <div className="bg-white rounded-xl p-4 border border-green-200 mb-4">
                     <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                       <Camera className="w-4 h-4 text-green-600" />
-                      After Work Photos ({complaint.afterPhotos?.length})
-                      <span className="text-xs font-normal text-slate-500 ml-2">(Proof of completion)</span>
+                      {t("complaintDetail.afterWorkPhotos")} ({afterPhotos.length})
+                      <span className="text-xs font-normal text-slate-500 ml-2">({t("complaintDetail.proofOfCompletion")})</span>
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {complaint.afterPhotos?.map((photo: { url?: string; _id?: string }, idx: number) => {
+                      {afterPhotos.map((photo, idx: number) => {
                         const src = photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`;
                         return (
                           <a
-                            key={photo._id || idx}
+                            key={idx}
                             href={src}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -1259,17 +1261,17 @@ export default function ComplaintDetailPage() {
                 )}
 
                 {/* Before Work Photos - Only for Agent/Admin */}
-                {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (complaint as any).beforePhotos?.length > 0 && (
+                {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && beforePhotos.length > 0 && (
                   <div className="bg-white rounded-xl p-4 border border-blue-200 mb-4">
                     <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                       <Camera className="w-4 h-4 text-blue-600" />
-                      Before Work Photos ({complaint.beforePhotos?.length})
+                      {t("complaintDetail.beforeWorkPhotos")} ({beforePhotos.length})
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {complaint.beforePhotos?.map((photo: { url?: string; _id?: string }, idx: number) => {
+                      {beforePhotos.map((photo, idx: number) => {
                         const src = photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`;
                         return (
-                          <a key={photo._id || idx} href={src} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-blue-400 hover:shadow-md transition-all">
+                          <a key={idx} href={src} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-blue-400 hover:shadow-md transition-all">
                             <img src={src} alt={`Before work photo ${idx + 1}`} className="w-full h-28 object-cover" />
                           </a>
                         );
@@ -1291,11 +1293,11 @@ export default function ComplaintDetailPage() {
                             // Refresh page to show updated status
                             window.location.reload();
                           } else {
-                            alert(result.message || "Failed to approve resolution");
+                            alert(result.message || t("complaintDetail.failedApproveResolution"));
                           }
                         } catch (err) {
                           console.error("Error approving resolution:", err);
-                          alert("Failed to approve resolution");
+                          alert(t("complaintDetail.failedApproveResolution"));
                         } finally {
                           setActionLoading(false);
                         }
@@ -1304,7 +1306,7 @@ export default function ComplaintDetailPage() {
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all text-sm font-semibold disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      {actionLoading ? "..." : "Approve"}
+                      {actionLoading ? "..." : t("complaintDetail.approve")}
                     </button>
                     <button
                       onClick={() => setActionModal("reject-resolution")}
@@ -1312,7 +1314,7 @@ export default function ComplaintDetailPage() {
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-semibold disabled:opacity-50"
                     >
                       <X className="w-4 h-4" />
-                      Reject
+                      {t("complaintDetail.reject")}
                     </button>
                   </div>
                 )}
@@ -1324,7 +1326,7 @@ export default function ComplaintDetailPage() {
               <section className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl shadow-lg p-6 border border-emerald-200" aria-labelledby="community-title">
                 <h2 id="community-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <ThumbsUp className="w-5 h-5 text-emerald-600" />
-                  Community Support
+                  {t("complaintDetail.communitySupport")}
                 </h2>
                 
                 {/* Confirmation/Upvote stats */}
@@ -1334,14 +1336,14 @@ export default function ComplaintDetailPage() {
                       <CheckCircle className="w-5 h-5" />
                       <span className="text-2xl font-bold">{complaint.confirmationCount || 0}</span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Confirmations</p>
+                    <p className="text-xs text-slate-500 mt-1">{t("complaintDetail.confirmations")}</p>
                   </div>
                   <div className="flex-1 bg-white/60 rounded-xl p-3 text-center">
                     <div className="flex items-center justify-center gap-1 text-blue-600">
                       <ThumbsUp className="w-5 h-5" />
                       <span className="text-2xl font-bold">{complaint.upvoteCount || 0}</span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Upvotes</p>
+                    <p className="text-xs text-slate-500 mt-1">{t("complaintDetail.upvotes")}</p>
                   </div>
                 </div>
 
@@ -1357,7 +1359,7 @@ export default function ComplaintDetailPage() {
                     } disabled:opacity-50`}
                   >
                     <CheckCircle className="w-4 h-4" />
-                    {isConfirming ? "..." : hasConfirmed ? "Confirmed" : "Confirm Issue"}
+                    {isConfirming ? "..." : hasConfirmed ? t("complaintDetail.confirmed") : t("complaintDetail.confirmIssue")}
                   </button>
                   <button
                     onClick={handleUpvote}
@@ -1369,12 +1371,12 @@ export default function ComplaintDetailPage() {
                     } disabled:opacity-50`}
                   >
                     <ThumbsUp className="w-4 h-4" />
-                    {isUpvoting ? "..." : hasUpvoted ? "Upvoted" : "Upvote"}
+                    {isUpvoting ? "..." : hasUpvoted ? t("complaintDetail.upvoted") : t("complaintDetail.upvote")}
                   </button>
                 </div>
                 
                 <p className="text-xs text-slate-500 mt-3 text-center">
-                  Help prioritize this issue by confirming it exists in your area
+                  {t("complaintDetail.communityHelpHint")}
                 </p>
               </section>
             )}
@@ -1384,7 +1386,7 @@ export default function ComplaintDetailPage() {
               <section className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl shadow-lg p-6 border border-primary/20" aria-labelledby="actions-title">
                 <h2 id="actions-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
-                  Actions
+                  {t("complaintDetail.actions")}
                 </h2>
                 <div className="space-y-3">
                   {/* SUBMITTED - Agent can Validate/Reject, Admin can Validate */}
@@ -1397,14 +1399,14 @@ export default function ComplaintDetailPage() {
                             icon={<CheckCircle2 className="w-4 h-4" />}
                             onClick={() => setActionModal("validate")}
                           >
-                            Validate Complaint
+                            {t("complaintDetail.validateComplaint")}
                           </Button>
                           <Button
                             className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
                             icon={<X className="w-4 h-4" />}
                             onClick={() => setActionModal("reject")}
                           >
-                            Reject Complaint
+                            {t("complaintDetail.rejectComplaint")}
                           </Button>
                         </>
                       )}
@@ -1420,7 +1422,7 @@ export default function ComplaintDetailPage() {
                           icon={<Building2 className="w-4 h-4" />}
                           onClick={() => setActionModal("department")}
                         >
-                          Assign to Department
+                          {t("complaintDetail.assignToDepartment")}
                         </Button>
                       )}
                       {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
@@ -1429,7 +1431,7 @@ export default function ComplaintDetailPage() {
                           icon={<AlertTriangle className="w-4 h-4" />}
                           onClick={() => setActionModal("priority")}
                         >
-                          Set Priority
+                          {t("complaintDetail.setPriority")}
                         </Button>
                       )}
                     </>
@@ -1445,26 +1447,26 @@ export default function ComplaintDetailPage() {
                             icon={<UserCog className="w-4 h-4" />}
                             onClick={() => setActionModal("technician")}
                           >
-                            {complaint.assignedTo ? "Change Technician" : "Assign to Repair Team"}
+                            {complaint.assignedTo ? t("complaintDetail.changeTechnician") : t("complaintDetail.assignToRepairTeam")}
                           </Button>
                           <Button
                             className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
                             icon={<AlertTriangle className="w-4 h-4" />}
                             onClick={() => setActionModal("priority")}
                           >
-                            Set Priority
+                            {t("complaintDetail.setPriority")}
                           </Button>
                           {!complaint.assignedTo && (
                             <p className="text-xs text-slate-500 text-center mt-2">
-                              Select a technician to assign this task
+                              {t("complaintDetail.selectTechnicianHint")}
                             </p>
                           )}
                         </>
                       )}
                       {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && complaint.assignedDepartment && !complaint.assignedTo && (
                         <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                          <p className="text-sm text-purple-800 font-medium">Department Assigned</p>
-                          <p className="text-xs text-purple-600">Waiting for technician assignment from manager</p>
+                          <p className="text-sm text-purple-800 font-medium">{t("complaintDetail.departmentAssigned")}</p>
+                          <p className="text-xs text-purple-600">{t("complaintDetail.waitingTechnicianAssignment")}</p>
                         </div>
                       )}
                     </>
@@ -1475,8 +1477,8 @@ export default function ComplaintDetailPage() {
                     <>
                       {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
                         <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
-                          <p className="text-sm text-orange-800 font-medium">In Progress</p>
-                          <p className="text-xs text-orange-600">Technician is working on this complaint</p>
+                          <p className="text-sm text-orange-800 font-medium">{t("complaintDetail.inProgress")}</p>
+                          <p className="text-xs text-orange-600">{t("complaintDetail.techWorking")}</p>
                         </div>
                       )}
                     </>
@@ -1487,8 +1489,8 @@ export default function ComplaintDetailPage() {
                     <>
                       {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
                         <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                          <p className="text-sm text-green-800 font-medium">Resolution Report Submitted</p>
-                          <p className="text-xs text-green-600">Review the resolution report above to approve or reject</p>
+                          <p className="text-sm text-green-800 font-medium">{t("complaintDetail.resolutionReportSubmitted")}</p>
+                          <p className="text-xs text-green-600">{t("complaintDetail.reviewResolutionReport")}</p>
                         </div>
                       )}
                     </>
@@ -1499,14 +1501,14 @@ export default function ComplaintDetailPage() {
                     <>
                       {user?.role === "DEPARTMENT_MANAGER" && (
                         <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                          <p className="text-sm text-green-800 font-medium">Department Statistics</p>
-                          <p className="text-xs text-green-600">View performance metrics</p>
+                          <p className="text-sm text-green-800 font-medium">{t("complaintDetail.departmentStats")}</p>
+                          <p className="text-xs text-green-600">{t("complaintDetail.viewPerformanceMetrics")}</p>
                         </div>
                       )}
                       {user?.role === "ADMIN" && (
                         <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                          <p className="text-sm text-purple-800 font-medium">Reports</p>
-                          <p className="text-xs text-purple-600">Generate global reports</p>
+                          <p className="text-sm text-purple-800 font-medium">{t("complaintDetail.reports")}</p>
+                          <p className="text-xs text-purple-600">{t("complaintDetail.generateGlobalReports")}</p>
                         </div>
                       )}
                     </>
@@ -1514,9 +1516,9 @@ export default function ComplaintDetailPage() {
 
                   {/* REJECTED - All roles can see archived */}
                   {complaint.status === "REJECTED" && (
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="text-sm text-gray-600 font-medium">Archived</p>
-                      <p className="text-xs text-gray-500">This complaint has been rejected</p>
+                    <div className="p-3 bg-slate-50 rounded-lg border border-gray-200">
+                      <p className="text-sm text-slate-600 font-medium">{t("complaintDetail.archived")}</p>
+                      <p className="text-xs text-slate-500">{t("complaintDetail.rejectedArchived")}</p>
                     </div>
                   )}
                 </div>
@@ -1528,7 +1530,7 @@ export default function ComplaintDetailPage() {
               <section className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-indigo-200" aria-labelledby="tech-actions-title">
                 <h2 id="tech-actions-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <UserCog className="w-5 h-5 text-indigo-600" />
-                  Technician Actions
+                  {t("complaintDetail.technicianActions")}
                 </h2>
                 <div className="space-y-3">
                   {/* ASSIGNED - Technician can Start */}
@@ -1538,7 +1540,7 @@ export default function ComplaintDetailPage() {
                       icon={<CheckCircle2 className="w-4 h-4" />}
                       onClick={() => setActionModal("start-work")}
                     >
-                      Start Work
+                      {t("complaintDetail.startWork")}
                     </Button>
                   )}
 
@@ -1549,15 +1551,15 @@ export default function ComplaintDetailPage() {
                       icon={<CheckCircle2 className="w-4 h-4" />}
                       onClick={() => setActionModal("resolve")}
                     >
-                      Mark as Resolved
+                      {t("complaintDetail.markAsResolved")}
                     </Button>
                   )}
 
                   {/* RESOLVED/CLOSED - Technician can see archived */}
                   {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (
-                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <p className="text-sm text-gray-600 font-medium">Archived</p>
-                      <p className="text-xs text-gray-500">This complaint has been completed</p>
+                    <div className="p-3 bg-slate-50 rounded-lg border border-gray-200">
+                      <p className="text-sm text-slate-600 font-medium">{t("complaintDetail.archived")}</p>
+                      <p className="text-xs text-slate-500">{t("complaintDetail.completedArchived")}</p>
                     </div>
                   )}
                 </div>
@@ -1572,20 +1574,20 @@ export default function ComplaintDetailPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">
-              {actionModal === "validate" && "Validate Complaint"}
-              {actionModal === "reject" && "Reject Complaint"}
-              {actionModal === "department" && "Assign to Department"}
-              {actionModal === "priority" && "Update Priority"}
-              {actionModal === "technician" && "Assign to Repair Team"}
-              {actionModal === "reject-resolution" && "Reject Resolution Report"}
-              {actionModal === "start-work" && "Start Work"}
-              {actionModal === "resolve" && "Submit Resolution"}
+              {actionModal === "validate" && t("complaintDetail.validateComplaint")}
+              {actionModal === "reject" && t("complaintDetail.rejectComplaint")}
+              {actionModal === "department" && t("complaintDetail.assignToDepartment")}
+              {actionModal === "priority" && t("complaintDetail.updatePriority")}
+              {actionModal === "technician" && t("complaintDetail.assignToRepairTeam")}
+              {actionModal === "reject-resolution" && t("complaintDetail.rejectResolutionReport")}
+              {actionModal === "start-work" && t("complaintDetail.startWork")}
+              {actionModal === "resolve" && t("complaintDetail.submitResolution")}
             </h3>
             
             {actionModal === "validate" && (
               <div className="space-y-4">
                 <p className="text-slate-600">
-                  Do you want to validate this complaint? It will be sent to the appropriate department.
+                  {t("complaintDetail.validateHelp")}
                 </p>
                 <div className="flex gap-3">
                   <Button
@@ -1593,14 +1595,14 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     className="flex-1 bg-green-600 hover:bg-green-700"
                     onClick={() => handleStatusUpdate("VALIDATED")}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Validate"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.validate")}
                   </Button>
                 </div>
               </div>
@@ -1610,14 +1612,14 @@ export default function ComplaintDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Rejection Reason
+                    {t("complaintDetail.rejectionReason")}
                   </label>
                   <textarea
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     rows={3}
-                    placeholder="Explain why this complaint is being rejected..."
+                    placeholder={t("complaintDetail.rejectReasonPlaceholder")}
                   />
                 </div>
                 <div className="flex gap-3">
@@ -1626,14 +1628,14 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     className="flex-1 bg-red-600 hover:bg-red-700"
                     onClick={() => handleStatusUpdate("REJECTED")}
                     disabled={actionLoading || !rejectionReason.trim()}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.reject")}
                   </Button>
                 </div>
               </div>
@@ -1643,23 +1645,23 @@ export default function ComplaintDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Priority Level
+                    {t("complaintDetail.priorityLevel")}
                   </label>
                   <select
                     value={selectedUrgency}
                     onChange={(e) => setSelectedUrgency(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   >
-                    <option value="">Select...</option>
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                    <option value="URGENT">Urgent</option>
+                    <option value="">{t("complaintDetail.select")}</option>
+                    <option value="LOW">{t("complaintDetail.low")}</option>
+                    <option value="MEDIUM">{t("complaintDetail.medium")}</option>
+                    <option value="HIGH">{t("complaintDetail.high")}</option>
+                    <option value="URGENT">{t("complaintDetail.urgent")}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Priority Score (1-10)
+                    {t("complaintDetail.priorityScore")}
                   </label>
                   <input
                     type="number"
@@ -1667,10 +1669,10 @@ export default function ComplaintDetailPage() {
                     max="10"
                     value={selectedPriorityScore}
                     onChange={(e) => setSelectedPriorityScore(e.target.value)}
-                    placeholder={complaint.priorityScore?.toString() || "Enter score"}
+                    placeholder={complaint.priorityScore?.toString() || t("complaintDetail.enterScore")}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Current score: {complaint.priorityScore || 0}</p>
+                  <p className="text-xs text-slate-500 mt-1">{t("complaintDetail.currentScore")}: {complaint.priorityScore || 0}</p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -1678,14 +1680,14 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     className="flex-1 bg-purple-600 hover:bg-purple-700"
                     onClick={handlePriorityUpdate}
                     disabled={actionLoading || (!selectedUrgency && !selectedPriorityScore)}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.update")}
                   </Button>
                 </div>
               </div>
@@ -1726,14 +1728,14 @@ export default function ComplaintDetailPage() {
                 })()}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Select Department
+                    {t("complaintDetail.selectDepartment")}
                   </label>
                   <select
                     value={selectedDepartment}
                     onChange={(e) => setSelectedDepartment(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                   >
-                    <option value="">Choose a department...</option>
+                    <option value="">{t("complaintDetail.chooseDepartment")}</option>
                     {(departments || []).map((dept) => (
                       <option key={dept._id} value={dept._id}>
                         {dept.name}
@@ -1741,7 +1743,7 @@ export default function ComplaintDetailPage() {
                     ))}
                   </select>
                   {(!departments || departments.length === 0) && (
-                    <p className="text-sm text-slate-500 mt-2">No departments available</p>
+                    <p className="text-sm text-slate-500 mt-2">{t("complaintDetail.noDepartments")}</p>
                   )}
                 </div>
                 <div className="flex gap-3">
@@ -1753,14 +1755,14 @@ export default function ComplaintDetailPage() {
                       setSelectedDepartment("");
                     }}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     className="flex-1 bg-blue-600 hover:bg-blue-700"
                     onClick={handleDepartmentUpdate}
                     disabled={actionLoading || !selectedDepartment}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.assign")}
                   </Button>
                 </div>
               </div>
@@ -1770,18 +1772,18 @@ export default function ComplaintDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Select Technician(s) for Repair Team
+                    {t("complaintDetail.selectTechnicians")}
                   </label>
                   {technicians.length === 0 ? (
                     <div className="text-center py-4 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-amber-800 font-medium">No technicians available</p>
+                      <p className="text-amber-800 font-medium">{t("complaintDetail.noTechnicians")}</p>
                       <p className="text-sm text-amber-600 mt-1">
-                        There are no technicians assigned to this department yet.
+                        {t("complaintDetail.noTechniciansHint")}
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                      <p className="text-xs text-slate-500 mb-2">Select one or more technicians:</p>
+                      <p className="text-xs text-slate-500 mb-2">{t("complaintDetail.selectOneOrMore")}</p>
                       {technicians.map((tech) => {
                         const isSelected = selectedTechnicians.includes(tech._id);
                         return (
@@ -1816,7 +1818,7 @@ export default function ComplaintDetailPage() {
                   )}
                   {selectedTechnicians.length > 1 && (
                     <p className="text-sm text-primary font-medium mt-2">
-                      {selectedTechnicians.length} technicians selected - A repair team will be created
+                      {t("complaintDetail.techTeamSelected", { count: selectedTechnicians.length })}
                     </p>
                   )}
                 </div>
@@ -1830,7 +1832,7 @@ export default function ComplaintDetailPage() {
                       setSelectedTechnicians([]);
                     }}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     className="flex-1 bg-indigo-600 hover:bg-indigo-700"
@@ -1838,7 +1840,7 @@ export default function ComplaintDetailPage() {
                     disabled={actionLoading || (selectedTechnicians.length === 0 && !selectedTechnician)}
                   >
                     {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 
-                      selectedTechnicians.length > 1 ? "Create Team & Assign" : "Assign"
+                      selectedTechnicians.length > 1 ? t("complaintDetail.createTeamAssign") : t("complaintDetail.assign")
                     }
                   </Button>
                 </div>
@@ -1848,14 +1850,14 @@ export default function ComplaintDetailPage() {
             {actionModal === "approve-resolution" && (
               <div className="space-y-4">
                 <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-sm font-medium text-green-800">You are about to approve the resolution report for:</p>
+                  <p className="text-sm font-medium text-green-800">{t("complaintDetail.aboutToApprove")}</p>
                   <p className="text-sm text-green-700 mt-1 font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</p>
                   {complaint.resolutionNotes && (
                     <p className="text-sm text-slate-600 mt-2 italic">&quot;{complaint.resolutionNotes.slice(0, 200)}{complaint.resolutionNotes.length > 200 ? '...' : ''}&quot;</p>
                   )}
                 </div>
                 <p className="text-sm text-slate-600">
-                  This will close the complaint and notify the citizen and technician.
+                  {t("complaintDetail.approveWillClose")}
                 </p>
                 <div className="flex gap-3">
                   <Button
@@ -1863,7 +1865,7 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => setActionModal(null)}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     className="flex-1 bg-green-600 hover:bg-green-700"
@@ -1887,7 +1889,7 @@ export default function ComplaintDetailPage() {
                     }}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Approval"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.confirmApproval")}
                   </Button>
                 </div>
               </div>
@@ -1897,14 +1899,14 @@ export default function ComplaintDetailPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Rejection Reason <span className="text-red-500">*</span>
+                    {t("complaintDetail.rejectionReason")} <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={rejectionReason}
                     onChange={(e) => setRejectionReason(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     rows={4}
-                    placeholder="Explain why this resolution report is being rejected..."
+                    placeholder={t("complaintDetail.rejectResolutionPlaceholder")}
                   />
                 </div>
                 <div className="flex gap-3">
@@ -1916,7 +1918,7 @@ export default function ComplaintDetailPage() {
                       setRejectionReason("");
                     }}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     variant="danger"
@@ -1931,18 +1933,18 @@ export default function ComplaintDetailPage() {
                           setRejectionReason("");
                           window.location.reload();
                         } else {
-                          alert(result.message || "Failed to reject resolution");
+                          alert(result.message || t("complaintDetail.failedRejectResolution"));
                         }
                       } catch (err) {
                         console.error("Error rejecting resolution:", err);
-                        alert("Failed to reject resolution");
+                        alert(t("complaintDetail.failedRejectResolution"));
                       } finally {
                         setActionLoading(false);
                       }
                     }}
                     disabled={actionLoading || !rejectionReason.trim()}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reject Resolution"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.rejectResolutionReport")}
                   </Button>
                 </div>
               </div>
@@ -1951,16 +1953,16 @@ export default function ComplaintDetailPage() {
             {actionModal === "start-work" && (
               <div className="space-y-4">
                 <p className="text-slate-600">
-                  Are you sure you want to start work on complaint <span className="font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</span>?
+                  {t("complaintDetail.startWorkConfirm", { id: getComplaintIdDisplay(complaint._id || complaint.id || "") })}
                 </p>
                 <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={() => setActionModal(null)}>Cancel</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setActionModal(null)}>{t("common.cancel")}</Button>
                   <Button
                     className="flex-1 bg-indigo-600 hover:bg-indigo-700"
                     onClick={() => handleStatusUpdate("IN_PROGRESS")}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Start Work"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.startWork")}
                   </Button>
                 </div>
               </div>
@@ -1969,16 +1971,16 @@ export default function ComplaintDetailPage() {
             {actionModal === "resolve" && (
               <div className="space-y-4">
                 <p className="text-slate-600">
-                  Submit your resolution for <span className="font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</span>? The agent will review your report.
+                  {t("complaintDetail.resolveConfirm", { id: getComplaintIdDisplay(complaint._id || complaint.id || "") })}
                 </p>
                 <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={() => setActionModal(null)}>Cancel</Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setActionModal(null)}>{t("common.cancel")}</Button>
                   <Button
                     className="flex-1 bg-green-600 hover:bg-green-700"
                     onClick={() => handleStatusUpdate("RESOLVED")}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit Resolution"}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.submitResolution")}
                   </Button>
                 </div>
               </div>

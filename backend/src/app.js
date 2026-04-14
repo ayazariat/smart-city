@@ -15,6 +15,7 @@ const notificationRoutes = require("./routes/notifications.routes");
 const aiRoutes = require("./routes/ai.routes");
 const publicRoutes = require("./routes/public.routes");
 const heatmapRoutes = require("./routes/heatmap.routes");
+const activityRoutes = require("./routes/activity.routes");
 
 const app = express();
 
@@ -60,6 +61,7 @@ app.use("/api/notifications", notificationRoutes.router);
 app.use("/api/ai", aiRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/heatmap", heatmapRoutes);
+app.use("/api/activity", activityRoutes);
 
 // 404 handler
 app.use((req, res) => {

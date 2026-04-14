@@ -1,5 +1,6 @@
 import React, { ButtonHTMLAttributes, ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
@@ -25,6 +26,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     disabled,
     ...props 
   }, ref) => {
+    const { t } = useTranslation();
     const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-300 focus:outline-none focus:ring-4 disabled:cursor-not-allowed active:scale-95 relative overflow-hidden';
     
     const variants = {
@@ -60,7 +62,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {isLoading ? (
           <>
             <LoaderCircle size={18} className="animate-spin" />
-            <span>Loading...</span>
+            <span>{t('common.loading')}</span>
           </>
         ) : (
           <>

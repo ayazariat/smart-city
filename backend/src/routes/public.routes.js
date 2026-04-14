@@ -943,7 +943,7 @@ router.get("/my-municipality-complaints", authenticate, authorize("CITIZEN"), as
     
     const total = await Complaint.countDocuments(query);
     const complaints = await Complaint.find(query)
-      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId media')
+      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId media upvoteCount confirmationCount')
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit))
       .sort({ createdAt: -1 });
@@ -987,6 +987,7 @@ router.post("/complaints/:id/confirm", authenticate, async (req, res) => {
       });
     }
     
+    complaint.confirmationCount = complaint.confirmations?.length || 0;
     await complaint.save();
     
     res.json({
@@ -1026,12 +1027,14 @@ router.post("/complaints/:id/upvote", authenticate, async (req, res) => {
       });
     }
     
+    complaint.upvoteCount = complaint.votes?.length || 0;
     await complaint.save();
     
     res.json({
       success: true,
       message: existingIndex >= 0 ? "Upvote removed" : "Complaint upvoted",
-      voteCount: complaint.votes?.length || 0
+      voteCount: complaint.votes?.length || 0,
+      upvoteCount: complaint.votes?.length || 0
     });
   } catch (error) {
     console.error("Upvote error:", error);

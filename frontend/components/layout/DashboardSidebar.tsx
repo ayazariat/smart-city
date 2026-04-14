@@ -7,6 +7,9 @@ import {
   Sparkles, X, LayoutDashboard, FileText, Plus, Archive, User,
   ClipboardList, Wrench, Users, BarChart3, Menu, LogOut, Bell, MapPin
 } from "lucide-react";
+import ThemeToggle from "../ui/ThemeToggle";
+import LanguagePicker from "../ui/LanguagePicker";
+import { useTranslation } from "react-i18next";
 
 interface SidebarItem {
   id: string;
@@ -34,37 +37,37 @@ interface DashboardSidebarProps {
   onNotificationsClick?: () => void;
 }
 
-function getSidebarItems(role: string, stats?: DashboardSidebarProps["stats"]): SidebarItem[] {
+function getSidebarItems(role: string, stats: DashboardSidebarProps["stats"] | undefined, t: (key: string) => string): SidebarItem[] {
   const overdue = stats?.totalOverdue || stats?.overdue || 0;
 
   const common: SidebarItem[] = [
-    { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { id: "dashboard", label: t("sidebar.dashboard"), href: "/dashboard", icon: LayoutDashboard },
   ];
 
   const roleItems: SidebarItem[] = (() => {
     switch (role) {
       case "CITIZEN":
         return [
-          { id: "my-complaints", label: "My Complaints", href: "/my-complaints", icon: FileText },
-          { id: "area-complaints", label: "Your Area", href: "/dashboard#complaints-area", icon: MapPin },
-          { id: "new-complaint", label: "New Complaint", href: "/complaints/new", icon: Plus, isAction: true },
+          { id: "my-complaints", label: t("sidebar.myComplaints"), href: "/my-complaints", icon: FileText },
+          { id: "area-complaints", label: t("sidebar.yourArea"), href: "/dashboard#complaints-area", icon: MapPin },
+          { id: "new-complaint", label: t("sidebar.newComplaint"), href: "/complaints/new", icon: Plus, isAction: true },
         ];
       case "MUNICIPAL_AGENT":
         return [
-          { id: "complaints", label: "My Actions", href: "/agent/complaints", icon: ClipboardList, badge: (stats?.submitted || stats?.pending || 0) > 0 ? (stats?.submitted || stats?.pending || 0) : undefined },
+          { id: "complaints", label: t("sidebar.myActions"), href: "/agent/complaints", icon: ClipboardList, badge: (stats?.submitted || stats?.pending || 0) > 0 ? (stats?.submitted || stats?.pending || 0) : undefined },
         ];
       case "DEPARTMENT_MANAGER":
         return [
-          { id: "pending", label: "To Process", href: "/manager/pending", icon: ClipboardList, badge: overdue > 0 ? overdue : undefined },
+          { id: "pending", label: t("sidebar.toProcess"), href: "/manager/pending", icon: ClipboardList, badge: overdue > 0 ? overdue : undefined },
         ];
       case "TECHNICIAN":
         return [
-          { id: "tasks", label: "My Tasks", href: "/tasks", icon: Wrench, badge: (stats?.assigned || 0) > 0 ? stats?.assigned : undefined },
+          { id: "tasks", label: t("sidebar.myTasks"), href: "/tasks", icon: Wrench, badge: (stats?.assigned || 0) > 0 ? stats?.assigned : undefined },
         ];
       case "ADMIN":
         return [
-          { id: "users", label: "User Management", href: "/admin/users", icon: Users },
-          { id: "all-complaints", label: "All Complaints", href: "/admin/complaints", icon: FileText, badge: overdue > 0 ? overdue : undefined },
+          { id: "users", label: t("sidebar.userManagement"), href: "/admin/users", icon: Users },
+          { id: "all-complaints", label: t("sidebar.allComplaints"), href: "/admin/complaints", icon: FileText, badge: overdue > 0 ? overdue : undefined },
         ];
       default:
         return [];
@@ -72,23 +75,16 @@ function getSidebarItems(role: string, stats?: DashboardSidebarProps["stats"]): 
   })();
 
   const bottom: SidebarItem[] = [
-    { id: "archive", label: "Archive", href: "/archive", icon: Archive },
-    { id: "transparency", label: "Transparency", href: "/transparency", icon: BarChart3 },
-    { id: "profile", label: "My Profile", href: "/profile", icon: User },
+    { id: "archive", label: t("sidebar.archive"), href: "/archive", icon: Archive },
+    { id: "transparency", label: t("sidebar.transparency"), href: "/transparency", icon: BarChart3 },
+    { id: "profile", label: t("sidebar.myProfile"), href: "/profile", icon: User },
   ];
 
   return [...common, ...roleItems, ...bottom];
 }
 
-function getRoleLabel(role: string) {
-  switch (role) {
-    case "CITIZEN": return "Citizen";
-    case "MUNICIPAL_AGENT": return "Municipal Agent";
-    case "DEPARTMENT_MANAGER": return "Dept. Manager";
-    case "TECHNICIAN": return "Technician";
-    case "ADMIN": return "Administrator";
-    default: return role;
-  }
+function getRoleLabel(role: string, t: (key: string) => string) {
+  return t(`roles.${role}`) || role;
 }
 
 export default function DashboardSidebar({
@@ -99,10 +95,12 @@ export default function DashboardSidebar({
   unreadNotifications,
   onNotificationsClick,
 }: DashboardSidebarProps) {
+  const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+  const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
 
-  const items = getSidebarItems(role, stats);
+  const items = getSidebarItems(role, stats, t);
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -144,11 +142,12 @@ export default function DashboardSidebar({
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-0 h-full w-[260px] z-40
-          bg-white text-slate-700 border-r border-slate-200
+          fixed top-0 h-full w-[260px] z-40
+          bg-white text-slate-700
           transform transition-transform duration-300 ease-in-out shadow-sm
           md:translate-x-0
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          ${isRTL ? "right-0 border-l border-slate-200" : "left-0 border-r border-slate-200"}
+          ${sidebarOpen ? "translate-x-0" : isRTL ? "translate-x-full" : "-translate-x-full"}
         `}
       >
         <div className="flex flex-col h-full">
@@ -182,7 +181,7 @@ export default function DashboardSidebar({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{fullName || "User"}</p>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary">
-                  {getRoleLabel(role)}
+                  {getRoleLabel(role, t)}
                 </span>
               </div>
               <button
@@ -197,12 +196,14 @@ export default function DashboardSidebar({
                   </span>
                 )}
               </button>
+              <ThemeToggle />
+              <LanguagePicker />
             </div>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Navigation</p>
+            <p className="px-3 mb-2 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{t('sidebar.navigation')}</p>
             {items.map((item) => {
               const active = isActive(item.href);
 
@@ -250,7 +251,7 @@ export default function DashboardSidebar({
               className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-all text-sm"
             >
               <LogOut className="w-4 h-4" />
-              Logout
+              {t('sidebar.logout')}
             </button>
           </div>
         </div>

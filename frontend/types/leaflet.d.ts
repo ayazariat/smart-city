@@ -26,3 +26,5 @@ declare module 'react-leaflet-markercluster' {
   const MarkerClusterGroup: FC<MarkerClusterGroupProps>;
   export default MarkerClusterGroup;
 }
+
+declare module 'leaflet/dist/leaflet.css';

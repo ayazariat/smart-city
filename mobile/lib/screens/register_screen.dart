@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:smart_city_app/services/api_client.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/main.dart';
 import 'package:smart_city_app/screens/verify_email_screen.dart';
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
-
-  final ApiClient _apiClient = ApiClient();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -58,16 +57,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      await _apiClient.post('/auth/register', {
-        'fullName': _fullNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'password': _passwordController.text,
-        'phone': _phoneController.text.isNotEmpty
-            ? _phoneController.text
-            : null,
-        'governorate': _selectedGovernorate,
-        'municipality': _selectedMunicipality,
-      });
+      await ref
+          .read(authProvider.notifier)
+          .register(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+            fullName: _fullNameController.text.trim(),
+            role: 'CITIZEN',
+            phone: _phoneController.text.isNotEmpty
+                ? _phoneController.text
+                : null,
+            governorate: _selectedGovernorate,
+            municipality: _selectedMunicipality,
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -84,13 +86,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         );
       }
-    } on ApiException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-      });
     } catch (e) {
       setState(() {
-        _errorMessage = 'An unexpected error occurred. Please try again.';
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
       if (mounted) {

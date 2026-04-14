@@ -19,7 +19,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" dir="ltr" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("smartcity-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");var l=localStorage.getItem("smartcity-lang");if(l){document.documentElement.lang=l;if(l==="ar"){document.documentElement.dir="rtl"}}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className={inter.variable}>
         <Providers>{children}</Providers>
       </body>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 type HistoryItem = {
   action?: string;
@@ -47,26 +48,23 @@ const getActionColor = (action: string) => {
   }
 };
 
-const getActionLabel = (action: string) => {
-  const map: Record<string, string> = {
-    SUBMITTED: "Submitted",
-    submitted: "Submitted",
-    VALIDATED: "Validated",
-    validated: "Validated",
-    REJECTED: "Rejected",
-    rejected: "Rejected",
-    ASSIGNED: "Assigned",
-    assigned: "Assigned",
-    STARTED: "Started",
-    started: "Started",
-    IN_PROGRESS: "In Progress",
-    in_progress: "In Progress",
-    RESOLVED: "Resolved",
-    resolved: "Resolved",
-    CLOSED: "Closed",
-    closed: "Closed",
-  };
-  return map[action] || action;
+const actionKeyMap: Record<string, string> = {
+  SUBMITTED: "timeline.submitted",
+  submitted: "timeline.submitted",
+  VALIDATED: "timeline.validated",
+  validated: "timeline.validated",
+  REJECTED: "timeline.rejected",
+  rejected: "timeline.rejected",
+  ASSIGNED: "timeline.assigned",
+  assigned: "timeline.assigned",
+  STARTED: "timeline.started",
+  started: "timeline.started",
+  IN_PROGRESS: "timeline.inProgress",
+  in_progress: "timeline.inProgress",
+  RESOLVED: "timeline.resolved",
+  resolved: "timeline.resolved",
+  CLOSED: "timeline.closed",
+  closed: "timeline.closed",
 };
 
 const formatDate = (ts?: string) => {
@@ -76,12 +74,13 @@ const formatDate = (ts?: string) => {
 };
 
 const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
+  const { t } = useTranslation();
   if (!history || history.length === 0) return null;
 
   // Normalize history items to handle both backend formats
   let normalizedHistory = history.map((h) => ({
     action: h.action || h.status || "",
-    actorName: h.actorName || h.changedBy?.fullName || "System",
+    actorName: h.actorName || h.changedBy?.fullName || t("timeline.system"),
     actorRole: h.actorRole || "",
     note: h.note || h.comment || "",
     timestamp: h.timestamp || h.date || "",
@@ -101,7 +100,7 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
     // Replace actor names with generic labels for citizens
     normalizedHistory = normalizedHistory.map(h => ({
       ...h,
-      actorName: h.actorName === "System" ? "System" : "Municipal Agent",
+      actorName: h.actorName === t("timeline.system") ? t("timeline.system") : t("timeline.municipalAgent"),
       actorRole: "",
     }));
   }
@@ -160,7 +159,7 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
                   color: getActionColor(h.action),
                 }}
               >
-                {getActionLabel(h.action)}
+                {actionKeyMap[h.action] ? t(actionKeyMap[h.action]) : h.action}
               </span>
               <span
                 style={{
@@ -175,7 +174,7 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
             <div style={{ fontSize: 11, color: "var(--txt2)" }}>
               {userRole !== "CITIZEN" && (
                 <>
-                  By <strong>{h.actorName}</strong>
+                  {t("timeline.by")} <strong>{h.actorName}</strong>
                   {h.actorRole && (
                     <span
                       className="badge"
@@ -192,7 +191,7 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
                 </>
               )}
               {userRole === "CITIZEN" && h.actorName !== "System" && (
-                <span style={{ color: "var(--txt3)" }}>Municipal Agent</span>
+                <span style={{ color: "var(--txt3)" }}>{t("timeline.municipalAgent")}</span>
               )}
             </div>
             {h.note && (
