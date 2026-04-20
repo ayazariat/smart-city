@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -6,12 +7,15 @@ import '../models/complaint_model.dart';
 import '../services/complaint_service.dart';
 import 'complaints_provider.dart';
 
-// Socket URL - uses localhost for web, 10.0.2.2 for Android emulator
+// Socket URL - matches ApiClient base URL but without /api
 String get _socketUrl {
   if (kIsWeb) {
     return 'http://localhost:5000';
   }
-  return 'http://10.0.2.2:5000';
+  if (Platform.isAndroid) {
+    return 'http://10.0.2.2:5000';
+  }
+  return 'http://localhost:5000';
 }
 
 // Notifications state
@@ -47,12 +51,17 @@ class NotificationsState {
 class NotificationsNotifier extends StateNotifier<NotificationsState> {
   final ComplaintService _service;
   io.Socket? _socket;
+  Timer? _pollTimer;
 
   NotificationsNotifier(this._service) : super(NotificationsState());
 
   void connectSocket(String token, String userId) {
     // Disconnect existing socket first
     disconnectSocket();
+
+    // Start periodic polling as fallback (every 60 seconds)
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) => load());
 
     try {
       _socket = io.io(
@@ -66,7 +75,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
       _socket?.onConnect((_) {
         state = state.copyWith(isConnected: true);
-        _socket?.emit('join', userId);
+        _socket?.emit('join', 'user:$userId');
       });
 
       _socket?.onDisconnect((_) {
@@ -96,6 +105,8 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   }
 
   void disconnectSocket() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
     try {
       _socket?.disconnect();
       _socket?.dispose();

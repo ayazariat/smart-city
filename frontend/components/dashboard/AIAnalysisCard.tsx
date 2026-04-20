@@ -25,6 +25,7 @@ interface DuplicateMatch {
   referenceId?: string;
   title: string;
   similarity: number;
+  overallScore?: number;
 }
 
 export default function AIAnalysisCard({
@@ -60,11 +61,13 @@ export default function AIAnalysisCard({
             explanation: (raw.explanation || "") as string,
           });
         }
-        if (dupResult.status === "fulfilled" && dupResult.value?.matches) {
+        if (dupResult.status === "fulfilled" && dupResult.value?.topMatches) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           setDuplicates(
-            dupResult.value.matches
-              .filter((m: DuplicateMatch) => m.complaintId !== complaintId)
+            (dupResult.value.topMatches as any[])
+              .filter((m) => m.complaintId !== complaintId)
               .slice(0, 3)
+              .map((m) => ({ ...m, similarity: m.similarity ?? m.overallScore ?? 0 }))
           );
         }
       } catch {

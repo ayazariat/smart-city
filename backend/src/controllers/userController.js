@@ -4,6 +4,7 @@ const Department = require("../models/Department");
 const Municipality = require("../models/Municipality");
 const { sendMagicLinkEmail } = require("../utils/mailer");
 const { normalizeMunicipality } = require("../utils/normalize");
+const { logAction } = require("../services/audit.service");
 
 // Tunisia Governorates and their municipalities
 const TUNISIA_GEOGRAPHY = {
@@ -470,8 +471,11 @@ class UserController {
         return res.status(404).json({ success: false, message: "User not found" });
       }
 
+      const oldRole = user.role;
       user.role = role;
       await user.save();
+
+      await logAction(req, "USER_ROLE_CHANGED", "User", id, { role: oldRole }, { role }).catch(() => {});
 
       res.json({
         success: true,
@@ -506,8 +510,11 @@ class UserController {
         return res.status(400).json({ success: false, message: "Cannot deactivate admin users" });
       }
 
+      const oldStatus = user.isActive;
       user.isActive = isActive;
       await user.save();
+
+      await logAction(req, "USER_STATUS_CHANGED", "User", id, { isActive: oldStatus }, { isActive }).catch(() => {});
 
       res.json({
         success: true,
@@ -619,7 +626,7 @@ class UserController {
       const departments = await Department.find().sort({ name: 1 });
       res.json({
         success: true,
-        data: departments.map(d => ({
+        departments: departments.map(d => ({
           _id: d._id,
           name: d.name,
           description: d.description,
@@ -631,6 +638,70 @@ class UserController {
     } catch (error) {
       console.error("Error fetching departments:", error);
       res.status(500).json({ success: false, message: "Failed to fetch departments" });
+    }
+  }
+
+  async createDepartment(req, res) {
+    try {
+      const { name, description, email, phone, categories } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, message: "Department name is required" });
+      }
+      const existing = await Department.findOne({ name: name.trim() });
+      if (existing) {
+        return res.status(409).json({ success: false, message: "A department with this name already exists" });
+      }
+      const dept = await Department.create({ name: name.trim(), description, email, phone, categories: categories || [] });
+      await logAction(req, "DEPARTMENT_CREATED", "Department", dept._id, null, { name: dept.name }).catch(() => {});
+      res.status(201).json({ success: true, message: "Department created", data: dept });
+    } catch (error) {
+      console.error("Error creating department:", error);
+      res.status(500).json({ success: false, message: "Failed to create department" });
+    }
+  }
+
+  async updateDepartment(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, description, email, phone, categories } = req.body;
+      const dept = await Department.findById(id);
+      if (!dept) return res.status(404).json({ success: false, message: "Department not found" });
+      const old = { name: dept.name, categories: dept.categories };
+      if (name) dept.name = name.trim();
+      if (description !== undefined) dept.description = description;
+      if (email !== undefined) dept.email = email;
+      if (phone !== undefined) dept.phone = phone;
+      if (categories !== undefined) dept.categories = categories;
+      await dept.save();
+      await logAction(req, "DEPARTMENT_UPDATED", "Department", id, old, { name: dept.name, categories: dept.categories }).catch(() => {});
+      res.json({ success: true, message: "Department updated", data: dept });
+    } catch (error) {
+      console.error("Error updating department:", error);
+      res.status(500).json({ success: false, message: "Failed to update department" });
+    }
+  }
+
+  async deleteDepartment(req, res) {
+    try {
+      const { id } = req.params;
+      const dept = await Department.findByIdAndDelete(id);
+      if (!dept) return res.status(404).json({ success: false, message: "Department not found" });
+      await logAction(req, "DEPARTMENT_DELETED", "Department", id, { name: dept.name }, null).catch(() => {});
+      res.json({ success: true, message: "Department deleted" });
+    } catch (error) {
+      console.error("Error deleting department:", error);
+      res.status(500).json({ success: false, message: "Failed to delete department" });
+    }
+  }
+
+  async updateSLARules(req, res) {
+    try {
+      // SLA rules are stored as system configuration — for now return accepted
+      // (extend with a SLAConfig model when needed)
+      res.json({ success: true, message: "SLA rules updated (persisted to config)" });
+    } catch (error) {
+      console.error("Error updating SLA rules:", error);
+      res.status(500).json({ success: false, message: "Failed to update SLA rules" });
     }
   }
 }

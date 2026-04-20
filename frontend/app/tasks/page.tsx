@@ -14,7 +14,6 @@ import {
   Loader2,
   Search,
   Filter,
-  Bell,
   X,
   Calendar,
   Building,
@@ -23,9 +22,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { technicianService } from "@/services/technician.service";
-import { notificationService } from "@/services/notification.service";
-import { connectSocket, subscribeToNotifications } from "@/lib/socket";
-import { Complaint, Notification } from "@/types";
+import { Complaint } from "@/types";
 import { showToast } from "@/components/ui/Toast";
 import { Button, Modal, PageHeader, ConfirmationModal } from "@/components/ui";
 import { categoryLabels } from "@/lib/complaints";
@@ -34,9 +31,9 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useTranslation } from "react-i18next";
 
 const statusConfig: Record<string, { labelKey: string; bgClass: string; textClass: string; borderClass: string }> = {
-  ASSIGNED: { labelKey: "tasks.assigned", bgClass: "bg-primary/10", textClass: "text-primary", borderClass: "border-primary/20" },
-  IN_PROGRESS: { labelKey: "tasks.inProgress", bgClass: "bg-orange-100", textClass: "text-orange-700", borderClass: "border-orange-200" },
-  RESOLVED: { labelKey: "tasks.resolved", bgClass: "bg-green-100", textClass: "text-green-700", borderClass: "border-green-200" },
+  ASSIGNED: { labelKey: "tasks.assigned", bgClass: "bg-purple-50", textClass: "text-purple-700", borderClass: "border-purple-200" },
+  IN_PROGRESS: { labelKey: "tasks.inProgress", bgClass: "bg-orange-50", textClass: "text-orange-700", borderClass: "border-orange-200" },
+  RESOLVED: { labelKey: "tasks.resolved", bgClass: "bg-green-50", textClass: "text-green-700", borderClass: "border-green-200" },
   CLOSED: { labelKey: "tasks.closed", bgClass: "bg-slate-100", textClass: "text-slate-600", borderClass: "border-slate-200" },
 };
 
@@ -68,10 +65,6 @@ export default function TechnicianTasksPage() {
     closed: 0,
     totalOverdue: 0,
   });
-
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
 
   const [selectedTask, setSelectedTask] = useState<Complaint | null>(null);
   const [resolveModal, setResolveModal] = useState(false);
@@ -105,11 +98,14 @@ export default function TechnicianTasksPage() {
       const statsResp = await technicianService.getTechnicianStats();
       if (statsResp.data) {
         const d = statsResp.data as Record<string, number>;
+        const assigned = d.assigned || 0;
+        const inProgress = d.inProgress || 0;
+        const resolved = d.resolved || 0;
         setStats({
-          total: d.total || 0,
-          assigned: d.assigned || 0,
-          inProgress: d.inProgress || 0,
-          resolved: d.resolved || 0,
+          total: assigned + inProgress + resolved,
+          assigned,
+          inProgress,
+          resolved,
           closed: d.closed || 0,
           totalOverdue: d.totalOverdue || 0,
         });
@@ -122,66 +118,11 @@ export default function TechnicianTasksPage() {
     }
   }, [token, user, filter]);
 
-  const fetchNotifications = useCallback(async () => {
-    if (!token) return;
-    try {
-      const [countResult, notifResult] = await Promise.all([
-        notificationService.getNotificationCount(),
-        notificationService.getNotifications(),
-      ]);
-      if (countResult.success && typeof countResult.count === "number") {
-        setUnreadCount(countResult.count);
-      }
-      if (notifResult.success && notifResult.data) {
-        setNotifications(notifResult.data);
-      }
-    } catch (err) {
-      console.error("Error fetching notifications:", err);
-    }
-  }, [token]);
-
   useEffect(() => {
     if (hydrated && token) {
       fetchTasks();
-      fetchNotifications();
-      // Connect socket for real-time notifications
-      const { user } = useAuthStore.getState();
-      if (user?.id) {
-        connectSocket(user.id);
-      }
-      const unsubscribe = subscribeToNotifications((notification: unknown) => {
-        const notif = notification as Notification;
-        setNotifications(prev => [notif, ...prev]);
-        setUnreadCount(prev => prev + 1);
-        showToast(notif.message || "New notification", "info");
-      });
-      const interval = setInterval(fetchNotifications, 60000);
-      return () => {
-        clearInterval(interval);
-        unsubscribe();
-      };
     }
-  }, [hydrated, token, fetchTasks, fetchNotifications]);
-
-  const handleMarkAsRead = async (id: string) => {
-    try {
-      await notificationService.markNotificationAsRead(id);
-      setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, isRead: true } : n)));
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch (err) {
-      console.error("Error marking as read:", err);
-    }
-  };
-
-  const handleNotificationClick = (notification: Notification) => {
-    if (!notification.isRead) {
-      handleMarkAsRead(notification._id);
-    }
-    if (notification.relatedId) {
-      router.push(`/dashboard/complaints/${notification.relatedId}?from=tasks`);
-    }
-    setShowNotifications(false);
-  };
+  }, [hydrated, token, fetchTasks]);
 
   const handleStartWork = async (id: string) => {
     setActionLoading(true);
@@ -271,62 +212,11 @@ export default function TechnicianTasksPage() {
         title={t("tasks.title")}
         subtitle={t("tasks.subtitle")}
         backHref="/dashboard"
-        rightContent={
-          <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl transition-all border border-white/20 shadow-lg"
-              >
-                <Bell className="w-5 h-5 text-white" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 shadow-lg animate-dot-pulse">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {showNotifications && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-scaleIn">
-                  <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
-                    <h3 className="font-semibold text-slate-900">{t("tasks.notifications")}</h3>
-                    <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
-                      <X className="w-4 h-4 text-slate-500" />
-                    </button>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="p-8 text-center text-slate-500">
-                        <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">{t("tasks.noNotifications")}</p>
-                      </div>
-                    ) : (
-                      notifications.slice(0, 10).map((n) => (
-                        <button
-                          key={n._id}
-                          onClick={() => handleNotificationClick(n)}
-                          className={`w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${!n.isRead ? "bg-primary/5" : ""}`}
-                        >
-                          <p className="text-sm font-medium text-slate-900 truncate">{n.title}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.message}</p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {new Date(n.createdAt).toLocaleDateString()}
-                          </p>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        }
       />
 
       {/* Stats Cards */}
       <div className="max-w-7xl mx-auto px-4 mt-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
             <div className="flex items-center justify-between">
               <div>
@@ -338,8 +228,20 @@ export default function TechnicianTasksPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-75">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">{t("tasks.assigned")}</p>
+                <p className="text-3xl font-bold text-purple-600 mt-1">{stats.assigned}</p>
+              </div>
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Wrench className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-100">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500 font-medium">{t("tasks.statsInProgress")}</p>
@@ -359,18 +261,6 @@ export default function TechnicianTasksPage() {
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp delay-175">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500 font-medium">{t("tasks.closed")}</p>
-                <p className="text-3xl font-bold text-slate-600 mt-1">{stats.closed}</p>
-              </div>
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-slate-600" />
               </div>
             </div>
           </div>

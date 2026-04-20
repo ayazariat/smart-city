@@ -172,7 +172,7 @@ export const adminService = {
    * Get all departments
    */
   async getDepartments(): Promise<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>> {
-    const response = await apiClient.get<ApiResponse<any[]>>("/admin/departments");
+    const response = await apiClient.get<ApiResponse<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>>>("/admin/departments");
     return response.data;
   },
 

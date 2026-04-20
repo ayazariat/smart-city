@@ -37,6 +37,7 @@ import { ComplaintCategory, ComplaintUrgency, ComplaintMedia, CreateComplaintDat
 import { complaintService, uploadMedia, predictCategory } from "@/services/complaint.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useTranslation } from "react-i18next";
+import type * as LeafletNS from "leaflet";
 
 type CategoryConfig = {
   value: ComplaintCategory;
@@ -153,10 +154,8 @@ export default function NewComplaintPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leafletMapRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const leafletMarkerRef = useRef<any>(null);
+  const leafletMapRef = useRef<LeafletNS.Map | null>(null);
+  const leafletMarkerRef = useRef<LeafletNS.Marker | null>(null);
   
   const { user, token, isLoading: authLoading, hydrated } = useAuthStore();
 
@@ -169,8 +168,8 @@ export default function NewComplaintPage() {
   const [urgencySlider, setUrgencySlider] = useState(2);
   const [address, setAddress] = useState("");
   const [media, setMedia] = useState<ComplaintMedia[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [, setIsUploading] = useState(false);
+  const [, setUploadProgress] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -348,8 +347,7 @@ export default function NewComplaintPage() {
     if (!container) return;
 
     const setupMap = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const L = (window as any).L;
+      const L = (window as Window & typeof globalThis & { L?: typeof LeafletNS }).L;
       if (!L || leafletMapRef.current) return;
 
       const initialLat = displayLocation.latitude;
@@ -366,8 +364,7 @@ export default function NewComplaintPage() {
       const marker = L.marker([initialLat, initialLon], { draggable: true }).addTo(map);
       leafletMarkerRef.current = marker;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      map.on("click", (e: any) => {
+      map.on("click", (e: LeafletNS.LeafletMouseEvent) => {
         const { lat, lng } = e.latlng;
         marker.setLatLng([lat, lng]);
         setLocation({ latitude: lat, longitude: lng });
@@ -378,8 +375,7 @@ export default function NewComplaintPage() {
         reverseGeocode(lat, lng);
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      marker.on("dragend", (e: any) => {
+      marker.on("dragend", (e: LeafletNS.DragEndEvent) => {
         const { lat, lng } = e.target.getLatLng();
         setLocation({ latitude: lat, longitude: lng });
         setLocationMode('manual');
@@ -390,8 +386,7 @@ export default function NewComplaintPage() {
       });
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!(window as any).L) {
+    if (!(window as Window & typeof globalThis & { L?: typeof LeafletNS }).L) {
       const existingScript = document.querySelector<HTMLScriptElement>(
         'script[src*="unpkg.com/leaflet"]'
       );
@@ -720,7 +715,7 @@ export default function NewComplaintPage() {
       <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600">{t('common.loading')}</p>
+          <p className="text-slate-600">{"\u00A0"}</p>
         </div>
       </div>
     );

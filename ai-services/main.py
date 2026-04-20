@@ -45,9 +45,10 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5000,http://127.0.0.1:5000,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,7 +64,7 @@ async def log_requests(request: Request, call_next):
         duration = int((time.time() - start) * 1000)
         print(f"[AI] {request.method} {request.url.path} → 500 ({duration}ms)")
         from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=200, content={"success": False, "message": "Internal error"})
+        return JSONResponse(status_code=500, content={"success": False, "message": "Internal error"})
     duration = int((time.time() - start) * 1000)
     print(f"[AI] {request.method} {request.url.path} → {response.status_code} ({duration}ms)")
     return response
@@ -95,14 +96,46 @@ async def health_check():
     """Overall health check."""
     from utils.model_manager import model_exists
     
+    # Check free model availability
+    models_status = {
+        "urgency": model_exists("urgency_model.pkl"),
+        "duplicate": False,
+        "trend": False
+    }
+    
+    free_models = {}
+    try:
+        from services.category_predictor import TRANSFORMERS_AVAILABLE as cat_tf
+        free_models["category_classifier"] = "bart-large-mnli" if cat_tf else "keyword-fallback"
+    except:
+        free_models["category_classifier"] = "unavailable"
+    
+    try:
+        from services.urgency_predictor import TRANSFORMERS_AVAILABLE as urg_tf
+        free_models["urgency_classifier"] = "bart-large-mnli" if urg_tf else "rule-based"
+    except:
+        free_models["urgency_classifier"] = "rule-based"
+    
+    try:
+        from services.keyword_extractor import TRANSFORMERS_AVAILABLE as kw_tf
+        free_models["keyword_extractor"] = "bert-base-NER" if kw_tf else "nltk-fallback"
+    except:
+        free_models["keyword_extractor"] = "nltk-fallback"
+    
+    try:
+        from services.duplicate_detector import SENTENCE_TRANSFORMERS_AVAILABLE as dup_st
+        free_models["duplicate_embeddings"] = "all-MiniLM-L6-v2" if dup_st else "tfidf-cosine"
+    except:
+        free_models["duplicate_embeddings"] = "tfidf-cosine"
+    
+    free_models["trend_forecasting"] = "ridge-regression" if True else "linear-regression"
+    free_models["sla_calculator"] = "rule-based"
+    
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
-        "models": {
-            "urgency": model_exists("urgency_model.pkl"),
-            "duplicate": False,
-            "trend": False
-        }
+        "models": models_status,
+        "freeModels": free_models
     }
 
 

@@ -3,6 +3,7 @@ dotenv.config();
 
 const app = require('./app');
 const http = require('http');
+const jwt = require('jsonwebtoken');
 const connectDB = require('./config/db');
 
 connectDB();
@@ -29,23 +30,38 @@ const io = new Server(server, {
       "http://127.0.0.1:3000",
       "http://localhost:3001",
       "http://127.0.0.1:3001",
+      "http://10.0.2.2:3000",
     ],
     credentials: true,
+    methods: ["GET", "POST"]
   },
 });
 
 // Store io instance on app for use in controllers
 app.set("io", io);
 
+// Socket.io authentication middleware
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return next();
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId;
+    socket.userRole = decoded.role;
+  } catch {
+    // Allow connection but without auth — public features still work
+  }
+  next();
+});
+
 // Socket.io connection handling
 io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
-
   // Join user-specific room
   socket.on("join", (room) => {
     if (room && typeof room === "string") {
       socket.join(room);
-      console.log(`Socket ${socket.id} joined room: ${room}`);
     }
   });
 
@@ -53,13 +69,10 @@ io.on("connection", (socket) => {
   socket.on("leave", (room) => {
     if (room && typeof room === "string") {
       socket.leave(room);
-      console.log(`Socket ${socket.id} left room: ${room}`);
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-  });
+  socket.on("disconnect", () => {});
 });
 
 server.listen(PORT, () => {

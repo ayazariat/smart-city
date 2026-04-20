@@ -586,6 +586,19 @@ class AuthController {
       res.clearCookie("accessToken");
       res.clearCookie("refreshToken");
 
+      // Audit logout
+      if (req.user) {
+        await AuditLog.create({
+          userId: req.user.userId,
+          userRole: req.user.role,
+          action: "AUTH_LOGOUT",
+          entityType: "User",
+          entityId: req.user.userId,
+          ip: req.ip,
+          userAgent: req.headers["user-agent"],
+        }).catch(() => {}); // fire-and-forget, never block logout
+      }
+
       res.json({ message: "Logged out successfully" });
     } catch (error) {
       console.error("Logout error:", error);

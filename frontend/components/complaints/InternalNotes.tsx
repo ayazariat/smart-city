@@ -89,7 +89,8 @@ const InternalNotes: React.FC<InternalNotesProps> = ({ notes, userRole, canAdd, 
         return (
           <div
             key={noteKey}
-            className={`p-3 rounded-lg border ${style.background} ${style.borderColor} border-l-4 ${style.leftBorderColor}`}
+            className={`p-3 rounded-lg border ${style.background} ${style.borderColor} border-l-4 ${style.leftBorderColor} animate-slideInRight`}
+            style={{ animationDelay: `${index * 80}ms` }}
           >
             <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-2">

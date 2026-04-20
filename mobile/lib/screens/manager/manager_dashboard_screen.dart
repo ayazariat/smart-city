@@ -5,6 +5,7 @@ import 'package:smart_city_app/providers/complaints_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
+import 'package:smart_city_app/screens/manager/team_performance_screen.dart';
 
 class ManagerDashboardScreen extends ConsumerStatefulWidget {
   const ManagerDashboardScreen({super.key});
@@ -17,6 +18,7 @@ class ManagerDashboardScreen extends ConsumerStatefulWidget {
 class _ManagerDashboardScreenState
     extends ConsumerState<ManagerDashboardScreen> {
   Map<String, dynamic> _stats = {};
+  String _selectedFilter = 'ALL';
 
   @override
   void initState() {
@@ -29,15 +31,9 @@ class _ManagerDashboardScreenState
 
   Future<void> _loadStats() async {
     try {
-      final stats = await ComplaintService().getManagerDashboard();
-      if (mounted) {
-        setState(() {
-          _stats = stats;
-        });
-      }
-    } catch (e) {
-      // Silently handle error
-    }
+      final stats = await ComplaintService().getManagerStats();
+      if (mounted) setState(() => _stats = stats);
+    } catch (e) {}
   }
 
   Future<void> _loadData() async {
@@ -48,8 +44,6 @@ class _ManagerDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(managerComplaintsProvider);
-
-    // Calculate stats
     final total = state.complaints.length;
     final inProgress = state.complaints
         .where((c) => c.status == 'IN_PROGRESS')
@@ -59,243 +53,333 @@ class _ManagerDashboardScreenState
         .length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manager Dashboard'),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: _loadData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Stats overview
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: AppColors.surface,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Department Overview',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppColors.primary, AppColors.primaryDark],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _buildStatCard('Total', total, AppColors.primary),
-                        const SizedBox(width: 8),
-                        _buildStatCard(
-                          'Active',
-                          inProgress,
-                          AppColors.inProgress,
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStatCard(
-                          'Resolved',
-                          resolved,
-                          AppColors.resolved,
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStatCard(
-                          'Overdue',
-                          _stats['overdue'] ?? 0,
-                          AppColors.error,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.dashboard,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'Manager Dashboard',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.bar_chart,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const TeamPerformanceScreen(),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.refresh,
+                                  color: Colors.white,
+                                ),
+                                onPressed: _loadData,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Manage your department complaints',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(13),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-
-              // Filter chips
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED']
-                        .map(
-                          (s) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: _buildFilterChip(s),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ),
-
-              // Complaints needing attention
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: const Text(
-                  'Complaints',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              // Complaints list
-              if (state.isLoading)
-                const Center(child: CircularProgressIndicator())
-              else if (state.complaints.isEmpty)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.check_circle_outline,
-                          size: 64,
-                          color: AppColors.textSecondary,
+                        const Text(
+                          'Department Overview',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'No complaints found',
-                          style: TextStyle(color: AppColors.textSecondary),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                'Total',
+                                total,
+                                Icons.summarize,
+                                const Color(0xFF3B82F6),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Active',
+                                inProgress,
+                                Icons.engineering,
+                                const Color(0xFFF97316),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatCard(
+                                'Resolved',
+                                resolved,
+                                Icons.check_circle,
+                                const Color(0xFF22C55E),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _buildStatCard(
+                                'Overdue',
+                                _stats['overdue'] ?? 0,
+                                Icons.warning,
+                                const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                )
-              else
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(12),
-                  itemCount: state.complaints.length,
-                  itemBuilder: (ctx, i) =>
-                      _buildComplaintCard(state.complaints[i]),
+                  Container(
+                    height: 40,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED']
+                          .map(
+                            (s) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                label: Text(
+                                  s == 'ALL' ? 'All' : s.replaceAll('_', ' '),
+                                ),
+                                selected: _selectedFilter == s,
+                                onSelected: (_) {
+                                  setState(() => _selectedFilter = s);
+                                  ref
+                                      .read(managerComplaintsProvider.notifier)
+                                      .load(status: s);
+                                },
+                                selectedColor: AppColors.primary,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+            if (state.isLoading)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (state.complaints.isEmpty)
+              SliverFillRemaining(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.inbox_outlined,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No complaints found',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      ),
+                    ],
+                  ),
                 ),
-            ],
-          ),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (ctx, i) => _buildComplaintCard(state.complaints[i]),
+                  childCount: state.complaints.length,
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(String label, int value, Color color) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              Text(
-                '$value',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ),
+  Widget _buildStatCard(String label, int value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withAlpha(13),
+        borderRadius: BorderRadius.circular(12),
       ),
-    );
-  }
-
-  Widget _buildFilterChip(String status) {
-    return FilterChip(
-      label: Text(status),
-      selected: false,
-      onSelected: (_) {
-        ref.read(managerComplaintsProvider.notifier).load(status: status);
-      },
-      labelStyle: const TextStyle(fontSize: 12),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            '$value',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+        ],
+      ),
     );
   }
 
   Widget _buildComplaintCard(Complaint complaint) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(8),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
             ),
-          );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      complaint.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+          ).then((_) => _loadData()),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        complaint.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  _buildStatusChip(complaint.status),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                complaint.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _buildCategoryChip(complaint.categoryLabel),
-                  const SizedBox(width: 8),
-                  if (complaint.assignedToName != null)
-                    Text(
-                      'Tech: ${complaint.assignedToName}',
-                      style: TextStyle(fontSize: 12, color: AppColors.accent),
-                    ),
-                  const Spacer(),
-                  Text(
-                    '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              if (complaint.status == 'ASSIGNED' &&
-                  complaint.assignedToName == null) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showAssignTechnicianDialog(complaint),
-                    icon: const Icon(Icons.person_add, size: 16),
-                    label: const Text('Assign Technician'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
+                    const SizedBox(width: 8),
+                    _buildStatusChip(complaint.status),
+                  ],
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  complaint.description,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildCategoryChip(complaint.categoryLabel),
+                    if (complaint.assignedToName != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        'Tech: ${complaint.assignedToName}',
+                        style: TextStyle(fontSize: 12, color: AppColors.accent),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+                if (complaint.status == 'ASSIGNED' &&
+                    complaint.assignedToName == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showAssignTechnicianDialog(complaint),
+                        icon: const Icon(Icons.person_add, size: 16),
+                        label: const Text('Assign Technician'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -305,7 +389,6 @@ class _ManagerDashboardScreenState
   Future<void> _showAssignTechnicianDialog(Complaint complaint) async {
     List<dynamic> technicians = [];
     bool loading = true;
-
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -313,33 +396,29 @@ class _ManagerDashboardScreenState
           if (loading) {
             ComplaintService()
                 .getDepartmentTechnicians()
-                .then((techs) {
-                  setDialogState(() {
+                .then(
+                  (techs) => setDialogState(() {
                     technicians = techs;
                     loading = false;
-                  });
-                })
-                .catchError((_) {
-                  setDialogState(() => loading = false);
-                });
+                  }),
+                )
+                .catchError((_) => setDialogState(() => loading = false));
           }
-
           return AlertDialog(
             title: const Text('Assign Technician'),
             content: SizedBox(
               width: double.maxFinite,
+              height: 300,
               child: loading
                   ? const Center(child: CircularProgressIndicator())
                   : technicians.isEmpty
-                  ? const Text('No technicians available')
+                  ? const Center(child: Text('No technicians available'))
                   : ListView.builder(
-                      shrinkWrap: true,
                       itemCount: technicians.length,
                       itemBuilder: (_, i) {
                         final tech = technicians[i];
                         final name =
                             tech['fullName'] ?? tech['name'] ?? 'Unknown';
-                        final email = tech['email'] ?? '';
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: AppColors.accent.withAlpha(25),
@@ -349,12 +428,10 @@ class _ManagerDashboardScreenState
                             ),
                           ),
                           title: Text(name),
-                          subtitle: email.isNotEmpty
-                              ? Text(
-                                  email,
-                                  style: const TextStyle(fontSize: 12),
-                                )
-                              : null,
+                          subtitle: Text(
+                            tech['email'] ?? '',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           onTap: () async {
                             Navigator.pop(ctx);
                             try {
@@ -370,11 +447,10 @@ class _ManagerDashboardScreenState
                                 _loadData();
                               }
                             } catch (e) {
-                              if (mounted) {
+                              if (mounted)
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text('Failed: $e')),
                                 );
-                              }
                             }
                           },
                         );
@@ -397,13 +473,13 @@ class _ManagerDashboardScreenState
     Color color;
     switch (status) {
       case 'ASSIGNED':
-        color = AppColors.assigned;
+        color = const Color(0xFF8B5CF6);
         break;
       case 'IN_PROGRESS':
-        color = AppColors.inProgress;
+        color = const Color(0xFFF97316);
         break;
       case 'RESOLVED':
-        color = AppColors.resolved;
+        color = const Color(0xFF22C55E);
         break;
       default:
         color = Colors.grey;
@@ -411,12 +487,16 @@ class _ManagerDashboardScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
+        color: color.withAlpha(26),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         status.replaceAll('_', ' '),
-        style: const TextStyle(color: Colors.white, fontSize: 10),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -425,8 +505,8 @@ class _ManagerDashboardScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(category, style: const TextStyle(fontSize: 11)),
     );

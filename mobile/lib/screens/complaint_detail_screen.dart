@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
@@ -18,14 +19,22 @@ class ComplaintDetailScreen extends ConsumerStatefulWidget {
 class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   final ComplaintService _complaintService = ComplaintService();
 
-  Map<String, dynamic>? _complaint;
+  Complaint? _complaint;
   bool _isLoading = true;
   String? _error;
+  List<dynamic> _departments = [];
+  List<dynamic> _technicians = [];
+  bool _loadingAction = false;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final role = ref.read(authProvider).user?.role ?? '';
+      if (role == 'MUNICIPAL_AGENT') _loadDepartments();
+      if (role == 'DEPARTMENT_MANAGER') _loadTechnicians();
+    });
   }
 
   Future<void> _loadData() async {
@@ -47,7 +56,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
 
   String get _baseUrl => ApiClient.baseUrl.replaceAll('/api', '');
   String get _userRole => ref.read(authProvider).user?.role ?? '';
-  String get _status => _complaint?['status'] ?? '';
+  String get _status => _complaint?.status ?? '';
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -105,6 +114,187 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
     if (url.isEmpty) return '';
     if (url.startsWith('http')) return url;
     return '$_baseUrl$url';
+  }
+
+  Future<void> _loadDepartments() async {
+    try {
+      final depts = await _complaintService.getAgentDepartments();
+      if (mounted) setState(() => _departments = depts);
+    } catch (_) {}
+  }
+
+  Future<void> _loadTechnicians() async {
+    try {
+      final techs = await _complaintService.getDepartmentTechnicians();
+      if (mounted) setState(() => _technicians = techs);
+    } catch (_) {}
+  }
+
+  Future<void> _doAction(
+    Future<void> Function() action,
+    String successMsg,
+  ) async {
+    setState(() => _loadingAction = true);
+    try {
+      await action();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(successMsg),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+        await _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingAction = false);
+    }
+  }
+
+  void _showRejectDialog() {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject Complaint'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'Reason for rejection',
+            hintText: 'Enter reason...',
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (ctrl.text.trim().isNotEmpty) {
+                _doAction(
+                  () => _complaintService.rejectComplaint(
+                    widget.complaintId,
+                    ctrl.text.trim(),
+                  ),
+                  'Complaint rejected',
+                );
+              }
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAssignDeptDialog() {
+    if (_departments.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No departments available')));
+      return;
+    }
+    String? selectedDeptId;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Assign to Department'),
+          content: DropdownButtonFormField<String>(
+            decoration: const InputDecoration(labelText: 'Department'),
+            items: _departments.map((d) {
+              final id = d['_id']?.toString() ?? d['id']?.toString() ?? '';
+              final name = d['name']?.toString() ?? id;
+              return DropdownMenuItem(value: id, child: Text(name));
+            }).toList(),
+            onChanged: (v) => setS(() => selectedDeptId = v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selectedDeptId == null
+                  ? null
+                  : () {
+                      Navigator.pop(ctx);
+                      _doAction(
+                        () => _complaintService.assignDepartment(
+                          widget.complaintId,
+                          selectedDeptId!,
+                        ),
+                        'Department assigned',
+                      );
+                    },
+              child: const Text('Assign'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAssignTechDialog() {
+    if (_technicians.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No technicians available')));
+      return;
+    }
+    String? selectedTechId;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Assign to Technician'),
+          content: DropdownButtonFormField<String>(
+            decoration: const InputDecoration(labelText: 'Technician'),
+            items: _technicians.map((t) {
+              final id = t['_id']?.toString() ?? t['id']?.toString() ?? '';
+              final name =
+                  t['fullName']?.toString() ?? t['name']?.toString() ?? id;
+              return DropdownMenuItem(value: id, child: Text(name));
+            }).toList(),
+            onChanged: (v) => setS(() => selectedTechId = v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selectedTechId == null
+                  ? null
+                  : () {
+                      Navigator.pop(ctx);
+                      _doAction(
+                        () => _complaintService.assignTechnician(
+                          widget.complaintId,
+                          selectedTechId!,
+                        ),
+                        'Technician assigned',
+                      );
+                    },
+              child: const Text('Assign'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -171,7 +361,14 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                     _buildStatusTimeline(),
                     const SizedBox(height: 16),
                   ],
+                  if (_hasDuplicateInfo()) ...[
+                    _buildDuplicateBanner(),
+                    const SizedBox(height: 16),
+                  ],
                   if (_userRole == 'CITIZEN') _buildCitizenActions(),
+                  if (_userRole == 'MUNICIPAL_AGENT') _buildAgentActions(),
+                  if (_userRole == 'DEPARTMENT_MANAGER') _buildManagerActions(),
+                  if (_userRole == 'TECHNICIAN') _buildTechnicianActions(),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -180,8 +377,8 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   Widget _buildHeader() {
-    final category = _complaint!['category'] ?? '';
-    final urgency = _complaint!['urgency'] ?? '';
+    final category = _complaint!.category;
+    final urgency = _complaint!.urgency ?? '';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -192,7 +389,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    _complaint!['title'] ?? '',
+                    _complaint!.title,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -227,20 +424,14 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                 _buildChip(category.replaceAll('_', ' '), AppColors.primary),
                 if (urgency.isNotEmpty)
                   _buildChip(urgency, _getUrgencyColor(urgency)),
-                if (_complaint!['priorityScore'] != null)
-                  _buildChip(
-                    'P${_complaint!['priorityScore']}',
-                    Colors.deepPurple,
-                  ),
+                _buildChip('P${_complaint!.priorityScore}', Colors.deepPurple),
               ],
             ),
-            if (_complaint!['createdAt'] != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Submitted: ${_formatDate(_complaint!['createdAt'])}',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-              ),
-            ],
+            const SizedBox(height: 8),
+            Text(
+              'Submitted: ${_formatDate(_complaint!.createdAt.toIso8601String())}',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
           ],
         ),
       ),
@@ -283,10 +474,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              _complaint!['description'] ?? '',
-              style: const TextStyle(height: 1.5),
-            ),
+            Text(_complaint!.description, style: const TextStyle(height: 1.5)),
           ],
         ),
       ),
@@ -294,12 +482,11 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   bool _hasMedia() {
-    final media = _complaint!['media'];
-    return media != null && media is List && media.isNotEmpty;
+    return _complaint!.media.isNotEmpty;
   }
 
   Widget _buildMediaGallery() {
-    final media = _complaint!['media'] as List;
+    final media = _complaint!.media;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -343,7 +530,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                         ? Image.network(
                             url,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                            errorBuilder: (_, _, _) =>
                                 const Icon(Icons.broken_image, size: 40),
                           )
                         : const Icon(Icons.image, size: 40),
@@ -358,10 +545,13 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   Widget _buildLocation() {
-    final loc = _complaint!['location'];
+    final loc = _complaint!.location;
     final municipality =
-        _complaint!['municipalityName'] ?? loc?['municipality'] ?? '';
-    final governorate = loc?['governorate'] ?? '';
+        _complaint!.municipalityName ??
+        loc?['municipality'] ??
+        loc?['commune'] ??
+        '';
+    final governorate = _complaint!.governorate ?? loc?['governorate'] ?? '';
     final address = loc?['address'] ?? '';
 
     return Card(
@@ -397,12 +587,8 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   Widget _buildStats() {
-    final confirmCount =
-        _complaint!['confirmationCount'] ??
-        _complaint!['confirmedBy']?.length ??
-        0;
-    final upvoteCount =
-        _complaint!['upvoteCount'] ?? _complaint!['upvotedBy']?.length ?? 0;
+    final confirmCount = _complaint!.confirmationCount;
+    final upvoteCount = _complaint!.upvoteCount;
 
     return Card(
       child: Padding(
@@ -455,12 +641,11 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   bool _hasSLA() {
-    return _complaint!['slaDeadline'] != null ||
-        _complaint!['slaStatus'] != null;
+    return _complaint!.slaDeadline != null || _complaint!.slaStatus != null;
   }
 
   Widget _buildSLAInfo() {
-    final slaStatus = _complaint!['slaStatus'] ?? 'ON_TRACK';
+    final slaStatus = _complaint!.slaStatus ?? 'ON_TRACK';
     Color slaColor;
     IconData slaIcon;
     switch (slaStatus) {
@@ -503,9 +688,9 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  if (_complaint!['slaDeadline'] != null)
+                  if (_complaint!.slaDeadline != null)
                     Text(
-                      'Deadline: ${_formatDate(_complaint!['slaDeadline'])}',
+                      'Deadline: ${_formatDate(_complaint!.slaDeadline!.toIso8601String())}',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,
@@ -521,18 +706,13 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   bool _hasBeforeAfterPhotos() {
-    final before = _complaint!['beforePhotos'];
-    final after = _complaint!['afterPhotos'] ?? _complaint!['proofPhotos'];
-    return (before is List && before.isNotEmpty) ||
-        (after is List && after.isNotEmpty);
+    return _complaint!.beforePhotos.isNotEmpty ||
+        _complaint!.afterPhotos.isNotEmpty;
   }
 
   Widget _buildBeforeAfterPhotos() {
-    final beforePhotos = (_complaint!['beforePhotos'] as List?) ?? [];
-    final afterPhotos =
-        (_complaint!['afterPhotos'] as List?) ??
-        (_complaint!['proofPhotos'] as List?) ??
-        [];
+    final beforePhotos = _complaint!.beforePhotos;
+    final afterPhotos = _complaint!.afterPhotos;
 
     return Card(
       child: Padding(
@@ -576,7 +756,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                           ? Image.network(
                               url,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
+                              errorBuilder: (_, _, _) =>
                                   const Icon(Icons.broken_image),
                             )
                           : const Icon(Icons.image),
@@ -611,7 +791,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                           ? Image.network(
                               url,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
+                              errorBuilder: (_, _, _) =>
                                   const Icon(Icons.broken_image),
                             )
                           : const Icon(Icons.image),
@@ -627,15 +807,13 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   bool _hasResolution() {
-    return _complaint!['resolutionNotes'] != null ||
-        _complaint!['resolutionNote'] != null ||
-        _complaint!['materialsUsed'] != null;
+    return _complaint!.resolutionNotes != null ||
+        _complaint!.materialsUsed.isNotEmpty;
   }
 
   Widget _buildResolutionReport() {
-    final notes =
-        _complaint!['resolutionNotes'] ?? _complaint!['resolutionNote'] ?? '';
-    final materials = _complaint!['materialsUsed'] as List?;
+    final notes = _complaint!.resolutionNotes ?? '';
+    final materials = _complaint!.materialsUsed;
     final isClosed = _status == 'CLOSED';
 
     return Card(
@@ -692,7 +870,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
               const SizedBox(height: 4),
               Text(notes, style: const TextStyle(height: 1.4)),
             ],
-            if (materials != null && materials.isNotEmpty) ...[
+            if (materials.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
                 'Materials Used',
@@ -717,10 +895,10 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                     .toList(),
               ),
             ],
-            if (_complaint!['resolvedAt'] != null) ...[
+            if (_complaint!.resolvedAt != null) ...[
               const SizedBox(height: 8),
               Text(
-                'Resolved: ${_formatDate(_complaint!['resolvedAt'])}',
+                'Resolved: ${_formatDate(_complaint!.resolvedAt!.toIso8601String())}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ],
@@ -731,12 +909,90 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   }
 
   bool _hasTimeline() {
-    final history = _complaint!['statusHistory'];
-    return history != null && history is List && history.isNotEmpty;
+    return _complaint!.statusHistory.isNotEmpty;
+  }
+
+  bool _hasDuplicateInfo() {
+    final ds = _complaint!.duplicateStatus;
+    return ds == 'PROBABLE_DUPLICATE' || ds == 'POSSIBLE_DUPLICATE';
+  }
+
+  Widget _buildDuplicateBanner() {
+    final isProbable = _complaint!.duplicateStatus == 'PROBABLE_DUPLICATE';
+    final color = isProbable ? Colors.orange : Colors.yellow.shade700;
+    final bgColor = isProbable ? Colors.orange.shade50 : Colors.yellow.shade50;
+    final borderColor = isProbable
+        ? Colors.orange.shade200
+        : Colors.yellow.shade300;
+    final topMatches =
+        _complaint!.aiDuplicateCheck?['topMatches'] as List<dynamic>? ?? [];
+    final recommendation =
+        _complaint!.aiDuplicateCheck?['recommendation'] as String?;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.copy_outlined, size: 16, color: color),
+              const SizedBox(width: 8),
+              Text(
+                isProbable ? 'Probable Duplicate' : 'Possible Duplicate',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          if (recommendation != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              recommendation,
+              style: const TextStyle(fontSize: 12, color: Colors.black87),
+            ),
+          ],
+          if (topMatches.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...topMatches.take(2).map((m) {
+              final match = m as Map<String, dynamic>;
+              final refId = match['referenceId'] ?? match['_id'] ?? '';
+              final similarity =
+                  ((match['overallScore'] ?? match['similarity'] ?? 0.0) * 100)
+                      .round();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.link, size: 12, color: color),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '$refId — $similarity% match',
+                        style: TextStyle(fontSize: 11, color: color),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildStatusTimeline() {
-    final history = (_complaint!['statusHistory'] as List?) ?? [];
+    final history = _complaint!.statusHistory;
 
     return Card(
       child: Padding(
@@ -756,13 +1012,10 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
             ),
             const SizedBox(height: 12),
             ...history.reversed.map((entry) {
-              final entryStatus = entry['status'] ?? '';
-              final updatedAt = _formatDate(entry['updatedAt']);
-              final updatedBy = entry['updatedBy'];
-              final name = updatedBy is Map
-                  ? (updatedBy['fullName'] ?? '')
-                  : '';
-              final notes = entry['notes'] ?? '';
+              final entryStatus = entry.status;
+              final updatedAt = _formatDate(entry.updatedAt.toIso8601String());
+              final name = entry.updatedByName ?? '';
+              final notes = entry.notes ?? '';
               final color = _getStatusColor(entryStatus);
 
               return Padding(
@@ -886,7 +1139,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
 
   Future<void> _voteComplaint() async {
     try {
-      await _complaintService.voteComplaint(widget.complaintId);
+      await _complaintService.upvoteComplaint(widget.complaintId);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -900,5 +1153,314 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
+  }
+
+  // ─── Agent Actions ───────────────────────────────────────────────────────────
+  Widget _buildAgentActions() {
+    final disabled = _loadingAction;
+    final canValidate = _status == 'SUBMITTED';
+    final canAssign = _status == 'VALIDATED';
+    final canClose = _status == 'RESOLVED';
+
+    return Card(
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.admin_panel_settings,
+                  size: 18,
+                  color: Colors.blue,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Agent Actions',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+                if (_loadingAction) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (canValidate)
+                  ElevatedButton.icon(
+                    onPressed: disabled
+                        ? null
+                        : () => _doAction(
+                            () => _complaintService.validateComplaint(
+                              widget.complaintId,
+                            ),
+                            'Complaint validated',
+                          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('Validate'),
+                  ),
+                if (canValidate)
+                  ElevatedButton.icon(
+                    onPressed: disabled ? null : _showRejectDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text('Reject'),
+                  ),
+                if (canAssign)
+                  ElevatedButton.icon(
+                    onPressed: disabled ? null : _showAssignDeptDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                    ),
+                    icon: const Icon(Icons.apartment, size: 16),
+                    label: const Text('Assign Dept.'),
+                  ),
+                if (canClose)
+                  ElevatedButton.icon(
+                    onPressed: disabled
+                        ? null
+                        : () => _doAction(
+                            () => _complaintService.closeComplaint(
+                              widget.complaintId,
+                            ),
+                            'Complaint closed',
+                          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey,
+                    ),
+                    icon: const Icon(Icons.lock_outline, size: 16),
+                    label: const Text('Close'),
+                  ),
+                if (_status == 'RESOLVED')
+                  ElevatedButton.icon(
+                    onPressed: disabled
+                        ? null
+                        : () => _doAction(
+                            () => _complaintService.approveResolution(
+                              widget.complaintId,
+                            ),
+                            'Resolution approved',
+                          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                    ),
+                    icon: const Icon(Icons.verified, size: 16),
+                    label: const Text('Approve Resolution'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Manager Actions ─────────────────────────────────────────────────────────
+  Widget _buildManagerActions() {
+    final disabled = _loadingAction;
+    final canAssignTech = _status == 'VALIDATED' || _status == 'ASSIGNED';
+
+    return Card(
+      color: Colors.purple.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.manage_accounts,
+                  size: 18,
+                  color: Colors.purple,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Manager Actions',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.purple,
+                  ),
+                ),
+                if (_loadingAction) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (canAssignTech)
+                  ElevatedButton.icon(
+                    onPressed: disabled ? null : _showAssignTechDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                    ),
+                    icon: const Icon(Icons.engineering, size: 16),
+                    label: const Text('Assign Technician'),
+                  ),
+                // Priority updater
+                PopupMenuButton<String>(
+                  onSelected: (urgency) => _doAction(
+                    () => _complaintService.updatePriority(
+                      widget.complaintId,
+                      urgency,
+                    ),
+                    'Priority updated to $urgency',
+                  ),
+                  itemBuilder: (_) => ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
+                      .map((u) => PopupMenuItem(value: u, child: Text(u)))
+                      .toList(),
+                  child: ElevatedButton.icon(
+                    onPressed: null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      disabledBackgroundColor: Colors.deepPurple,
+                      disabledForegroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.flag_outlined, size: 16),
+                    label: const Text('Set Priority'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Technician Actions ──────────────────────────────────────────────────────
+  Widget _buildTechnicianActions() {
+    final disabled = _loadingAction;
+
+    return Card(
+      color: Colors.teal.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.engineering, size: 18, color: Colors.teal),
+                const SizedBox(width: 8),
+                const Text(
+                  'Technician Actions',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.teal,
+                  ),
+                ),
+                if (_loadingAction) ...[
+                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (_status == 'ASSIGNED')
+                  ElevatedButton.icon(
+                    onPressed: disabled
+                        ? null
+                        : () => _doAction(
+                            () =>
+                                _complaintService.startTask(widget.complaintId),
+                            'Task started',
+                          ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                    ),
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: const Text('Start Work'),
+                  ),
+                if (_status == 'IN_PROGRESS')
+                  ElevatedButton.icon(
+                    onPressed: disabled ? null : _showCompleteTaskDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                    ),
+                    icon: const Icon(Icons.check_circle, size: 16),
+                    label: const Text('Mark Complete'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCompleteTaskDialog() {
+    final notesCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Complete Task'),
+        content: TextField(
+          controller: notesCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Resolution notes',
+            hintText: 'Describe what was done...',
+          ),
+          maxLines: 4,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _doAction(
+                () => _complaintService.completeTask(widget.complaintId, {
+                  'resolutionNotes': notesCtrl.text.trim(),
+                }),
+                'Task marked as complete',
+              );
+            },
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
   }
 }

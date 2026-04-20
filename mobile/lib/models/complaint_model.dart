@@ -23,6 +23,14 @@ class Complaint {
   final int upvoteCount;
   final List<dynamic> confirmations;
   final List<dynamic> upvotes;
+  final Map<String, dynamic>? location;
+  final DateTime? slaDeadline;
+  final String? slaStatus;
+  final List<dynamic> beforePhotos;
+  final List<dynamic> afterPhotos;
+  final List<dynamic> materialsUsed;
+  final Map<String, dynamic>? aiDuplicateCheck;
+  final String? duplicateStatus;
 
   Complaint({
     required this.id,
@@ -49,6 +57,14 @@ class Complaint {
     this.upvoteCount = 0,
     this.confirmations = const [],
     this.upvotes = const [],
+    this.location,
+    this.slaDeadline,
+    this.slaStatus,
+    this.beforePhotos = const [],
+    this.afterPhotos = const [],
+    this.materialsUsed = const [],
+    this.aiDuplicateCheck,
+    this.duplicateStatus,
   });
 
   factory Complaint.fromJson(Map<String, dynamic> json) {
@@ -97,6 +113,20 @@ class Complaint {
       upvoteCount: json['upvoteCount'] ?? 0,
       confirmations: json['confirmations'] ?? [],
       upvotes: json['upvotes'] ?? [],
+      location: json['location'] is Map<String, dynamic>
+          ? json['location'] as Map<String, dynamic>
+          : null,
+      slaDeadline: json['slaDeadline'] != null
+          ? DateTime.tryParse(json['slaDeadline'].toString())
+          : null,
+      slaStatus: json['slaStatus'],
+      beforePhotos: json['beforePhotos'] ?? [],
+      afterPhotos: json['afterPhotos'] ?? json['proofPhotos'] ?? [],
+      materialsUsed: json['materialsUsed'] ?? [],
+      aiDuplicateCheck: json['aiDuplicateCheck'] is Map<String, dynamic>
+          ? json['aiDuplicateCheck'] as Map<String, dynamic>
+          : null,
+      duplicateStatus: json['duplicateStatus'],
     );
   }
 
@@ -187,20 +217,31 @@ class ComplaintMedia {
 class StatusHistoryItem {
   final String status;
   final String? updatedBy;
+  final String? updatedByName;
   final DateTime updatedAt;
   final String? notes;
 
   StatusHistoryItem({
     required this.status,
     this.updatedBy,
+    this.updatedByName,
     required this.updatedAt,
     this.notes,
   });
 
   factory StatusHistoryItem.fromJson(Map<String, dynamic> json) {
+    String? updatedBy;
+    String? updatedByName;
+    if (json['updatedBy'] is Map) {
+      updatedBy = json['updatedBy']['_id'] ?? json['updatedBy']['id'];
+      updatedByName = json['updatedBy']['fullName'];
+    } else {
+      updatedBy = json['updatedBy']?.toString();
+    }
     return StatusHistoryItem(
       status: json['status'] ?? '',
-      updatedBy: json['updatedBy'],
+      updatedBy: updatedBy,
+      updatedByName: updatedByName,
       updatedAt: DateTime.tryParse(json['updatedAt'] ?? '') ?? DateTime.now(),
       notes: json['notes'],
     );

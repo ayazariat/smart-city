@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const userRepository = require('../repositories/userRepository');
 const PendingUser = require('../models/PendingUser');
 const AuditLog = require('../models/AuditLog');
 const bcrypt = require('bcryptjs');
@@ -6,23 +6,22 @@ const bcrypt = require('bcryptjs');
 class UserService {
   // Find user by email
   async findByEmail(email) {
-    return await User.findOne({ email: email.toLowerCase().trim() });
+    return await userRepository.findByEmail(email);
   }
 
   // Find user by ID
   async findById(id) {
-    return await User.findById(id);
+    return await userRepository.findById(id);
   }
 
   // Create new user
   async create(userData) {
     const { fullName, email, password, phone, governorate, municipality } = userData;
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = new User({
+    return await userRepository.create({
       fullName,
       email: email.toLowerCase().trim(),
       password: hashedPassword,
@@ -32,8 +31,6 @@ class UserService {
       isVerified: true,
       isActive: true,
     });
-
-    return await user.save();
   }
 
   // Create pending user
@@ -105,12 +102,12 @@ class UserService {
 
   // Delete user
   async deleteUser(userId) {
-    const user = await User.findById(userId);
+    const user = await userRepository.findById(userId);
     if (!user) {
       throw new Error('User not found');
     }
 
-    await User.findByIdAndDelete(userId);
+    await userRepository.delete(userId);
     return true;
   }
 
@@ -126,35 +123,18 @@ class UserService {
       ];
     }
 
-    const skip = (page - 1) * limit;
-    
-    const users = await User.find(query)
-      .select('-password -refreshToken')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await User.countDocuments(query);
-
-    return {
-      users,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    };
+    return await userRepository.findAll(query, { page, limit, sort: { createdAt: -1 } });
   }
 
   // Get user statistics
   async getStats() {
-    const total = await User.countDocuments();
-    const active = await User.countDocuments({ isActive: true });
-    const inactive = await User.countDocuments({ isActive: false });
-    
-    const byRole = await User.aggregate([
-      { $group: { _id: '$role', count: { $sum: 1 } } },
+    const [total, active, inactive, byRole] = await Promise.all([
+      userRepository.count(),
+      userRepository.count({ isActive: true }),
+      userRepository.count({ isActive: false }),
+      userRepository.aggregate([
+        { $group: { _id: '$role', count: { $sum: 1 } } },
+      ]),
     ]);
 
     return {

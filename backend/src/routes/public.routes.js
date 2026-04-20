@@ -60,7 +60,7 @@ const predictDepartment = (category, description) => {
 // POST /api/public/ai/predict-department - AI department suggestion
 router.post("/ai/predict-department", async (req, res) => {
   try {
-    const { category, description, municipality } = req.body;
+    const { category, description } = req.body;
     
     const prediction = predictDepartment(category, description);
     
@@ -157,12 +157,6 @@ router.get("/stats", async (req, res) => {
     }
 
     // Count overdue (SLA overdue or > 7 days)
-    const atRisk = complaints.filter(c => {
-      if (!c.slaDeadline || c.status === "RESOLVED" || c.status === "CLOSED") return false;
-      const progress = (Date.now() - new Date(c.createdAt).getTime()) / (new Date(c.slaDeadline).getTime() - new Date(c.createdAt).getTime()) * 100;
-      return progress >= 80 && progress < 100;
-    }).length;
-
     const overdue = complaints.filter(c => {
       // Only count if not resolved/closed/rejected
       if (["RESOLVED", "CLOSED", "REJECTED"].includes(c.status)) return false;
@@ -347,7 +341,8 @@ router.get("/stats/by-municipality", async (req, res) => {
           total: 0, 
           resolved: 0,
           resolvedOnTime: 0,
-          totalResolutionTime: 0
+          totalResolutionTime: 0,
+          governorate: complaint.governorate || ""
         };
       }
       municipalityStats[municipality].total++;
@@ -380,6 +375,7 @@ router.get("/stats/by-municipality", async (req, res) => {
       
       return {
         name,
+        governorate: stats.governorate || "",
         total: stats.total,
         resolved: stats.resolved,
         rate: stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0,
@@ -414,33 +410,6 @@ router.get("/stats/all-municipalities", async (req, res) => {
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
     const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
-
-    const municipalityToGovernorate = {
-      "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana", "Kalaat El Andalous": "Ariana", "Sidi Ameur": "Ariana",
-      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Mateur": "Béja", "Joumine": "Béja", "El Ma El Abiod": "Béja",
-      "Ben Arous": "Ben Arous", "Radès": "Ben Arous", "Mornag": "Ben Arous", "Hammam Lif": "Ben Arous", "Hammam Chott": "Ben Arous", "Ezzahra": "Ben Arous", "Mourouj": "Ben Arous", "Borj Cédria": "Ben Arous", "Méryana": "Ben Arous",
-      "Bizerte": "Bizerte", "Mateur": "Bizerte", "Ras Jebel": "Bizerte", "Sejnane": "Bizerte", "Menzel Bourguiba": "Bizerte", "Tinja": "Bizerte", "El Alia": "Bizerte", "Ghar El Melh": "Bizerte", "Aousja": "Bizerte",
-      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès", "Degache": "Gabès", "Tamazret": "Gabès", "Zarat": "Gabès",
-      "Gafsa": "Gafsa", "Métlaoui": "Gafsa", "El Ksar": "Gafsa", "Sidi Aïch": "Gafsa", "Moularès": "Gafsa", "Haidra": "Gafsa", "Sened": "Gafsa", "El Guettar": "Gafsa",
-      "Jendouba": "Jendouba", "Tabarka": "Jendouba", "Aïn Draham": "Jendouba", "Balta": "Jendouba", "Bou Salem": "Jendouba", "Fernana": "Jendouba", "Ghardimaou": "Jendouba", "Oued Meliz": "Jendouba",
-      "Kairouan": "Kairouan", "Kairouan Nord": "Kairouan", "Kairouan Sud": "Kairouan", "Oueslatia": "Kairouan", "Bougarnane": "Kairouan", "Sidi Jaber": "Kairouan", "Haffouz": "Kairouan", "Hajeb El Ayoun": "Kairouan",
-      "Kasserine": "Kasserine", "Sbeitla": "Kasserine", "Thala": "Kasserine", "Feriana": "Kasserine", "Sbiba": "Kasserine", "Djedeliane": "Kasserine", "Aïn Khoucha": "Kasserine",
-      "Kébili": "Kébili", "Douz": "Kébili", "Kébili Nord": "Kébili", "Kébili Sud": "Kébili", "Razzeg": "Kébili", "Béchari": "Kébili", "El Golâa": "Kébili", "Souk Lahad": "Kébili",
-      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Menzel Salem": "Le Kef", "Bouchemma": "Le Kef", "El Krib": "Le Kef", "Dahmani": "Le Kef", "Bargou": "Le Kef",
-      "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia", "Melloulèche": "Mahdia", "Sidi Alouane": "Mahdia", "El Djem": "Mahdia", "Chebba": "Mahdia",
-      "Manouba": "Manouba", "Den Den": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba", "Menzel Mahfoudh": "Manouba", "Tabarja": "Manouba",
-      "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Beni Khedache": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine", "Ajim": "Médenine",
-      "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir", "Bembla": "Monastir", "Beni Hassen": "Monastir",
-      "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
-      "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax", "Chihia": "Sfax", "Jedeni": "Sfax", "Menzel Chaker": "Sfax", "Agareb": "Sfax",
-      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid", "Ouled Haffouz": "Sidi Bouzid", "Melloulèche": "Sidi Bouzid", "Bir El Hafey": "Sidi Bouzid", "Sahline": "Sidi Bouzid",
-      "Siliana": "Siliana", "Bousalem": "Siliana", "El Krib": "Siliana", "Bargou": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana", "Bou Arada": "Siliana", "Sidi Morocco": "Siliana", "Gaâfour": "Siliana",
-      "Sousse": "Sousse", "Sousse Ville": "Sousse", "Ksibet Thrayet": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Hammam Sousse": "Sousse", "Kantaoui": "Sousse", "Kalâa Kebira": "Sousse",
-      "Tataouine": "Tataouine", "Tataouine Nord": "Tataouine", "Tataouine Sud": "Tataouine", "Ghomrassen": "Tataouine", "Dhehiba": "Tataouine", "Remada": "Tataouine", "El Ferch": "Tataouine", "Smar": "Tataouine",
-      "Tozeur": "Tozeur", "Nefta": "Tozeur", "Degache": "Tozeur", "Tameghza": "Tozeur", "El Hamma du Jérid": "Tozeur",
-      "Tunis": "Tunis", "Tunis Ville": "Tunis", "Cité El Khadra": "Tunis", "El Ouardia": "Tunis", "El Menzah": "Tunis", "Bhar Lazreg": "Tunis", "Le Bardo": "Tunis", "Sidi Hassine": "Tunis", "Jebel Jelloud": "Tunis",
-      "Zaghouan": "Zaghouan", "Zaghouan Ville": "Zaghouan", "Nadhour": "Zaghouan", "Bir Mcherga": "Zaghouan", "Zriba": "Zaghouan", "El Amaiem": "Zaghouan", "Fountain": "Zaghouan"
-    };
 
     const allMunicipalities = [
       { name: "Ariana", governorate: "Ariana" }, { name: "Raoued", governorate: "Ariana" }, { name: "Sidi Thabet", governorate: "Ariana" }, { name: "La Soukra", governorate: "Ariana" }, { name: "Ettadhamen", governorate: "Ariana" }, { name: "Mnihla", governorate: "Ariana" }, { name: "Kalaat El Andalous", governorate: "Ariana" }, { name: "Sidi Ameur", governorate: "Ariana" },
@@ -610,23 +579,23 @@ router.get("/stats/by-zone", async (req, res) => {
     // Comprehensive municipality to governorate mapping
     const municipalityToGovernorate = {
       "Ariana": "Ariana", "Raoued": "Ariana", "Sidi Thabet": "Ariana", "La Soukra": "Ariana", "Ettadhamen": "Ariana", "Mnihla": "Ariana", "Kalaat El Andalous": "Ariana", "Sidi Ameur": "Ariana",
-      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Mateur": "Béja", "Joumine": "Béja", "El Ma El Abiod": "Béja",
+      "Béja": "Béja", "Medjez El Bab": "Béja", "Nefza": "Béja", "Teboursouk": "Béja", "Testour": "Béja", "Joumine": "Béja", "El Ma El Abiod": "Béja",
       "Ben Arous": "Ben Arous", "Radès": "Ben Arous", "Mornag": "Ben Arous", "Hammam Lif": "Ben Arous", "Hammam Chott": "Ben Arous", "Ezzahra": "Ben Arous", "Mourouj": "Ben Arous", "Borj Cédria": "Ben Arous", "Méryana": "Ben Arous",
       "Bizerte": "Bizerte", "Mateur": "Bizerte", "Ras Jebel": "Bizerte", "Sejnane": "Bizerte", "Menzel Bourguiba": "Bizerte", "Tinja": "Bizerte", "El Alia": "Bizerte", "Ghar El Melh": "Bizerte", "Aousja": "Bizerte",
-      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès", "Degache": "Gabès", "Tamazret": "Gabès", "Zarat": "Gabès",
+      "Gabès": "Gabès", "Mareth": "Gabès", "El Hamma": "Gabès", "Métouia": "Gabès", "Oudhref": "Gabès", "Ghannouch": "Gabès", "Tamazret": "Gabès", "Zarat": "Gabès",
       "Gafsa": "Gafsa", "Métlaoui": "Gafsa", "El Ksar": "Gafsa", "Sidi Aïch": "Gafsa", "Moularès": "Gafsa", "Haidra": "Gafsa", "Sened": "Gafsa", "El Guettar": "Gafsa",
       "Jendouba": "Jendouba", "Tabarka": "Jendouba", "Aïn Draham": "Jendouba", "Balta": "Jendouba", "Bou Salem": "Jendouba", "Fernana": "Jendouba", "Ghardimaou": "Jendouba", "Oued Meliz": "Jendouba",
       "Kairouan": "Kairouan", "Kairouan Nord": "Kairouan", "Kairouan Sud": "Kairouan", "Oueslatia": "Kairouan", "Bougarnane": "Kairouan", "Sidi Jaber": "Kairouan", "Haffouz": "Kairouan", "Hajeb El Ayoun": "Kairouan",
       "Kasserine": "Kasserine", "Sbeitla": "Kasserine", "Thala": "Kasserine", "Feriana": "Kasserine", "Sbiba": "Kasserine", "Djedeliane": "Kasserine", "Aïn Khoucha": "Kasserine",
       "Kébili": "Kébili", "Douz": "Kébili", "Kébili Nord": "Kébili", "Kébili Sud": "Kébili", "Razzeg": "Kébili", "Béchari": "Kébili", "El Golâa": "Kébili", "Souk Lahad": "Kébili",
-      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Menzel Salem": "Le Kef", "Bouchemma": "Le Kef", "El Krib": "Le Kef", "Dahmani": "Le Kef", "Bargou": "Le Kef",
+      "Le Kef": "Le Kef", "Sakiet Sidi Youssef": "Le Kef", "Tajerouine": "Le Kef", "Menzel Salem": "Le Kef", "Bouchemma": "Le Kef", "Dahmani": "Le Kef",
       "Mahdia": "Mahdia", "Mahdia Ville": "Mahdia", "Ksour Essef": "Mahdia", "Melloulèche": "Mahdia", "Sidi Alouane": "Mahdia", "El Djem": "Mahdia", "Chebba": "Mahdia",
       "Manouba": "Manouba", "Den Den": "Manouba", "Mornaguia": "Manouba", "Borj El Amri": "Manouba", "Jedaida": "Manouba", "Menzel Mahfoudh": "Manouba", "Tabarja": "Manouba",
       "Médenine": "Médenine", "Djerba": "Médenine", "Midoun": "Médenine", "Houmt Souk": "Médenine", "Beni Khedache": "Médenine", "Zarzis": "Médenine", "Ben Gardane": "Médenine", "Ajim": "Médenine",
       "Monastir": "Monastir", "Monastir Ville": "Monastir", "Skanès": "Monastir", "Ksar Hellal": "Monastir", "Moknine": "Monastir", "Bembla": "Monastir", "Beni Hassen": "Monastir",
       "Nabeul": "Nabeul", "Hammamet": "Nabeul", "Kelibia": "Nabeul", "Menzel Temime": "Nabeul", "Dar Chaâbane": "Nabeul", "Beni Khiar": "Nabeul",
       "Sfax": "Sfax", "Sfax Ville": "Sfax", "Sfax Sud": "Sfax", "Sfax Nord": "Sfax", "Thyna": "Sfax", "Chihia": "Sfax", "Jedeni": "Sfax", "Menzel Chaker": "Sfax", "Agareb": "Sfax",
-      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid", "Ouled Haffouz": "Sidi Bouzid", "Melloulèche": "Sidi Bouzid", "Bir El Hafey": "Sidi Bouzid", "Sahline": "Sidi Bouzid",
+      "Sidi Bouzid": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid", "Ouled Haffouz": "Sidi Bouzid", "Bir El Hafey": "Sidi Bouzid", "Sahline": "Sidi Bouzid",
       "Siliana": "Siliana", "Bousalem": "Siliana", "El Krib": "Siliana", "Bargou": "Siliana", "Kesra": "Siliana", "Makthar": "Siliana", "Bou Arada": "Siliana", "Sidi Morocco": "Siliana", "Gaâfour": "Siliana",
       "Sousse": "Sousse", "Sousse Ville": "Sousse", "Ksibet Thrayet": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Hammam Sousse": "Sousse", "Kantaoui": "Sousse", "Kalâa Kebira": "Sousse",
       "Tataouine": "Tataouine", "Tataouine Nord": "Tataouine", "Tataouine Sud": "Tataouine", "Ghomrassen": "Tataouine", "Dhehiba": "Tataouine", "Remada": "Tataouine", "El Ferch": "Tataouine", "Smar": "Tataouine",
@@ -854,7 +823,7 @@ router.get("/complaints", async (req, res) => {
     
     const [complaints, total] = await Promise.all([
       Complaint.find(query)
-        .select("title description category status location createdAt priorityScore confirmationCount upvoteCount media municipalityName referenceId")
+        .select("title description category status location createdAt priorityScore confirmationCount upvoteCount media municipalityName governorate referenceId")
         .sort(sortOptions)
         .skip(skip)
         .limit(parseInt(limit))
@@ -884,7 +853,7 @@ router.get("/complaints", async (req, res) => {
 router.get("/complaints/:id", async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id)
-      .select("title description category status priorityScore municipalityName location createdAt updatedAt media confirmationCount upvoteCount")
+      .select("title description category status priorityScore municipalityName governorate location createdAt updatedAt resolvedAt media afterPhotos beforePhotos proofPhotos confirmationCount upvoteCount viewsCount referenceId")
       .lean();
     
     if (!complaint) {
@@ -892,17 +861,19 @@ router.get("/complaints/:id", async (req, res) => {
     }
     
     // Only show public statuses
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"];
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
     if (!publicStatuses.includes(complaint.status)) {
       return res.status(404).json({ success: false, message: "Complaint not available" });
     }
+
+    // Increment views (fire-and-forget, no dedup for v1)
+    Complaint.updateOne({ _id: req.params.id }, { $inc: { viewsCount: 1 } }).catch(() => {});
     
     res.json({
       success: true,
-      data: complaint
+      data: { ...complaint, viewsCount: (complaint.viewsCount || 0) + 1 }
     });
-  } catch (error) {
-    console.error("Public complaint detail error:", error);
+  } catch {
     res.status(500).json({ success: false, message: "Failed to fetch complaint" });
   }
 });

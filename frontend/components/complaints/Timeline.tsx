@@ -110,6 +110,7 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
   return (
     <div style={{ position: "relative", paddingLeft: 24 }}>
       <div
+        className="animate-timeline-grow"
         style={{
           position: "absolute",
           left: 7,
@@ -122,12 +123,16 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
       {normalizedHistory.map((h, i) => (
         <div
           key={i}
+          className="animate-fadeInUp"
           style={{
             position: "relative",
             marginBottom: 16,
             display: "flex",
             gap: 12,
             alignItems: "flex-start",
+            animationDelay: `${i * 0.1}s`,
+            opacity: 0,
+            animationFillMode: "forwards",
           }}
         >
           <div
@@ -196,6 +201,7 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
             </div>
             {h.note && (
               <div
+                className="animate-slideInRight"
                 style={{
                   marginTop: 6,
                   fontSize: 11,

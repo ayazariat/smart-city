@@ -21,8 +21,6 @@ import {
   Trophy,
   Target,
   Eye,
-  Heart,
-  ThumbsUp,
   Radio,
   MapPinned,
   Timer,
@@ -49,7 +47,6 @@ import {
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, ComposedChart, Line, CartesianGrid, XAxis, YAxis, Bar, Legend } from "recharts";
 import { useTranslation } from "react-i18next";
-import { apiClient } from "@/services/api.client";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const getPhotoUrl = (complaint: ComplaintItem, explicitUrl?: string): string | null => {
@@ -181,13 +178,16 @@ interface ComplaintItem {
   socialScore: number;
   priorityScore: number;
   priorityLevel?: string;
-  location?: { municipality?: string; address?: string; commune?: string };
+  location?: { municipality?: string; address?: string; commune?: string; governorate?: string };
   createdAt: string;
   municipalityName?: string;
+  governorate?: string;
   referenceId?: string;
   slaDeadline?: string;
   media?: Array<{ url?: string; type?: string }>;
   proofPhotos?: Array<{ url?: string; type?: string }>;
+  afterPhotos?: Array<{ url?: string; type?: string }>;
+  beforePhotos?: Array<{ url?: string; type?: string }>;
   resolvedAt?: string;
   updatedAt?: string;
 }
@@ -209,6 +209,9 @@ const calculateSocialScore = (confirms: number, upvotes: number): number => {
   return Math.min(confirmScore + upvoteScore, 3);
 };
 
+// Normalize accented chars for matching municipality names (e.g. "Béni Khiar" vs "Beni Khiar")
+const normalizeStr = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 export default function TransparencyPage() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -221,7 +224,6 @@ export default function TransparencyPage() {
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [filteredComplaints, setFilteredComplaints] = useState<ComplaintItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false); // kept for fetchData
   const [period, setPeriod] = useState("month");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -276,8 +278,7 @@ export default function TransparencyPage() {
   }, [loading, activeView]);
 
   const fetchData = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+    if (!isRefresh) setLoading(true);
     
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -288,7 +289,7 @@ export default function TransparencyPage() {
         fetch(`${apiUrl}/public/stats/by-category?period=${period}`),
         fetch(`${apiUrl}/public/stats/by-municipality?period=${period}`),
         fetch(`${apiUrl}/public/stats/monthly-trends?months=6`),
-        fetch(`${apiUrl}/public/complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`),
+        fetch(`${apiUrl}/public/complaints?limit=100&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED,CLOSED`),
         fetch(`${apiUrl}/public/stats/by-zone?period=all`),  // All-time zone data
         fetch(`${apiUrl}/public/top-recurring?limit=5`),
         fetch(`${apiUrl}/public/stats/all-municipalities?period=all`)  // All-time municipality data
@@ -375,7 +376,6 @@ export default function TransparencyPage() {
       console.error("Failed to fetch stats:", error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -395,6 +395,8 @@ export default function TransparencyPage() {
         c.description?.toLowerCase().includes(query) ||
         c.municipalityName?.toLowerCase().includes(query) ||
         c.location?.municipality?.toLowerCase().includes(query) ||
+        c.governorate?.toLowerCase().includes(query) ||
+        c.location?.governorate?.toLowerCase().includes(query) ||
         categoryLabels[c.category]?.toLowerCase().includes(query)
       );
       // Auto-switch to complaints view when searching
@@ -410,33 +412,6 @@ export default function TransparencyPage() {
     setFilteredComplaints(filtered);
   }, [searchQuery, categoryFilter, complaints]);
 
-  const handleUpvote = async (complaintId: string, status?: string) => {
-    // Only allow upvote for VALIDATED or ASSIGNED complaints
-    if (status && status !== "VALIDATED" && status !== "ASSIGNED") {
-      return;
-    }
-    if (!token) {
-      router.push(`/login?redirect=/transparency`);
-      return;
-    }
-    try {
-      const data = await apiClient.post<{ success: boolean; upvoteCount?: number; voteCount?: number }>(
-        `/public/complaints/${complaintId}/upvote`,
-        {}
-      );
-      const nextVotes = data.upvoteCount ?? data.voteCount ?? 0;
-      if (data.success) {
-        setComplaints(prev => prev.map(c => 
-          c._id === complaintId 
-            ? { ...c, upvoteCount: nextVotes, socialScore: calculateSocialScore(c.confirmationCount, nextVotes) }
-            : c
-        ));
-      }
-    } catch (error) {
-      console.error("Upvote failed:", error);
-    }
-  };
-
   const filteredMunicipalities = searchQuery 
     ? ALL_MUNICIPALITIES.filter(m => 
         m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -449,7 +424,7 @@ export default function TransparencyPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-slate-50">
         <div className="text-center">
           <Loader2 className="w-16 h-16 animate-spin text-green-600 mx-auto mb-4" />
-          <p className="text-slate-500 text-lg">{t('transparency.loadingDashboard')}</p>
+          <p className="text-slate-500 text-lg">{"\u00A0"}</p>
         </div>
       </div>
     );
@@ -520,7 +495,7 @@ export default function TransparencyPage() {
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl z-40
+        fixed top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl z-[60]
         transform transition-transform duration-300 ease-in-out shadow-xl md:shadow-sm
         md:translate-x-0 md:block
         ${isRTL ? 'right-0 border-l border-slate-200' : 'left-0 border-r border-slate-200'}
@@ -557,6 +532,8 @@ export default function TransparencyPage() {
                   key={item.id}
                   onClick={() => {
                     setActiveView(item.view);
+                    setSearchQuery("");
+                    setCategoryFilter("");
                     if (item.view === "overview") {
                       setActiveSection(item.id);
                       setTimeout(() => {
@@ -735,7 +712,7 @@ export default function TransparencyPage() {
                   {stats && (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                       {[
-                        { label: t('transparency.metrics.totalReports'), value: allTimeStats?.total ?? stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
+                        { label: t('transparency.metrics.totalReports'), value: stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
                         { label: t('transparency.metrics.problemsFixed'), value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
                         { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
                         { label: t('transparency.metrics.avgFixTime'), value: `${stats.avgResolutionDays}d`, icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
@@ -850,8 +827,8 @@ export default function TransparencyPage() {
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {complaints.filter(c => c.status === 'RESOLVED' || c.status === 'CLOSED').slice(0, 6).map((complaint) => {
-                      const photoUrl = getPhotoUrl(complaint, complaint.proofPhotos?.[0]?.url) || getPhotoUrl(complaint);
+                    {complaints.filter(c => c.status === 'CLOSED').slice(0, 6).map((complaint) => {
+                      const photoUrl = getPhotoUrl(complaint, complaint.afterPhotos?.[0]?.url || complaint.proofPhotos?.[0]?.url) || getPhotoUrl(complaint);
                       const resolvedDate = complaint.resolvedAt || complaint.updatedAt || complaint.createdAt;
                       const resolvedMs = new Date(resolvedDate).getTime();
                       const createdMs = new Date(complaint.createdAt).getTime();
@@ -907,10 +884,12 @@ export default function TransparencyPage() {
                           </div>
                           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                             <div className="flex items-center gap-2">
-                              <span className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs text-blue-600 font-medium">
-                                <ThumbsUp className="w-3 h-3" />
-                                {complaint.upvoteCount || 0} {t('transparency.resolutions.likes')}
-                              </span>
+                              {(complaint.confirmationCount || 0) > 0 && (
+                                <span className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs text-emerald-600 font-medium">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  {complaint.confirmationCount} {t('transparency.complaintsView.confirmed')}
+                                </span>
+                              )}
                             </div>
                             <span className="text-xs text-slate-400">
                               {resolvedDate && !isNaN(new Date(resolvedDate).getTime()) 
@@ -1139,7 +1118,7 @@ export default function TransparencyPage() {
                   </h3>
                   <p className="text-sm text-slate-500 mb-4">{t('transparency.recurring.subtitle')}</p>
                   {recurringIssues.length > 0 ? (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {recurringIssues.map((issue, idx) => {
                         const allResolved = issue.resolvedCount >= issue.count;
                         const someResolved = issue.resolvedCount > 0 && issue.resolvedCount < issue.count;
@@ -1156,7 +1135,7 @@ export default function TransparencyPage() {
                           <div 
                             key={idx} 
                             className="bg-white rounded-xl p-5 border border-slate-200 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
-                            onClick={() => { setCategoryFilter(issue.category); setSearchQuery(issue.title.split(' ').slice(0, 3).join(' ')); setActiveView("complaints"); }}
+                            onClick={() => { setCategoryFilter(issue.category); setSearchQuery(issue.title.split(' ').slice(0, 4).join(' ')); setActiveView("complaints"); }}
                           >
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-xs px-2 py-1 bg-slate-100 rounded-lg text-slate-600 font-medium">
@@ -1292,6 +1271,16 @@ export default function TransparencyPage() {
             {/* Complaints View */}
             {activeView === "complaints" && (
                 <div id="complaints" className="space-y-6">
+                {/* Back button when filtered */}
+                {searchQuery && (
+                  <button 
+                    onClick={() => { setSearchQuery(""); setCategoryFilter(""); setActiveView("municipalities"); }}
+                    className="flex items-center gap-2 text-green-600 hover:text-green-700 font-medium"
+                  >
+                    <ArrowRight className="w-4 h-4 rotate-180" />
+                    {t('transparency.govDetail.back')}
+                  </button>
+                )}
                 {/* Filters */}
                 <div className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm">
                   <div className="flex flex-wrap items-center gap-4">
@@ -1336,11 +1325,11 @@ export default function TransparencyPage() {
                       const photoUrl = getPhotoUrl(complaint);
                       
                       const statusLabels: Record<string, string> = {
-                        VALIDATED: "Verified",
-                        ASSIGNED: "Assigned",
-                        IN_PROGRESS: "In Progress",
-                        RESOLVED: "Resolved",
-                        CLOSED: "Closed"
+                        VALIDATED: t('transparency.complaintsView.verified'),
+                        ASSIGNED: t('transparency.complaintsView.assigned'),
+                        IN_PROGRESS: t('transparency.complaintsView.inProgress'),
+                        RESOLVED: t('transparency.complaintsView.resolved'),
+                        CLOSED: t('transparency.complaintsView.closed')
                       };
                       
                       const formattedDate = new Date(complaint.createdAt).toLocaleDateString(undefined, {
@@ -1415,19 +1404,13 @@ export default function TransparencyPage() {
                             {cleanDescription || t('transparency.complaintsView.noDescription')}
                           </p>
                            
-                          {/* Action buttons - Like, Comment, Views */}
+                          {/* Action buttons - Comment, Views */}
                           <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                             <div className="flex items-center gap-4">
-                              <button
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  handleUpvote(complaint._id, complaint.status);
-                                }}
-                                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-pink-500 transition-colors"
-                              >
-                                <Heart className="w-4 h-4" />
-                                <span>{complaint.upvoteCount || 0}</span>
-                              </button>
+                              <span className="flex items-center gap-1.5 text-sm text-emerald-600">
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>{complaint.confirmationCount || 0}</span>
+                              </span>
                               <button
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
@@ -1508,9 +1491,9 @@ export default function TransparencyPage() {
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <div className="flex items-center gap-3 text-sm text-slate-400">
-                              <span className="flex items-center gap-1">
-                                <Heart className="w-4 h-4" />
-                                {complaint.upvoteCount || 0}
+                              <span className="flex items-center gap-1 text-emerald-600">
+                                <CheckCircle2 className="w-4 h-4" />
+                                {complaint.confirmationCount || 0}
                               </span>
                               <Eye className="w-4 h-4" />
                             </div>
@@ -1554,9 +1537,9 @@ export default function TransparencyPage() {
                   </div>
                   
                   {searchQuery && filteredMunicipalities.length > 0 ? (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {filteredMunicipalities.map((mun) => {
-                        const munStats = allMunicipalityStats.find(m => m.name === mun.name);
+                        const munStats = allMunicipalityStats.find(m => normalizeStr(m.name) === normalizeStr(mun.name));
                         return (
                           <div 
                             key={`${mun.name}-${mun.governorate}`}
@@ -1647,7 +1630,7 @@ export default function TransparencyPage() {
                                 <Trophy className="w-5 h-5" />
                                 {t('transparency.govDetail.achievements')}
                               </h4>
-                              <div className="grid grid-cols-3 gap-4">
+                              <div className="grid grid-cols-3 sm:grid-cols-3 gap-4">
                                 <div className="text-center">
                                   <p className="text-2xl font-bold text-green-600">{resolved}</p>
                                   <p className="text-xs text-green-700">{t('transparency.govDetail.resolvedLabel')}</p>
@@ -1702,9 +1685,9 @@ export default function TransparencyPage() {
                             
                             <div>
                               <h4 className="font-semibold text-slate-800 mb-3">{t('transparency.govDetail.municipalitiesIn', { name: selectedGovernorate })}</h4>
-                              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {gov.municipalities.map((mun) => {
-                                  const munStat = allMunicipalityStats.find(m => m.name === mun);
+                                  const munStat = allMunicipalityStats.find(m => normalizeStr(m.name) === normalizeStr(mun));
                                   const munTotal = munStat?.total || 0;
                                   const munRate = munStat?.rate || 0;
                                   return (
@@ -1735,9 +1718,13 @@ export default function TransparencyPage() {
                                 <div>
                                   <h4 className="font-semibold text-slate-800 mb-3">{t('transparency.govDetail.recentReports', { name: selectedGovernorate })}</h4>
                                   <div className="space-y-2">
-                                    {complaints.filter(c => c.location?.municipality && 
-                                      ALL_MUNICIPALITIES.find(m => m.name === c.location?.municipality && m.governorate === selectedGovernorate)
-                                    ).slice(0, 5).map((complaint) => {
+                                    {complaints.filter(c => {
+                                      // Match by governorate directly or by municipality belonging to this governorate
+                                      if (c.governorate === selectedGovernorate || c.location?.governorate === selectedGovernorate) return true;
+                                      const mun = c.location?.municipality || c.municipalityName;
+                                      if (!mun) return false;
+                                      return !!ALL_MUNICIPALITIES.find(m => m.name === mun && m.governorate === selectedGovernorate);
+                                    }).slice(0, 5).map((complaint) => {
                                       const cPhoto = getPhotoUrl(complaint);
                                       return (
                                       <div 
@@ -1893,7 +1880,7 @@ export default function TransparencyPage() {
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1">
                                 {gov.municipalities.map((mun) => {
-                                  const munStat = allMunicipalityStats.find(m => m.name === mun);
+                                  const munStat = allMunicipalityStats.find(m => normalizeStr(m.name) === normalizeStr(mun));
                                   const munTotal = munStat?.total || 0;
                                   return (
                                     <button 
@@ -2043,15 +2030,8 @@ export default function TransparencyPage() {
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => handleUpvote(c._id, c.status)}
-                      className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-pink-500 transition-colors"
-                    >
-                      <Heart className="w-4 h-4" />
-                      <span>{c.upvoteCount || 0}</span>
-                    </button>
-                    <span className="flex items-center gap-1.5 text-sm text-slate-500">
-                      <Users className="w-4 h-4" />
+                    <span className="flex items-center gap-1.5 text-sm text-emerald-600">
+                      <CheckCircle2 className="w-4 h-4" />
                       <span>{c.confirmationCount || 0} {t('transparency.modal.confirms')}</span>
                     </span>
                   </div>

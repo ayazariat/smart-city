@@ -3,20 +3,17 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { User, FileText, Plus, Sparkles, Shield, Loader2, Archive, Bell, X, BarChart3, MapPin, CheckCircle, Heart, ArrowRight, TrendingUp, AlertTriangle } from "lucide-react";
-import DashboardSidebar from "@/components/layout/DashboardSidebar";
+import { FileText, Plus, Sparkles, Shield, Loader2, BarChart3, MapPin, CheckCircle, ArrowRight, TrendingUp, AlertTriangle, MessageSquare } from "lucide-react";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import RecentActivities from "@/components/dashboard/RecentActivities";
 import MunicipalityOverview from "@/components/dashboard/MunicipalityOverview";
 import { useAuthStore } from "@/store/useAuthStore";
-import { notificationService } from "@/services/notification.service";
-import { connectSocket, subscribeToNotifications } from "@/lib/socket";
 import { agentService } from "@/services/agent.service";
 import { managerService } from "@/services/manager.service";
 import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
 import { categoryLabels } from "@/lib/complaints";
-import { Notification } from "@/types";
-import { getTrendAlerts, upvoteComplaint, confirmComplaint } from "@/services/complaint.service";
+import { getTrendAlerts, confirmComplaint } from "@/services/complaint.service";
 import TrendForecastChart from "@/components/dashboard/TrendForecastChart";
 import DuplicateStatsCard from "@/components/dashboard/DuplicateStatsCard";
 import { useTranslation } from "react-i18next";
@@ -55,15 +52,8 @@ function DashboardContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, logout, hydrated } = useAuthStore();
-  const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
+  const { user, hydrated } = useAuthStore();
 
-  // Notification state
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
-  
   // Stats state for agent/manager
   const [stats, setStats] = useState<DashboardStats>({});
   const [byCategory, setByCategory] = useState<Record<string, number>>({});
@@ -91,66 +81,6 @@ function DashboardContent() {
     const u = user as { id?: string; _id?: string };
     return u.id || u._id;
   })();
-
-  // Fetch notifications
-  const fetchNotifications = async () => {
-    const { token } = useAuthStore.getState();
-    if (!token) return;
-    
-    try {
-      setLoadingNotifications(true);
-      const [countResult, notificationsResult] = await Promise.all([
-        notificationService.getNotificationCount(),
-        notificationService.getNotifications()
-      ]);
-      
-      if (countResult.success && typeof countResult.count === 'number') {
-        setUnreadCount(countResult.count);
-      }
-      if (notificationsResult.success && notificationsResult.data) {
-        setNotifications(notificationsResult.data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch notifications:", error);
-    } finally {
-      setLoadingNotifications(false);
-    }
-  };
-
-  // Mark notification as read
-  const handleMarkAsRead = async (notificationId: string) => {
-    try {
-      await notificationService.markNotificationAsRead(notificationId);
-      setNotifications(prev => 
-        prev.map(n => n._id === notificationId ? { ...n, isRead: true } : n)
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error("Failed to mark notification as read:", error);
-    }
-  };
-
-  // Mark all as read
-  const handleMarkAllAsRead = async () => {
-    try {
-      await notificationService.markAllNotificationsAsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      setUnreadCount(0);
-    } catch (error) {
-      console.error("Failed to mark all as read:", error);
-    }
-  };
-
-  // Handle notification click
-  const handleNotificationClick = async (notification: Notification) => {
-    if (!notification.isRead) {
-      await handleMarkAsRead(notification._id);
-    }
-    if (notification.relatedId) {
-      router.push(`/dashboard/complaints/${notification.relatedId}`);
-    }
-    setShowNotifications(false);
-  };
 
   // Fetch stats for all roles
   const fetchStats = async () => {
@@ -226,33 +156,6 @@ function DashboardContent() {
     }
   };
 
-  // Handle upvote for citizen
-  const handleUpvote = async (complaintId: string) => {
-    const { token } = useAuthStore.getState();
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    const target = municipalityComplaints.find((c) => c._id === complaintId);
-    if (target && currentUserId && getOwnerId(target) === currentUserId) {
-      return;
-    }
-
-    try {
-      const data = await upvoteComplaint(complaintId);
-      if (data.success) {
-        setMunicipalityComplaints(prev => prev.map(c => 
-          c._id === complaintId 
-            ? { ...c, upvoteCount: data.upvoteCount ?? (c.upvoteCount || 0) + 1 }
-            : c
-        ));
-      }
-    } catch (err) {
-      console.error("Upvote failed:", err);
-    }
-  };
-
   // Handle confirm for citizen
   const handleConfirm = async (complaintId: string) => {
     const { token } = useAuthStore.getState();
@@ -279,27 +182,6 @@ function DashboardContent() {
       console.error("Confirm failed:", err);
     }
   };
-
-  // Fetch notifications on mount, subscribe to real-time updates
-  useEffect(() => {
-    const { token } = useAuthStore.getState();
-    if (hydrated && user && token) {
-      fetchNotifications();
-      // Connect socket for real-time notifications
-      connectSocket(user.id);
-      const unsubscribe = subscribeToNotifications((notification: unknown) => {
-        const notif = notification as Notification;
-        setNotifications(prev => [notif, ...prev]);
-        setUnreadCount(prev => prev + 1);
-      });
-      // Also poll every 60 seconds as fallback
-      const interval = setInterval(fetchNotifications, 60000);
-      return () => {
-        clearInterval(interval);
-        unsubscribe();
-      };
-    }
-  }, [hydrated, user]);
 
   // Fetch stats for all roles on mount
   useEffect(() => {
@@ -399,10 +281,6 @@ function DashboardContent() {
     );
   }
 
-  const handleLogout = () => {
-    logout();
-  };
-
   // Get role-based dashboard configuration
   const getDashboardConfig = () => {
     if (!user) return null;
@@ -425,112 +303,8 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
-      {/* Sidebar */}
-      <DashboardSidebar
-        role={user?.role || "CITIZEN"}
-        fullName={user?.fullName}
-        email={user?.email}
-        onLogout={handleLogout}
-        stats={stats}
-        unreadNotifications={unreadCount}
-        onNotificationsClick={() => setShowNotifications(!showNotifications)}
-      />
-
-      {/* Top Bar — notifications, user info */}
-      <header className={`bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 hidden md:block ${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"}`}>
-        <div className="px-4 md:px-6 py-3">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-lg font-bold text-slate-800">Smart City Tunisia</h1>
-                <p className="text-xs text-slate-500">Dashboard</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              {/* Notification Bell — hidden on mobile as mobile top bar has notifications */}
-              <div className="relative hidden md:block">
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
-                  title="Notifications"
-                >
-                  <Bell className="w-5 h-5 text-slate-600" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Notifications Dropdown */}
-                {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-                    <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-gradient-to-r from-primary/5 to-secondary-50">
-                      <h3 className="font-semibold text-slate-900">{t('sidebar.notifications')}</h3>
-                      <div className="flex items-center gap-2">
-                        {unreadCount > 0 && (
-                          <button onClick={handleMarkAllAsRead} className="text-xs text-primary hover:text-primary-700 font-medium">
-                            {t('dashboard.markAllRead')}
-                          </button>
-                        )}
-                        <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-100 rounded-lg transition-colors">
-                          <X className="w-4 h-4 text-slate-500" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {loadingNotifications ? (
-                        <div className="p-8 text-center">
-                          <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
-                        </div>
-                      ) : notifications.length === 0 ? (
-                        <div className="p-8 text-center text-slate-500">
-                          <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">{t('dashboard.noNotifications')}</p>
-                        </div>
-                      ) : (
-                        notifications.slice(0, 10).map((notification) => (
-                          <button
-                            key={notification._id}
-                            onClick={() => handleNotificationClick(notification)}
-                            className={`w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${!notification.isRead ? 'bg-primary/5' : ''}`}
-                          >
-                            <div className="flex items-start gap-3">
-                              {!notification.isRead && (
-                                <span className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0"></span>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-slate-900 truncate">{notification.title}</p>
-                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{notification.message}</p>
-                                <p className="text-xs text-slate-400 mt-1">
-                                  {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="hidden md:flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-xl">
-                <User className="w-4 h-4 text-slate-500" />
-                <span className="text-sm font-medium text-slate-700">{user?.fullName}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content - offset by sidebar width on desktop */}
-      <main className={`${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"} px-4 md:px-6 py-6 md:py-8 max-w-6xl pt-16 md:pt-8`}>
+    <DashboardLayout>
+      <main className="px-4 md:px-6 py-6 md:py-8 max-w-6xl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -581,45 +355,6 @@ function DashboardContent() {
             )}
           </div>
         </div>
-
-        {/* Admin System Overview Panel */}
-        {user?.role === "ADMIN" && !loadingStats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <Link href="/admin/users" className="group bg-gradient-to-br from-violet-500 to-violet-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <User className="w-5 h-5" />
-                </div>
-                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <p className="text-violet-100 text-xs font-medium uppercase tracking-wide">{t('adminOverview.userManagement')}</p>
-              <p className="text-2xl font-bold mt-1">{t('adminOverview.adminPanel')}</p>
-              <p className="text-violet-200 text-xs mt-1">{t('adminOverview.manageUsers')}</p>
-            </Link>
-            <Link href="/admin/complaints" className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <p className="text-blue-100 text-xs font-medium uppercase tracking-wide">{t('adminOverview.systemWide')}</p>
-              <p className="text-2xl font-bold mt-1">{stats.total || 0} {t('adminOverview.complaints')}</p>
-              <p className="text-blue-200 text-xs mt-1">{t('adminOverview.resolutionRate', { rate: stats.resolutionRate || 0 })}</p>
-            </Link>
-            <Link href="/archive" className="group bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 text-white">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                  <Archive className="w-5 h-5" />
-                </div>
-                <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              <p className="text-emerald-100 text-xs font-medium uppercase tracking-wide">{t('adminOverview.archive')}</p>
-              <p className="text-2xl font-bold mt-1">{stats.closed || 0} {t('adminOverview.closed')}</p>
-              <p className="text-emerald-200 text-xs mt-1">{t('adminOverview.viewArchived')}</p>
-            </Link>
-          </div>
-        )}
 
         {/* Today's Priorities - Role-specific action summary */}
         {!loadingStats && stats.total !== undefined && (
@@ -760,6 +495,14 @@ function DashboardContent() {
           </div>
         )}
 
+        {/* Recent Activities — Before statistics */}
+        <div className="mb-8">
+          <RecentActivities
+            role={user?.role || "CITIZEN"}
+            maxItems={8}
+          />
+        </div>
+
         {/* Statistics Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
           <div className="flex items-center justify-between mb-6">
@@ -807,7 +550,7 @@ function DashboardContent() {
           {/* Agent Stats */}
           {user?.role === 'MUNICIPAL_AGENT' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
                   <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
@@ -827,6 +570,11 @@ function DashboardContent() {
                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
                   <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
                   <div className="text-xs text-green-500 mt-1">{t('stats.awaitingClosure')}</div>
+                </div>
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
+                  <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
+                  <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
+                  <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
@@ -851,7 +599,7 @@ function DashboardContent() {
           {/* Manager Stats */}
           {user?.role === 'DEPARTMENT_MANAGER' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
                   <div className="text-sm text-blue-600 font-medium">{t('stats.department')}</div>
@@ -871,6 +619,11 @@ function DashboardContent() {
                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
                   <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
                   <div className="text-xs text-green-500 mt-1">{t('stats.awaitingClosure')}</div>
+                </div>
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
+                  <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
+                  <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
+                  <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
@@ -895,7 +648,12 @@ function DashboardContent() {
           {/* Technician Stats */}
           {user?.role === 'TECHNICIAN' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
+                  <div className="text-2xl font-bold text-slate-700 mb-1">{stats.total || (stats.assigned || 0) + (stats.inProgress || 0) + (stats.resolved || 0)}</div>
+                  <div className="text-sm text-slate-600 font-medium">{t('stats.total')}</div>
+                  <div className="text-xs text-slate-500 mt-1">{t('stats.allTasks')}</div>
+                </div>
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.assigned || 0}</div>
                   <div className="text-sm text-blue-600 font-medium">{t('stats.newTasks')}</div>
@@ -1076,29 +834,27 @@ function DashboardContent() {
           )}
         </div>
 
-        {/* Recent Activities + Municipality Overview — Two column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          <RecentActivities
-            role={user?.role || "CITIZEN"}
-            maxItems={8}
-          />
+        {/* AI Insight Widgets — 7-Day Forecast + Duplicate Stats, right after stats/trend alerts */}
+        {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && (
+          <div className={`grid grid-cols-1 ${(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") ? "lg:grid-cols-2" : ""} gap-6 mt-6`}>
+            <TrendForecastChart
+              municipality={user?.municipalityName || (typeof user?.municipality === "object" ? user?.municipality?.name : "") || ""}
+              category=""
+            />
+            {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+              <DuplicateStatsCard />
+            )}
+          </div>
+        )}
+
+        {/* Municipality Overview — Full width */}
+        <div className="mt-6">
           <MunicipalityOverview
             role={user?.role || "CITIZEN"}
             userMunicipality={user?.municipalityName || (typeof user?.municipality === 'object' && user?.municipality?.name) || undefined}
             userGovernorate={user?.governorate}
           />
         </div>
-
-        {/* AI Insight Widgets — For manager/admin/agent */}
-        {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <TrendForecastChart
-              municipality={user?.municipalityName || (typeof user?.municipality === "object" ? user?.municipality?.name : "") || ""}
-              category=""
-            />
-            <DuplicateStatsCard />
-          </div>
-        )}
 
         {/* Municipality Complaints Section - For CITIZEN role */}
         {user?.role === "CITIZEN" && municipalityComplaints && (
@@ -1192,17 +948,15 @@ function DashboardContent() {
                               {complaint.confirmationCount || 0}
                             </span>
                           </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleUpvote(complaint._id); }}
-                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium transition-colors"
-                            title={t('municipality.prioritizeTitle')}
+                          <Link
+                            href={`/transparency/complaints/${complaint._id}#comments`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium transition-colors"
+                            title="View or add comments"
                           >
-                            <Heart className="w-3.5 h-3.5" />
-                            <span>{t('municipality.prioritizeBtn')}</span>
-                            <span className="bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
-                              {complaint.upvoteCount || 0}
-                            </span>
-                          </button>
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Comments</span>
+                          </Link>
                         </div>
                       )}
                     </div>
@@ -1280,7 +1034,7 @@ function DashboardContent() {
           </div>
         )}
       </main>
-    </div>
+    </DashboardLayout>
   );
 }
 

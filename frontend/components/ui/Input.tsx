@@ -39,13 +39,13 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               w-full px-3 py-2.5 
               ${icon ? 'pl-10' : ''} 
               ${isPassword ? 'pr-10' : ''}
-              border rounded-lg
+              border rounded-xl
               transition-all duration-300
               ${error 
                 ? 'border-urgent-300 focus:border-urgent-500 focus:ring-urgent-500/20 focus:shadow-lg focus:shadow-urgent-100' 
                 : 'border-slate-200 focus:border-primary focus:ring-primary/20 focus:shadow-lg focus:shadow-primary/5'
               }
-              focus:outline-none focus:ring-4
+              focus:outline-none focus:ring-2
               placeholder:text-slate-400
               disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed
               hover:border-slate-300

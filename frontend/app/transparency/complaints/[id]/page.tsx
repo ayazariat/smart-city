@@ -64,6 +64,7 @@ interface Complaint {
   proofPhotos?: ComplaintMedia[];
   confirmationCount?: number;
   upvoteCount?: number;
+  viewsCount?: number;
   resolutionNote?: string;
   statusHistory?: Array<{ status: string; timestamp: string }>;
 }
@@ -97,6 +98,8 @@ export default function PublicComplaintDetailPage() {
   
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [commentText, setCommentText] = useState("");
@@ -245,12 +248,12 @@ export default function PublicComplaintDetailPage() {
   const cleanDescription = (text: string) =>
     text.replace(/Contact\s*phone\s*:?[\s\d+\-]*/gi, "").replace(/(\+?\d[\d\s\-]{7,})/g, "").trim();
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 via-white to-slate-50">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
-          <p className="text-slate-600">{t("publicComplaint.loading")}</p>
+          <p className="text-slate-600">{"\u00A0"}</p>
         </div>
       </div>
     );
@@ -298,10 +301,10 @@ export default function PublicComplaintDetailPage() {
               </button>
               <button
                 onClick={() => router.back()}
-                className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all duration-300 hover:scale-110 active:scale-95"
                 title={t("publicComplaint.back")}
               >
-                <ArrowLeft className="w-5 h-5 text-slate-600" />
+                <ArrowLeft className="w-5 h-5" />
               </button>
               <div className="hidden sm:block">
                 <h1 className="text-lg font-bold text-slate-800 leading-tight">{t("publicComplaint.complaintDetail")}</h1>
@@ -322,7 +325,7 @@ export default function PublicComplaintDetailPage() {
 
       {/* Sidebar — matches transparency page */}
       <aside className={`
-        fixed left-0 top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl border-r border-slate-200 z-40
+        fixed left-0 top-0 h-full w-[260px] bg-white/95 backdrop-blur-xl border-r border-slate-200 z-[60]
         transform transition-transform duration-300 ease-in-out shadow-xl md:shadow-sm
         md:translate-x-0 md:block
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -661,7 +664,7 @@ export default function PublicComplaintDetailPage() {
                 </div>
                 <div className="text-center p-2 bg-blue-50 rounded-xl">
                   <Eye className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-slate-800">—</p>
+                  <p className="text-lg font-bold text-slate-800">{complaint.viewsCount != null ? (complaint.viewsCount >= 1000 ? `${(complaint.viewsCount / 1000).toFixed(1)}K` : complaint.viewsCount) : 0}</p>
                   <p className="text-[10px] text-slate-500">{t("publicComplaint.views")}</p>
                 </div>
               </div>

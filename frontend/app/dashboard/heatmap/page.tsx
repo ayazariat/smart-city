@@ -51,9 +51,9 @@ export default function HeatmapPage() {
       }
       
       if (user?.role === "MUNICIPAL_AGENT" && user.municipality) {
-        params.municipality = typeof user.municipality === 'string' ? user.municipality : (user.municipality as any).name || (user.municipality as any)._id;
+        params.municipality = typeof user.municipality === 'string' ? user.municipality : user.municipality.name || user.municipality._id;
       } else if (user?.role === "DEPARTMENT_MANAGER" && user.department) {
-        params.department = typeof user.department === 'string' ? user.department : (user.department as any).name || (user.department as any)._id;
+        params.department = typeof user.department === 'string' ? user.department : user.department.name || user.department._id;
       }
       
       const response = await heatmapService.getHeatmapData(params);

@@ -33,5 +33,11 @@ router.get("/geography/:governorate/municipalities", userController.getMunicipal
 
 // Department management
 router.get("/departments", userController.getDepartments);
+router.post("/departments", userController.createDepartment);
+router.put("/departments/:id", userController.updateDepartment);
+router.delete("/departments/:id", userController.deleteDepartment);
+
+// SLA Rules
+router.put("/sla-rules", userController.updateSLARules);
 
 module.exports = router;

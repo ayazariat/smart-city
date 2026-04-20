@@ -17,9 +17,9 @@ cron.schedule('0 2 * * *', async () => {
       {
         status: { $in: ['CLOSED', 'REJECTED'] },
         updatedAt: { $lt: thirtyDaysAgo },
-        archived: { $ne: true }
+        isArchived: { $ne: true }
       },
-      { $set: { archived: true } }
+      { $set: { isArchived: true, archivedAt: new Date() } }
     );
     
     console.log(`Auto-archive: ${result.modifiedCount} complaints archived`);

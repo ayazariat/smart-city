@@ -119,6 +119,7 @@ export default function DashboardComplaintsPage() {
                   href={`/dashboard/complaints/${complaint._id || complaint.id}${fromParam ? `?from=${fromParam}` : ''}`}
                   showCitizen
                   showDepartment
+                  showAssignedTo
                 />
                 );
               })}

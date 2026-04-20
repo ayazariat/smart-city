@@ -19,6 +19,7 @@
     "active": "Actif",
     "resolved": "Résolu",
     "help": "Aide",
+    "unknown": "Inconnu",
     "timeAgo": {
       "now": "À l'instant",
       "minutes": "il y a {{n}} min",
@@ -37,6 +38,7 @@
     "myTasks": "Mes tâches",
     "userManagement": "Gestion des utilisateurs",
     "allComplaints": "Toutes les réclamations",
+    "systemSettings": "Paramètres système",
     "archive": "Archive",
     "transparency": "Transparence",
     "myProfile": "Mon profil",
@@ -172,8 +174,7 @@
     "department": "Département",
     "totalComplaints": "Total des réclamations",
     "toAssign": "À assigner",
-    "needsTechnician": "Nécessite un technicien",
-    "newTasks": "Nouvelles tâches",
+    "needsTechnician": "Nécessite un technicien",    "allTasks": "Total des tâches",    "newTasks": "Nouvelles tâches",
     "readyToStart": "Prêtes à démarrer",
     "workingOn": "En cours",
     "completed": "Terminées",
@@ -506,7 +507,8 @@
       "assigned": "Assignée",
       "inProgress": "En cours",
       "resolved": "Résolue",
-      "closed": "Fermée"
+      "closed": "Fermée",
+      "confirmed": "confirmée(s)"
     },
     "municipalitiesView": {
       "title": "Toutes les municipalités en Tunisie",
@@ -713,6 +715,7 @@
     "assignToDepartment": "Assigner au département",
     "updatePriority": "Mettre à jour la priorité",
     "assignToRepairTeam": "Assigner à l'équipe d'intervention",
+    "assignedToRepairTeam": "Assigné à l'équipe d'intervention",
     "rejectResolutionReport": "Rejeter le rapport de résolution",
     "submitResolution": "Soumettre la résolution",
     "validateHelp": "Voulez-vous valider cette réclamation ? Elle sera envoyée au département approprié.",

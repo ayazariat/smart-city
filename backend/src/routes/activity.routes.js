@@ -20,15 +20,16 @@ router.get("/recent", authenticate, async (req, res) => {
       case "CITIZEN":
         query.createdBy = userId;
         break;
-      case "AGENT":
+      case "MUNICIPAL_AGENT":
         if (municipality) {
           query.$or = [
             { municipality: municipality },
+            { municipalityName: municipality },
             { "location.municipality": municipality },
           ];
         }
         break;
-      case "MANAGER":
+      case "DEPARTMENT_MANAGER":
         if (department) {
           query.assignedDepartment = department;
         }

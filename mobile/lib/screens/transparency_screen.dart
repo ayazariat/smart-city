@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/main.dart';
 
@@ -13,7 +14,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
     with SingleTickerProviderStateMixin {
   final ApiClient _apiClient = ApiClient();
   late TabController _tabController;
-  List<dynamic> _complaints = [];
+  List<Complaint> _complaints = [];
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
   String? _error;
@@ -48,9 +49,13 @@ class _TransparencyScreenState extends State<TransparencyScreen>
         _stats = results[0] is Map ? results[0] as Map<String, dynamic> : {};
         final complaintData = results[1];
         if (complaintData is Map && complaintData['complaints'] != null) {
-          _complaints = complaintData['complaints'] as List;
+          _complaints = (complaintData['complaints'] as List)
+              .map((c) => Complaint.fromJson(c))
+              .toList();
         } else if (complaintData is List) {
-          _complaints = complaintData;
+          _complaints = complaintData
+              .map((c) => Complaint.fromJson(c))
+              .toList();
         }
         _isLoading = false;
       });
@@ -62,15 +67,13 @@ class _TransparencyScreenState extends State<TransparencyScreen>
     }
   }
 
-  List<dynamic> get _filteredComplaints {
+  List<Complaint> get _filteredComplaints {
     if (_searchQuery.isEmpty) return _complaints;
     final q = _searchQuery.toLowerCase();
     return _complaints.where((c) {
-      final title = (c['title'] ?? '').toString().toLowerCase();
-      final desc = (c['description'] ?? '').toString().toLowerCase();
-      final muni = (c['municipalityName'] ?? c['municipality'] ?? '')
-          .toString()
-          .toLowerCase();
+      final title = c.title.toLowerCase();
+      final desc = c.description.toLowerCase();
+      final muni = (c.municipalityName ?? '').toLowerCase();
       return title.contains(q) || desc.contains(q) || muni.contains(q);
     }).toList();
   }
@@ -121,8 +124,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
         title: const Text('Public Dashboard'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -383,16 +385,15 @@ class _TransparencyScreenState extends State<TransparencyScreen>
     );
   }
 
-  Widget _complaintCard(dynamic complaint) {
-    final status = complaint['status'] ?? 'SUBMITTED';
-    final category = complaint['category']?.toString();
-    final municipality =
-        complaint['municipalityName'] ?? complaint['municipality'] ?? '';
-    final title = complaint['title'] ?? 'Untitled';
-    final description = complaint['description'] ?? '';
-    final media = complaint['media'] as List?;
-    final confirmCount = complaint['confirmationCount'] ?? 0;
-    final upvoteCount = complaint['upvoteCount'] ?? 0;
+  Widget _complaintCard(Complaint complaint) {
+    final status = complaint.status;
+    final category = complaint.category;
+    final municipality = complaint.municipalityName ?? '';
+    final title = complaint.title;
+    final description = complaint.description;
+    final media = complaint.media;
+    final confirmCount = complaint.confirmationCount;
+    final upvoteCount = complaint.upvoteCount;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -402,16 +403,16 @@ class _TransparencyScreenState extends State<TransparencyScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Image
-          if (media != null && media.isNotEmpty && media[0]['url'] != null)
+          if (media.isNotEmpty && media[0].url.isNotEmpty)
             SizedBox(
               height: 120,
               width: double.infinity,
               child: Image.network(
-                media[0]['url'].toString().startsWith('http')
-                    ? media[0]['url'].toString()
-                    : '${ApiClient.baseUrl.replaceAll('/api', '')}${media[0]['url']}',
+                media[0].url.startsWith('http')
+                    ? media[0].url
+                    : '${ApiClient.baseUrl.replaceAll('/api', '')}${media[0].url}',
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorBuilder: (_, _, _) => Container(
                   height: 120,
                   color: AppColors.secondary,
                   child: const Center(
@@ -454,7 +455,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      category ?? 'OTHER',
+                      category,
                       style: const TextStyle(
                         fontSize: 10,
                         color: AppColors.textSecondary,

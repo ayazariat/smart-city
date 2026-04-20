@@ -7,6 +7,9 @@ const User = require("../models/User");
 const { normalizeMunicipality } = require("../utils/normalize");
 const { calculatePriorityAndSLA } = require("../utils/priorityCalculator");
 
+const rateLimit = require("express-rate-limit");
+const createLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: { message: "Too many submissions, please try again later." } });
+
 // Public routes
 // None for now
 
@@ -14,7 +17,7 @@ const { calculatePriorityAndSLA } = require("../utils/priorityCalculator");
 router.use(authenticate);
 
 // Citizen routes - create and manage their own complaints
-router.post("/", complaintController.create);
+router.post("/", createLimiter, complaintController.create);
 
 // My complaints routes - must come BEFORE /:id to avoid matching issues
 router.get("/my-complaints", complaintController.getMyComplaints);
@@ -54,7 +57,7 @@ router.get("/archived", authenticate, async (req, res) => {
       }
     }
     // ADMIN sees all archived complaints - no additional filter needed
-    if (req.user.role === 'DEPARTMENT_MANAGER') {
+    if (req.user.role === 'DEPARTMENT_MANAGER' && req.user.department) {
       query.assignedDepartment = req.user.department;
     }
     if (req.user.role === 'TECHNICIAN') {

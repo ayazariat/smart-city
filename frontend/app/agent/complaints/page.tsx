@@ -581,6 +581,7 @@ export default function AgentComplaintsPage() {
                     complaint={complaint}
                     showCitizen
                     showDepartment
+                    showAssignedTo
                     showMunicipality
                     index={index}
                     actions={

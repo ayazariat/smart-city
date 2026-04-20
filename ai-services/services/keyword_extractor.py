@@ -7,7 +7,36 @@ import re
 from typing import Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
-import anthropic
+
+# Try to import transformers for free keyword extraction via NER/token-classification
+try:
+    from transformers import pipeline as hf_pipeline
+    _ner_pipeline = None
+    
+    def get_ner_pipeline():
+        global _ner_pipeline
+        if _ner_pipeline is None:
+            _ner_pipeline = hf_pipeline(
+                "token-classification",
+                model="dslim/bert-base-NER",
+                aggregation_strategy="simple",
+                device=-1  # CPU
+            )
+        return _ner_pipeline
+    
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+
+# Optional: Anthropic as fallback if key is set
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+anthropic_client = None
+if ANTHROPIC_API_KEY:
+    try:
+        import anthropic
+        anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    except ImportError:
+        pass
 
 # Try to import NLTK, make it optional
 try:
@@ -75,7 +104,8 @@ class ExtractionResponse(BaseModel):
 
 def extract_keywords(description: str, title: Optional[str] = None) -> ExtractionResponse:
     """
-    Extract keywords from complaint text using Claude + NLTK.
+    Extract keywords from complaint text.
+    Strategy: HuggingFace NER (free) → Claude API (optional paid) → NLTK (free fallback)
     """
     # Combine title and description
     full_text = f"{title}\n{description}" if title else description
@@ -85,11 +115,30 @@ def extract_keywords(description: str, title: Optional[str] = None) -> Extractio
     location_keywords = []
     urgency_keywords = []
     
-    # Use Claude for intelligent extraction if API key is available
-    if ANTHROPIC_API_KEY:
+    # Strategy 1: Free HuggingFace NER for entity extraction
+    if TRANSFORMERS_AVAILABLE:
         try:
-            client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            ner = get_ner_pipeline()
+            # Truncate to 512 tokens for BERT
+            text_for_ner = full_text[:512]
+            entities = ner(text_for_ner)
             
+            for entity in entities:
+                word = entity["word"].strip().replace("##", "")
+                if len(word) > 2:
+                    entity_group = entity.get("entity_group", "")
+                    if entity_group in ("LOC", "GPE"):
+                        if word.lower() not in location_keywords:
+                            location_keywords.append(word.lower())
+                    elif entity_group in ("ORG", "PER", "MISC"):
+                        if word.lower() not in keywords:
+                            keywords.append(word.lower())
+        except Exception as e:
+            print(f"HuggingFace NER error: {e}")
+    
+    # Strategy 2: Claude API for intelligent extraction (optional, if key set)
+    if anthropic_client:
+        try:
             prompt = f"""Extract keywords from this complaint text. Return a JSON object:
 {{
   "keywords": ["keyword1", "keyword2", ...],
@@ -101,7 +150,7 @@ Complaint: {full_text}
 
 Respond with ONLY valid JSON, no other text."""
 
-            message = client.messages.create(
+            message = anthropic_client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=256,
                 messages=[{"role": "user", "content": prompt}]
@@ -120,7 +169,7 @@ Respond with ONLY valid JSON, no other text."""
         except Exception as e:
             print(f"Claude extraction error: {e}")
     
-    # Use NLTK for basic extraction if available
+    # Strategy 3: NLTK for basic token extraction (free fallback)
     if NLTK_AVAILABLE:
         try:
             # Tokenize

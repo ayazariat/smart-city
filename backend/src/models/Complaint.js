@@ -1,55 +1,5 @@
 const mongoose = require("mongoose");
 
-// SLA Configuration by Category and Urgency (in hours)
-// Working days are Mon-Fri, excluding Tunis holidays
-const SLA_CONFIG = {
-  // Routes & Infrastructure
-  ROAD: { LOW: 7 * 24, MEDIUM: 3 * 24, HIGH: 24, URGENT: 4 },
-  // Public Lighting
-  LIGHTING: { LOW: 5 * 24, MEDIUM: 2 * 24, HIGH: 12, URGENT: 2 },
-  // Waste Management
-  WASTE: { LOW: 3 * 24, MEDIUM: 24, HIGH: 6, URGENT: 2 },
-  // Water & Sanitation
-  WATER: { LOW: 7 * 24, MEDIUM: 3 * 24, HIGH: 12, URGENT: 1 },
-  // Public Safety
-  SAFETY: { LOW: 5 * 24, MEDIUM: 48, HIGH: 6, URGENT: 0.5 }, // 30min
-  // Public Property
-  PUBLIC_PROPERTY: { LOW: 10 * 24, MEDIUM: 4 * 24, HIGH: 24, URGENT: 2 },
-  // Green Space & Parks
-  GREEN_SPACE: { LOW: 10 * 24, MEDIUM: 5 * 24, HIGH: 48, URGENT: 1 },
-  // Building & Construction
-  BUILDING: { LOW: 10 * 24, MEDIUM: 5 * 24, HIGH: 48, URGENT: 4 },
-  // Other
-  OTHER: { LOW: 10 * 24, MEDIUM: 5 * 24, HIGH: 48, URGENT: 4 },
-};
-
-// Calculate working days (exclude weekends)
-// Note: For production, add Tunis holidays
-function addWorkingDays(startDate, days) {
-  const result = new Date(startDate);
-  let daysAdded = 0;
-  
-  while (daysAdded < days) {
-    result.setDate(result.getDate() + 1);
-    const day = result.getDay();
-    if (day !== 0 && day !== 6) { // Skip Sun (0) and Sat (6)
-      daysAdded++;
-    }
-  }
-  
-  return result;
-}
-
-// Calculate SLA deadline based on category and urgency
-function calculateSLADeadline(category, urgency, assignedAt) {
-  const categorySLA = SLA_CONFIG[category] || SLA_CONFIG.OTHER;
-  const urgencyKey = urgency?.toUpperCase() || 'MEDIUM';
-  const hours = categorySLA[urgencyKey] || categorySLA.MEDIUM;
-  
-  // Return deadline - for now use calendar hours (can be enhanced to working days)
-  return new Date(assignedAt.getTime() + hours * 60 * 60 * 1000);
-}
-
 // Get SLA status with detailed info
 function getSlaStatus(deadline, createdAt, status) {
   if (!deadline || status === 'RESOLVED' || status === 'CLOSED') {
@@ -254,6 +204,8 @@ const complaintSchema = new mongoose.Schema(
       upvotedAt: { type: Date, default: Date.now }
     }],
     upvoteCount: { type: Number, default: 0, min: 0 },
+    // View tracking
+    viewsCount: { type: Number, default: 0, min: 0 },
     // AI fields for BL-24, BL-25, BL-37
     aiUrgencyPrediction: { type: Object, default: null },
     aiPredictedUrgency: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', null], default: null },

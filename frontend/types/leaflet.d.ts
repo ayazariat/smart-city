@@ -1,11 +1,11 @@
 declare module 'react-leaflet-heatmap-layer-v3' {
   import { FC } from 'react';
   
-  interface HeatmapLayerProps {
-    points: any[];
-    longitudeExtractor: (point: any) => number;
-    latitudeExtractor: (point: any) => number;
-    intensityExtractor?: (point: any) => number;
+  interface HeatmapLayerProps<T = Record<string, unknown>> {
+    points: T[];
+    longitudeExtractor: (point: T) => number;
+    latitudeExtractor: (point: T) => number;
+    intensityExtractor?: (point: T) => number;
     radius?: number;
     maxOpacity?: number;
     gradient?: Record<number, string>;

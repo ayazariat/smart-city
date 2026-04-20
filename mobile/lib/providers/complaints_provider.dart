@@ -1,14 +1,49 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/complaint_model.dart';
 import '../services/complaint_service.dart';
+
+// Stats for dashboard
+class DashboardStats {
+  final int total;
+  final int submitted;
+  final int pending;
+  final int inProgress;
+  final int resolved;
+  final int closed;
+
+  DashboardStats({
+    this.total = 0,
+    this.submitted = 0,
+    this.pending = 0,
+    this.inProgress = 0,
+    this.resolved = 0,
+    this.closed = 0,
+  });
+
+  factory DashboardStats.fromJson(Map<String, dynamic> json) {
+    return DashboardStats(
+      total: json['total'] ?? 0,
+      submitted: json['submitted'] ?? 0,
+      pending: json['pending'] ?? 0,
+      inProgress: json['inProgress'] ?? 0,
+      resolved: json['resolved'] ?? 0,
+      closed: json['closed'] ?? 0,
+    );
+  }
+
+  int get activeCount => pending + inProgress;
+  int get completedCount => resolved + closed;
+}
 
 // Complaints state
 class ComplaintsState {
-  final List<dynamic> complaints;
+  final List<Complaint> complaints;
   final bool isLoading;
   final String? error;
   final int total;
   final int currentPage;
   final int totalPages;
+  final DashboardStats? stats;
 
   ComplaintsState({
     this.complaints = const [],
@@ -17,15 +52,17 @@ class ComplaintsState {
     this.total = 0,
     this.currentPage = 1,
     this.totalPages = 1,
+    this.stats,
   });
 
   ComplaintsState copyWith({
-    List<dynamic>? complaints,
+    List<Complaint>? complaints,
     bool? isLoading,
     String? error,
     int? total,
     int? currentPage,
     int? totalPages,
+    DashboardStats? stats,
   }) {
     return ComplaintsState(
       complaints: complaints ?? this.complaints,
@@ -34,6 +71,7 @@ class ComplaintsState {
       total: total ?? this.total,
       currentPage: currentPage ?? this.currentPage,
       totalPages: totalPages ?? this.totalPages,
+      stats: stats ?? this.stats,
     );
   }
 }
@@ -49,6 +87,22 @@ class MyComplaintsNotifier extends StateNotifier<ComplaintsState> {
     try {
       final complaints = await _service.getMyComplaints();
       state = state.copyWith(complaints: complaints, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> loadWithStats() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final complaints = await _service.getMyComplaints();
+      final statsJson = await _service.getCitizenStats();
+      final stats = DashboardStats.fromJson(statsJson);
+      state = state.copyWith(
+        complaints: complaints,
+        stats: stats,
+        isLoading: false,
+      );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -70,10 +124,10 @@ class MyComplaintsNotifier extends StateNotifier<ComplaintsState> {
         'title': title,
         'description': description,
         'category': category,
-        'municipality': ?municipality,
-        'governorate': ?governorate,
-        'latitude': ?latitude,
-        'longitude': ?longitude,
+        if (municipality != null) 'municipality': municipality,
+        if (governorate != null) 'governorate': governorate,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
         if (mediaUrls != null && mediaUrls.isNotEmpty) 'media': mediaUrls,
       };
       await _service.createComplaint(data);
@@ -132,6 +186,20 @@ class TechnicianTasksNotifier extends StateNotifier<ComplaintsState> {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
     return;
+  }
+
+  Future<void> loadWithStats({
+    String status = 'ASSIGNED,IN_PROGRESS,RESOLVED',
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final tasks = await _service.getTechnicianTasks(status: status);
+      final statsJson = await _service.getTechnicianStats();
+      final stats = DashboardStats.fromJson(statsJson);
+      state = state.copyWith(complaints: tasks, stats: stats, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
   }
 
   Future<void> startTask(String id, {String? notes}) async {

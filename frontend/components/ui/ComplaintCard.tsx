@@ -11,14 +11,13 @@ import {
   Wrench,
   Flag,
   ChevronRight,
-  ThumbsUp,
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
 import { statusConfig, categoryLabels, getComplaintIdDisplay } from "@/lib/complaints";
 import { getPhotoUrl } from "@/lib/photos";
 import { useAuthStore } from "@/store/useAuthStore";
-import { confirmComplaint, unconfirmComplaint, upvoteComplaint, removeUpvote } from "@/services/complaint.service";
+import { confirmComplaint, unconfirmComplaint } from "@/services/complaint.service";
 
 export interface BaseComplaint {
   _id?: string;
@@ -33,6 +32,7 @@ export interface BaseComplaint {
   media?: Array<{ url: string; type?: string }>;
   citizen?: { fullName: string } | null;
   department?: { _id?: string; name: string } | null;
+  assignedDepartment?: { _id?: string; name: string } | null;
   assignedTo?: { _id?: string; fullName: string };
   municipality?: { _id?: string; name: string; governorate?: string } | string;
   municipalityName?: string;
@@ -44,6 +44,7 @@ export interface BaseComplaint {
   slaStatus?: string;
   slaDeadline?: string | Date | null;
   referenceId?: string;
+  resolutionRejectionReason?: string;
 }
 
 interface ComplaintCardProps {
@@ -86,11 +87,10 @@ export const ComplaintCard = ({
     : undefined;
   const userId = user?.id ?? userSub;
   const [isConfirming, setIsConfirming] = useState(false);
-  const [isUpvoting, setIsUpvoting] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Check if this is a rejected resolution (IN_PROGRESS but with resolutionRejectionReason)
-  const isResolutionRejected = complaint.status === "IN_PROGRESS" && (complaint as any).resolutionRejectionReason;
+  const isResolutionRejected = complaint.status === "IN_PROGRESS" && complaint.resolutionRejectionReason;
   
   // Use special status for rejected resolution
   const displayStatus = isResolutionRejected ? "RESOLUTION_REJECTED" : complaint.status;
@@ -103,7 +103,6 @@ export const ComplaintCard = ({
   };
 
   const hasConfirmed = complaint.confirmations?.some(c => c.citizenId === userId);
-  const hasUpvoted = complaint.upvotes?.some(u => u.citizenId === userId);
 
   const createdById = typeof complaint.createdBy === "string" 
     ? complaint.createdBy 
@@ -144,41 +143,6 @@ export const ComplaintCard = ({
       console.error("Confirm error:", err);
     } finally {
       setIsConfirming(false);
-    }
-  };
-
-  const handleUpvote = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!complaint._id || isUpvoting || !userId) return;
-    setIsUpvoting(true);
-    try {
-      if (hasUpvoted) {
-        const result = await removeUpvote(complaint._id);
-        if (result.success && onUpdate) {
-          onUpdate({
-            ...complaint,
-            upvoteCount: result.upvoteCount,
-            upvotes: complaint.upvotes?.filter(u => u.citizenId !== userId),
-          });
-        }
-      } else {
-        const result = await upvoteComplaint(complaint._id);
-        if (result.success && onUpdate) {
-          onUpdate({
-            ...complaint,
-            upvoteCount: result.upvoteCount,
-            upvotes: [
-              ...(complaint.upvotes || []),
-              { citizenId: userId, upvotedAt: new Date().toISOString() },
-            ],
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Upvote error:", err);
-    } finally {
-      setIsUpvoting(false);
     }
   };
 
@@ -228,6 +192,7 @@ export const ComplaintCard = ({
       className={`
         bg-white rounded-2xl border border-slate-200 shadow-sm
         hover:shadow-xl hover:border-primary/20 transition-all duration-300
+        card-3d
         ${slaBorderColor ? `border-l-4 ${slaBorderColor}` : ''}
         ${isHighPriority ? 'ring-2 ring-primary/20' : ''}
         ${href ? 'cursor-pointer' : ''}
@@ -352,16 +317,16 @@ export const ComplaintCard = ({
               {municipalityName}
             </span>
           )}
-          {showCitizen && complaint.citizen && (
+          {showCitizen && (complaint.citizen || (typeof complaint.createdBy === 'object' && complaint.createdBy?.fullName)) && (
             <span className="inline-flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-slate-400" />
-              {complaint.citizen.fullName}
+              {complaint.citizen?.fullName || (typeof complaint.createdBy === 'object' ? complaint.createdBy?.fullName : '')}
             </span>
           )}
-          {showDepartment && complaint.department && (
+          {showDepartment && (complaint.department || complaint.assignedDepartment) && (
             <span className="inline-flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              {complaint.department.name}
+              {(complaint.department || complaint.assignedDepartment)?.name}
             </span>
           )}
           {showAssignedTo && complaint.assignedTo && (
@@ -386,7 +351,8 @@ export const ComplaintCard = ({
               {complaint.media.slice(0, 4).map((item, idx) => (
                 <div
                   key={idx}
-                  className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0 group"
+                  className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0 group animate-gallery-item"
+                  style={{ animationDelay: `${idx * 80}ms` }}
                 >
                   {item.type === "photo" || !item.type ? (
                     <img
@@ -414,33 +380,23 @@ export const ComplaintCard = ({
         )}
 
         {/* Community Stats (BL-28) */}
-        {(complaint.confirmationCount !== undefined || complaint.upvoteCount !== undefined) && (
+        {complaint.confirmationCount !== undefined && (
           <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
-            {complaint.confirmationCount !== undefined && (
-              <div className={`flex items-center gap-1.5 text-sm ${hasConfirmed ? 'text-emerald-600' : 'text-slate-500'}`}>
-                <CheckCircle className={`w-4 h-4 ${hasConfirmed ? '' : 'opacity-50'}`} />
-                <span className="font-medium">{complaint.confirmationCount}</span>
-                <span className="text-xs text-slate-400">confirmed</span>
-              </div>
-            )}
-            {complaint.upvoteCount !== undefined && (
-              <div className={`flex items-center gap-1.5 text-sm ${hasUpvoted ? 'text-blue-600' : 'text-slate-500'}`}>
-                <ThumbsUp className={`w-4 h-4 ${hasUpvoted ? '' : 'opacity-50'}`} />
-                <span className="font-medium">{complaint.upvoteCount}</span>
-                <span className="text-xs text-slate-400">upvotes</span>
-              </div>
-            )}
+            <div className={`flex items-center gap-1.5 text-sm ${hasConfirmed ? 'text-emerald-600' : 'text-slate-500'}`}>
+              <CheckCircle className={`w-4 h-4 ${hasConfirmed ? '' : 'opacity-50'}`} />
+              <span className="font-medium">{complaint.confirmationCount}</span>
+              <span className="text-xs text-slate-400">confirmed</span>
+            </div>
           </div>
         )}
 
         {/* Actions Row */}
         {(actions || canConfirmUpvote) && (
-          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100 [&>button]:btn-action [&>a]:btn-action">
             {actions}
             
             {canConfirmUpvote && (
-              <>
-                <button
+              <button
                   onClick={handleConfirm}
                   disabled={isConfirming}
                   className={`
@@ -456,24 +412,6 @@ export const ComplaintCard = ({
                   <CheckCircle className="w-3.5 h-3.5" />
                   {isConfirming ? "..." : hasConfirmed ? "Confirmed" : "Confirm"}
                 </button>
-                
-                <button
-                  onClick={handleUpvote}
-                  disabled={isUpvoting}
-                  className={`
-                    inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                    transition-all duration-200 hover:scale-105 active:scale-95
-                    ${hasUpvoted
-                      ? "bg-blue-500 text-white shadow-sm hover:bg-blue-600"
-                      : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
-                    }
-                    disabled:opacity-50 disabled:hover:scale-100
-                  `}
-                >
-                  <ThumbsUp className="w-3.5 h-3.5" />
-                  {isUpvoting ? "..." : hasUpvoted ? "Upvoted" : "Upvote"}
-                </button>
-              </>
             )}
           </div>
         )}

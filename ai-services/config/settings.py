@@ -11,8 +11,8 @@ AI_SERVICE_PORT = 8000
 MIN_TRAINING_SAMPLES = 20
 
 # Duplicate Detection Thresholds
-DUPLICATE_THRESHOLD_REVIEW = 0.55      # POSSIBLE_DUPLICATE
-DUPLICATE_THRESHOLD_PROBABLE = 0.75    # PROBABLE_DUPLICATE
+DUPLICATE_THRESHOLD_REVIEW = 0.50      # POSSIBLE_DUPLICATE  (was 0.55 — more sensitive)
+DUPLICATE_THRESHOLD_PROBABLE = 0.72    # PROBABLE_DUPLICATE  (was 0.75 — slightly lower)
 
 # Urgency Score Thresholds
 URGENCY_THRESHOLDS = {
@@ -57,22 +57,36 @@ CRITICAL_KEYWORDS = [
     "effondrement", "blessé", "mort", "urgence", "danger", "fuite gaz",
     "rupture", "danger public",
     # Arabic
-    "فيضان", "حريق", "حادث", "انهيار", "جريح", "وفاة", "خطر", "تسرب غاز", "طوارئ"
+    "فيضان", "حريق", "حادث", "انهيار", "جريح", "وفاة", "خطر", "تسرب غاز", "طوارئ",
+    # English
+    "flood", "fire", "accident", "collapse", "injured", "death", "danger", "gas leak", "emergency",
+    "explosion", "electrocution", "critical"
 ]
 
 HIGH_KEYWORDS = [
     # French
     "canalisation", "fuite eau", "panne totale", "route coupée",
-    "décharge", "eau stagnante",
+    "décharge", "eau stagnante", "égout bouché", "inondation", "fuite importante",
+    "câble électrique", "poteau tombé", "chaussée effondrée",
     # Arabic
-    "قناة مياه", "تسرب ماء", "انقطاع كامل", "طريق مغلق", "مياه راكدة"
+    "قناة مياه", "تسرب ماء", "انقطاع كامل", "طريق مغلق", "مياه راكدة",
+    "مجرى مسدود", "كابل كهربائي", "عمود ساقط",
+    # English
+    "burst pipe", "total blackout", "road closed", "sewage overflow", "fallen pole",
+    "collapsed road", "major leak"
 ]
 
 MEDIUM_KEYWORDS = [
     # French
     "nid de poule", "lampadaire", "ordures", "dégradé", "cassé",
+    "trottoir abîmé", "bac débordant", "feux de signalisation", "graffiti",
+    "éclairage défaillant", "déchets accumulés",
     # Arabic
-    "حفرة", "عمود إنارة", "نفايات", "تدهور", "مكسور"
+    "حفرة", "عمود إنارة", "نفايات", "تدهور", "مكسور",
+    "رصيف تالف", "حاوية ممتلئة", "إشارات مرور", "نفايات متراكمة",
+    # English
+    "pothole", "streetlight", "garbage", "broken", "damaged",
+    "cracked pavement", "overflowing bin", "graffiti", "littering"
 ]
 
 # Category Keywords for better category prediction
@@ -261,7 +275,7 @@ DATA_PATHS = {
 }
 
 # MongoDB Connection (for AI services)
-MONGODB_URI = "mongodb://localhost:27017/smartcity"
+MONGODB_URI = "mongodb://localhost:27017/smart-city"
 
 # HTTP Timeout Settings (in seconds)
 HTTP_TIMEOUT = {

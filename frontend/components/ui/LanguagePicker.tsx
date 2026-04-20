@@ -23,6 +23,9 @@ export default function LanguagePicker() {
 
   const change = (code: string) => {
     i18n.changeLanguage(code);
+    // Immediately update dir/lang so sidebar reacts without waiting for React effect
+    document.documentElement.dir = code === "ar" ? "rtl" : "ltr";
+    document.documentElement.lang = code;
     setOpen(false);
   };
 

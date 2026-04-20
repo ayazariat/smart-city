@@ -276,7 +276,7 @@ export default function MyComplaintsPage() {
                           const department = (() => {
                             if (!("department" in updated)) return c.department;
                             const departmentVal = updated.department;
-                            if (departmentVal === null) return null;
+                            if (departmentVal === null) return undefined;
                             if (
                               departmentVal &&
                               typeof departmentVal === "object" &&
@@ -324,6 +324,7 @@ export default function MyComplaintsPage() {
                             citizen,
                             department,
                             assignedTo,
+                            assignedDepartment: ((updated as unknown as Record<string, unknown>).assignedDepartment ?? undefined) as Complaint['assignedDepartment'],
                           };
                         }
                         return c;

@@ -13,4 +13,7 @@ const confirmationSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+confirmationSchema.index({ complaint: 1, confirmedBy: 1, type: 1 }, { unique: true });
+confirmationSchema.index({ complaint: 1 });
+
 module.exports = mongoose.model("Confirmation", confirmationSchema);

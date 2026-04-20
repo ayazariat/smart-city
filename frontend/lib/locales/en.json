@@ -19,6 +19,7 @@
     "active": "Active",
     "resolved": "Resolved",
     "help": "Help",
+    "unknown": "Unknown",
     "timeAgo": {
       "now": "Just now",
       "minutes": "{{n}}m ago",
@@ -37,6 +38,7 @@
     "myTasks": "My Tasks",
     "userManagement": "User Management",
     "allComplaints": "All Complaints",
+    "systemSettings": "System Settings",
     "archive": "Archive",
     "transparency": "Transparency",
     "myProfile": "My Profile",
@@ -173,6 +175,7 @@
     "totalComplaints": "Total complaints",
     "toAssign": "To Assign",
     "needsTechnician": "Needs technician",
+    "allTasks": "Total tasks",
     "newTasks": "New Tasks",
     "readyToStart": "Ready to start",
     "workingOn": "Working on",
@@ -508,7 +511,8 @@
       "assigned": "Assigned",
       "inProgress": "In Progress",
       "resolved": "Resolved",
-      "closed": "Closed"
+      "closed": "Closed",
+      "confirmed": "confirmed"
     },
     "municipalitiesView": {
       "title": "All Municipalities in Tunisia",
@@ -715,6 +719,7 @@
     "assignToDepartment": "Assign to Department",
     "updatePriority": "Update Priority",
     "assignToRepairTeam": "Assign to Repair Team",
+    "assignedToRepairTeam": "Assigned to Repair Team",
     "rejectResolutionReport": "Reject Resolution Report",
     "submitResolution": "Submit Resolution",
     "validateHelp": "Do you want to validate this complaint? It will be sent to the appropriate department.",

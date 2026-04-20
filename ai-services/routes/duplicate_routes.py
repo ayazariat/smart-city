@@ -27,12 +27,12 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
             "createdAt": {"$gte": cutoff}
         }
         if municipality:
-            query["municipality"] = municipality
+            query["municipalityName"] = municipality
 
         cursor = db.complaints.find(
             query,
             {"_id": 1, "referenceId": 1, "title": 1, "description": 1,
-             "category": 1, "municipality": 1, "latitude": 1, "longitude": 1,
+             "category": 1, "municipalityName": 1, "latitude": 1, "longitude": 1,
              "status": 1, "createdAt": 1, "submittedAt": 1}
         ).sort("createdAt", -1).limit(limit)
 

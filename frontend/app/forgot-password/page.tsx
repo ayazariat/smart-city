@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Mail, Sparkles, ArrowLeft, CheckCircle, AlertCircle, BarChart3 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
@@ -11,6 +11,9 @@ import { useTranslation } from "react-i18next";
 
 export default function ForgotPasswordPage() {
   const { t } = useTranslation();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const mt = (key: string, fallback?: string) => mounted ? t(key) : (fallback ?? '');
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export default function ForgotPasswordPage() {
                   <CheckCircle className="w-8 h-8 text-success" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {t('forgotPassword.checkEmail')}
+                  {mt('forgotPassword.checkEmail')}
                 </h1>
                 <p className="text-slate-600">
                   {success}
@@ -66,7 +69,7 @@ export default function ForgotPasswordPage() {
 
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
                 <p className="text-sm text-blue-800">
-                  <strong>{t('forgotPassword.tip')}</strong> {t('forgotPassword.spamHint')}
+                  <strong>{mt('forgotPassword.tip')}</strong> {mt('forgotPassword.spamHint')}
                 </p>
               </div>
 
@@ -76,14 +79,14 @@ export default function ForgotPasswordPage() {
                   onClick={() => { setSuccess(null); setError(null); }}
                   className="block w-full text-center text-primary hover:text-primary-700 font-medium transition-colors"
                 >
-                  {t('forgotPassword.didntReceive')}
+                  {mt('forgotPassword.didntReceive')}
                 </Link>
                 <Link
                   href="/"
                   className="block w-full text-center text-slate-600 hover:text-slate-900 font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  {t('forgotPassword.backToLogin')}
+                  {mt('forgotPassword.backToLogin')}
                 </Link>
               </div>
             </div>
@@ -105,10 +108,10 @@ export default function ForgotPasswordPage() {
               <Sparkles className="w-8 h-8 text-white" />
             </Link>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              {t('forgotPassword.title')}
+              {mt('forgotPassword.title')}
             </h1>
             <p className="text-slate-600">
-              {t('forgotPassword.subtitle')}
+              {mt('forgotPassword.subtitle')}
             </p>
             <div className="mt-3">
               <Link 
@@ -116,7 +119,7 @@ export default function ForgotPasswordPage() {
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-green-50/80 text-green-700 border border-green-200/60 hover:bg-green-100 transition-colors text-sm font-medium shadow-sm"
               >
                 <BarChart3 className="w-4 h-4" />
-                {t('forgotPassword.publicStats')}
+                {mt('forgotPassword.publicStats')}
               </Link>
             </div>
           </div>
@@ -137,12 +140,12 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="animate-slideInLeft delay-300">
                 <Input
-                  label={t('forgotPassword.email')}
+                  label={mt('forgotPassword.email', 'Email')}
                   type="email"
                   name="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t('forgotPassword.emailPlaceholder')}
+                  placeholder={mt('forgotPassword.emailPlaceholder')}
                   icon={<Mail size={18} />}
                   required
                 />
@@ -157,7 +160,7 @@ export default function ForgotPasswordPage() {
                   className="group"
                   icon={<Mail className="w-5 h-5" />}
                 >
-                  {t('forgotPassword.sendLink')}
+                  {mt('forgotPassword.sendLink', 'Send Reset Link')}
                 </Button>
               </div>
             </form>
@@ -168,7 +171,7 @@ export default function ForgotPasswordPage() {
                 className="flex items-center justify-center gap-2 text-slate-600 hover:text-slate-900 font-medium transition-all duration-200"
               >
                 <ArrowLeft className="w-4 h-4" />
-                {t('forgotPassword.backToLogin')}
+                {mt('forgotPassword.backToLogin')}
               </Link>
             </div>
           </div>

@@ -6,15 +6,17 @@ const getAiServiceUrl = (): string => {
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
 
-const fetchAi = async (path: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response> => {
+const fetchAi = async (path: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response | null> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(new Error('Request timeout')), timeoutMs);
   try {
     const aiUrl = getAiServiceUrl();
     return await fetch(`${aiUrl}${path}`, {
       ...options,
       signal: controller.signal,
     });
+  } catch {
+    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -471,7 +473,7 @@ export const predictUrgency = async (
       }),
     });
 
-    if (!response.ok) {
+    if (!response || !response.ok) {
       return null;
     }
 
@@ -492,25 +494,15 @@ export const extractKeywords = async (text: string): Promise<{
   urgencyKeywords: string[];
   similarityHash: string;
 }> => {
-  let response: Response;
-  try {
-    response = await fetchAi(`/extract-keywords`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ text }),
-    }, 4000);
-  } catch {
-    return {
-      keywords: [],
-      locationKeywords: [],
-      urgencyKeywords: [],
-      similarityHash: "",
-    };
-  }
+  const response = await fetchAi(`/extract-keywords`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ text }),
+  }, 4000);
 
-  if (!response.ok) {
+  if (!response || !response.ok) {
     return {
       keywords: [],
       locationKeywords: [],
@@ -620,7 +612,7 @@ export const getTrendForecast = async (
       4000
     );
 
-    if (!response.ok) {
+    if (!response || !response.ok) {
       return null;
     }
 
@@ -644,7 +636,7 @@ export const getTrendAlerts = async (): Promise<{
   try {
     const response = await fetchAi(`/ai/trend/alerts`, { method: "GET" }, 3000);
 
-    if (!response.ok) {
+    if (!response || !response.ok) {
       return [];
     }
 
@@ -694,7 +686,7 @@ export const checkDuplicate = async (
       }),
     }, 5000);
 
-    if (!response.ok) return null;
+    if (!response || !response.ok) return null;
 
     const result = await response.json();
     return result.data || null;
@@ -713,7 +705,7 @@ export const getDuplicateStats = async (): Promise<{
 } | null> => {
   try {
     const response = await fetchAi(`/ai/duplicate/stats`, { method: "GET" }, 3000);
-    if (!response.ok) return null;
+    if (!response || !response.ok) return null;
     const result = await response.json();
     return result.data || result;
   } catch {

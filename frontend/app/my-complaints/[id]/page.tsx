@@ -333,7 +333,7 @@ export default function MyComplaintDetailPage() {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.back()}
-                className="p-2.5 hover:bg-slate-100 rounded-xl transition-all duration-200 flex items-center justify-center text-slate-600"
+                className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all duration-300 hover:scale-110 active:scale-95"
                 aria-label="Go back to my complaints"
               >
                 <ArrowLeft className="w-5 h-5" />

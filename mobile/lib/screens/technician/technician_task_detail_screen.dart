@@ -35,10 +35,10 @@ class _TechnicianTaskDetailScreenState
     });
 
     try {
-      final taskJson = await _complaintService.getTaskById(widget.taskId);
+      final task = await _complaintService.getTaskById(widget.taskId);
       if (!mounted) return;
       setState(() {
-        _task = Complaint.fromJson(taskJson);
+        _task = task;
         _isLoading = false;
       });
     } catch (e) {
@@ -287,7 +287,7 @@ class _TechnicianTaskDetailScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.2),
+        color: AppColors.primary.withAlpha(51),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -321,7 +321,7 @@ class _TechnicianTaskDetailScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withAlpha(51),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -443,7 +443,75 @@ class _TechnicianTaskDetailScreenState
   }
 
   Widget _buildLocation() {
-    return const SizedBox.shrink();
+    final task = _task!;
+    final municipality = task.municipalityName ?? '';
+    final governorate = task.governorate ?? '';
+    if (municipality.isEmpty && governorate.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.location_on, color: AppColors.primary),
+                SizedBox(width: 8),
+                Text(
+                  'Location',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (municipality.isNotEmpty)
+              Row(
+                children: [
+                  const Icon(
+                    Icons.location_city,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    municipality,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            if (governorate.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.map,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    governorate,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildMedia() {
@@ -551,9 +619,9 @@ class _TechnicianTaskDetailScreenState
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.resolved.withOpacity(0.1),
+          color: AppColors.resolved.withAlpha(26),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.resolved.withOpacity(0.3)),
+          border: Border.all(color: AppColors.resolved.withAlpha(77)),
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -575,9 +643,9 @@ class _TechnicianTaskDetailScreenState
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.closed.withOpacity(0.1),
+          color: AppColors.closed.withAlpha(26),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.closed.withOpacity(0.3)),
+          border: Border.all(color: AppColors.closed.withAlpha(77)),
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,

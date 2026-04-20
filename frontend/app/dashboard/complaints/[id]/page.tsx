@@ -131,12 +131,13 @@ export default function ComplaintDetailPage() {
   };
 
   // BL-28: Check if current user has confirmed/upvoted
+  // citizenId is stored as ObjectId in DB, so we must compare as strings
   const userId = user?.id;
   const hasConfirmed = complaint?.confirmations?.some(
-    c => c.citizenId === userId
+    c => c.citizenId?.toString() === userId?.toString()
   );
   const hasUpvoted = complaint?.upvotes?.some(
-    u => u.citizenId === userId
+    u => u.citizenId?.toString() === userId?.toString()
   );
   const isOwnComplaint = (() => {
     if (!complaint || !userId) return false;
@@ -448,6 +449,7 @@ export default function ComplaintDetailPage() {
     user?.role === "DEPARTMENT_MANAGER" ||
     user?.role === "ADMIN";
   const canSeeAiInsights = user?.role !== "CITIZEN";
+  const canSeeUrgencyPrediction = user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
 
   // Check if current user is a technician assigned to this complaint
   const isAssignedTechnician = user?.role === "TECHNICIAN" && 
@@ -646,15 +648,17 @@ export default function ComplaintDetailPage() {
             </section>
 
             {/* AI Analysis Section (BL-24, BL-25) */}
-            {canSeeAiInsights && (complaint.aiUrgencyPrediction || complaint.aiDuplicateCheck) && (
+            {canSeeAiInsights && (
+              (canSeeUrgencyPrediction && complaint.aiUrgencyPrediction) || complaint.aiDuplicateCheck
+            ) && (
               <section className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-violet-200">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <span className="text-2xl">🤖</span>
                   {t("complaintDetail.aiAnalysis")}
                 </h2>
                 
-                {/* BL-24: Urgency Prediction */}
-                {complaint.aiUrgencyPrediction && (
+                {/* BL-24: Urgency Prediction — Manager/Admin only */}
+                {canSeeUrgencyPrediction && complaint.aiUrgencyPrediction && (
                   <div className="mb-4 p-4 bg-white rounded-xl border border-violet-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-700">{t("complaintDetail.aiUrgencyPrediction")}</span>
@@ -807,7 +811,7 @@ export default function ComplaintDetailPage() {
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {complaint.media.map((item, index) => (
-                    <div key={`media-${index}`} className="relative group">
+                    <div key={`media-${index}`} className="relative group animate-gallery-item" style={{ animationDelay: `${index * 100}ms` }}>
                       {mediaErrors[index] ? (
                         <div className="w-full h-32 bg-slate-200 rounded-lg flex items-center justify-center">
                           <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -844,8 +848,8 @@ export default function ComplaintDetailPage() {
               )}
             </section>
 
-            {/* Before Photos (Technician) - Hide when resolved/closed (shown in Resolution Report instead) */}
-            {complaint.beforePhotos && complaint.beforePhotos.length > 0 && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
+            {/* Before Photos (Technician) */}
+            {complaint.beforePhotos && complaint.beforePhotos.length > 0 && (
               <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500" aria-labelledby="before-photos-title">
                 <h2 id="before-photos-title" className="text-lg font-semibold text-slate-900 mb-4">
                   {t("complaintDetail.beforeWorkPhotos")} ({complaint.beforePhotos.length})
@@ -890,8 +894,8 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
-            {/* After Photos (Technician) - Hide when resolved/closed (shown in Resolution Report instead) */}
-            {complaint.afterPhotos && complaint.afterPhotos.length > 0 && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
+            {/* After Photos (Technician) */}
+            {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
               <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500" aria-labelledby="after-photos-title">
                 <h2 id="after-photos-title" className="text-lg font-semibold text-slate-900 mb-4">
                   {t("complaintDetail.afterWorkPhotos")} ({complaint.afterPhotos.length})
@@ -1442,13 +1446,22 @@ export default function ComplaintDetailPage() {
                     <>
                       {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
                         <>
-                          <Button
-                            className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-                            icon={<UserCog className="w-4 h-4" />}
-                            onClick={() => setActionModal("technician")}
-                          >
-                            {complaint.assignedTo ? t("complaintDetail.changeTechnician") : t("complaintDetail.assignToRepairTeam")}
-                          </Button>
+                          {complaint.assignedTo ? (
+                            <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                              <p className="text-sm text-indigo-800 font-medium">{t("complaintDetail.assignedToRepairTeam")}</p>
+                              <p className="text-xs text-indigo-600 mt-1">
+                                {typeof complaint.assignedTo === 'object' ? complaint.assignedTo.fullName : t("complaintDetail.technicianAssigned")}
+                              </p>
+                            </div>
+                          ) : (
+                            <Button
+                              className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
+                              icon={<UserCog className="w-4 h-4" />}
+                              onClick={() => setActionModal("technician")}
+                            >
+                              {t("complaintDetail.assignToRepairTeam")}
+                            </Button>
+                          )}
                           <Button
                             className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
                             icon={<AlertTriangle className="w-4 h-4" />}

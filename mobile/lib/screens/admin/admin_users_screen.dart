@@ -102,7 +102,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
 
   Future<void> _toggleUserStatus(User user) async {
     try {
-      await _api.put('/admin/users/${user.id}/toggle-status', {});
+      await _api.patch('/admin/users/${user.id}/toggle-status', {});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -417,7 +417,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
             // Avatar
             CircleAvatar(
               radius: 24,
-              backgroundColor: roleColor.withOpacity(0.2),
+              backgroundColor: roleColor.withAlpha(51),
               child: Icon(_getRoleIcon(user.role), color: roleColor),
             ),
             const SizedBox(width: 12),
@@ -451,7 +451,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: roleColor.withOpacity(0.2),
+                          color: roleColor.withAlpha(51),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(

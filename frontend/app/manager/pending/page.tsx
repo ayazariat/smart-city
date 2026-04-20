@@ -44,7 +44,7 @@ export default function ManagerPendingPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const [assignTechTarget, setAssignTechTarget] = useState<string | null>(null);
-  const [selectedTechnician, setSelectedTechnician] = useState("");
+  const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>([]);
 
   const [priorityTarget, setPriorityTarget] = useState<string | null>(null);
   const [priorityScore, setPriorityScore] = useState<number>(5);
@@ -111,21 +111,26 @@ export default function ManagerPendingPage() {
   }, [token, user]);
 
   const handleAssignTechnician = async () => {
-    if (!assignTechTarget || !selectedTechnician) return;
+    if (!assignTechTarget || selectedTechnicians.length === 0) return;
     setActionLoading(assignTechTarget);
     try {
-      const result = await managerService.assignTechnician(assignTechTarget, selectedTechnician);
+      let result;
+      if (selectedTechnicians.length === 1) {
+        result = await managerService.assignTechnician(assignTechTarget, selectedTechnicians[0]);
+      } else {
+        result = await managerService.assignTeam(assignTechTarget, selectedTechnicians);
+      }
       if (result.success) {
         setAssignTechTarget(null);
-        setSelectedTechnician("");
+        setSelectedTechnicians([]);
         await refreshComplaints();
       } else {
-        alert((result as { message?: string }).message || "Failed to assign technician");
+        alert((result as { message?: string }).message || "Failed to assign technician(s)");
       }
     } catch (err: unknown) {
-      console.error("Error assigning technician:", err);
+      console.error("Error assigning technician(s):", err);
       const errorObj = err as { message?: string };
-      alert(errorObj?.message || "Failed to assign technician");
+      alert(errorObj?.message || "Failed to assign technician(s)");
     } finally {
       setActionLoading(null);
     }
@@ -488,14 +493,15 @@ export default function ManagerPendingPage() {
                     key={id}
                     complaint={complaint}
                     showCitizen
+                    showDepartment
                     showAssignedTo
                     showPriority
                     index={index}
                     actions={
                       <>
-                        {complaint.status === "ASSIGNED" && !complaint.assignedTo && (
+                        {complaint.status === "ASSIGNED" && (
                           <button
-                            onClick={() => setAssignTechTarget(id)}
+                            onClick={() => { setAssignTechTarget(id); setSelectedTechnicians([]); }}
                             disabled={actionLoading === id}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
                           >
@@ -536,37 +542,58 @@ export default function ManagerPendingPage() {
       {/* Assign Technician Modal */}
       <Modal
         isOpen={assignTechTarget !== null}
-        onClose={() => { setAssignTechTarget(null); setSelectedTechnician(""); }}
-        title="Assign to Technician"
-        description="Select the technician who will handle this complaint."
+        onClose={() => { setAssignTechTarget(null); setSelectedTechnicians([]); }}
+        title="Assign Repair Team"
+        description="Select one or more technicians to form a repair team for this complaint."
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setAssignTechTarget(null); setSelectedTechnician(""); }} disabled={actionLoading !== null}>
+            <Button variant="ghost" onClick={() => { setAssignTechTarget(null); setSelectedTechnicians([]); }} disabled={actionLoading !== null}>
               Cancel
             </Button>
-            <Button onClick={handleAssignTechnician} isLoading={actionLoading !== null} disabled={!selectedTechnician || actionLoading !== null}>
-              Assign
+            <Button onClick={handleAssignTechnician} isLoading={actionLoading !== null} disabled={selectedTechnicians.length === 0 || actionLoading !== null}>
+              {selectedTechnicians.length > 1 ? `Assign Team (${selectedTechnicians.length})` : "Assign"}
             </Button>
           </>
         }
       >
-        <select
-          value={selectedTechnician}
-          onChange={(e) => setSelectedTechnician(e.target.value)}
-          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white transition-all"
-        >
-          <option value="">Select technician...</option>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
           {technicians.map((tech) => {
             const activeCount = complaints.filter(c =>
               c.assignedTo?._id === tech._id && ["ASSIGNED", "IN_PROGRESS"].includes(c.status)
             ).length;
+            const selected = selectedTechnicians.includes(tech._id);
             return (
-              <option key={tech._id} value={tech._id}>
-                {tech.fullName}{activeCount > 0 ? ` (${activeCount} active task${activeCount > 1 ? 's' : ''})` : ' (available)'}
-              </option>
+              <label
+                key={tech._id}
+                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  selected
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                    : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() =>
+                    setSelectedTechnicians(prev =>
+                      selected ? prev.filter(id => id !== tech._id) : [...prev, tech._id]
+                    )
+                  }
+                  className="w-4 h-4 accent-primary"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800">{tech.fullName}</p>
+                  <p className="text-xs text-slate-500">
+                    {activeCount > 0 ? `${activeCount} active task${activeCount > 1 ? 's' : ''}` : 'Available'}
+                  </p>
+                </div>
+                {activeCount === 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">Free</span>
+                )}
+              </label>
             );
           })}
-        </select>
+        </div>
       </Modal>
 
       {/* Priority Modal */}
@@ -619,13 +646,13 @@ export default function ManagerPendingPage() {
         isOpen={confirmAction.type === "assignTech"}
         onClose={() => setConfirmAction({ type: null, targetId: null, targetName: "" })}
         onConfirm={() => {
-          if (confirmAction.targetId && selectedTechnician) {
+          if (confirmAction.targetId && selectedTechnicians.length > 0) {
             handleAssignTechnician();
           }
           setConfirmAction({ type: null, targetId: null, targetName: "" });
         }}
-        title="Assign Technician"
-        message={`Are you sure you want to assign ${complaints.find(c => c._id === confirmAction.targetId)?.title || "this complaint"} to the selected technician?`}
+        title="Assign Repair Team"
+        message={`Are you sure you want to assign ${complaints.find(c => c._id === confirmAction.targetId)?.title || "this complaint"} to the selected technician(s)?`}
         confirmText="Assign"
         variant="warning"
         isLoading={actionLoading !== null}

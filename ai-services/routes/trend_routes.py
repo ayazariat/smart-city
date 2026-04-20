@@ -22,7 +22,7 @@ async def _fetch_historical_data(db, days_back: int = 90) -> List[Dict]:
             {"$match": {"createdAt": {"$gte": cutoff}}},
             {"$group": {
                 "_id": {
-                    "municipality": "$municipality",
+                    "municipality": "$municipalityName",
                     "category": "$category",
                     "date": {"$dateToString": {"format": "%Y-%m-%d", "date": "$createdAt"}}
                 },
@@ -143,9 +143,15 @@ async def get_forecast_endpoint(
     try:
         # Try MongoDB first
         db = await get_db()
-        if db is not None and municipality and category:
+        if db is not None:
+            query = {"_type": {"$exists": False}}
+            if municipality:
+                query["municipality"] = municipality
+            if category:
+                query["category"] = category
+
             prediction = await db.ai_trend_predictions.find_one(
-                {"municipality": municipality, "category": category, "_type": {"$exists": False}}
+                query, sort=[("updatedAt", -1)]
             )
             if prediction:
                 prediction.pop("_id", None)

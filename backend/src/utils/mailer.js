@@ -14,7 +14,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verify SMTP connection on startup
-transporter.verify((error, success) => {
+transporter.verify((error) => {
   if (error) {
     console.error("[mailer] SMTP Error:", error.message);
   } else {
@@ -168,9 +168,63 @@ const sendInvitationEmail = async (to, userId, token, fullName, role) => {
   }
 };
 
+// Send complaint status update email
+const sendComplaintStatusEmail = async (to, fullName, complaintTitle, status, complaintId) => {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const userName = fullName || to.split('@')[0] || "User";
+  
+  const statusLabels = {
+    'VALIDATED': { label: 'Validated', color: '#2196F3', description: 'Your complaint has been reviewed and validated. It will be processed shortly.' },
+    'REJECTED': { label: 'Rejected', color: '#F44336', description: 'Your complaint has been reviewed and rejected.' },
+    'ASSIGNED': { label: 'Assigned', color: '#FF9800', description: 'Your complaint has been assigned to a department for processing.' },
+    'IN_PROGRESS': { label: 'In Progress', color: '#FF9800', description: 'Your complaint is currently being worked on.' },
+    'RESOLVED': { label: 'Resolved', color: '#4CAF50', description: 'Your complaint has been resolved.' },
+    'CLOSED': { label: 'Closed', color: '#9E9E9E', description: 'Your complaint has been closed.' },
+  };
+
+  const statusInfo = statusLabels[status] || { label: status, color: '#607D8B', description: `Your complaint status has been updated to ${status}.` };
+
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject: `Smart City Tunisia - Complaint ${statusInfo.label}: ${complaintTitle}`,
+      text: `Hi ${userName}, ${statusInfo.description} Complaint: "${complaintTitle}"`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
+          </div>
+          <p>Hi <strong>${userName}</strong>,</p>
+          <div style="background: ${statusInfo.color}15; border-left: 4px solid ${statusInfo.color}; padding: 15px; border-radius: 4px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #333;">
+              <strong style="color: ${statusInfo.color};">${statusInfo.label}</strong>
+            </p>
+            <p style="margin: 8px 0 0; font-size: 13px; color: #555;">${statusInfo.description}</p>
+          </div>
+          <p><strong>Complaint:</strong> ${complaintTitle}</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${frontendUrl}/complaints/${complaintId}" style="background: #2E7D32; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              View Complaint
+            </a>
+          </div>
+          <p style="color: #666; font-size: 12px;">
+            You received this email because you submitted a complaint on Smart City Tunisia.
+          </p>
+        </div>
+      `,
+    });
+    console.log(`[mailer] Status email sent to ${to} for complaint ${complaintId}`);
+  } catch (error) {
+    console.error(`[mailer] Failed to send status email to ${to}:`, error.message);
+    // Don't throw - email failure should not block the main flow
+  }
+};
+
 module.exports = {
   sendMagicLinkEmail,
   sendPasswordResetEmail,
   sendLoginEmailReminder,
   sendInvitationEmail,
+  sendComplaintStatusEmail,
 };

@@ -19,6 +19,7 @@
     "active": "نشط",
     "resolved": "محلول",
     "help": "مساعدة",
+    "unknown": "غير معروف",
     "timeAgo": {
       "now": "الآن",
       "minutes": "منذ {{n}} د",
@@ -37,6 +38,7 @@
     "myTasks": "مهامي",
     "userManagement": "إدارة المستخدمين",
     "allComplaints": "جميع الشكاوى",
+    "systemSettings": "إعدادات النظام",
     "archive": "الأرشيف",
     "transparency": "الشفافية",
     "myProfile": "ملفي الشخصي",
@@ -172,8 +174,7 @@
     "department": "القسم",
     "totalComplaints": "إجمالي الشكاوى",
     "toAssign": "للتعيين",
-    "needsTechnician": "تحتاج فني",
-    "newTasks": "مهام جديدة",
+    "needsTechnician": "تحتاج فني",    "allTasks": "إجمالي المهام",    "newTasks": "مهام جديدة",
     "readyToStart": "جاهزة للبدء",
     "workingOn": "قيد العمل",
     "completed": "مكتملة",
@@ -500,7 +501,7 @@
     },
     "nav": "التنقل",
     "complaintsView": {
-      "found": "{{n}} شكوى تم العثور عليها",
+      "found": "تم العثور على {{n}} شكوى",
       "noDescription": "بدون وصف",
       "unknown": "غير معروف",
       "noMatch": "لم يتم العثور على شكاوى تطابق معاييرك",
@@ -508,7 +509,8 @@
       "assigned": "تم التعيين",
       "inProgress": "قيد المعالجة",
       "resolved": "تم الحل",
-      "closed": "مغلقة"
+      "closed": "مغلقة",
+      "confirmed": "مؤكدة"
     },
     "municipalitiesView": {
       "title": "جميع البلديات في تونس",
@@ -715,6 +717,7 @@
     "assignToDepartment": "إسناد إلى القسم",
     "updatePriority": "تحديث الأولوية",
     "assignToRepairTeam": "إسناد إلى فريق الإصلاح",
+    "assignedToRepairTeam": "تم الإسناد إلى فريق الإصلاح",
     "rejectResolutionReport": "رفض تقرير الحل",
     "submitResolution": "إرسال الحل",
     "validateHelp": "هل تريد التحقق من هذه الشكوى؟ سيتم إرسالها إلى القسم المناسب.",

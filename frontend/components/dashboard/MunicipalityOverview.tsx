@@ -110,7 +110,7 @@ export default function MunicipalityOverview({ role, userMunicipality }: Municip
 
   // For admin: governorate aggregation
   const governorates = municipalities.reduce((acc, m) => {
-    const gov = m.governorate || "Unknown";
+    const gov = m.governorate || t("common.unknown", "Unknown");
     if (!acc[gov]) acc[gov] = { total: 0, resolved: 0, municipalities: 0 };
     acc[gov].total += m.total;
     acc[gov].resolved += m.resolved;

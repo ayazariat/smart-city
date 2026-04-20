@@ -17,11 +17,12 @@ export const FilterBar = ({
   onSearchChange,
   statusFilter,
   onStatusChange,
-  searchPlaceholder = t("filterBar.searchPlaceholder"),
+  searchPlaceholder = "",
   statusOptions = [...STATUS_OPTIONS],
   count,
 }: FilterBarProps) => {
   const { t } = useTranslation();
+  const placeholder = searchPlaceholder || t("filterBar.searchPlaceholder");
   return (
     <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200 animate-fadeIn">
       <div className="flex flex-col md:flex-row gap-3 items-center">
@@ -32,7 +33,7 @@ export const FilterBar = ({
           </div>
           <input
             type="text"
-            placeholder={searchPlaceholder}
+            placeholder={placeholder}
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             className="w-full pl-10 pr-10 py-3 text-sm border border-slate-200 rounded-xl 

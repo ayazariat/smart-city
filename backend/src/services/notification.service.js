@@ -5,6 +5,7 @@
 
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const { sendComplaintStatusEmail } = require('../utils/mailer');
 
 /**
  * Send a notification to a user
@@ -137,14 +138,41 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, sta
     'RESOLVED': `Votre réclamation a été résolue.`,
     'CLOSED': `Votre réclamation a été fermée.`
   };
+  const statusTitles = {
+    'VALIDATED': 'Réclamation validée ✅',
+    'REJECTED': 'Réclamation rejetée ❌',
+    'ASSIGNED': 'Réclamation assignée 📋',
+    'IN_PROGRESS': 'Traitement en cours 🔧',
+    'RESOLVED': 'Réclamation résolue 🎉',
+    'CLOSED': 'Réclamation fermée 🔒'
+  };
 
   const message = statusMessages[status] || `Statut de votre réclamation: ${statusLabel}`;
+  const title = statusTitles[status] || `Mise à jour: ${statusLabel}`;
 
-  return sendNotification(io, citizenId, {
+  // Send real-time notification
+  const notif = await sendNotification(io, citizenId, {
     type: status.toLowerCase(),
+    title,
     message,
     complaintId
   });
+
+  // Send email notification (non-blocking)
+  try {
+    const citizen = await User.findById(citizenId).select('email fullName').lean();
+    if (citizen?.email) {
+      const Complaint = require('../models/Complaint');
+      const complaint = await Complaint.findById(complaintId).select('title').lean();
+      const complaintTitle = complaint?.title || 'Your complaint';
+      sendComplaintStatusEmail(citizen.email, citizen.fullName, complaintTitle, status, complaintId)
+        .catch(err => console.error('[notification] Email send error:', err.message));
+    }
+  } catch (emailErr) {
+    console.error('[notification] Email lookup error:', emailErr.message);
+  }
+
+  return notif;
 };
 
 module.exports = {

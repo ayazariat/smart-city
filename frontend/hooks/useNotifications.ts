@@ -96,7 +96,7 @@ export function useNotifications(): UseNotificationsReturn {
   useEffect(() => {
     if (hydrated && token && user?.id) {
       fetchNotifications();
-      connectSocket(user.id);
+      connectSocket(user.id, token);
       const unsubscribe = subscribeToNotifications(handleNewNotification);
       return () => unsubscribe();
     }

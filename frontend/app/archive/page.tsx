@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Archive, 
   Search, 
-  Loader2,
   ArrowLeft,
   Eye,
   ChevronLeft,
@@ -73,7 +71,7 @@ function ArchivePageContent() {
         } else {
           setError("Failed to load archived complaints");
         }
-      } catch (err) {
+      } catch {
         setError("Failed to load archived complaints");
       } finally {
         setLoading(false);
@@ -162,7 +160,12 @@ function ArchivePageContent() {
   const filteredComplaints = complaints.filter((c) => {
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
-    return c.description?.toLowerCase().includes(q);
+    return (
+      c.title?.toLowerCase().includes(q) ||
+      c.description?.toLowerCase().includes(q) ||
+      (c.referenceId || "").toLowerCase().includes(q) ||
+      (c.category || "").toLowerCase().includes(q)
+    );
   });
 
   if (!hydrated) {

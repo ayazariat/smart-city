@@ -31,7 +31,7 @@ class _TeamPerformanceScreenState extends ConsumerState<TeamPerformanceScreen> {
     });
 
     try {
-      final data = await _complaintService.getManagerDashboard();
+      final data = await _complaintService.getManagerStats();
       setState(() {
         _dashboardData = data;
         _isLoading = false;
@@ -449,7 +449,7 @@ class _TeamPerformanceScreenState extends ConsumerState<TeamPerformanceScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.2),
+              color: statusColor.withAlpha(51),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(

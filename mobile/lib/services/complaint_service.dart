@@ -1,144 +1,217 @@
 import 'api_client.dart';
+import '../models/complaint_model.dart';
 
 class ComplaintService {
   final ApiClient _apiClient = ApiClient();
 
-  // Citizen: Get my complaints
-  Future<List<dynamic>> getMyComplaints({int page = 1, int limit = 20}) async {
+  // ─── Citizen ───
+
+  Future<List<Complaint>> getMyComplaints({
+    int page = 1,
+    int limit = 20,
+  }) async {
     final response = await _apiClient.get(
       '/citizen/complaints?page=$page&limit=$limit',
     );
-    return response['complaints'] ?? [];
+    final list = response['complaints'] ?? [];
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Citizen: Get complaint by ID
-  Future<Map<String, dynamic>> getComplaintById(String id) async {
+  Future<Complaint> getComplaintById(String id) async {
     final response = await _apiClient.get('/citizen/complaints/$id');
-    return response['data'] ?? {};
+    return Complaint.fromJson(response['complaint'] ?? response['data'] ?? {});
   }
 
-  // Citizen: Create complaint
   Future<Map<String, dynamic>> createComplaint(
     Map<String, dynamic> data,
   ) async {
     final response = await _apiClient.post('/citizen/complaints', data);
+    return response['complaint'] ?? response['data'] ?? {};
+  }
+
+  Future<Map<String, dynamic>> updateComplaint(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final response = await _apiClient.put('/citizen/complaints/$id', data);
+    return response['complaint'] ?? {};
+  }
+
+  Future<void> deleteComplaint(String id) async {
+    await _apiClient.delete('/citizen/complaints/$id');
+  }
+
+  Future<Map<String, dynamic>> getCitizenStats() async {
+    final response = await _apiClient.get('/citizen/stats');
     return response['data'] ?? {};
   }
 
-  // Citizen: Confirm complaint
+  // ─── Confirm / Upvote (public routes) ───
+
   Future<void> confirmComplaint(String id) async {
-    await _apiClient.post('/citizen/complaints/$id/confirm', {});
+    await _apiClient.post('/public/complaints/$id/confirm', {});
   }
 
-  // Citizen: Vote complaint
-  Future<void> voteComplaint(String id) async {
-    await _apiClient.post('/citizen/complaints/$id/vote', {});
+  Future<void> upvoteComplaint(String id) async {
+    await _apiClient.post('/public/complaints/$id/upvote', {});
   }
 
-  // Agent: Get assigned complaints
-  Future<List<dynamic>> getAgentComplaints({
+  // ─── Agent ───
+
+  Future<List<Complaint>> getAgentComplaints({
     String? status,
     int page = 1,
     int limit = 50,
   }) async {
     String endpoint = '/agent/complaints?page=$page&limit=$limit';
-    if (status != null && status.isNotEmpty) {
+    if (status != null && status.isNotEmpty && status != 'ALL') {
       endpoint += '&status=$status';
     }
     final response = await _apiClient.get(endpoint);
-    return response['complaints'] ?? [];
+    final data = response['data'];
+    final list = data is Map
+        ? (data['complaints'] ?? [])
+        : (response['complaints'] ?? []);
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Agent: Validate complaint
   Future<void> validateComplaint(String id) async {
-    await _apiClient.post('/agent/complaints/$id/validate', {});
+    await _apiClient.put('/agent/complaints/$id/validate', {});
   }
 
-  // Agent: Reject complaint
   Future<void> rejectComplaint(String id, String reason) async {
-    await _apiClient.post('/agent/complaints/$id/reject', {'reason': reason});
+    await _apiClient.put('/agent/complaints/$id/reject', {'reason': reason});
   }
 
-  // Agent: Assign department
   Future<void> assignDepartment(String id, String departmentId) async {
-    await _apiClient.put('/agent/complaints/$id/assign', {
+    await _apiClient.put('/agent/complaints/$id/assign-department', {
       'departmentId': departmentId,
     });
   }
 
-  // Agent: Update status
-  Future<void> updateComplaintStatus(
-    String id,
-    String status, {
-    String? notes,
-  }) async {
-    await _apiClient.put('/agent/complaints/$id', {
-      'status': status,
-      'resolutionNotes': notes,
+  Future<void> closeComplaint(String id) async {
+    await _apiClient.put('/agent/complaints/$id/close', {});
+  }
+
+  Future<void> approveResolution(String id, {String? notes}) async {
+    await _apiClient.post('/agent/complaints/$id/approve-resolution', {
+      'notes': ?notes,
     });
   }
 
-  // Agent: Verify technician report
-  Future<void> verifyReport(String id, String action, {String? notes}) async {
-    await _apiClient.post('/agent/complaints/$id/verify-report', {
-      'action': action,
-      'notes': notes,
+  Future<void> rejectResolution(String id, {String? reason}) async {
+    await _apiClient.post('/agent/complaints/$id/reject-resolution', {
+      'reason': ?reason,
     });
   }
 
-  // Technician: Get tasks
-  Future<List<dynamic>> getTechnicianTasks({
+  Future<List<dynamic>> getAgentDepartments() async {
+    final response = await _apiClient.get('/agent/departments');
+    return response['data'] ?? response['departments'] ?? [];
+  }
+
+  // ─── Technician ───
+
+  Future<List<Complaint>> getTechnicianTasks({
     String? status,
     int page = 1,
     int limit = 50,
   }) async {
-    String endpoint = '/technician/tasks?page=$page&limit=$limit';
+    String endpoint = '/technician/complaints?page=$page&limit=$limit';
     final response = await _apiClient.get(endpoint);
-    return response['complaints'] ?? [];
+    final data = response['data'];
+    final list = data is Map
+        ? (data['complaints'] ?? [])
+        : (response['complaints'] ?? []);
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Technician: Get task by ID
-  Future<Map<String, dynamic>> getTaskById(String id) async {
+  Future<Complaint> getTaskById(String id) async {
     final response = await _apiClient.get('/technician/complaints/$id');
-    return response['data'] ?? {};
+    return Complaint.fromJson(response['data'] ?? {});
   }
 
-  // Technician: Start task
   Future<void> startTask(String id) async {
     await _apiClient.put('/technician/complaints/$id/start', {});
   }
 
-  // Technician: Complete task
   Future<void> completeTask(String id, Map<String, dynamic> data) async {
     await _apiClient.put('/technician/complaints/$id/complete', data);
   }
 
-  // Manager: Get complaints
-  Future<List<dynamic>> getManagerComplaints({
+  Future<void> addBeforePhoto(String id, List<String> urls) async {
+    await _apiClient.post('/technician/complaints/$id/before-photo', {
+      'photos': urls,
+    });
+  }
+
+  Future<void> addAfterPhoto(String id, List<String> urls) async {
+    await _apiClient.post('/technician/complaints/$id/after-photo', {
+      'photos': urls,
+    });
+  }
+
+  Future<void> addTechnicianComment(String id, String text) async {
+    await _apiClient.post('/technician/complaints/$id/comments', {
+      'text': text,
+      'type': 'NOTE',
+    });
+  }
+
+  Future<Map<String, dynamic>> getTechnicianStats() async {
+    final response = await _apiClient.get('/technician/stats');
+    return response['data'] ?? {};
+  }
+
+  // ─── Manager ───
+
+  Future<List<Complaint>> getManagerComplaints({
     String? status,
     int page = 1,
     int limit = 50,
   }) async {
     String endpoint = '/manager/complaints?page=$page&limit=$limit';
+    if (status != null && status.isNotEmpty && status != 'ALL') {
+      endpoint += '&status=$status';
+    }
     final response = await _apiClient.get(endpoint);
-    return response['complaints'] ?? [];
+    final data = response['data'];
+    final list = data is Map
+        ? (data['complaints'] ?? [])
+        : (response['complaints'] ?? []);
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Manager: Update priority
   Future<void> updatePriority(String id, String urgency) async {
     await _apiClient.put('/manager/complaints/$id/priority', {
       'urgency': urgency,
     });
   }
 
-  // Manager: Get dashboard stats
-  Future<Map<String, dynamic>> getManagerDashboard() async {
-    final response = await _apiClient.get('/manager/dashboard');
+  Future<Map<String, dynamic>> getManagerStats() async {
+    final response = await _apiClient.get('/manager/stats');
     return response['data'] ?? {};
   }
 
-  // Admin: Get all complaints
-  Future<List<dynamic>> getAllComplaints({
+  Future<void> assignTechnician(String complaintId, String technicianId) async {
+    await _apiClient.put('/manager/complaints/$complaintId/assign-technician', {
+      'technicianId': technicianId,
+    });
+  }
+
+  Future<List<dynamic>> getDepartmentTechnicians() async {
+    final response = await _apiClient.get('/manager/technicians');
+    return response['data'] ?? response['technicians'] ?? [];
+  }
+
+  Future<List<dynamic>> getTechnicianPerformance() async {
+    final response = await _apiClient.get('/manager/technicians/performance');
+    return response['data'] ?? [];
+  }
+
+  // ─── Admin ───
+
+  Future<List<Complaint>> getAllComplaints({
     String? status,
     String? category,
     String? priority,
@@ -150,48 +223,49 @@ class ComplaintService {
   }) async {
     String endpoint = '/complaints?page=$page&limit=$limit';
     if (status != null && status.isNotEmpty) endpoint += '&status=$status';
-    if (category != null && category.isNotEmpty) {
+    if (category != null && category.isNotEmpty)
       endpoint += '&category=$category';
-    }
-    if (priority != null && priority.isNotEmpty) {
+    if (priority != null && priority.isNotEmpty)
       endpoint += '&priority=$priority';
-    }
-    if (governorate != null && governorate.isNotEmpty) {
+    if (governorate != null && governorate.isNotEmpty)
       endpoint += '&governorate=$governorate';
-    }
-    if (municipality != null && municipality.isNotEmpty) {
+    if (municipality != null && municipality.isNotEmpty)
       endpoint += '&municipality=$municipality';
-    }
     if (search != null && search.isNotEmpty) endpoint += '&search=$search';
     final response = await _apiClient.get(endpoint);
-    return response['complaints'] ?? [];
+    final data = response['data'];
+    final list = data is Map
+        ? (data['complaints'] ?? [])
+        : (response['complaints'] ?? []);
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Admin: Get dashboard stats
-  Future<Map<String, dynamic>> getAdminDashboard() async {
-    final response = await _apiClient.get('/admin/dashboard');
-    return response['data'] ?? {};
+  Future<Map<String, dynamic>> getAdminStats() async {
+    final response = await _apiClient.get('/admin/users/stats');
+    return response['data'] ?? response;
   }
 
-  // Archive: Get archived complaints
-  Future<List<dynamic>> getArchivedComplaints({
+  // ─── Archive ───
+
+  Future<List<Complaint>> getArchivedComplaints({
     int page = 1,
     int limit = 20,
   }) async {
     final response = await _apiClient.get(
       '/complaints/archived?page=$page&limit=$limit',
     );
-    return response['complaints'] ?? [];
+    final list = response['complaints'] ?? [];
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Public: Get stats
+  // ─── Public / Transparency ───
+
   Future<Map<String, dynamic>> getPublicStats() async {
     final response = await _apiClient.get('/public/stats');
     return response['data'] ?? {};
   }
 
-  // Public: Get public complaints
-  Future<List<dynamic>> getPublicComplaints({
+  Future<List<Complaint>> getPublicComplaints({
     String? governorate,
     String? category,
     int page = 1,
@@ -205,10 +279,15 @@ class ComplaintService {
       endpoint += '&category=$category';
     }
     final response = await _apiClient.get(endpoint);
-    return response['complaints'] ?? [];
+    final data = response['data'];
+    final list = data is Map
+        ? (data['complaints'] ?? [])
+        : (response['complaints'] ?? []);
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  // Notifications
+  // ─── Notifications ───
+
   Future<List<dynamic>> getNotifications({int page = 1, int limit = 50}) async {
     final response = await _apiClient.get(
       '/notifications?page=$page&limit=$limit',
@@ -218,7 +297,7 @@ class ComplaintService {
 
   Future<int> getUnreadCount() async {
     final response = await _apiClient.get('/notifications/count');
-    return response['count'] ?? response['unreadCount'] ?? 0;
+    return response['unread'] ?? response['count'] ?? 0;
   }
 
   Future<void> markAsRead(String id) async {
@@ -227,24 +306,5 @@ class ComplaintService {
 
   Future<void> markAllAsRead() async {
     await _apiClient.put('/notifications/read-all', {});
-  }
-
-  // Agent: Get departments
-  Future<List<dynamic>> getAgentDepartments() async {
-    final response = await _apiClient.get('/agent/departments');
-    return response['departments'] ?? response['data'] ?? [];
-  }
-
-  // Manager: Assign technician
-  Future<void> assignTechnician(String complaintId, String technicianId) async {
-    await _apiClient.put('/manager/complaints/$complaintId/assign-technician', {
-      'technicianId': technicianId,
-    });
-  }
-
-  // Manager: Get department technicians
-  Future<List<dynamic>> getDepartmentTechnicians() async {
-    final response = await _apiClient.get('/manager/technicians');
-    return response['technicians'] ?? response['data'] ?? [];
   }
 }

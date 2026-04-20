@@ -2,6 +2,8 @@
 Duplicate Detection Service (BL-25)
 ====================================
 Detect if a new complaint is likely a duplicate of an existing open complaint.
+Uses HuggingFace sentence-transformers (free) for semantic similarity when available,
+falls back to TF-IDF cosine similarity.
 """
 
 from typing import Optional, Dict, Any, List
@@ -20,6 +22,39 @@ try:
     NUMPY_AVAILABLE = True
 except ImportError:
     NUMPY_AVAILABLE = False
+
+# Try importing sentence-transformers for better semantic similarity (free)
+try:
+    from transformers import AutoTokenizer, AutoModel
+    import torch
+    _sentence_model = None
+    _sentence_tokenizer = None
+    
+    def get_sentence_model():
+        global _sentence_model, _sentence_tokenizer
+        if _sentence_model is None:
+            model_name = "sentence-transformers/all-MiniLM-L6-v2"
+            _sentence_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            _sentence_model = AutoModel.from_pretrained(model_name)
+            _sentence_model.eval()
+        return _sentence_model, _sentence_tokenizer
+    
+    def encode_texts(texts: List[str]) -> np.ndarray:
+        """Encode texts to embeddings using sentence-transformers."""
+        model, tokenizer = get_sentence_model()
+        encoded = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+        with torch.no_grad():
+            outputs = model(**encoded)
+        # Mean pooling
+        attention_mask = encoded["attention_mask"]
+        token_embeddings = outputs.last_hidden_state
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        return embeddings.numpy()
+    
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
 
 from utils.text_preprocessor import clean_text, combine_fields
 from utils.geo_utils import calculate_geo_score
@@ -40,26 +75,40 @@ class DuplicateDetector:
     
     def _calculate_text_similarity(self, new_text: str, 
                                      candidates: List[Dict]) -> List[float]:
-        """Calculate TF-IDF cosine similarity scores."""
+        """Calculate text similarity scores.
+        Strategy: Sentence-transformers (free, semantic) → TF-IDF (free, lexical) → Simple matching
+        """
         if not candidates:
             return []
         
-        # Fit vectorizer on all texts
-        all_texts = [new_text] + [combine_fields(c.get("title", ""), c.get("description", "")) 
-                                   for c in candidates]
+        candidate_texts = [combine_fields(c.get("title", ""), c.get("description", "")) 
+                           for c in candidates]
         
+        # Strategy 1: Free sentence-transformers for semantic similarity
+        if SENTENCE_TRANSFORMERS_AVAILABLE:
+            try:
+                all_texts = [new_text] + candidate_texts
+                embeddings = encode_texts(all_texts)
+                
+                # Cosine similarity between new text and each candidate
+                from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+                similarities = cos_sim(embeddings[0:1], embeddings[1:])[0]
+                return similarities.tolist()
+            except Exception as e:
+                print(f"Sentence-transformer error: {e}")
+        
+        # Strategy 2: TF-IDF cosine similarity (free, lexical)
         try:
+            all_texts = [new_text] + candidate_texts
             self.vectorizer = TfidfVectorizer(max_features=500, ngram_range=(1, 2))
             tfidf_matrix = self.vectorizer.fit_transform(all_texts)
             
-            # Calculate similarity between new complaint and each candidate
             similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])[0]
-            
             return similarities.tolist()
             
         except Exception as e:
-            print(f"Vectorization error: {e}")
-            # Fallback to simple substring matching
+            print(f"TF-IDF error: {e}")
+            # Strategy 3: Simple substring matching
             return self._simple_text_match(new_text, candidates)
     
     def _simple_text_match(self, new_text: str, candidates: List[Dict]) -> List[float]:

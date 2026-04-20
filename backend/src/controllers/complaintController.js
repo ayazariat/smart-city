@@ -4,6 +4,7 @@ const Notification = require("../models/Notification");
 const Department = require("../models/Department");
 const { getStatus: getSlaStatus } = require("../utils/slaCalculator");
 const { normalizeMunicipality, getMunicipalityGovernorate } = require("../utils/normalize");
+const { logAction } = require("../services/audit.service");
 
 class ComplaintController {
   // Create new complaint (citizen)
@@ -47,6 +48,8 @@ class ComplaintController {
 
       await complaint.save();
 
+      logAction(req, "COMPLAINT_CREATED", "Complaint", complaint._id, null, { title, category, municipality });
+
       // Notify municipal agents in the same municipality
       try {
         const normalizedMun = normalizeMunicipality(municipality || "");
@@ -60,19 +63,31 @@ class ComplaintController {
           ]
         }).select('_id');
         
-        // Create notifications for each agent
-        const notificationPromises = agents.map(agent => 
-          Notification.create({
-            recipient: agent._id,
+        // Send real-time notifications via Socket.IO
+        const io = req.app?.get?.("io");
+        if (io) {
+          const notificationService = require("../services/notification.service");
+          const agentIds = agents.map(a => a._id.toString());
+          await notificationService.sendNotificationToMultiple(io, agentIds, {
+            type: "complaint_submitted",
             title: "New Complaint",
             message: `New complaint in ${municipality || 'your municipality'}: ${title}`,
-            type: "COMPLAINT",
-            relatedId: complaint._id,
-          })
-        );
-        
-        await Promise.all(notificationPromises);
-        console.log(`Created ${notificationPromises.length} notifications for municipal agents`);
+            complaintId: complaint._id,
+          });
+        } else {
+          // Fallback: save to DB only
+          const notificationPromises = agents.map(agent => 
+            Notification.create({
+              recipient: agent._id,
+              title: "New Complaint",
+              message: `New complaint in ${municipality || 'your municipality'}: ${title}`,
+              type: "COMPLAINT",
+              relatedId: complaint._id,
+            })
+          );
+          await Promise.all(notificationPromises);
+        }
+        console.log(`Created ${agents.length} notifications for municipal agents`);
       } catch (notifError) {
         console.error("Failed to create notifications for agents:", notifError);
       }
@@ -253,14 +268,19 @@ class ComplaintController {
       const slaStatus = getSlaStatus(complaint.slaDeadline);
 
       // Map statusHistory to a simpler history array
-      const history = (complaint.statusHistory || []).map((entry) => ({
-        status: entry.status,
-        changedBy: entry.updatedBy
-          ? { fullName: entry.updatedBy.fullName }
-          : null,
-        date: entry.updatedAt,
-        comment: entry.notes || null,
-      }));
+      const createdById = complaint.createdBy?._id?.toString() || complaint.createdBy?.toString();
+      const history = (complaint.statusHistory || []).map((entry) => {
+        const entryUserId = entry.updatedBy?._id?.toString() || entry.updatedBy?.toString();
+        const isCitizenEntry = entryUserId && entryUserId === createdById;
+        return {
+          status: entry.status,
+          changedBy: entry.updatedBy
+            ? { fullName: (complaint.isAnonymous && isCitizenEntry) ? "Anonymous" : entry.updatedBy.fullName }
+            : null,
+          date: entry.updatedAt,
+          comment: entry.notes || null,
+        };
+      });
 
       // Separate internal notes (from comments marked isInternal)
       const allComments = complaint.comments || [];
@@ -419,6 +439,9 @@ class ComplaintController {
           ];
         } else if (user?.governorate) {
           query.governorate = user.governorate;
+        } else {
+          // Agent has no municipality, governorate, or municipality ID — return empty
+          query._id = null;
         }
       } else if (req.user.role === "TECHNICIAN") {
         // Technicians see complaints assigned to them OR as member of repair team
@@ -441,19 +464,33 @@ class ComplaintController {
       if (governorate && req.user.role === "ADMIN") query.governorate = governorate; // Admin can filter by governorate
       if (municipality && req.user.role === "ADMIN") {
         const normalizedMun = normalizeMunicipality(municipality);
-        query.$or = [
+        const muniConditions = [
           { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, "i") } },
           { "location.municipality": { $regex: new RegExp(`^${normalizedMun}$`, "i") } },
           { municipalityNormalized: normalizedMun }
         ];
+        // Preserve any existing $or (role-based) using $and
+        if (query.$or) {
+          query.$and = [...(query.$and || []), { $or: query.$or }, { $or: muniConditions }];
+          delete query.$or;
+        } else {
+          query.$or = muniConditions;
+        }
       }
       
       if (search) {
         const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        query.$or = [
+        const searchConditions = [
           { title: { $regex: safe, $options: "i" } },
           { description: { $regex: safe, $options: "i" } },
         ];
+        // Preserve any existing $or (role-based) using $and
+        if (query.$or) {
+          query.$and = [...(query.$and || []), { $or: query.$or }, { $or: searchConditions }];
+          delete query.$or;
+        } else {
+          query.$or = searchConditions;
+        }
       }
 
       const skip = (page - 1) * limit;
@@ -572,6 +609,7 @@ class ComplaintController {
       }
 
       // Update status
+      const oldStatus = complaint.status;
       complaint.status = status;
       
       // Add to status history with actor info
@@ -597,18 +635,32 @@ class ComplaintController {
 
       await complaint.save();
 
-      // Notify citizen
+      // Notify citizen via Socket.IO
       try {
-        await Notification.create({
-          recipient: complaint.createdBy,
-          title: "Complaint Status Updated",
-          message: `Your complaint "${complaint.title}" has been ${status.toLowerCase()}`,
-          type: "COMPLAINT",
-          relatedId: complaint._id,
-        });
+        const io = req.app?.get?.("io");
+        if (io) {
+          const notificationService = require("../services/notification.service");
+          await notificationService.notifyCitizenStatusChange(
+            io,
+            complaint.createdBy.toString(),
+            complaint._id,
+            status,
+            status.toLowerCase()
+          );
+        } else {
+          await Notification.create({
+            recipient: complaint.createdBy,
+            title: "Complaint Status Updated",
+            message: `Your complaint "${complaint.title}" has been ${status.toLowerCase()}`,
+            type: "COMPLAINT",
+            relatedId: complaint._id,
+          });
+        }
       } catch (notifError) {
         console.error("Failed to create notification:", notifError);
       }
+
+      logAction(req, "STATUS_CHANGED", "Complaint", complaint._id, { status: oldStatus }, { status });
 
       res.json({
         success: true,
@@ -670,18 +722,31 @@ class ComplaintController {
       }
       await complaint.save();
 
-      // Notify technician
+      // Notify technician via Socket.IO
       try {
-        await Notification.create({
-          recipient: assignedToId,
-          title: "New Assignment",
-          message: `You have been assigned to complaint: ${complaint.title}`,
-          type: "ASSIGNMENT",
-          relatedId: complaint._id,
-        });
+        const io = req.app?.get?.("io");
+        if (io) {
+          const notificationService = require("../services/notification.service");
+          await notificationService.sendNotification(io, assignedToId.toString(), {
+            type: "assignment",
+            title: "New Assignment",
+            message: `You have been assigned to complaint: ${complaint.title}`,
+            complaintId: complaint._id,
+          });
+        } else {
+          await Notification.create({
+            recipient: assignedToId,
+            title: "New Assignment",
+            message: `You have been assigned to complaint: ${complaint.title}`,
+            type: "ASSIGNMENT",
+            relatedId: complaint._id,
+          });
+        }
       } catch (notifError) {
         console.error("Failed to create notification:", notifError);
       }
+
+      logAction(req, "COMPLAINT_ASSIGNED", "Complaint", complaint._id, null, { assignedTo: assignedToId });
 
       res.json({
         success: true,
@@ -880,7 +945,9 @@ class ComplaintController {
       complaint.isArchived = true;
       complaint.archivedAt = new Date();
       await complaint.save();
-      
+
+      logAction(req, "COMPLAINT_ARCHIVED", "Complaint", complaint._id, { isArchived: false }, { isArchived: true });
+
       res.json({
         success: true,
         message: "Complaint archived successfully",
@@ -906,7 +973,9 @@ class ComplaintController {
       complaint.isArchived = false;
       complaint.archivedAt = null;
       await complaint.save();
-      
+
+      logAction(req, "COMPLAINT_UNARCHIVED", "Complaint", complaint._id, { isArchived: true }, { isArchived: false });
+
       res.json({
         success: true,
         message: "Complaint unarchived successfully",

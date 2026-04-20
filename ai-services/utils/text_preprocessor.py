@@ -60,23 +60,19 @@ def detect_keywords(text: str, keyword_list: list) -> list:
 def combine_fields(title: str, description: str = "") -> str:
     """
     Combine title and description fields for vectorization.
-    
-    Args:
-        title: Complaint title
-        description: Complaint description
-        
-    Returns:
-        Combined text string
+    Title is repeated twice to give it higher TF-IDF weight.
     """
     parts = []
-    
+
     if title:
+        # Repeat title to boost its signal weight in TF-IDF
         parts.append(title)
-    
+        parts.append(title)
+
     if description:
         # Take first 500 chars of description to avoid very long texts
         parts.append(description[:500])
-    
+
     return " ".join(parts)
 
 

@@ -51,7 +51,7 @@ const ROLES_REQUIRING_DEPARTMENT: UserRole[] = ["DEPARTMENT_MANAGER", "TECHNICIA
  */
 export default function AdminUsersPage() {
   const router = useRouter();
-  const { user, token, logout } = useAuthStore();
+  const { user, token } = useAuthStore();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -161,7 +161,7 @@ export default function AdminUsersPage() {
     try {
       const statsData = await adminService.getUserStats();
       setStats(statsData);
-    } catch (_err) {
+    } catch {
       // Silently handle stats fetch error
     }
   };
@@ -171,7 +171,7 @@ export default function AdminUsersPage() {
     try {
       const depts = await adminService.getDepartments();
       setDepartments(depts);
-    } catch (_err) {
+    } catch {
       // Silently handle departments fetch error
     }
   };
@@ -379,8 +379,8 @@ export default function AdminUsersPage() {
       isActive: userItem.isActive,
       role: userItem.role,
       governorate: userItem.governorate || "",
-      municipality: typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name || "",
-      department: (userItem.department as any)?._id || (userItem.department as any)?.name || "",
+      municipality: typeof userItem.municipality === 'string' ? userItem.municipality : userItem.municipality?.name || "",
+      department: userItem.department?._id || userItem.department?.name || "",
     });
     setShowEditModal(true);
   };
@@ -537,7 +537,7 @@ export default function AdminUsersPage() {
                       {userItem.municipality ? (
                         <div className="flex items-center gap-1 text-slate-600">
                           <MapPin className="w-3 h-3" />
-                          <span>{typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name}</span>
+                          <span>{typeof userItem.municipality === 'string' ? userItem.municipality : userItem.municipality?.name}</span>
                           <span className="text-slate-400">({userItem.governorate})</span>
                         </div>
                       ) : (
@@ -644,7 +644,7 @@ export default function AdminUsersPage() {
                   <div className="flex items-center gap-1 text-sm text-slate-600">
                     <MapPin className="w-3 h-3" />
                     {userItem.municipality && userItem.governorate ? (
-                      <span>{typeof userItem.municipality === 'string' ? userItem.municipality : (userItem.municipality as any)?.name}, {userItem.governorate}</span>
+                      <span>{typeof userItem.municipality === 'string' ? userItem.municipality : userItem.municipality?.name}, {userItem.governorate}</span>
                     ) : (
                       <span className="text-slate-400">-</span>
                     )}

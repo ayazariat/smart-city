@@ -27,7 +27,7 @@ import {
   Mail,
   UserCog
 } from "lucide-react";
-import { Complaint } from "@/types";
+import { Complaint, Notification } from "@/types";
 import { technicianService } from "@/services/technician.service";
 import { notificationService } from "@/services/notification.service";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -68,7 +68,7 @@ export default function TechnicianTaskDetailPage() {
   const [resolveNote, setResolveNote] = useState("");
   const [proofPhotos, setProofPhotos] = useState<File[]>([]);
 
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -106,9 +106,9 @@ export default function TechnicianTaskDetailPage() {
       } else {
         setError("Task not found");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching task:", err);
-      setError(err?.message || "Failed to load task");
+      setError(err instanceof Error ? err.message : "Failed to load task");
     } finally {
       setLoading(false);
     }
@@ -137,7 +137,7 @@ export default function TechnicianTaskDetailPage() {
     }
   };
 
-  const handleNotificationClick = (notification: any) => {
+  const handleNotificationClick = (notification: Notification) => {
     if (!notification.isRead) {
       handleMarkAsRead(notification._id);
     }
@@ -154,8 +154,8 @@ export default function TechnicianTaskDetailPage() {
       await technicianService.startWork(task._id || "");
       showToast("Work started successfully!", "success");
       fetchTaskDetail();
-    } catch (err: any) {
-      showToast(err?.message || "Failed to start work", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to start work", "error");
     } finally {
       setActionLoading(false);
     }
@@ -179,7 +179,7 @@ export default function TechnicianTaskDetailPage() {
         );
         const uploadData = await uploadRes.json();
         if (uploadData.success && uploadData.data) {
-          photoUrls = uploadData.data.map((f: any) => f.url);
+          photoUrls = uploadData.data.map((f: { url: string }) => f.url);
         }
       }
 
@@ -189,8 +189,8 @@ export default function TechnicianTaskDetailPage() {
       setResolveNote("");
       setProofPhotos([]);
       fetchTaskDetail();
-    } catch (err: any) {
-      showToast(err?.message || "Failed to resolve task", "error");
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Failed to resolve task", "error");
     } finally {
       setActionLoading(false);
     }
@@ -274,7 +274,7 @@ export default function TechnicianTaskDetailPage() {
   };
 
   // Check if this is a rejected resolution case
-  const isReworkNeeded = task.status === "IN_PROGRESS" && (task as any).resolutionRejectionReason;
+  const isReworkNeeded = task.status === "IN_PROGRESS" && task.resolutionRejectionReason;
 
   return (
     <DashboardLayout>
@@ -394,7 +394,7 @@ export default function TechnicianTaskDetailPage() {
               </div>
               
               {/* REWORK NEEDED - Show when resolution was rejected */}
-              {(task as any).resolutionRejectionReason && (
+              {task.resolutionRejectionReason && (
                 <div className="mt-4 pt-4 border-t border-red-200">
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                     <h3 className="text-red-800 font-semibold flex items-center gap-2 mb-2">
@@ -402,7 +402,7 @@ export default function TechnicianTaskDetailPage() {
                       Resolution Rejected - Action Required
                     </h3>
                     <p className="text-red-700 text-sm">
-                      {(task as any).resolutionRejectionReason}
+                      {task.resolutionRejectionReason}
                     </p>
                     <p className="text-red-600 text-xs mt-2">
                       Please review the feedback and complete the work properly before resubmitting.

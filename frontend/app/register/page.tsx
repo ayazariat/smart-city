@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, User, Sparkles, MapPin, Navigation, BarChart3 } from "lucide-react";
@@ -21,6 +21,9 @@ import { useTranslation } from "react-i18next";
  */
 export default function RegisterPage() {
   const { t } = useTranslation();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const mt = (key: string, fallback?: string) => mounted ? t(key) : (fallback ?? '');
   const router = useRouter();
   const { register, isLoading, error } = useAuthStore();
   const [formData, setFormData] = useState({
@@ -34,7 +37,7 @@ export default function RegisterPage() {
   });
   const [localError, setLocalError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [, setCaptchaToken] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState("");
 
@@ -180,11 +183,11 @@ export default function RegisterPage() {
     if (/[^a-zA-Z\d]/.test(password)) strength++;
 
     const configs = [
-      { strength: 1, label: t('register.strengthWeak'), color: 'bg-urgent-500' },
-      { strength: 2, label: t('register.strengthFair'), color: 'bg-attention-500' },
-      { strength: 3, label: t('register.strengthGood'), color: 'bg-attention-400' },
-      { strength: 4, label: t('register.strengthStrong'), color: 'bg-success-500' },
-      { strength: 5, label: t('register.strengthVeryStrong'), color: 'bg-success-600' },
+      { strength: 1, label: mt('register.strengthWeak'), color: 'bg-urgent-500' },
+      { strength: 2, label: mt('register.strengthFair'), color: 'bg-attention-500' },
+      { strength: 3, label: mt('register.strengthGood'), color: 'bg-attention-400' },
+      { strength: 4, label: mt('register.strengthStrong'), color: 'bg-success-500' },
+      { strength: 5, label: mt('register.strengthVeryStrong'), color: 'bg-success-600' },
     ];
 
     return configs[Math.min(strength, 5) - 1] || configs[0];
@@ -207,10 +210,10 @@ export default function RegisterPage() {
               <Sparkles className="w-6 h-6 text-white" />
             </Link>
             <h1 className="text-2xl font-bold text-slate-900 mb-1 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-primary-900">
-              {t('register.title')}
+              {mt('register.title')}
             </h1>
             <p className="text-sm text-slate-600">
-              {t('register.subtitle')}
+              {mt('register.subtitle')}
             </p>
             <div className="mt-2">
               <Link 
@@ -218,7 +221,7 @@ export default function RegisterPage() {
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-green-50/80 text-green-700 border border-green-200/60 hover:bg-green-100 transition-colors text-xs font-medium shadow-sm"
               >
                 <BarChart3 className="w-3.5 h-3.5" />
-                {t('register.publicStats')}
+                {mt('register.publicStats')}
               </Link>
             </div>
           </div>
@@ -229,12 +232,12 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="animate-slideInLeft delay-300">
                   <Input
-                    label={t('register.fullName')}
+                    label={mt('register.fullName', 'Full Name')}
                     type="text"
                     name="fullName"
                     value={formData.fullName}
                     onChange={handleChange}
-                    placeholder={t('register.fullNamePlaceholder')}
+                    placeholder={mt('register.fullNamePlaceholder')}
                     icon={<User size={18} />}
                     error={fieldErrors.fullName}
                     required
@@ -243,12 +246,12 @@ export default function RegisterPage() {
 
                 <div className="animate-slideInRight delay-300">
                   <Input
-                    label={t('register.email')}
+                    label={mt('register.email', 'Email')}
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    placeholder={t('register.emailPlaceholder')}
+                    placeholder={mt('register.emailPlaceholder')}
                     icon={<Mail size={18} />}
                     error={fieldErrors.email}
                     required
@@ -261,7 +264,7 @@ export default function RegisterPage() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-slate-700">
                     <MapPin className="w-4 h-4 inline mr-1" />
-                    {t('register.location')}
+                    {mt('register.location')}
                   </label>
                   <button
                     type="button"
@@ -270,7 +273,7 @@ export default function RegisterPage() {
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Navigation className={`w-4 h-4 ${locationLoading ? 'animate-pulse' : ''}`} />
-                    {locationLoading ? t('register.gettingLocation') : t('register.useMyLocation')}
+                    {locationLoading ? mt('register.gettingLocation') : mt('register.useMyLocation')}
                   </button>
                 </div>
                 
@@ -285,7 +288,7 @@ export default function RegisterPage() {
                       name="governorate"
                       value={formData.governorate}
                       onChange={handleChange}
-                      placeholder={t('register.governoratePlaceholder')}
+                      placeholder={mt('register.governoratePlaceholder')}
                       list="governorate-list"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
                       autoComplete="off"
@@ -303,7 +306,7 @@ export default function RegisterPage() {
                       name="municipality"
                       value={formData.municipality}
                       onChange={handleChange}
-                      placeholder={formData.governorate ? t('register.communePlaceholder') : t('register.selectGovernorateFirst')}
+                      placeholder={formData.governorate ? mt('register.communePlaceholder') : mt('register.selectGovernorateFirst')}
                       list="municipality-list"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
                       autoComplete="off"
@@ -322,7 +325,7 @@ export default function RegisterPage() {
                 <div className="animate-slideInLeft delay-400">
                   <div className="w-full">
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                      {t('register.phone')} <span className="text-red-500">*</span>
+                      {mt('register.phone')} <span className="text-red-500">*</span>
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
                       <span style={{
@@ -364,12 +367,12 @@ export default function RegisterPage() {
 
               <div className="animate-slideInLeft delay-500">
                 <Input
-                  label={t('register.password')}
+                  label={mt('register.password', 'Password')}
                   type="password"
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder={t('register.passwordPlaceholder')}
+                  placeholder={mt('register.passwordPlaceholder')}
                   icon={<Lock size={18} />}
                   error={fieldErrors.password}
                   required
@@ -378,7 +381,7 @@ export default function RegisterPage() {
                 {formData.password && (
                   <div className="mt-2 space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-600">{t('register.passwordStrength')}</span>
+                      <span className="text-slate-600">{mt('register.passwordStrength')}</span>
                       <span className={`font-medium ${passwordStrength.strength >= 3 ? 'text-success-700' : 'text-attention-700'}`}>
                         {passwordStrength.label}
                       </span>
@@ -395,12 +398,12 @@ export default function RegisterPage() {
 
               <div className="animate-slideInLeft delay-500">
                 <Input
-                  label={t('register.confirmPassword')}
+                  label={mt('register.confirmPassword', 'Confirm Password')}
                   type="password"
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  placeholder={t('register.confirmPasswordPlaceholder')}
+                  placeholder={mt('register.confirmPasswordPlaceholder')}
                   icon={<Lock size={18} />}
                   error={fieldErrors.confirmPassword}
                   required
@@ -420,7 +423,7 @@ export default function RegisterPage() {
                   size="lg"
                   className="group"
                 >
-                  {t('register.createBtn')}
+                  {mt('register.createBtn', 'Create Account')}
                 </Button>
               </div>
 
@@ -436,12 +439,12 @@ export default function RegisterPage() {
 
             <div className="mt-5 pt-5 border-t border-slate-100 animate-fadeIn delay-500">
               <p className="text-center text-sm text-slate-600">
-                {t('register.alreadyHaveAccount')}{" "}
+                {mt('register.alreadyHaveAccount')}{" "}
                 <Link 
                   href="/" 
                   className="text-primary hover:text-primary-700 font-semibold transition-all duration-200 hover:underline"
                 >
-                  {t('register.signIn')}
+                  {mt('register.signIn')}
                 </Link>
               </p>
             </div>
@@ -449,7 +452,7 @@ export default function RegisterPage() {
 
           {/* Footer */}
           <p className="text-center text-xs text-slate-500 mt-4 animate-fadeIn delay-500">
-            {t('register.terms')}
+            {mt('register.terms')}
           </p>
         </div>
       </div>

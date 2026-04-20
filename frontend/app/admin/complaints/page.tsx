@@ -9,8 +9,8 @@ import { Complaint } from "@/types";
 import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
 import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
 import { 
-  FileText, Download, Filter, Search, TrendingUp, CheckCircle, 
-  Clock, AlertTriangle, BarChart3 
+  Download, Filter, Search, TrendingUp, CheckCircle, 
+  Clock, AlertTriangle 
 } from "lucide-react";
 import {
   PageHeader,
@@ -34,8 +34,16 @@ export default function AdminComplaintsPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [availableMunicipalities, setAvailableMunicipalities] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
-  const [stats, setStats] = useState<any>({});
-  const [byCategory, setByCategory] = useState<Record<string, number>>({});
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [stats, setStats] = useState<{
+    total?: number;
+    resolved?: number;
+    totalAtRisk?: number;
+    totalOverdue?: number;
+    byCategory?: Record<string, number>;
+  }>({});
+  const [, setByCategory] = useState<Record<string, number>>({});
 
   // Update available municipalities when governorate changes
   useEffect(() => {
@@ -83,8 +91,8 @@ export default function AdminComplaintsPage() {
     try {
       const statsRes = await adminService.getStats();
       if (statsRes?.data) {
-        setStats(statsRes.data as any);
-        setByCategory((statsRes.data as any).byCategory || {});
+        setStats(statsRes.data);
+        setByCategory(statsRes.data.byCategory || {});
       }
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -95,7 +103,7 @@ export default function AdminComplaintsPage() {
     if (token && user?.role === "ADMIN") {
       fetchStats();
     }
-  }, [token, user]);
+  }, [token, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredComplaints = complaints.filter((c) => {
     if (categoryFilter && c.category !== categoryFilter) return false;
@@ -104,6 +112,14 @@ export default function AdminComplaintsPage() {
       if (priorityFilter === "MEDIUM" && ((c.priorityScore || 0) < 6 || (c.priorityScore || 0) >= 15)) return false;
       if (priorityFilter === "LOW" && (c.priorityScore || 0) >= 6) return false;
     }
+    if (dateFrom) {
+      const fromTime = new Date(dateFrom).getTime();
+      if (new Date(c.createdAt).getTime() < fromTime) return false;
+    }
+    if (dateTo) {
+      const toTime = new Date(dateTo).getTime() + 86_400_000;
+      if (new Date(c.createdAt).getTime() > toTime) return false;
+    }
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -111,6 +127,33 @@ export default function AdminComplaintsPage() {
       categoryLabels[c.category]?.toLowerCase().includes(q)
     );
   });
+
+  const exportPDF = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    const rows = filteredComplaints.map(c => `
+      <tr style="border-bottom:1px solid #eee">
+        <td style="padding:6px 10px;font-size:12px">${c.referenceId || c._id?.slice(-6) || "-"}</td>
+        <td style="padding:6px 10px;font-size:12px">${(c.title || "").replace(/</g, "&lt;")}</td>
+        <td style="padding:6px 10px;font-size:12px">${categoryLabels[c.category] || c.category}</td>
+        <td style="padding:6px 10px;font-size:12px">${c.status}</td>
+        <td style="padding:6px 10px;font-size:12px">${c.priorityScore || 0}</td>
+        <td style="padding:6px 10px;font-size:12px">${c.municipalityName || "-"}</td>
+        <td style="padding:6px 10px;font-size:12px">${new Date(c.createdAt).toLocaleDateString()}</td>
+      </tr>
+    `).join("");
+    printWindow.document.write(`
+      <!DOCTYPE html><html><head><title>Complaints Report</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px}h1{color:#2e7d32;font-size:20px}table{width:100%;border-collapse:collapse}th{background:#2e7d32;color:white;padding:8px 10px;font-size:12px;text-align:left}@media print{button{display:none}}</style>
+      </head><body>
+      <h1>Complaints Report</h1>
+      <p style="color:#666;font-size:12px">Generated: ${new Date().toLocaleString()} &nbsp;|&nbsp; Total: ${filteredComplaints.length} complaints</p>
+      <table><thead><tr><th>Ref</th><th>Title</th><th>Category</th><th>Status</th><th>Priority</th><th>Municipality</th><th>Date</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <script>window.onload=()=>{window.print();window.close();}<\/script>
+      </body></html>`);
+    printWindow.document.close();
+  };
 
   const exportCSV = () => {
     const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
@@ -299,15 +342,19 @@ export default function AdminComplaintsPage() {
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm border rounded-xl transition-all ${showFilters ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
             >
               <Filter className="w-4 h-4" />
-              Filters {(governorateFilter || municipalityFilter || categoryFilter || priorityFilter || statusFilter) && (
+              Filters {(governorateFilter || municipalityFilter || categoryFilter || priorityFilter || statusFilter || dateFrom || dateTo) && (
                 <span className="w-2 h-2 bg-primary rounded-full" />
               )}
             </button>
 
-            {/* Export Button */}
+            {/* Export Buttons */}
             <Button onClick={exportCSV} variant="outline" size="sm">
               <Download className="w-4 h-4 mr-1" />
               CSV
+            </Button>
+            <Button onClick={exportPDF} variant="outline" size="sm" className="border-red-200 text-red-600 hover:bg-red-50">
+              <Download className="w-4 h-4 mr-1" />
+              PDF
             </Button>
 
             <span className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
@@ -381,30 +428,102 @@ export default function AdminComplaintsPage() {
                 <option value="MEDIUM">Medium (6-14)</option>
                 <option value="LOW">Low (&lt;6)</option>
               </select>
+
+              {/* Date Range */}
+              <div className="flex gap-2 sm:col-span-2 lg:col-span-2">
+                <div className="flex-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium pointer-events-none">FROM</span>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full pl-14 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                  />
+                </div>
+                <div className="flex-1 relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium pointer-events-none">TO</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>
 
-        {/* SLA Monitoring Section */}
-        {overdueCount > 0 || atRiskCount > 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-700 mb-3">SLA Monitoring (Service Level Agreement)</h3>
-            <div className="flex gap-4">
-              {overdueCount > 0 && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-xl border border-red-200">
-                  <span className="text-red-600 font-bold">{overdueCount}</span>
-                  <span className="text-sm text-red-700">Overdue (Past deadline)</span>
-                </div>
-              )}
-              {atRiskCount > 0 && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 rounded-xl border border-amber-200">
-                  <span className="text-amber-600 font-bold">{atRiskCount}</span>
-                  <span className="text-sm text-amber-700">At Risk (Close to deadline)</span>
-                </div>
-              )}
+        {/* SLA Monitoring Section — always visible */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6 border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-slate-700">SLA Monitoring</h3>
+            <span className="text-xs text-slate-400">{complaints.length} total tracked</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            {/* Compliant */}
+            <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-green-700">Compliant</span>
+                <span className="text-lg font-bold text-green-600">
+                  {complaints.length - overdueCount - atRiskCount}
+                </span>
+              </div>
+              <div className="w-full bg-green-100 rounded-full h-2">
+                <div
+                  className="bg-green-500 h-2 rounded-full transition-all"
+                  style={{ width: complaints.length ? `${((complaints.length - overdueCount - atRiskCount) / complaints.length) * 100}%` : '0%' }}
+                />
+              </div>
+              <p className="text-[10px] text-green-600 mt-1">
+                {complaints.length ? Math.round(((complaints.length - overdueCount - atRiskCount) / complaints.length) * 100) : 0}% on time
+              </p>
+            </div>
+            {/* At Risk */}
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-amber-700">At Risk</span>
+                <span className="text-lg font-bold text-amber-600">{atRiskCount}</span>
+              </div>
+              <div className="w-full bg-amber-100 rounded-full h-2">
+                <div
+                  className="bg-amber-500 h-2 rounded-full transition-all"
+                  style={{ width: complaints.length ? `${(atRiskCount / complaints.length) * 100}%` : '0%' }}
+                />
+              </div>
+              <p className="text-[10px] text-amber-600 mt-1">4–7 days active, no resolution</p>
+            </div>
+            {/* Overdue */}
+            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-red-700">Overdue</span>
+                <span className="text-lg font-bold text-red-600">{overdueCount}</span>
+              </div>
+              <div className="w-full bg-red-100 rounded-full h-2">
+                <div
+                  className="bg-red-500 h-2 rounded-full transition-all"
+                  style={{ width: complaints.length ? `${(overdueCount / complaints.length) * 100}%` : '0%' }}
+                />
+              </div>
+              <p className="text-[10px] text-red-600 mt-1">&gt;7 days active, past deadline</p>
             </div>
           </div>
-        ) : null}
+          {/* Combined SLA bar */}
+          {complaints.length > 0 && (
+            <div>
+              <div className="flex rounded-full overflow-hidden h-3">
+                <div className="bg-green-500 transition-all" style={{ width: `${((complaints.length - overdueCount - atRiskCount) / complaints.length) * 100}%` }} />
+                <div className="bg-amber-400 transition-all" style={{ width: `${(atRiskCount / complaints.length) * 100}%` }} />
+                <div className="bg-red-500 transition-all" style={{ width: `${(overdueCount / complaints.length) * 100}%` }} />
+              </div>
+              <div className="flex gap-4 mt-2">
+                <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Compliant</span>
+                <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> At Risk</span>
+                <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Overdue</span>
+              </div>
+            </div>
+          )}
+        </div>
 
         {loading && <LoadingSpinner />}
 
@@ -412,7 +531,7 @@ export default function AdminComplaintsPage() {
           filteredComplaints.length === 0 ? (
             <EmptyState
               message={
-                searchTerm || statusFilter || governorateFilter || municipalityFilter
+                searchTerm || statusFilter || governorateFilter || municipalityFilter || categoryFilter || priorityFilter || dateFrom || dateTo
                   ? "Try adjusting your search or filters."
                   : "No complaints have been submitted yet."
               }
@@ -426,6 +545,7 @@ export default function AdminComplaintsPage() {
                   href={`/dashboard/complaints/${complaint._id || complaint.id}?from=admin`}
                   showCitizen
                   showDepartment
+                  showAssignedTo
                   showMunicipality
                 />
               ))}

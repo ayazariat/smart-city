@@ -2,6 +2,7 @@
 Trend Prediction Service (BL-37)
 ==================================
 Forecast complaint volumes by category and municipality for the next 7 and 30 days.
+Uses sklearn Ridge regression (free) with seasonal features, falls back to numpy linear regression.
 Runs as a nightly batch job.
 """
 
@@ -9,6 +10,14 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import numpy as np
 from collections import defaultdict
+
+# Try importing sklearn for better regression
+try:
+    from sklearn.linear_model import Ridge
+    from sklearn.preprocessing import StandardScaler
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
 
 from config.settings import (
     TREND_MIN_HISTORY_DAYS,
@@ -97,7 +106,7 @@ class TrendPredictor:
         return outliers
     
     def _linear_regression_forecast(self, daily_counts: List[int], days_ahead: int) -> Dict[str, Any]:
-        """Simple linear regression for short-term forecast."""
+        """Forecast using sklearn Ridge regression with features, or simple linear regression."""
         n = len(daily_counts)
         if n == 0:
             return {
@@ -105,14 +114,65 @@ class TrendPredictor:
                 "dailyForecast": [0] * days_ahead,
                 "trend": "STABLE"
             }
+        
+        # Strategy 1: sklearn Ridge regression with engineered features (free, more robust)
+        if SKLEARN_AVAILABLE and n >= 7:
+            try:
+                # Build feature matrix: [day_index, day_of_week, moving_avg_7d]
+                X_train = []
+                y_train = daily_counts
+                
+                for i in range(n):
+                    day_of_week = i % 7
+                    is_weekend = 1.0 if day_of_week >= 5 else 0.0
+                    # Moving average (use what's available)
+                    start = max(0, i - 6)
+                    ma7 = np.mean(daily_counts[start:i+1])
+                    X_train.append([float(i), float(day_of_week), is_weekend, ma7])
+                
+                X_train = np.array(X_train)
+                y_train = np.array(daily_counts, dtype=float)
+                
+                scaler = StandardScaler()
+                X_scaled = scaler.fit_transform(X_train)
+                
+                model = Ridge(alpha=1.0)
+                model.fit(X_scaled, y_train)
+                
+                # Build forecast features
+                last_ma = np.mean(daily_counts[-7:])
+                X_forecast = []
+                for i in range(days_ahead):
+                    idx = n + i
+                    day_of_week = idx % 7
+                    is_weekend = 1.0 if day_of_week >= 5 else 0.0
+                    X_forecast.append([float(idx), float(day_of_week), is_weekend, last_ma])
+                
+                X_forecast = np.array(X_forecast)
+                X_forecast_scaled = scaler.transform(X_forecast)
+                
+                forecast = [max(0, int(round(v))) for v in model.predict(X_forecast_scaled)]
+                
+                # Determine trend from model coefficient on day_index
+                slope = model.coef_[0]
+                trend = "INCREASING" if slope > 0.1 else "DECREASING" if slope < -0.1 else "STABLE"
+                
+                return {
+                    "expectedTotal": sum(forecast),
+                    "dailyForecast": forecast,
+                    "trend": trend,
+                    "modelUsed": "ridge-regression"
+                }
+            except Exception as e:
+                print(f"Ridge regression error: {e}")
+        
+        # Strategy 2: Simple linear regression (numpy, always available)
         x = list(range(n))
         y = daily_counts
         
-        # Calculate means
         x_mean = sum(x) / n
         y_mean = sum(y) / n
         
-        # Calculate slope and intercept
         numerator = sum((x[i] - x_mean) * (y[i] - y_mean) for i in range(n))
         denominator = sum((x[i] - x_mean) ** 2 for i in range(n))
         
@@ -123,13 +183,13 @@ class TrendPredictor:
         
         intercept = y_mean - slope * x_mean
         
-        # Forecast
         forecast = [max(0, int(intercept + slope * (n + i))) for i in range(days_ahead)]
         
         return {
             "expectedTotal": sum(forecast),
             "dailyForecast": forecast,
-            "trend": "INCREASING" if slope > 0.1 else "DECREASING" if slope < -0.1 else "STABLE"
+            "trend": "INCREASING" if slope > 0.1 else "DECREASING" if slope < -0.1 else "STABLE",
+            "modelUsed": "linear-regression"
         }
     
     def _calculate_change_percentage(self, forecast: List[int], historical_avg: float) -> str:

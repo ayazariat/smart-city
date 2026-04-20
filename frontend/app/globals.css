@@ -581,6 +581,209 @@
     background-color: rgba(46, 125, 50, 0.08) !important;
   }
 
+  /* ===== Dark mode: Sidebar ===== */
+  /* Sidebar background */
+  [data-theme='dark'] aside {
+    background-color: var(--bg2) !important;
+    border-color: var(--bdr) !important;
+  }
+
+  /* Sidebar header / user info borders */
+  [data-theme='dark'] aside .border-b {
+    border-color: var(--bdr) !important;
+  }
+
+  /* Sidebar nav active item */
+  [data-theme='dark'] aside .bg-primary\/10 {
+    background-color: rgba(46, 125, 50, 0.15) !important;
+  }
+
+  /* Sidebar hover */
+  [data-theme='dark'] aside .hover\:bg-slate-50:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  /* Sidebar logout button */
+  [data-theme='dark'] aside .bg-slate-100 {
+    background-color: rgba(255, 255, 255, 0.07) !important;
+  }
+  [data-theme='dark'] aside .hover\:bg-slate-200:hover {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* Dark mode mobile topbar */
+  [data-theme='dark'] .mobile-topbar {
+    background-color: var(--bg2) !important;
+    border-color: var(--bdr) !important;
+  }
+
+  /* ===== Dark mode: primary color consistency ===== */
+  /* bg-primary stays as-is (it's the brand green with good contrast) */
+  /* text-primary on dark gets a brighter green shade */
+  [data-theme='dark'] .text-primary {
+    color: #66bb6a !important;
+  }
+
+  /* bg-primary/10 on dark */
+  [data-theme='dark'] .bg-primary\/10 {
+    background-color: rgba(102, 187, 106, 0.12) !important;
+  }
+  [data-theme='dark'] .bg-primary\/5 {
+    background-color: rgba(102, 187, 106, 0.06) !important;
+  }
+  [data-theme='dark'] .border-primary\/20 {
+    border-color: rgba(102, 187, 106, 0.25) !important;
+  }
+  [data-theme='dark'] .border-primary\/30 {
+    border-color: rgba(102, 187, 106, 0.35) !important;
+  }
+  [data-theme='dark'] .ring-primary\/30 {
+    --tw-ring-color: rgba(102, 187, 106, 0.35) !important;
+  }
+  [data-theme='dark'] .focus\:ring-primary\/20:focus {
+    --tw-ring-color: rgba(102, 187, 106, 0.3) !important;
+  }
+  [data-theme='dark'] .focus\:border-primary:focus {
+    border-color: #66bb6a !important;
+  }
+
+  /* ===== Dark mode: tables ===== */
+  [data-theme='dark'] table {
+    background-color: var(--bg2) !important;
+  }
+  [data-theme='dark'] thead tr {
+    background-color: var(--bg3) !important;
+  }
+  [data-theme='dark'] tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.04) !important;
+  }
+  [data-theme='dark'] th,
+  [data-theme='dark'] td {
+    border-color: var(--bdr) !important;
+    color: var(--txt2) !important;
+  }
+  [data-theme='dark'] th {
+    color: var(--txt) !important;
+  }
+
+  /* ===== Dark mode: map popup ===== */
+  [data-theme='dark'] .leaflet-popup-content-wrapper {
+    background: var(--bg2) !important;
+    color: var(--txt) !important;
+    border: 1px solid var(--bdr) !important;
+    box-shadow: var(--shmd) !important;
+  }
+  [data-theme='dark'] .leaflet-popup-tip {
+    background: var(--bg2) !important;
+  }
+
+  /* ===== Dark mode: recharts ===== */
+  [data-theme='dark'] .recharts-cartesian-grid line {
+    stroke: var(--bdr2) !important;
+  }
+  [data-theme='dark'] .recharts-text {
+    fill: var(--txt3) !important;
+  }
+
+  /* ===== Dark mode: white cards / panels ===== */
+  [data-theme='dark'] .bg-white,
+  [data-theme='dark'] .bg-white\/95,
+  [data-theme='dark'] .bg-white\/90,
+  [data-theme='dark'] .bg-white\/80,
+  [data-theme='dark'] .bg-white\/70,
+  [data-theme='dark'] .bg-white\/60 {
+    background-color: var(--bg2) !important;
+  }
+  /* text colours inside white cards */
+  [data-theme='dark'] .text-slate-800,
+  [data-theme='dark'] .text-slate-900 {
+    color: var(--txt) !important;
+  }
+  [data-theme='dark'] .text-slate-700,
+  [data-theme='dark'] .text-slate-600 {
+    color: var(--txt2) !important;
+  }
+  [data-theme='dark'] .text-slate-500,
+  [data-theme='dark'] .text-slate-400 {
+    color: var(--txt3) !important;
+  }
+  /* stats mini-cards inside the hero All-Time Stats panel */
+  [data-theme='dark'] .bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+  }
+  [data-theme='dark'] .bg-teal-50 {
+    background-color: rgba(20, 184, 166, 0.12) !important;
+  }
+  /* rounded card borders */
+  [data-theme='dark'] .border-slate-200,
+  [data-theme='dark'] .border-slate-100,
+  [data-theme='dark'] .border-slate-200\/50 {
+    border-color: var(--bdr) !important;
+  }
+  /* backdrop-blur panels */
+  [data-theme='dark'] .backdrop-blur {
+    background-color: var(--bg2) !important;
+  }
+
+  /* ===== Dark mode: additional overrides ===== */
+  /* Gradient backgrounds in hero sections */
+  [data-theme='dark'] .bg-gradient-to-br.from-green-50,
+  [data-theme='dark'] .bg-gradient-to-b.from-slate-50,
+  [data-theme='dark'] .bg-gradient-to-br.from-slate-50,
+  [data-theme='dark'] .bg-gradient-to-br.from-emerald-50 {
+    --tw-gradient-from: var(--bg2) !important;
+    --tw-gradient-to: var(--bg3) !important;
+  }
+  /* Green accent backgrounds used in transparency sidebar & nav active state */
+  [data-theme='dark'] .bg-green-50 {
+    background-color: rgba(34, 197, 94, 0.1) !important;
+  }
+  [data-theme='dark'] .text-green-700 {
+    color: #4ade80 !important;
+  }
+  [data-theme='dark'] .text-green-600 {
+    color: #86efac !important;
+  }
+  /* KPI stat card backgrounds on dashboard */
+  [data-theme='dark'] .bg-primary\/5,
+  [data-theme='dark'] .bg-primary\/10 {
+    background-color: rgba(76, 175, 80, 0.12) !important;
+  }
+  /* Card wrappers on transparency & dashboard */
+  [data-theme='dark'] .rounded-3xl.bg-white,
+  [data-theme='dark'] .rounded-2xl.bg-white,
+  [data-theme='dark'] .rounded-xl.bg-white {
+    background-color: var(--bg2) !important;
+  }
+  /* Border colours */
+  [data-theme='dark'] .border-slate-200\/50,
+  [data-theme='dark'] .border-slate-100 {
+    border-color: var(--bdr) !important;
+  }
+  /* Stat value text in hero card */
+  [data-theme='dark'] .bg-blue-100 {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+  }
+  [data-theme='dark'] .bg-green-100 {
+    background-color: rgba(34, 197, 94, 0.15) !important;
+  }
+  [data-theme='dark'] .bg-teal-100 {
+    background-color: rgba(20, 184, 166, 0.15) !important;
+  }
+  /* Ensure text inside dark badge chips stays readable */
+  [data-theme='dark'] .bg-emerald-50 {
+    background-color: rgba(52, 211, 153, 0.12) !important;
+  }
+  [data-theme='dark'] .text-emerald-600,
+  [data-theme='dark'] .text-emerald-700 {
+    color: #6ee7b7 !important;
+  }
+  /* Header/topbar background in dark mode */
+  [data-theme='dark'] header {
+    background-color: var(--bg2) !important;
+    border-color: var(--bdr) !important;
+  }
+
   /* ===== RTL Support (Arabic) ===== */
   [dir='rtl'] {
     font-family: 'Noto Sans Arabic', 'Inter', sans-serif;
@@ -613,11 +816,11 @@
 
   /* RTL: Flip ml-[260px] on transparency pages */
   [dir='rtl'] .ml-0.md\:ml-\[260px\],
-  [dir='rtl'] [class*="md:ml-[260px]"] {
+  [dir='rtl'] [class*='md:ml-[260px]'] {
     margin-left: 0 !important;
   }
   @media (min-width: 768px) {
-    [dir='rtl'] [class*="md:ml-[260px]"] {
+    [dir='rtl'] [class*='md:ml-[260px]'] {
       margin-left: 0 !important;
       margin-right: 260px !important;
     }
@@ -630,17 +833,17 @@
   }
 
   /* RTL: Border-left accents become border-right */
-  [dir='rtl'] [class*="border-l-"] {
+  [dir='rtl'] [class*='border-l-'] {
     border-left-width: 0 !important;
     border-right-width: 3px !important;
   }
-  [dir='rtl'] [class*="border-l-[3px]"] {
+  [dir='rtl'] [class*='border-l-[3px]'] {
     border-left-width: 0 !important;
     border-right-width: 3px !important;
   }
 
   /* RTL: Fix padding-left accents -> padding-right */
-  [dir='rtl'] [class*="pl-[9px]"] {
+  [dir='rtl'] [class*='pl-[9px]'] {
     padding-left: 0 !important;
     padding-right: 9px !important;
   }
@@ -654,7 +857,7 @@
   }
 
   /* RTL: Fix timeline left padding */
-  [dir='rtl'] [style*="paddingLeft: 24px"] {
+  [dir='rtl'] [style*='paddingLeft: 24px'] {
     padding-left: 0 !important;
     padding-right: 24px !important;
   }
@@ -826,6 +1029,36 @@
 
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-400;
+  }
+
+  /* ===== Leaflet Map Z-Index Fix ===== */
+  /* Keep Leaflet map below fixed/sticky headers (z-30 to z-[80]) */
+  .leaflet-pane {
+    z-index: 1 !important;
+  }
+  .leaflet-tile-pane {
+    z-index: 2 !important;
+  }
+  .leaflet-overlay-pane {
+    z-index: 3 !important;
+  }
+  .leaflet-shadow-pane {
+    z-index: 4 !important;
+  }
+  .leaflet-marker-pane {
+    z-index: 5 !important;
+  }
+  .leaflet-tooltip-pane {
+    z-index: 6 !important;
+  }
+  .leaflet-popup-pane {
+    z-index: 7 !important;
+  }
+  .leaflet-map-pane canvas {
+    z-index: 1 !important;
+  }
+  .leaflet-control {
+    z-index: 8 !important;
   }
 
   /* ===== Animation Keyframes ===== */
@@ -1070,6 +1303,76 @@
   }
   .animate-dot-pulse {
     animation: dot-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* ===== Timeline Progress ===== */
+  @keyframes timeline-grow {
+    from {
+      height: 0;
+    }
+    to {
+      height: 100%;
+    }
+  }
+  .animate-timeline-grow {
+    animation: timeline-grow 0.8s ease-out forwards;
+  }
+
+  /* ===== Action Button Pulse + Scale ===== */
+  .btn-action {
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.3s ease;
+  }
+  .btn-action:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 16px rgba(46, 125, 50, 0.35);
+  }
+  .btn-action:active {
+    transform: scale(0.97);
+  }
+
+  /* ===== Photo Gallery Stagger FadeIn ===== */
+  @keyframes galleryFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-gallery-item {
+    animation: galleryFadeIn 0.4s ease-out forwards;
+    opacity: 0;
+  }
+
+  /* ===== Card 3D Tilt Hover ===== */
+  .card-3d {
+    transition:
+      transform 0.35s ease,
+      box-shadow 0.35s ease;
+    transform-style: preserve-3d;
+  }
+  .card-3d:hover {
+    transform: perspective(800px) rotateX(2deg) rotateY(-2deg) translateY(-4px);
+    box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.12);
+  }
+
+  /* ===== Notes Slide-in from Right ===== */
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  .animate-slideInRight {
+    animation: slideInRight 0.35s ease-out forwards;
   }
 
   /* ===== Stagger Animation Delays ===== */

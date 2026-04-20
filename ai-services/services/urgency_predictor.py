@@ -2,6 +2,7 @@
 Urgency Prediction Service (BL-24)
 ===================================
 Predict urgency level (LOW/MEDIUM/HIGH/CRITICAL) at complaint submission time.
+Uses HuggingFace zero-shot classification (free) for text analysis + rule-based scoring.
 """
 
 from typing import Optional, Dict, Any
@@ -15,6 +16,25 @@ try:
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
+
+# Try importing transformers for free zero-shot urgency classification
+try:
+    from transformers import pipeline as hf_pipeline
+    _urgency_classifier = None
+    
+    def get_urgency_classifier():
+        global _urgency_classifier
+        if _urgency_classifier is None:
+            _urgency_classifier = hf_pipeline(
+                "zero-shot-classification",
+                model="facebook/bart-large-mnli",
+                device=-1  # CPU
+            )
+        return _urgency_classifier
+    
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
 
 from utils.text_preprocessor import (
     clean_text, 
@@ -60,7 +80,37 @@ class UrgencyPredictor:
         Used as fallback when no trained model exists.
         """
         text = combine_fields(title, description)
-        text_score = calculate_keyword_score(text)
+        
+        # Use HuggingFace zero-shot for text urgency scoring (free, more accurate)
+        text_score = 0.0
+        ai_keywords = []
+        if TRANSFORMERS_AVAILABLE:
+            try:
+                classifier = get_urgency_classifier()
+                urgency_labels = [
+                    "critical emergency requiring immediate action",
+                    "serious problem needing urgent attention",
+                    "moderate issue that should be addressed",
+                    "minor inconvenience with low priority"
+                ]
+                label_scores = {"critical": 1.0, "serious": 0.7, "moderate": 0.4, "minor": 0.15}
+                
+                result = classifier(text[:512], urgency_labels, multi_label=False)
+                top_label = result["labels"][0]
+                top_score = result["scores"][0]
+                
+                # Map label to score
+                for key, score_val in label_scores.items():
+                    if key in top_label:
+                        text_score = score_val * top_score
+                        break
+                ai_keywords = [top_label.split()[0]]  # e.g. "critical", "serious"
+            except Exception as e:
+                print(f"HuggingFace urgency classification error: {e}")
+                text_score = calculate_keyword_score(text)
+                ai_keywords = []
+        else:
+            text_score = calculate_keyword_score(text)
         
         keywords = extract_keywords_by_level(text)
         
@@ -90,7 +140,7 @@ class UrgencyPredictor:
         
         return {
             "predictedUrgency": predicted_urgency,
-            "confidenceScore": 0.65,  # Lower confidence for rule-based
+            "confidenceScore": 0.75 if TRANSFORMERS_AVAILABLE else 0.65,
             "breakdown": {
                 "textScore": round(text_score, 3),
                 "citizenUrgencyScore": round(citizen_score, 3),
@@ -98,10 +148,11 @@ class UrgencyPredictor:
                 "communityScore": round(community_score, 3),
                 "timeScore": round(time_score, 3),
                 "sensitiveZoneBonus": round(zone_bonus, 3),
-                "keywordsDetected": keywords["critical"] + keywords["high"] + keywords["medium"],
-                "citizenUrgencyInput": (citizen_urgency or "MEDIUM").upper()
+                "keywordsDetected": ai_keywords + keywords["critical"] + keywords["high"] + keywords["medium"],
+                "citizenUrgencyInput": (citizen_urgency or "MEDIUM").upper(),
+                "modelUsed": "bart-large-mnli" if TRANSFORMERS_AVAILABLE else "keyword-rules"
             },
-            "isRuleBased": True
+            "isRuleBased": not TRANSFORMERS_AVAILABLE
         }
     
     def _calculate_time_score(self, submitted_at: datetime) -> float:

@@ -1,11 +1,26 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
-  static const String baseUrl = 'http://10.0.2.2:5000/api';
-  // Use 10.0.2.2 for Android emulator to connect to localhost
-  // For iOS simulator, use localhost or your machine's IP
+  /// Override this to use a custom API base URL (e.g. on a real device).
+  /// Set via: ApiClient.overrideBaseUrl = 'http://192.168.1.x:5000/api';
+  static String? overrideBaseUrl;
+
+  static String get baseUrl {
+    if (overrideBaseUrl != null && overrideBaseUrl!.isNotEmpty) {
+      return overrideBaseUrl!;
+    }
+    // Android emulator uses 10.0.2.2 to reach host machine localhost.
+    // For a real Android/iOS device on the same WiFi, set overrideBaseUrl to your machine IP.
+    if (Platform.isAndroid) {
+      return 'http://10.0.2.2:5000/api';
+    }
+    return 'http://localhost:5000/api';
+  }
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   String? _token;
@@ -24,9 +39,16 @@ class ApiClient {
     await _storage.write(key: 'refresh_token', value: refreshToken);
   }
 
+  // Load tokens AND the saved server URL override
   Future<void> loadTokens() async {
     _token = await _storage.read(key: 'access_token');
     _refreshToken = await _storage.read(key: 'refresh_token');
+    // Restore custom server URL if set (for real-device support)
+    final prefs = await SharedPreferences.getInstance();
+    final savedUrl = prefs.getString('server_url');
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      overrideBaseUrl = savedUrl;
+    }
   }
 
   Future<void> clearTokens() async {
@@ -48,12 +70,18 @@ class ApiClient {
   // Generic GET request
   Future<dynamic> get(String endpoint) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
-      );
+      var response = await http
+          .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await http
+            .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+            .timeout(const Duration(seconds: 15));
+      }
       return _handleResponse(response);
     } catch (e) {
+      if (e is ApiException) rethrow;
       throw ApiException('Network error: $e');
     }
   }
@@ -61,13 +89,26 @@ class ApiClient {
   // Generic POST request
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
-        body: jsonEncode(body),
-      );
+      var response = await http
+          .post(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await http
+            .post(
+              Uri.parse('$baseUrl$endpoint'),
+              headers: _headers,
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 15));
+      }
       return _handleResponse(response);
     } catch (e) {
+      if (e is ApiException) rethrow;
       throw ApiException('Network error: $e');
     }
   }
@@ -75,13 +116,26 @@ class ApiClient {
   // Generic PUT request
   Future<dynamic> put(String endpoint, Map<String, dynamic> body) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
-        body: jsonEncode(body),
-      );
+      var response = await http
+          .put(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await http
+            .put(
+              Uri.parse('$baseUrl$endpoint'),
+              headers: _headers,
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 15));
+      }
       return _handleResponse(response);
     } catch (e) {
+      if (e is ApiException) rethrow;
       throw ApiException('Network error: $e');
     }
   }
@@ -89,10 +143,15 @@ class ApiClient {
   // Generic DELETE request
   Future<dynamic> delete(String endpoint) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
-      );
+      var response = await http
+          .delete(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await http
+            .delete(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+            .timeout(const Duration(seconds: 15));
+      }
       return _handleResponse(response);
     } catch (e) {
       if (e is ApiException) rethrow;
@@ -129,11 +188,23 @@ class ApiClient {
   // PATCH request
   Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
     try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl$endpoint'),
-        headers: _headers,
-        body: jsonEncode(body),
-      );
+      var response = await http
+          .patch(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await http
+            .patch(
+              Uri.parse('$baseUrl$endpoint'),
+              headers: _headers,
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 15));
+      }
       return _handleResponse(response);
     } catch (e) {
       if (e is ApiException) rethrow;
@@ -152,8 +223,7 @@ class ApiClient {
       case 400:
         throw ApiException(body?['message'] ?? 'Bad request');
       case 401:
-        // Try to refresh token
-        return _handleUnauthorized();
+        throw ApiException('Unauthorized');
       case 403:
         throw ApiException(body?['message'] ?? 'Access denied');
       case 404:
@@ -165,8 +235,8 @@ class ApiClient {
     }
   }
 
-  // Handle unauthorized - try to refresh token
-  Future<dynamic> _handleUnauthorized() async {
+  // Refresh tokens when 401 is received
+  Future<void> _refreshTokens() async {
     if (_refreshToken == null) {
       await clearTokens();
       throw ApiException('Session expired. Please login again.');
@@ -182,13 +252,14 @@ class ApiClient {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         await setTokens(body['accessToken'], body['refreshToken']);
-        // Retry original request
-        return null; // Caller should retry
+        // Tokens refreshed — caller will retry the original request
+        return;
       } else {
         await clearTokens();
         throw ApiException('Session expired. Please login again.');
       }
     } catch (e) {
+      if (e is ApiException) rethrow;
       await clearTokens();
       throw ApiException('Session expired. Please login again.');
     }

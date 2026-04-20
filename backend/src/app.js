@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const mongoSanitize = require("express-mongo-sanitize");
 const path = require("path");
 const authRoutes = require("./routes/auth");
 const citizenRoutes = require("./routes/citizen.routes");
@@ -33,9 +36,25 @@ app.use(cors({
   ],
   credentials: true,
 }));
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+// express-mongo-sanitize's default middleware sets req.query/req.params which are read-only in Express 5.
+// Sanitize body/headers via reassignment, and query/params in-place only.
+app.use((req, res, next) => {
+  if (req.body)    req.body    = mongoSanitize.sanitize(req.body);
+  if (req.params)  mongoSanitize.sanitize(req.params);   // mutates in-place, no reassignment (read-only in Express 5)
+  if (req.headers) req.headers = mongoSanitize.sanitize(req.headers);
+  if (req.query)   mongoSanitize.sanitize(req.query);    // mutates in-place, no reassignment (read-only in Express 5)
+  next();
+});
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
+
+// Rate limiters
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { message: "Too many requests, please try again later." } });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { message: "Too many authentication attempts, please try again later." } });
+// Stricter limiter for complaint creation — applied at route level in complaints.js
+app.use("/api", apiLimiter);
 
 // Serve uploaded files statically
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -49,7 +68,7 @@ app.get("/", (req, res) => {
 });
 
 // Mount routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/citizen", citizenRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/manager", managerRoutes);
@@ -69,7 +88,8 @@ app.use((req, res) => {
 });
 
 // Error handler
-app.use((err, req, res) => {
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: "Something went wrong!", error: err.message });
 });

@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Sparkles, X, LayoutDashboard, FileText, Plus, Archive, User,
-  ClipboardList, Wrench, Users, BarChart3, Menu, LogOut, Bell, MapPin
+  ClipboardList, Wrench, Users, BarChart3, Menu, LogOut, Bell, MapPin, Settings
 } from "lucide-react";
-import ThemeToggle from "../ui/ThemeToggle";
-import LanguagePicker from "../ui/LanguagePicker";
 import { useTranslation } from "react-i18next";
+import ThemeToggle from "@/components/ui/ThemeToggle";
+import LanguagePicker from "@/components/ui/LanguagePicker";
 
 interface SidebarItem {
   id: string;
@@ -78,6 +78,7 @@ function getSidebarItems(role: string, stats: DashboardSidebarProps["stats"] | u
     { id: "archive", label: t("sidebar.archive"), href: "/archive", icon: Archive },
     { id: "transparency", label: t("sidebar.transparency"), href: "/transparency", icon: BarChart3 },
     { id: "profile", label: t("sidebar.myProfile"), href: "/profile", icon: User },
+    ...(role === "ADMIN" ? [{ id: "settings", label: t("sidebar.systemSettings"), href: "/admin/settings", icon: Settings }] : []),
   ];
 
   return [...common, ...roleItems, ...bottom];
@@ -98,7 +99,15 @@ export default function DashboardSidebar({
   const { t } = useTranslation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
+  const [isRTL, setIsRTL] = useState(false);
+
+  useEffect(() => {
+    const checkDir = () => setIsRTL(document.documentElement.dir === "rtl");
+    checkDir();
+    const observer = new MutationObserver(checkDir);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["dir"] });
+    return () => observer.disconnect();
+  }, []);
 
   const items = getSidebarItems(role, stats, t);
 
@@ -111,7 +120,7 @@ export default function DashboardSidebar({
   return (
     <>
       {/* Mobile top bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-3 py-2 bg-white border-b border-slate-200 shadow-sm md:hidden">
+      <div className="mobile-topbar fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-3 py-2 bg-white border-b border-slate-200 shadow-sm md:hidden">
         <button
           onClick={() => setSidebarOpen(true)}
           className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
@@ -125,26 +134,33 @@ export default function DashboardSidebar({
           </div>
           <span className="text-sm font-bold text-slate-800">Smart City</span>
         </Link>
-        <button
-          onClick={onNotificationsClick}
-          className="relative p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-          title="Notifications"
-        >
-          <Bell className="w-5 h-5 text-slate-600" />
-          {(unreadNotifications || 0) > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
-              {(unreadNotifications || 0) > 99 ? "99+" : unreadNotifications}
-            </span>
-          )}
-        </button>
+        {/* Right actions: theme, language, notification bell */}
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <LanguagePicker />
+          <div className="relative">
+            <button
+              onClick={onNotificationsClick}
+              className="relative p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+              title="Notifications"
+            >
+              <Bell className="w-5 h-5 text-slate-600" />
+              {(unreadNotifications || 0) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
+                  {(unreadNotifications || 0) > 99 ? "99+" : unreadNotifications}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Sidebar */}
+      {/* Sidebar — z-[70] ensures it covers mobile topbar (z-50) and overlay (z-[60]) */}
       <aside
         className={`
-          fixed top-0 h-full w-[260px] z-40
+          fixed top-0 h-full w-[260px] z-[70]
           bg-white text-slate-700
-          transform transition-transform duration-300 ease-in-out shadow-sm
+          transform transition-transform duration-300 ease-in-out shadow-xl
           md:translate-x-0
           ${isRTL ? "right-0 border-l border-slate-200" : "left-0 border-r border-slate-200"}
           ${sidebarOpen ? "translate-x-0" : isRTL ? "translate-x-full" : "-translate-x-full"}
@@ -184,20 +200,6 @@ export default function DashboardSidebar({
                   {getRoleLabel(role, t)}
                 </span>
               </div>
-              <button
-                onClick={onNotificationsClick}
-                className="relative p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                title="Notifications"
-              >
-                <Bell className="w-4 h-4 text-slate-500" />
-                {(unreadNotifications || 0) > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
-                    {(unreadNotifications || 0) > 99 ? "99+" : unreadNotifications}
-                  </span>
-                )}
-              </button>
-              <ThemeToggle />
-              <LanguagePicker />
             </div>
           </div>
 
@@ -245,7 +247,7 @@ export default function DashboardSidebar({
           </nav>
 
           {/* Bottom */}
-          <div className="p-4 border-t border-slate-100 space-y-2">
+          <div className="p-4 border-t border-slate-100">
             <button
               onClick={onLogout}
               className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-all text-sm"
@@ -257,10 +259,10 @@ export default function DashboardSidebar({
         </div>
       </aside>
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay — z-[60] covers mobile topbar (z-50), sidebar is z-[70] on top */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          className="fixed inset-0 bg-black/50 z-[60] md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}

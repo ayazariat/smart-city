@@ -1,3 +1,4 @@
+const complaintRepository = require('../repositories/complaintRepository');
 const Complaint = require('../models/Complaint');
 
 class ComplaintService {
@@ -5,7 +6,7 @@ class ComplaintService {
   async create(complaintData, userId) {
     const { title, description, category, governorate, municipality, latitude, longitude } = complaintData;
 
-    const complaint = new Complaint({
+    return await complaintRepository.create({
       title,
       description,
       category,
@@ -16,20 +17,14 @@ class ComplaintService {
       status: 'PENDING',
       citizen: userId,
     });
-
-    return await complaint.save();
   }
 
   // Get complaints by citizen
   async getByCitizen(citizenId, page = 1, limit = 10) {
-    const skip = (page - 1) * limit;
-    
-    const complaints = await Complaint.find({ citizen: citizenId })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Complaint.countDocuments({ citizen: citizenId });
+    const { complaints, total } = await complaintRepository.findAll(
+      { citizen: citizenId },
+      { page, limit, sort: { createdAt: -1 } }
+    );
 
     return {
       complaints,
@@ -44,8 +39,11 @@ class ComplaintService {
 
   // Get complaint by ID
   async getById(complaintId) {
-    return await Complaint.findById(complaintId)
-      .populate('citizen', 'fullName email phone');
+    const complaint = await complaintRepository.findById(complaintId);
+    if (complaint) {
+      await complaint.populate('citizen', 'fullName email phone');
+    }
+    return complaint;
   }
 
   // Get all complaints (for admin/agent)
@@ -64,15 +62,10 @@ class ComplaintService {
       ];
     }
 
-    const skip = (page - 1) * limit;
-    
-    const complaints = await Complaint.find(query)
-      .populate('citizen', 'fullName email phone')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Complaint.countDocuments(query);
+    const { complaints, total } = await complaintRepository.findAll(
+      query,
+      { page, limit, sort: { createdAt: -1 }, populate: 'citizen' }
+    );
 
     return {
       complaints,
@@ -93,28 +86,20 @@ class ComplaintService {
       updateData.assignedTo = assignedTo;
     }
 
-    return await Complaint.findByIdAndUpdate(
-      complaintId,
-      updateData,
-      { new: true }
-    );
+    return await complaintRepository.update(complaintId, updateData);
   }
 
   // Assign complaint to technician/agent
   async assign(complaintId, assignedTo) {
-    return await Complaint.findByIdAndUpdate(
-      complaintId,
-      {
-        assignedTo,
-        status: 'IN_PROGRESS',
-      },
-      { new: true }
-    );
+    return await complaintRepository.update(complaintId, {
+      assignedTo,
+      status: 'IN_PROGRESS',
+    });
   }
 
   // Add comment to complaint
   async addComment(complaintId, comment, userId) {
-    const complaint = await Complaint.findById(complaintId);
+    const complaint = await complaintRepository.findById(complaintId);
     if (!complaint) {
       throw new Error('Complaint not found');
     }
@@ -130,7 +115,6 @@ class ComplaintService {
 
   // Get statistics
   async getStats(filters = {}) {
-    // whitelist filter keys
     const query = {};
     const allowed = ['status','category','governorate','municipality'];
     for (const key of allowed) {
@@ -144,20 +128,23 @@ class ComplaintService {
       ];
     }
     
-    const total = await Complaint.countDocuments(query);
-    const pending = await Complaint.countDocuments({ ...query, status: 'PENDING' });
-    const inProgress = await Complaint.countDocuments({ ...query, status: 'IN_PROGRESS' });
-    const resolved = await Complaint.countDocuments({ ...query, status: 'RESOLVED' });
-    const rejected = await Complaint.countDocuments({ ...query, status: 'REJECTED' });
-
-    const byCategory = await Complaint.aggregate([
-      { $match: query },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
+    const [total, pending, inProgress, resolved, rejected] = await Promise.all([
+      complaintRepository.count(query),
+      complaintRepository.count({ ...query, status: 'PENDING' }),
+      complaintRepository.count({ ...query, status: 'IN_PROGRESS' }),
+      complaintRepository.count({ ...query, status: 'RESOLVED' }),
+      complaintRepository.count({ ...query, status: 'REJECTED' }),
     ]);
 
-    const byGovernorate = await Complaint.aggregate([
-      { $match: query },
-      { $group: { _id: '$governorate', count: { $sum: 1 } } },
+    const [byCategory, byGovernorate] = await Promise.all([
+      complaintRepository.aggregate([
+        { $match: query },
+        { $group: { _id: '$category', count: { $sum: 1 } } },
+      ]),
+      complaintRepository.aggregate([
+        { $match: query },
+        { $group: { _id: '$governorate', count: { $sum: 1 } } },
+      ]),
     ]);
 
     return {
