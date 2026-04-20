@@ -23,9 +23,13 @@ const REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || "7d";
 const generateAccessToken = (user) => {
   return jwt.sign(
     {
-      id: user.id || user._id,
+      userId: (user._id && user._id.toString()) || user.id,
       email: user.email,
       role: user.role,
+      municipality: user.municipality || null,
+      municipalityName: user.municipalityName || "",
+      governorate: user.governorate || "",
+      department: user.department || null,
     },
     ACCESS_TOKEN_SECRET,
     {
@@ -42,7 +46,7 @@ const generateAccessToken = (user) => {
 const generateRefreshToken = (user) => {
   return jwt.sign(
     {
-      id: user.id || user._id,
+      userId: (user._id && user._id.toString()) || user.id,
       role: user.role,
     },
     REFRESH_TOKEN_SECRET,

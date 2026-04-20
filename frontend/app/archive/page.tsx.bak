@@ -1,0 +1,81 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { complaintService } from "@/services/complaint.service";
+import { useAuthStore } from "@/store/useAuthStore";
+
+console.log("Archive page component loaded");
+
+export default function ArchivePage() {
+  console.log("ArchivePage render", { hydrated: useAuthStore.getState().hydrated });
+  
+  const router = useRouter();
+  const { user, token, hydrated } = useAuthStore();
+  
+  console.log("ArchivePage state", { user: user?.role, token: !!token, hydrated });
+  
+  const [complaints, setComplaints] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    console.log("ArchivePage useEffect 1", { hydrated, token: !!token, user: !!user });
+    
+    if (!hydrated) return;
+    
+    if (!token || !user) {
+      router.push("/");
+      return;
+    }
+  }, [hydrated, token, user, router]);
+
+  useEffect(() => {
+    async function fetchData() {
+      console.log("ArchivePage fetchData", { hydrated, token: !!token, user: !!user });
+      
+      if (!token || !hydrated || !user) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        const response = await complaintService.getArchivedComplaints({
+          page: 1,
+          limit: 10
+        });
+        
+        console.log("ArchivePage response", response);
+        
+        if (response && response.success) {
+          setComplaints(response.complaints || []);
+        }
+      } catch (e: any) {
+        console.error("ArchivePage error", e);
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [hydrated, token, user]);
+
+  return (
+    <div style={{ padding: "50px", minHeight: "100vh", backgroundColor: "#f0f0f0" }}>
+      <h1 style={{ color: "blue" }}>ARCHIVE PAGE</h1>
+      <p>hydrated: {String(hydrated)}</p>
+      <p>user role: {user?.role || "none"}</p>
+      <p>token: {token ? "yes" : "no"}</p>
+      <p>loading: {String(loading)}</p>
+      <p>error: {error || "none"}</p>
+      <p>complaints count: {complaints.length}</p>
+      
+      {complaints.map((c: any) => (
+        <div key={c._id} style={{ border: "1px solid black", margin: "10px", padding: "10px" }}>
+          <p>{c.title}</p>
+        </div>
+      ))}
+    </div>
+  );
+}

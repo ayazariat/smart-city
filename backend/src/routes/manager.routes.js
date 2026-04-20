@@ -1,28 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const { authenticate, authorize } = require("../middleware/auth");
+const managerController = require("../controllers/managerController");
 
-// All manager routes require authentication and DEPARTMENT_MANAGER role
-
-router.get("/department/reports", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => {
-  res.json({
-    message: "Department reports access granted",
-    reports: [],
-  });
-});
-
-router.get("/department/stats", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => {
-  res.json({
-    message: "Department statistics retrieved",
-    stats: {},
-  });
-});
-
-router.get("/agents", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => {
-  res.json({
-    message: "Agents list retrieved",
-    agents: [],
-  });
-});
+router.get("/complaints", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.getComplaints(req, res));
+router.put("/complaints/:id/assign-technician", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.assignTechnician(req, res));
+router.put("/complaints/:id/reassign-technician", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.reassignTechnician(req, res));
+router.put("/complaints/:id/assign-team", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.assignTeam(req, res));
+router.put("/complaints/:id/priority", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.updatePriority(req, res));
+router.get("/technicians", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.getTechnicians(req, res));
+router.get("/stats", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.getStats(req, res));
+router.get("/technicians/performance", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.getTechnicianPerformance(req, res));
+router.post("/technicians/:id/message", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.sendMessage(req, res));
+router.post("/technicians/:id/warning", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.sendWarning(req, res));
+router.put("/complaints/:id/reassign", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.reassign(req, res));
 
 module.exports = router;

@@ -10,6 +10,10 @@ export interface AdminUser {
   phone?: string;
   isActive: boolean;
   isVerified: boolean;
+  governorate?: string;
+  municipality?: string | { _id?: string; name: string; governorate?: string } | null;
+  municipalityName?: string;
+  department?: { _id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,19 +45,30 @@ export interface UserStats {
 export interface CreateUserData {
   fullName: string;
   email: string;
-  password: string;
   role?: UserRole;
   phone?: string;
+  governorate?: string;
+  municipality?: string;
+  department?: string;
 }
 
 export interface UpdateUserData {
   fullName?: string;
   phone?: string;
   isActive?: boolean;
+  governorate?: string;
+  municipality?: string;
+  department?: string;
 }
 
 export interface UpdateRoleData {
   role: UserRole;
+}
+
+// Tunisia geography types
+export interface GovernorateData {
+  governorate: string;
+  municipalities: string[];
 }
 
 /**
@@ -143,5 +158,62 @@ export const adminService = {
   async getUserStats(): Promise<UserStats> {
     const response = await apiClient.get<ApiResponse<UserStats>>("/admin/users/stats");
     return response.data;
+  },
+
+  /**
+   * Get Tunisia geography (governorates and municipalities)
+   */
+  async getGeography(): Promise<GovernorateData[]> {
+    const response = await apiClient.get<ApiResponse<GovernorateData[]>>("/admin/geography");
+    return response.data;
+  },
+
+  /**
+   * Get all departments
+   */
+  async getDepartments(): Promise<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>> {
+    const response = await apiClient.get<ApiResponse<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>>>("/admin/departments");
+    return response.data;
+  },
+
+  /**
+   * Get complaint statistics (system-wide for admin)
+   */
+  async getStats(): Promise<{
+    success: boolean;
+    data: {
+      total: number;
+      submitted: number;
+      validated: number;
+      assigned: number;
+      inProgress: number;
+      resolved: number;
+      closed: number;
+      rejected: number;
+      totalOverdue: number;
+      totalAtRisk: number;
+      resolutionRate: number;
+      averageResolutionTime: number;
+      byCategory: Record<string, number>;
+    };
+  }> {
+    return apiClient.get<{
+      success: boolean;
+      data: {
+        total: number;
+        submitted: number;
+        validated: number;
+        assigned: number;
+        inProgress: number;
+        resolved: number;
+        closed: number;
+        rejected: number;
+        totalOverdue: number;
+        totalAtRisk: number;
+        resolutionRate: number;
+        averageResolutionTime: number;
+        byCategory: Record<string, number>;
+      };
+    }>("/complaints/stats");
   },
 };

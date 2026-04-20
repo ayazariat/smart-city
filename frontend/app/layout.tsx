@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const inter = Inter({ 
@@ -8,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Smart City Tunis",
-  description: "Système de gestion urbaine pour Smart City Tunis",
+  title: "Smart City Tunisia",
+  description: "Urban management system for Smart City Tunisia",
 };
 
 export default function RootLayout({
@@ -18,8 +19,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
-      <body className={inter.variable}>{children}</body>
+    <html lang="en" dir="ltr" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("smartcity-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");var l=localStorage.getItem("smartcity-lang");if(l){document.documentElement.lang=l;if(l==="ar"){document.documentElement.dir="rtl"}}}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className={inter.variable}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

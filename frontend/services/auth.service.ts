@@ -7,7 +7,7 @@ import {
 } from "@/types";
 import { useAuthStore } from "@/store/useAuthStore";
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_URL = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/auth`;
 
 interface LoginResponse {
   message: string;
@@ -30,14 +30,19 @@ interface VerifyResponse {
 
 export const authService = {
   async refreshToken(refreshToken: string): Promise<RefreshResponse> {
-    const response = await fetch(`${API_URL}/refresh`, {
+    const response = await fetch(`${API_URL}/refresh-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
+      credentials: "include",
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/html")) {
+        throw new Error("Server error. Please ensure the backend is running.");
+      }
+      const error = await response.json().catch(() => ({ message: "Token refresh failed" }));
       throw new Error(error.message || "Token refresh failed");
     }
 
@@ -49,6 +54,7 @@ export const authService = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      credentials: "include",
     });
 
     if (!response.ok) {
@@ -60,15 +66,22 @@ export const authService = {
   },
 
   async login(data: LoginData): Promise<LoginResponse> {
-    const response = await fetch(`${API_URL}/login`, {
+    const url = `${API_URL}/login`;
+    
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      credentials: "include",
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Login failed");
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/html")) {
+        throw new Error("Server error. Please ensure the backend is running.");
+      }
+      const error = await response.json().catch(() => ({ message: "Network error" }));
+      throw new Error(error.message || `Login failed (${response.status})`);
     }
 
     return response.json();
@@ -77,14 +90,14 @@ export const authService = {
   async verifyToken(token: string): Promise<VerifyResponse> {
     const { refreshToken } = useAuthStore.getState();
     
-    const response = await fetch(`${API_URL}/verify`, {
+    const response = await fetch(`${API_URL}/me`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!response.ok && response.status === 401 && refreshToken) {
       try {
-        const refreshResponse = await fetch(`${API_URL}/refresh`, {
+        const refreshResponse = await fetch(`${API_URL}/refresh-token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken }),
@@ -94,7 +107,7 @@ export const authService = {
           const data = await refreshResponse.json();
           if (data.token) {
             useAuthStore.setState({ token: data.token });
-            const retryResponse = await fetch(`${API_URL}/verify`, {
+            const retryResponse = await fetch(`${API_URL}/me`, {
               method: "GET",
               headers: { Authorization: `Bearer ${data.token}` },
             });
@@ -121,7 +134,10 @@ export const authService = {
   },
 
   async logout(): Promise<void> {
-    await fetch(`${API_URL}/logout`, { method: "POST" });
+    await fetch(`${API_URL}/logout`, { 
+      method: "POST",
+      credentials: "include",
+    });
   },
 
   async requestVerification(
@@ -188,14 +204,14 @@ export const authService = {
     const { token, refreshToken } = useAuthStore.getState();
     if (!token) throw new Error("No authentication token found");
 
-    const response = await fetch(`${API_URL}/profile`, {
+    const response = await fetch(`${API_URL}/me`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!response.ok && response.status === 401 && refreshToken) {
       try {
-        const refreshResponse = await fetch(`${API_URL}/refresh`, {
+        const refreshResponse = await fetch(`${API_URL}/refresh-token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken }),
@@ -205,7 +221,7 @@ export const authService = {
           const data = await refreshResponse.json();
           if (data.token) {
             useAuthStore.setState({ token: data.token });
-            const retryResponse = await fetch(`${API_URL}/profile`, {
+            const retryResponse = await fetch(`${API_URL}/me`, {
               method: "GET",
               headers: { Authorization: `Bearer ${data.token}` },
             });
@@ -251,7 +267,7 @@ export const authService = {
 
     if (!response.ok && response.status === 401 && refreshToken) {
       try {
-        const refreshResponse = await fetch(`${API_URL}/refresh`, {
+        const refreshResponse = await fetch(`${API_URL}/refresh-token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken }),
@@ -300,6 +316,22 @@ export const authService = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || "Failed to change password");
+    }
+
+    return response.json();
+  },
+
+  // Set password for admin-created users
+  async setPassword(token: string, email: string, password: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/set-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, email, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to set password");
     }
 
     return response.json();

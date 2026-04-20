@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { User, Mail, Phone, Edit2, Save, X, Sparkles, Shield, Lock, AlertCircle, CheckCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { User, Mail, Phone, Edit2, Save, X, Sparkles, Shield, Lock, AlertCircle, CheckCircle, ArrowLeft, MapPin, Building2 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 
 interface ProfileFormData {
   fullName: string;
@@ -28,12 +29,82 @@ interface ValidationErrors {
 }
 
 function ProfilePage() {
-  const { user, isLoading, error, updateProfile, changePassword, clearError } = useAuthStore();
+  const router = useRouter();
+  const { user, isLoading, error, updateProfile, changePassword, clearError, hydrated, logout, fetchProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<"profile" | "security">("profile");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [resetEmailLoading, setResetEmailLoading] = useState(false);
   const syncRef = useRef(false);
+  const [formData, setFormData] = useState<ProfileFormData>({
+    fullName: "",
+    phone: "",
+    email: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+
+  // Auth check + fetch fresh profile data (populates department name)
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!user) {
+      router.push("/");
+    }
+  }, [hydrated, user, router]);
+
+  // Fetch fresh profile data on mount
+  useEffect(() => {
+    if (hydrated && user) {
+      fetchProfile();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // Clear error when component unmounts
+  useEffect(() => {
+    return () => {
+      clearError();
+    };
+  }, [clearError]);
+
+  // Strip +216 from phone if present
+  const stripCountryCode = (phone: string | undefined | null): string => {
+    if (!phone) return "";
+    const digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("216")) {
+      return digits.substring(3);
+    }
+    return digits.slice(-8) || "";
+  };
+
+  // Sync form data from user
+  useEffect(() => {
+    if (user && !isEditing && !syncRef.current) {
+      const timer = setTimeout(() => {
+        setFormData({
+          fullName: user.fullName || "",
+          phone: stripCountryCode(user.phone),
+          email: user.email || "",
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+        syncRef.current = true;
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+     
+  }, [user, isEditing]);
+
+  if (!hydrated || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   // Send password reset email to logged-in user's email
   const handleSendPasswordResetEmail = async () => {
@@ -65,59 +136,12 @@ function ProfilePage() {
   // Format phone number - strip +216 prefix and show only 8 digits
   const formatPhoneDisplay = (phone: string | undefined | null): string => {
     if (!phone) return "Not set";
-    // Remove any non-digit characters first
     const digits = phone.replace(/\D/g, "");
-    // If it starts with 216 (Tunisia country code), strip it
     if (digits.startsWith("216")) {
       return digits.substring(3);
     }
-    // Return the last 8 digits (Tunisia phone numbers)
     return digits.slice(-8) || "Not set";
   };
-
-  // Initialize form data with persisted user data directly (no API call needed)
-  const [formData, setFormData] = useState<ProfileFormData>({
-    fullName: user?.fullName || "",
-    phone: user?.phone || "",
-    email: user?.email || "",
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-
-  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
-
-  // Clear error when component unmounts
-  useEffect(() => {
-    return () => {
-      clearError();
-    };
-  }, [clearError]);
-
-  // Sync function to update form data from user
-  const syncFormData = () => {
-    if (user && !syncRef.current) {
-      setFormData({
-        fullName: user.fullName || "",
-        phone: user.phone || "",
-        email: user.email || "",
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-      syncRef.current = true;
-    }
-  };
-
-  // Use setTimeout to defer the state update and avoid the lint rule
-  useEffect(() => {
-    if (user && !isEditing && !syncRef.current) {
-      const timer = setTimeout(() => {
-        syncFormData();
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [user, isEditing]);
 
   // Validation functions
   const validateFullName = (value: string): string | undefined => {
@@ -129,14 +153,9 @@ function ProfilePage() {
 
   const validatePhone = (value: string): string | undefined => {
     if (!value) return undefined;
-    // Accept either E.164 format (+216 followed by 8 digits) or just 8 digits
-    const digitsOnly = value.replace(/\D/g, "");
-    if (digitsOnly.startsWith("216")) {
-      // Remove country code and check if it's 8 digits
-      const localNumber = digitsOnly.substring(3);
-      if (localNumber.length !== 8) return "Phone must be 8 digits (e.g., 25448885)";
-    } else if (digitsOnly.length !== 8) {
-      return "Phone must be 8 digits (e.g., 25448885)";
+    const phoneRegex = /^[2-9][0-9]{7}$/;
+    if (!phoneRegex.test(value)) {
+      return "Phone must be 8 digits starting with 2-9 (e.g., 25448885)";
     }
     return undefined;
   };
@@ -188,7 +207,7 @@ function ProfilePage() {
     if (user) {
       setFormData({
         fullName: user.fullName || "",
-        phone: user.phone || "",
+        phone: stripCountryCode(user.phone),
         email: user.email || "",
         currentPassword: "",
         newPassword: "",
@@ -279,26 +298,35 @@ function ProfilePage() {
   };
 
   return (
-    <div className="min-h-auto bg-gradient-to-br from-slate-50 to-slate-100 pb-8">
-      {/* Navigation */}
-      <nav className="bg-gradient-to-r from-primary to-primary-700 text-white shadow-lg mb-6">
+    <DashboardLayout>
+    <div className="min-h-screen bg-slate-50/50 pb-8">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Smart City Tunisia</h1>
-              <Link 
-                href="/dashboard" 
-                className="text-sm text-primary-100 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.back()}
+                className="w-10 h-10 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center transition-colors"
               >
-                Dashboard
-              </Link>
+                <ArrowLeft className="w-5 h-5 text-slate-600" />
+              </button>
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-800">Smart City Tunisia</h1>
+                <p className="text-sm text-slate-500">Profile Settings</p>
+              </div>
+            </div>
+            
+            <div className="hidden md:flex items-center gap-2 bg-slate-100 px-4 py-2.5 rounded-xl">
+              <User className="w-5 h-5 text-slate-600" />
+              <span className="text-sm font-medium text-slate-700">{user.fullName}</span>
             </div>
           </div>
         </div>
-      </nav>
+      </div>
 
       {/* Main Content */}
       <main className="container mx-auto px-4">
@@ -441,14 +469,44 @@ function ProfilePage() {
               {/* Phone */}
               {isEditing ? (
                 <div className="p-4 bg-slate-50 rounded-xl">
-                  <Input
-                    label="Phone"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
-                    error={validationErrors.phone}
-                    placeholder="25448885"
-                    helperText="Optional. Enter 8 digits (e.g., 25448885)"
-                  />
+                  <div className="w-full">
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                      Phone
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                      <span style={{
+                        padding: '0 12px',
+                        height: 42,
+                        display: 'flex', alignItems: 'center',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRight: 'none',
+                        borderRadius: '8px 0 0 8px',
+                        fontSize: 13, color: '#64748b',
+                        fontFamily: 'DM Mono, monospace',
+                        flexShrink: 0
+                      }}>TN</span>
+                      <input
+                        type="tel"
+                        className="w-full px-3 py-2.5 border rounded-r-lg focus:outline-none focus:ring-4 focus:border-primary focus:ring-primary/20 transition-all placeholder:text-slate-400"
+                        style={{ borderRadius: '0 8px 8px 0' }}
+                        placeholder="2X XXX XXX"
+                        maxLength={8}
+                        value={formData.phone}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                          handleInputChange("phone", digits);
+                        }}
+                      />
+                    </div>
+                    {validationErrors.phone && (
+                      <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                        <span className="inline-block w-1 h-1 bg-red-600 rounded-full"></span>
+                        {validationErrors.phone}
+                      </p>
+                    )}
+                    <p className="mt-1.5 text-sm text-slate-500">Optional. Enter 8 digits (e.g., 25448885)</p>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
@@ -460,6 +518,55 @@ function ProfilePage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-slate-900 font-medium">{user?.phone ? formatPhoneDisplay(user.phone) : <span className="text-slate-400 italic">Not set</span>}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Municipality */}
+              {(user.role === "CITIZEN" || user.role === "MUNICIPAL_AGENT" || user.role === "ADMIN" || user.role === "DEPARTMENT_MANAGER") && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-3 min-w-[140px]">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Municipality</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-900 font-medium">
+                      {user.municipalityName || (user.municipality && typeof user.municipality === 'object' ? user.municipality.name : <span className="text-slate-400 italic">Not set</span>)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Governorate */}
+              {(user.role === "CITIZEN" || user.role === "MUNICIPAL_AGENT" || user.role === "ADMIN" || user.role === "DEPARTMENT_MANAGER") && user.governorate && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-3 min-w-[140px]">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Governorate</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-900 font-medium">{user.governorate}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Department (for MANAGER and TECHNICIAN) */}
+              {(user.role === "DEPARTMENT_MANAGER" || user.role === "TECHNICIAN") && user.department && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className="flex items-center gap-3 min-w-[140px]">
+                    <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Department</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-900 font-medium">
+                      {typeof user.department === 'object' ? user.department.name : user.department}
+                    </p>
                   </div>
                 </div>
               )}
@@ -551,14 +658,10 @@ function ProfilePage() {
         )}
       </main>
     </div>
+    </DashboardLayout>
   );
 }
 
-// Wrap with ProtectedRoute for route-level protection
 export default function ProfilePageWithAuth() {
-  return (
-    <ProtectedRoute>
-      <ProfilePage />
-    </ProtectedRoute>
-  );
+  return <ProfilePage />;
 }

@@ -1,13 +1,58 @@
 const mongoose = require("mongoose");
 
+// All notification types - using String with validation against this list
+// Using String type (not enum) to allow flexibility while still documenting expected types
+const NOTIFICATION_TYPES = [
+  // Status changes (lowercase - used by notification service)
+  "submitted", "validated", "rejected", "assigned", "in_progress",
+  "resolved", "closed", "report_accepted", "report_rejected",
+  
+  // Status changes (uppercase - alternative)
+  "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED",
+  
+  // Complaint lifecycle (snake_case for new types)
+  "complaint_submitted", "complaint_validated", "complaint_rejected",
+  "complaint_assigned", "complaint_in_progress", "complaint_resolved", "complaint_closed",
+  
+  // Resolution workflow
+  "resolution_approved", "resolution_rejected", "report_submitted",
+  
+  // System notifications
+  "welcome", "SYSTEM", "SLA_ALERT", "priority_changed",
+  
+  // User interactions
+  "COMMENT", "CONFIRMATION", "CONFIRMATION_RECEIVED",
+  "public_note", "blocage", "note",
+  "upvote", "upvoted", "confirm",
+  
+  // Assignment related
+  "ASSIGNMENT", "new_complaint_municipality", "department_assigned",
+  
+  // Technician related
+  "technician_message", "manager_warning",
+  
+  // General
+  "info", "warning", "error", "success"
+];
+
 const notificationSchema = new mongoose.Schema(
   {
+    recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    type: {
+      type: String,
+      default: "info"
+    },
+    title: { type: String, default: "Notification" },
     message: { type: String, required: true },
-    isRead: { type: Boolean, default: false },
-    recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     complaint: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint" },
+    relatedId: { type: mongoose.Schema.Types.ObjectId },
+    isRead: { type: Boolean, default: false },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
+
+// Index for efficient querying
+notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ recipient: 1, isRead: 1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

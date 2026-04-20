@@ -11,7 +11,7 @@ declare global {
 }
 
 interface ReCaptchaBadgeProps {
-  action: "register" | "login";
+  action: "register" | "login" | "setPassword" | "resetPassword";
   onTokenChange?: (token: string | null) => void;
 }
 

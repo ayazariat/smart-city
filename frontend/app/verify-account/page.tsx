@@ -8,6 +8,7 @@ import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { useAuthStore } from "@/store/useAuthStore";
+import { setClientAuthTokens } from "@/lib/api";
 
 function VerifyAccountContent() {
   const router = useRouter();
@@ -33,13 +34,47 @@ function VerifyAccountContent() {
     setErrorMessage(null);
 
     try {
-      await verifyMagicLink(magicToken!, magicUserId!);
-      setIsVerified(true);
-      
-      // Redirect to login after success
-      setTimeout(() => {
-        router.push("/");
-      }, 2000);
+      const params = new URLSearchParams({ token: magicToken!, userId: magicUserId! });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/verify-magic-link?${params.toString()}`,
+        { method: 'GET' }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrorMessage(data.message || "La vérification a échoué.");
+        return;
+      }
+
+      // Check if user needs to set password (admin-created user)
+      if (data.needsPasswordSetup) {
+        // Redirect to password setup page
+        window.location.href = data.redirectUrl;
+        return;
+      }
+
+      // Store tokens and redirect to dashboard
+      if (data.token && data.refreshToken) {
+        // Set tokens in cookies for API calls
+        setClientAuthTokens(data.token, data.refreshToken);
+        
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Redirect to dashboard with tokens in URL for verification handling
+        setIsVerified(true);
+        setTimeout(() => {
+          router.push(`/dashboard?verified=true&token=${data.token}&refreshToken=${data.refreshToken}`);
+        }, 1500);
+      } else {
+        // Fallback: redirect to login if no tokens
+        setIsVerified(true);
+        setTimeout(() => {
+          router.push("/?verified=true");
+        }, 2000);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -93,15 +128,6 @@ function VerifyAccountContent() {
                     <Alert variant="error" onClose={() => setErrorMessage(null)}>
                       {errorMessage}
                     </Alert>
-                  </div>
-                  <div className="text-center py-4">
-                    <Link
-                      href="/"
-                      className="inline-flex items-center gap-2 text-primary hover:text-primary-700 font-semibold"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                      Retour à la page de connexion
-                    </Link>
                   </div>
                 </>
               ) : isVerifying ? (
@@ -180,7 +206,7 @@ function VerifyAccountLoading() {
     <div className="min-h-screen flex items-center justify-center bg-secondary-100">
       <div className="flex flex-col items-center gap-3">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-slate-600">Chargement...</p>
+        <p className="text-slate-600">Loading...</p>
       </div>
     </div>
   );

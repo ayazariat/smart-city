@@ -12,38 +12,32 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, token, refreshToken, verifySession, refreshAccessToken } = useAuthStore();
+  const { user, token, refreshToken, verifySession, refreshAccessToken, hydrated } = useAuthStore();
   const [isVerifying, setIsVerifying] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
+      // Wait for auth store to be hydrated from localStorage
+      if (!hydrated) {
+        return;
+      }
+
       // If no token at all, redirect to login
       if (!token) {
         router.push(`/?redirect=${encodeURIComponent(pathname)}`);
         return;
       }
 
-      // If user is already loaded from persisted storage, access is granted
-      if (user) {
-        // Check role-based access
-        if (allowedRoles && !allowedRoles.includes(user.role)) {
-          router.push("/unauthorized");
-          return;
-        }
-        setIsReady(true);
-        return;
-      }
-
-      // We have token but no user yet - need to verify
+      // CRITICAL: Always verify the token with the server
+      // Don't trust localStorage blindly - the token might be expired
       setIsVerifying(true);
       
       // Try to refresh token first if we have a refresh token
       if (refreshToken) {
         const refreshed = await refreshAccessToken();
         if (refreshed) {
-          // Token was refreshed, now verify session
-          const { token: newToken, user: refreshedUser } = useAuthStore.getState();
+          const { user: refreshedUser } = useAuthStore.getState();
           if (refreshedUser) {
             if (allowedRoles && !allowedRoles.includes(refreshedUser.role)) {
               router.push("/unauthorized");
@@ -56,14 +50,15 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
         }
       }
 
+      // Verify the session with the server
       try {
         const isValid = await verifySession();
         if (!isValid) {
-          router.push(`/?redirect=${encodeURIComponent(pathname)}`);
+          router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
           return;
         }
       } catch {
-        router.push(`/?redirect=${encodeURIComponent(pathname)}`);
+        router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
         return;
       }
 
@@ -74,6 +69,10 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
           router.push("/unauthorized");
           return;
         }
+      } else {
+        // No user after verification means token was invalid
+        router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
+        return;
       }
 
       setIsVerifying(false);
@@ -83,7 +82,19 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     // Small delay to allow zustand persistence to hydrate
     const timer = setTimeout(checkAuth, 50);
     return () => clearTimeout(timer);
-  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles]);
+  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles, hydrated, refreshToken]);
+
+  // Show loading while waiting for hydration
+  if (!hydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-secondary-100">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-600">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If not ready and no verification needed, show nothing to prevent flash
   if (!isReady && !isVerifying) {

@@ -1,0 +1,52 @@
+name: smart_city_app
+description: "Smart City Tunisia - Mobile Application"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # HTTP & API
+  http: ^1.2.2
+
+  # Secure Storage (tokens)
+  flutter_secure_storage: ^9.2.2
+
+  # WebSocket / Real-time
+  socket_io_client: ^3.0.2
+
+  # Image handling
+  image_picker: ^1.1.2
+  cached_network_image: ^3.4.1
+
+  # Location
+  geolocator: ^13.0.1
+
+  # Charts
+  fl_chart: ^0.69.2
+
+  # Utils
+  intl: ^0.20.1
+  uuid: ^4.5.1
+  path_provider: ^2.1.5
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/

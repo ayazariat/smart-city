@@ -10,4 +10,7 @@ const repairTeamSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+repairTeamSchema.index({ department: 1 });
+repairTeamSchema.index({ isAvailable: 1 });
+
 module.exports = mongoose.model("RepairTeam", repairTeamSchema);

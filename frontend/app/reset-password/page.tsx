@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Lock, Sparkles, ArrowLeft, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
-  const userId = searchParams.get("userId");
+  const userId = searchParams.get("userId") || searchParams.get("id");
+  const isSetup = searchParams.get("isSetup") === "true";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -52,7 +53,7 @@ export default function ResetPasswordPage() {
     }
 
     if (!token || !userId) {
-      setError("Invalid reset link. Please request a new password reset.");
+      setError(isSetup ? "Invalid setup link." : "Invalid reset link. Please request a new password reset.");
       return;
     }
 
@@ -67,14 +68,15 @@ export default function ResetPasswordPage() {
         body: JSON.stringify({ 
           userId,
           token,
-          newPassword: password 
+          newPassword: password,
+          isSetup: isSetup 
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to reset password");
+        throw new Error(data.message || (isSetup ? "Failed to set up password" : "Failed to reset password"));
       }
 
       setSuccess(true);
@@ -91,16 +93,18 @@ export default function ResetPasswordPage() {
         <AnimatedBackground />
         <div className="min-h-screen flex items-center justify-center p-4">
           <div className="w-full max-w-md">
-            <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 p-8 animate-scaleIn">
+            <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 animate-scaleIn">
               <div className="text-center mb-8">
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-success/20 rounded-2xl mb-4 shadow-xl">
                   <CheckCircle className="w-8 h-8 text-success" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  Password Reset!
+                  {isSetup ? "Account Activated!" : "Password Reset!"}
                 </h1>
                 <p className="text-slate-600">
-                  Your password has been successfully reset. You can now log in with your new password.
+                  {isSetup 
+                    ? "Your password has been set successfully. You can now sign in."
+                    : "Your password has been reset successfully. You can now sign in."}
                 </p>
               </div>
 
@@ -125,16 +129,18 @@ export default function ResetPasswordPage() {
         <AnimatedBackground />
         <div className="min-h-screen flex items-center justify-center p-4">
           <div className="w-full max-w-md">
-            <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 p-8 animate-scaleIn">
+            <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 animate-scaleIn">
               <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-2xl mb-4 shadow-xl">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-2xl mb-4">
                   <AlertCircle className="w-8 h-8 text-red-500" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  Invalid Reset Link
+                  {isSetup ? "Invalid Activation Link" : "Invalid Reset Link"}
                 </h1>
                 <p className="text-slate-600">
-                  This password reset link is invalid or has expired. Please request a new one.
+                  {isSetup 
+                    ? "This activation link is invalid or has expired."
+                    : "This reset link is invalid or has expired. Please request a new one."}
                 </p>
               </div>
 
@@ -175,15 +181,17 @@ export default function ResetPasswordPage() {
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              Set New Password
+              {isSetup ? "Set Your Password" : "New Password"}
             </h1>
             <p className="text-slate-600">
-              Your password must be different from previously used passwords.
+              {isSetup 
+                ? "Create a secure password to activate your account."
+                : "Your password must be different from previously used passwords."}
             </p>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 animate-scaleIn delay-200">
             {error && (
               <div className="mb-6 animate-slideInLeft">
                 <Alert variant="error" onClose={() => setError(null)}>
@@ -199,7 +207,7 @@ export default function ResetPasswordPage() {
               <div className="animate-slideInLeft delay-300">
                 <div className="relative">
                   <Input
-                    label="New Password"
+                    label={isSetup ? "Password" : "New Password"}
                     type={showPassword ? "text" : "password"}
                     name="password"
                     value={password}
@@ -210,7 +218,7 @@ export default function ResetPasswordPage() {
                       }
                     }}
                     error={validationErrors.password}
-                    placeholder="Enter new password"
+                    placeholder="Enter password"
                     icon={<Lock size={18} />}
                     required
                   />
@@ -223,14 +231,14 @@ export default function ResetPasswordPage() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Must include uppercase, lowercase, number, and special character
+                  Must contain uppercase, lowercase, numbers and special characters
                 </p>
               </div>
 
               <div className="animate-slideInLeft delay-400">
                 <div className="relative">
                   <Input
-                    label="Confirm New Password"
+                    label={isSetup ? "Confirm Password" : "Confirm New Password"}
                     type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
                     value={confirmPassword}
@@ -264,7 +272,7 @@ export default function ResetPasswordPage() {
                   className="group"
                   icon={<Lock className="w-5 h-5" />}
                 >
-                  Reset Password
+                  {isSetup ? "Activate Account" : "Reset Password"}
                 </Button>
               </div>
             </form>
@@ -282,5 +290,17 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
