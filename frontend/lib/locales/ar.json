@@ -919,6 +919,26 @@
     "statsAssigned": "مسندة",
     "statsInProgress": "قيد التنفيذ",
     "statsResolved": "تم الحل",
-    "statsOverdue": "متأخرة"
+    "statsOverdue": "متأخرة",
+    "notification": {
+      "status": {
+        "validated": "تم التحقق من الشكوى",
+        "validated.desc": "تم التحقق من شكواك وسيتم معالجتها.",
+        "rejected": "تم رفض الشكوى",
+        "rejected.desc": "تم رفض شكواك.",
+        "assigned": "تم إسناء الشكوى",
+        "assigned.desc": "تم إسناء شكواك إلى فريق.",
+        "inProgress": "قيد المعالجة",
+        "inProgress.desc": "شكواك قيد المعالجة.",
+        "resolved": "تم حل الشكوى",
+        "resolved.desc": "تم حل شكواك.",
+        "closed": "تم إغلاق الشكوى",
+        "closed.desc": "تم إغلاق شكواك."
+      },
+      "newComplaint": "شكوى جديدة",
+      "newComplaint.desc": "تم تقديم شكوى جديدة.",
+      "assignedToYou": "مسندة إليك",
+      "assignedToYou.desc": "تم إسناء شكوى إليك."
+    }
   }
 }

@@ -11,8 +11,8 @@ AI_SERVICE_PORT = 8000
 MIN_TRAINING_SAMPLES = 20
 
 # Duplicate Detection Thresholds
-DUPLICATE_THRESHOLD_REVIEW = 0.50      # POSSIBLE_DUPLICATE  (was 0.55 — more sensitive)
-DUPLICATE_THRESHOLD_PROBABLE = 0.72    # PROBABLE_DUPLICATE  (was 0.75 — slightly lower)
+DUPLICATE_THRESHOLD_REVIEW = 0.15
+DUPLICATE_THRESHOLD_PROBABLE = 0.30
 
 # Urgency Score Thresholds
 URGENCY_THRESHOLDS = {
@@ -192,10 +192,10 @@ SENSITIVE_ZONES = {
 
 # Duplicate Detection Weights
 DUPLICATE_WEIGHTS = {
-    "textSimilarity": 0.40,
-    "geographicProximity": 0.30,
-    "categoryMatch": 0.20,
-    "temporalProximity": 0.10
+    "textSimilarity": 0.70,
+    "geographicProximity": 0.15,
+    "categoryMatch": 0.10,
+    "temporalProximity": 0.05
 }
 
 # Geographic Proximity Scoring (in meters)

@@ -20,8 +20,6 @@ interface Department {
   _id: string;
   name: string;
   description?: string;
-  email?: string;
-  phone?: string;
   categories: string[];
 }
 
@@ -63,7 +61,7 @@ export default function AdminSettingsPage() {
   // Department modal state
   const [deptModal, setDeptModal] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
-  const [deptForm, setDeptForm] = useState({ name: "", description: "", email: "", phone: "", categories: [] as string[] });
+  const [deptForm, setDeptForm] = useState({ name: "", description: "", categories: [] as string[] });
   const [savingDept, setSavingDept] = useState(false);
 
   // SLA form
@@ -119,10 +117,10 @@ export default function AdminSettingsPage() {
   const openDeptModal = (dept?: Department) => {
     if (dept) {
       setEditingDept(dept);
-      setDeptForm({ name: dept.name, description: dept.description || "", email: dept.email || "", phone: dept.phone || "", categories: dept.categories || [] });
+      setDeptForm({ name: dept.name, description: dept.description || "", categories: dept.categories || [] });
     } else {
       setEditingDept(null);
-      setDeptForm({ name: "", description: "", email: "", phone: "", categories: [] });
+      setDeptForm({ name: "", description: "", categories: [] });
     }
     setDeptModal(true);
   };
@@ -244,10 +242,6 @@ export default function AdminSettingsPage() {
                                     {CATEGORY_LABELS[cat] || cat}
                                   </span>
                                 ))}
-                              </div>
-                              <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                                {dept.email && <span>✉ {dept.email}</span>}
-                                {dept.phone && <span>☎ {dept.phone}</span>}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0 ml-4">
@@ -412,29 +406,9 @@ export default function AdminSettingsPage() {
               placeholder="Optional description..."
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
-              <input
-                type="email"
-                value={deptForm.email}
-                onChange={(e) => setDeptForm({ ...deptForm, email: e.target.value })}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                placeholder="dept@city.tn"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Phone</label>
-              <input
-                value={deptForm.phone}
-                onChange={(e) => setDeptForm({ ...deptForm, phone: e.target.value })}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                placeholder="+216..."
-              />
-            </div>
-          </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Handles Categories</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Handles Categories (Default Assignment)</label>
+            <p className="text-xs text-slate-500 mb-2">When a citizen submits a complaint with these categories, this department will be suggested as the default assignment.</p>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
               {ALL_CATEGORIES.map((cat) => {
                 const checked = deptForm.categories.includes(cat);

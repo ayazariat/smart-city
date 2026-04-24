@@ -1,16 +1,22 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
-import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 
 class NewComplaintScreen extends StatefulWidget {
   final VoidCallback onComplaintSubmitted;
+  final VoidCallback? onBack;
 
-  const NewComplaintScreen({super.key, required this.onComplaintSubmitted});
+  const NewComplaintScreen({
+    super.key,
+    required this.onComplaintSubmitted,
+    this.onBack,
+  });
 
   @override
   State<NewComplaintScreen> createState() => _NewComplaintScreenState();
@@ -56,6 +62,67 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     'GREEN_SPACE': Icons.park,
     'OTHER': Icons.help_outline,
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController.addListener(_onTextChanged);
+    _descriptionController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    if (!_duplicateOverride &&
+        _titleController.text.trim().length >= 5 &&
+        _descriptionController.text.trim().length >= 10 &&
+        _selectedCategory != null &&
+        _selectedMunicipality != null) {
+      _checkDuplicates();
+    }
+  }
+
+  // Duplicate detection state
+  List<Map<String, dynamic>> _proactiveDuplicates = [];
+  bool _isCheckingDuplicates = false;
+  bool _duplicateOverride = false;
+
+  // Check for duplicates proactively (BL-25)
+  @protected
+  Future<void> _checkDuplicates() async {
+    if (_titleController.text.trim().length < 5 ||
+        _descriptionController.text.trim().length < 10 ||
+        _selectedCategory == null ||
+        _selectedMunicipality == null ||
+        _duplicateOverride) {
+      return;
+    }
+
+    setState(() => _isCheckingDuplicates = true);
+
+    try {
+      final result = await _complaintService.checkDuplicate(
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        category: _selectedCategory!,
+        municipality: _selectedMunicipality!,
+        latitude: _latitude,
+        longitude: _longitude,
+      );
+
+      if (result['topMatches'] != null &&
+          (result['topMatches'] as List).isNotEmpty) {
+        setState(() {
+          _proactiveDuplicates = (result['topMatches'] as List)
+              .take(3)
+              .cast<Map<String, dynamic>>()
+              .toList();
+        });
+      }
+    } catch (e) {
+      setState(() => _proactiveDuplicates = []);
+    } finally {
+      setState(() => _isCheckingDuplicates = false);
+    }
+  }
 
   void _onGovernorateChanged(String? value) {
     setState(() {
@@ -223,6 +290,98 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // BL-25: Duplicate warning
+              if (_proactiveDuplicates.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.content_copy,
+                            size: 20,
+                            color: Colors.amber.shade700,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Similar complaint found!',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.amber.shade700,
+                              ),
+                            ),
+                          ),
+                          if (!_duplicateOverride)
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _duplicateOverride = true),
+                              child: Icon(
+                                Icons.close,
+                                size: 18,
+                                color: Colors.amber.shade700,
+                              ),
+                            ),
+                        ],
+                      ),
+                      ..._proactiveDuplicates
+                          .take(2)
+                          .map(
+                            (m) => Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '- ${m['title'] ?? 'Similar complaint'}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.amber.shade900,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+              if (_isCheckingDuplicates)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Checking for duplicates...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               // Header
               Container(
                 padding: const EdgeInsets.all(20),

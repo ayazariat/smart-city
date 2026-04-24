@@ -227,6 +227,11 @@ export interface CreateComplaintData {
   phone?: string;
   // combined incident datetime (ISO string)
   incidentDateTime?: string;
+  // additional fields
+  municipality?: string;
+  governorate?: string;
+  incidentDate?: Date;
+  incidentTime?: string;
 }
 
 export interface Comment {

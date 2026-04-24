@@ -1,160 +1,149 @@
 /**
  * Notification Service
- * Handles creating and sending notifications to users
+ * Handles sending notifications to users via Socket.IO and in-app store
  */
 
-const Notification = require('../models/Notification');
-const User = require('../models/User');
-const { sendComplaintStatusEmail } = require('../utils/mailer');
-
-/**
- * Send a notification to a user
- * @param {string} userId - Recipient user ID
- * @param {Object} notification - Notification data
- * @param {string} notification.type - Notification type
- * @param {string} notification.message - Notification message
- * @param {string} [notification.complaintId] - Related complaint ID
- * @param {Object} io - Socket.io instance for real-time notifications
- */
-const sendNotification = async (io, userId, notification) => {
+const sendNotification = async (io, recipientId, data) => {
+  const { type, title, message, complaintId, priority = 'normal', relatedId } = data;
+  
+  const Notification = require('../models/Notification');
+  const mongoose = require('mongoose');
+  
+  // Store notification in database
   try {
-    const notif = await Notification.create({
-      recipient: userId,
-      type: notification.type,
-      title: notification.title || 'Notification',
-      message: notification.message,
-      complaint: notification.complaintId,
-      relatedId: notification.complaintId,
-      isRead: false
+    const notification = await Notification.create({
+      recipient: new mongoose.Types.ObjectId(recipientId),
+      type,
+      title, // This should be a status key like 'notification.validated'
+      message,
+      relatedId: complaintId || relatedId,
+      priority,
+      status: 'UNREAD'
     });
-
+    
+    // Emit real-time notification via Socket.IO
     if (io) {
-      io.to(`user:${userId}`).emit('notification', {
-        _id: notif._id.toString(),
-        type: notification.type,
-        title: notification.title || 'Notification',
-        message: notification.message,
-        complaintId: notification.complaintId,
+      io.to(`user:${recipientId}`).emit('notification', {
+        _id: notification._id,
+        type,
+        title, // Pass the key for i18n translation
+        message,
+        relatedId: complaintId || relatedId,
         isRead: false,
-        createdAt: notif.createdAt
+        createdAt: notification.createdAt
       });
     }
-
-    return notif;
-  } catch (error) {
-    console.error('Error sending notification:', error);
-    throw error;
+    
+    return notification;
+  } catch (err) {
+    console.error('[notification] Save error:', err.message);
+    throw err;
   }
 };
 
 /**
- * Notify multiple users at once
- * @param {string[]} userIds - Array of user IDs
- * @param {Object} notification - Notification data
- * @param {Object} io - Socket.io instance
+ * Send notification to multiple users
  */
-const sendNotificationToMultiple = async (io, userIds, notification) => {
-  const promises = userIds.map(userId => sendNotification(io, userId, notification));
-  return Promise.all(promises);
+const sendNotificationToMultiple = async (io, recipientIds, data) => {
+  const notifications = [];
+  for (const recipientId of recipientIds) {
+    try {
+      const notif = await sendNotification(io, recipientId, data);
+      notifications.push(notif);
+    } catch (err) {
+      console.error(`[notification] Failed for ${recipientId}:`, err.message);
+    }
+  }
+  return notifications;
 };
 
 /**
- * Notify all users in a specific role
- * @param {string} role - User role
- * @param {Object} notification - Notification data
- * @param {Object} io - Socket.io instance
+ * Notify users by role
+ * Useful for broadcasting system announcements
  */
-const notifyUsersByRole = async (io, role, notification) => {
-  try {
-    const users = await User.find({ role }).select('_id');
-    const userIds = users.map(u => u._id.toString());
-    return sendNotificationToMultiple(io, userIds, notification);
-  } catch (error) {
-    console.error('Error notifying users by role:', error);
-    throw error;
-  }
+const notifyUsersByRole = async (io, role, data) => {
+  const User = require('../models/User');
+  const users = await User.find({ role }).select('_id').lean();
+  const userIds = users.map(u => u._id.toString());
+  return sendNotificationToMultiple(io, userIds, data);
 };
 
 /**
- * Notify all users in a municipality
- * @param {string} municipalityName - Municipality name
- * @param {Object} notification - Notification data
- * @param {Object} io - Socket.io instance
+ * Notify users in a specific municipality
  */
-const notifyUsersByMunicipality = async (io, municipalityName, notification) => {
-  try {
-    const users = await User.find({ 
-      municipalityName: { $regex: new RegExp(`^${municipalityName}$`, 'i') } 
-    }).select('_id');
-    const userIds = users.map(u => u._id.toString());
-    return sendNotificationToMultiple(io, userIds, notification);
-  } catch (error) {
-    console.error('Error notifying users by municipality:', error);
-    throw error;
-  }
+const notifyUsersByMunicipality = async (io, municipalityId, data) => {
+  const User = require('../models/User');
+  const users = await User.find({ municipality: municipalityId }).select('_id').lean();
+  const userIds = users.map(u => u._id.toString());
+  return sendNotificationToMultiple(io, userIds, data);
 };
 
 /**
- * Notify managers in a department
- * @param {string} departmentId - Department ID
- * @param {Object} notification - Notification data
- * @param {Object} io - Socket.io instance
+ * Notify managers of a specific department
  */
-const notifyManagersByDepartment = async (io, departmentId, notification) => {
-  try {
-    const users = await User.find({ department: departmentId, role: 'DEPARTMENT_MANAGER' }).select('_id');
-    const userIds = users.map(u => u._id.toString());
-    return sendNotificationToMultiple(io, userIds, notification);
-  } catch (error) {
-    console.error('Error notifying managers by department:', error);
-    throw error;
-  }
+const notifyManagersByDepartment = async (io, departmentId, data) => {
+  const User = require('../models/User');
+  const users = await User.find({ 
+    department: departmentId,
+    role: 'DEPARTMENT_MANAGER'
+  }).select('_id').lean();
+  const userIds = users.map(u => u._id.toString());
+  return sendNotificationToMultiple(io, userIds, data);
 };
 
 /**
  * Notify technicians assigned to a complaint
- * @param {string[]} technicianIds - Array of technician IDs
- * @param {Object} notification - Notification data
- * @param {Object} io - Socket.io instance
  */
-const notifyTechnicians = async (io, technicianIds, notification) => {
-  return sendNotificationToMultiple(io, technicianIds, notification);
+const notifyTechnicians = async (io, complaintId, data) => {
+  const Complaint = require('../models/Complaint');
+  const complaint = await Complaint.findById(complaintId).select('assignedTo').lean();
+  if (complaint?.assignedTo) {
+    return sendNotification(io, complaint.assignedTo.toString(), data);
+  }
+  return null;
+};
+
+/**
+ * Send email notification
+ */
+const sendComplaintStatusEmail = async (email, fullName, complaintTitle, status) => {
+  // Placeholder for email service integration
+  console.log(`[email] Would send to ${email}: Complaint "${complaintTitle}" status: ${status}`);
+  return Promise.resolve();
 };
 
 /**
  * Notify citizen about complaint status change
- * @param {string} citizenId - Citizen user ID
- * @param {string} complaintId - Complaint ID
- * @param {string} status - New status
- * @param {string} statusLabel - Human-readable status label
- * @param {Object} io - Socket.io instance
+ * Uses status keys for i18n translation on frontend
  */
 const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, statusLabel) => {
-  const statusMessages = {
-    'VALIDATED': `Votre réclamation a été validée et sera traitée.`,
-    'REJECTED': `Votre réclamation a été rejetée.`,
-    'ASSIGNED': `Votre réclamation a été assignée à une équipe.`,
-    'IN_PROGRESS': 'Votre reclamation est en cours de traitement.',
-    'RESOLVED': `Votre réclamation a été résolue.`,
-    'CLOSED': `Votre réclamation a été fermée.`
+  // Use status keys for i18n translation on frontend
+  const statusKeys = {
+    'VALIDATED': 'notification.status.validated',
+    'REJECTED': 'notification.status.rejected',
+    'ASSIGNED': 'notification.status.assigned',
+    'IN_PROGRESS': 'notification.status.inProgress',
+    'RESOLVED': 'notification.status.resolved',
+    'CLOSED': 'notification.status.closed'
   };
-  const statusTitles = {
-    'VALIDATED': 'Réclamation validée ✅',
-    'REJECTED': 'Réclamation rejetée ❌',
-    'ASSIGNED': 'Réclamation assignée 📋',
-    'IN_PROGRESS': 'Traitement en cours 🔧',
-    'RESOLVED': 'Réclamation résolue 🎉',
-    'CLOSED': 'Réclamation fermée 🔒'
+  
+  const statusMessages = {
+    'VALIDATED': 'notification.status.validated.desc',
+    'REJECTED': 'notification.status.rejected.desc',
+    'ASSIGNED': 'notification.status.assigned.desc',
+    'IN_PROGRESS': 'notification.status.inProgress.desc',
+    'RESOLVED': 'notification.status.resolved.desc',
+    'CLOSED': 'notification.status.closed.desc'
   };
 
-  const message = statusMessages[status] || `Statut de votre réclamation: ${statusLabel}`;
-  const title = statusTitles[status] || `Mise à jour: ${statusLabel}`;
+  const titleKey = statusKeys[status] || `notification.status.${status}`;
+  const messageKey = statusMessages[status] || `notification.status.${status}.desc`;
 
   // Send real-time notification
   const notif = await sendNotification(io, citizenId, {
     type: status.toLowerCase(),
-    title,
-    message,
+    title: titleKey, // Use key like 'notification.status.validated'
+    message: messageKey, // Use key like 'notification.status.validated.desc'
     complaintId
   });
 
@@ -165,7 +154,7 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, sta
       const Complaint = require('../models/Complaint');
       const complaint = await Complaint.findById(complaintId).select('title').lean();
       const complaintTitle = complaint?.title || 'Your complaint';
-      sendComplaintStatusEmail(citizen.email, citizen.fullName, complaintTitle, status, complaintId)
+      sendComplaintStatusEmail(citizen.email, citizen.fullName, complaintTitle, status)
         .catch(err => console.error('[notification] Email send error:', err.message));
     }
   } catch (emailErr) {
@@ -173,6 +162,7 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, sta
   }
 
   return notif;
+  
 };
 
 module.exports = {

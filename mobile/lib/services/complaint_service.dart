@@ -307,4 +307,37 @@ class ComplaintService {
   Future<void> markAllAsRead() async {
     await _apiClient.put('/notifications/read-all', {});
   }
+
+  // Duplicate Detection (BL-25)
+  Future<Map<String, dynamic>> checkDuplicate({
+    required String title,
+    required String description,
+    required String category,
+    required String municipality,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await _apiClient.post('/ai/duplicate/check', {
+      'title': title,
+      'description': description,
+      'category': category,
+      'municipality': municipality,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+    });
+    return response;
+  }
+
+  Future<Map<String, dynamic>> confirmDuplicateDecision({
+    required String newComplaintId,
+    required String existingComplaintId,
+    required String action,
+  }) async {
+    final response = await _apiClient.post('/ai/duplicate/confirm', {
+      'newComplaintId': newComplaintId,
+      'existingComplaintId': existingComplaintId,
+      'action': action,
+    });
+    return response;
+  }
 }

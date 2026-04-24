@@ -265,38 +265,8 @@ export default function NewComplaintPage() {
     return () => clearTimeout(timer);
   }, [title, description, category]);
 
-  // BL-24: Predict urgency using AI when title/description/category/urgency changes
-  useEffect(() => {
-    if (!title.trim() || !description.trim() || !category) {
-      setAiPredictedUrgency(null);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const { predictUrgency } = await import("@/services/complaint.service");
-        const result = await predictUrgency(
-          title,
-          description,
-          category,
-          urgency,
-          commune || "Tunis"
-        );
-
-        if (result) {
-          setAiPredictedUrgency({
-            level: result.predictedUrgency,
-            confidence: result.confidenceScore,
-            explanation: result.explanation,
-          });
-        }
-      } catch (err) {
-        console.error("Urgency prediction failed:", err);
-      }
-    }, 1500); // Debounce
-
-    return () => clearTimeout(timer);
-  }, [title, description, category, urgency, commune]);
+  // REMOVED: BL-24 Urgency prediction - User requested removal
+  // Urgency is now set manually by citizen via slider only
 
   // BL-25: Proactive duplicate check while typing
   useEffect(() => {

@@ -113,8 +113,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [hydrated, user]);
 
   const handleNotificationsClick = useCallback(async () => {
-    setShowNotifications(prev => !prev);
-    if (!showNotifications) {
+    const willShow = !showNotifications;
+    setShowNotifications(willShow);
+    if (willShow && notifications.length === 0) {
       setLoadingNotifs(true);
       try {
         const result = await notificationService.getNotifications();
@@ -124,7 +125,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       } catch { /* silent */ }
       setLoadingNotifs(false);
     }
-  }, [showNotifications]);
+  }, [showNotifications, notifications.length]);
 
   const handleMarkAllRead = async () => {
     try {
@@ -236,7 +237,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                           </div>
                         ) : (
                           <div className="divide-y divide-slate-100">
-                            {notifications.map((notif) => (
+                            {notifications.map((notif) => {
+                              // Translate notification title and message using i18n
+                              const title = notif.title?.startsWith('notification.') ? t(notif.title) : notif.title;
+                              const message = notif.message?.startsWith('notification.') ? t(notif.message) : notif.message;
+                              return (
                               <div
                                 key={notif._id}
                                 className={`px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.isRead ? "bg-primary/5" : ""}`}
@@ -254,8 +259,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                 <div className="flex items-start gap-2.5">
                                   <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${!notif.isRead ? "bg-primary" : "bg-transparent"}`} />
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-slate-800 line-clamp-1">{notif.title}</p>
-                                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{notif.message}</p>
+                                    <p className="text-xs font-medium text-slate-800 line-clamp-1">{title}</p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{message}</p>
                                     <p className="text-[10px] text-slate-400 mt-1">
                                       {new Date(notif.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                                     </p>
@@ -267,7 +272,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                   )}
                                 </div>
                               </div>
-                            ))}
+                            );
+                            })}
                           </div>
                         )}
                       </div>

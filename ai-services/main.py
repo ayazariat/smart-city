@@ -31,6 +31,7 @@ import time
 from routes.urgency_routes import router as urgency_router
 from routes.duplicate_routes import router as duplicate_router
 from routes.trend_routes import router as trend_router
+from routes.clustering_routes import router as clustering_router
 
 # Import service functions for category, keyword, SLA
 from services.category_predictor import predict_category, PredictionRequest as CategoryPredictionRequest
@@ -74,6 +75,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(urgency_router, prefix="/ai/urgency", tags=["Urgency AI (BL-24)"])
 app.include_router(duplicate_router, prefix="/ai/duplicate", tags=["Duplicate AI (BL-25)"])
 app.include_router(trend_router, prefix="/ai/trend", tags=["Trend AI (BL-37)"])
+app.include_router(clustering_router, prefix="/ai/clustering", tags=["Root Cause Clustering (BL-1770032236)"])
 
 
 @app.get("/")

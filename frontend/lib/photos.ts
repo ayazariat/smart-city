@@ -9,6 +9,9 @@ export const getPhotoUrl = (url: string | undefined): string | null => {
   // Already a full HTTPS URL
   if (url.startsWith("https://")) return url;
   
+  // Handle HTTP URLs (local uploads) - convert to HTTPS or keep as is
+  if (url.startsWith("http://")) return url;
+  
   // Protocol-relative URL (//cloudinary...)
   if (url.startsWith("//")) return `https:${url}`;
   

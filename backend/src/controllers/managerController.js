@@ -748,6 +748,99 @@ class ManagerController {
       res.status(500).json({ success: false, message: "Failed to reassign technician" });
     }
   }
+
+  async validate(req, res) {
+    try {
+      const complaint = await Complaint.findById(req.params.id);
+      if (!complaint) {
+        return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      if (complaint.status !== "SUBMITTED") {
+        return res.status(400).json({ success: false, message: "Only SUBMITTED complaints can be validated" });
+      }
+
+      const department = await getManagerDepartment(req.user.userId);
+      const departmentId = department?._id;
+
+      if (departmentId) {
+        complaint.assignedDepartment = departmentId;
+      }
+
+      complaint.status = "ASSIGNED";
+      complaint.validatedBy = req.user.userId;
+      complaint.validatedAt = new Date();
+      if (!complaint.statusHistory) complaint.statusHistory = [];
+      complaint.statusHistory.push({
+        status: "ASSIGNED",
+        updatedBy: req.user.userId,
+        updatedAt: new Date(),
+        notes: "Validated by Manager"
+      });
+
+      await complaint.save();
+
+      if (complaint.createdBy) {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+          type: "validated",
+          title: "notification.status.validated",
+          message: "notification.status.validated.desc",
+          complaintId: complaint._id,
+        });
+      }
+
+      res.json({ success: true, message: "Complaint validated successfully", data: complaint });
+    } catch (error) {
+      console.error("Manager validate error:", error);
+      res.status(500).json({ success: false, message: "Failed to validate complaint" });
+    }
+  }
+
+  async reject(req, res) {
+    try {
+      const { reason } = req.body;
+      if (!reason) {
+        return res.status(400).json({ success: false, message: "Rejection reason is required" });
+      }
+
+      const complaint = await Complaint.findById(req.params.id);
+      if (!complaint) {
+        return res.status(404).json({ success: false, message: "Complaint not found" });
+      }
+
+      if (complaint.status !== "SUBMITTED") {
+        return res.status(400).json({ success: false, message: "Only SUBMITTED complaints can be rejected" });
+      }
+
+      complaint.status = "REJECTED";
+      complaint.rejectionReason = reason;
+      complaint.rejectedBy = req.user.userId;
+      complaint.rejectedAt = new Date();
+      if (!complaint.statusHistory) complaint.statusHistory = [];
+      complaint.statusHistory.push({
+        status: "REJECTED",
+        updatedBy: req.user.userId,
+        updatedAt: new Date(),
+        notes: `Rejected by Manager: ${reason}`
+      });
+
+      await complaint.save();
+
+      if (complaint.createdBy) {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+          type: "rejected",
+          title: "notification.status.rejected",
+          message: "notification.status.rejected.desc",
+          complaintId: complaint._id,
+        });
+      }
+
+      res.json({ success: true, message: "Complaint rejected", data: complaint });
+    } catch (error) {
+      console.error("Manager reject error:", error);
+      res.status(500).json({ success: false, message: "Failed to reject complaint" });
+    }
+  }
 }
 
 module.exports = new ManagerController();

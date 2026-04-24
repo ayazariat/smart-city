@@ -1,160 +1,104 @@
+// ========== MAIN APP ==========
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/screens/login_screen.dart';
+import 'package:smart_city_app/core/constants/colors.dart';
+import 'package:smart_city_app/core/constants/strings.dart';
+import 'package:smart_city_app/screens/auth/login_screen.dart';
+import 'package:smart_city_app/screens/auth/register_screen.dart';
+import 'package:smart_city_app/screens/auth/forgot_password_screen.dart';
+import 'package:smart_city_app/screens/dashboard_screen.dart';
 import 'package:smart_city_app/screens/home_screen.dart';
-import 'package:smart_city_app/providers/auth_provider.dart';
-import 'package:smart_city_app/providers/theme_provider.dart';
-
-// Theme colors matching web (Civic Green)
-class AppColors {
-  static const Color primary = Color(0xFF2E7D32);
-  static const Color primaryLight = Color(0xFF4CAF50);
-  static const Color primaryDark = Color(0xFF1B5E20);
-  static const Color secondary = Color(0xFFF5F7FA);
-  static const Color surface = Color(0xFFF5F7FA);
-  static const Color attention = Color(0xFFF57C00);
-  static const Color success = Color(0xFF81C784);
-  static const Color urgent = Color(0xFFC62828);
-  static const Color error = Color(0xFFC62828);
-  static const Color textPrimary = Color(0xFF1E293B);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color assigned = Color(0xFFFF9800);
-  static const Color inProgress = Color(0xFFFF5722);
-  static const Color resolved = Color(0xFF4CAF50);
-  static const Color accent = Color(0xFF1976D2);
-  static const Color warning = Color(0xFFFFA726);
-  static const Color submitted = Color(0xFF2196F3);
-  static const Color validated = Color(0xFF9C27B0);
-  static const Color closed = Color(0xFF757575);
-  static const Color rejected = Color(0xFFC62828);
-}
+import 'package:smart_city_app/screens/complaints_screen.dart';
+import 'package:smart_city_app/screens/new_complaint_screen.dart';
+import 'package:smart_city_app/screens/complaint_detail_screen.dart';
+import 'package:smart_city_app/screens/profile_screen.dart';
+import 'package:smart_city_app/screens/settings_screen.dart';
+import 'package:smart_city_app/screens/transparency_screen.dart';
+import 'package:smart_city_app/screens/archive_screen.dart';
+import 'package:smart_city_app/screens/public_stats_screen.dart';
+import 'package:smart_city_app/screens/verify_email_screen.dart';
+import 'package:smart_city_app/screens/admin/admin_complaints_screen.dart';
+import 'package:smart_city_app/screens/admin/admin_users_screen.dart';
+import 'package:smart_city_app/screens/agent/agent_complaints_screen.dart';
+import 'package:smart_city_app/screens/manager/manager_dashboard_screen.dart';
+import 'package:smart_city_app/screens/manager/team_performance_screen.dart';
+import 'package:smart_city_app/screens/technician/technician_tasks_screen.dart';
+import 'package:smart_city_app/screens/technician/technician_task_detail_screen.dart';
+import 'package:smart_city_app/routes/app_routes.dart';
 
 void main() {
-  runApp(const ProviderScope(child: SmartCityApp()));
+  WidgetsFlutterBinding.ensureInitialized();
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  runApp(const ProviderScope(child: MyApp()));
 }
 
-class SmartCityApp extends ConsumerWidget {
-  const SmartCityApp({super.key});
+class MyApp extends ConsumerWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeProvider);
-
     return MaterialApp(
-      title: 'Smart City Tunisia',
-      debugShowCheckedModeBanner: false,
-      themeMode: themeMode,
+      title: AppStrings.appName,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
-          brightness: Brightness.light,
+        primaryColor: AppColors.primary,
+        scaffoldBackgroundColor: AppColors.background,
+        colorScheme: ColorScheme.light(
           primary: AppColors.primary,
-          secondary: AppColors.secondary,
-          error: AppColors.urgent,
+          secondary: AppColors.accent,
         ),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primary,
-          brightness: Brightness.dark,
-          primary: AppColors.primaryLight,
-          error: AppColors.urgent,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0A1628),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF112240),
-          foregroundColor: Colors.white,
-          elevation: 0,
-        ),
-        cardTheme: const CardThemeData(
-          color: Color(0xFF112240),
-          elevation: 2,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryLight,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.primaryLight, width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: const Color(0xFF112240),
-          indicatorColor: AppColors.primaryLight.withAlpha(40),
-        ),
-        dialogTheme: const DialogThemeData(
-          backgroundColor: Color(0xFF112240),
-        ),
-      ),
-      home: const AuthWrapper(),
-    );
-  }
-}
+      debugShowCheckedModeBanner: false,
+      initialRoute: AppRoutes.login,
+      routes: {
+        // Auth
+        AppRoutes.login: (context) => const LoginScreen(),
+        AppRoutes.register: (context) => const RegisterScreen(),
+        AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
+        AppRoutes.verifyEmail: (context) => const VerifyEmailScreen(email: ''),
 
-// Auth wrapper using Riverpod authProvider
-class AuthWrapper extends ConsumerWidget {
-  const AuthWrapper({super.key});
+        // Main
+        AppRoutes.home: (context) => const HomeScreen(),
+        AppRoutes.dashboard: (context) => const DashboardScreen(),
+        AppRoutes.transparency: (context) => const TransparencyScreen(),
+        AppRoutes.profile: (context) =>
+            ProfileScreen(onLogout: () {}, userName: '', userRole: ''),
+        AppRoutes.settings: (context) => const SettingsScreen(),
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
+        // Complaints
+        AppRoutes.complaints: (context) => const ComplaintsScreen(),
+        AppRoutes.newComplaint: (context) => NewComplaintScreen(
+          onComplaintSubmitted: () {},
+          onBack: () => Navigator.pop(context),
+        ),
+        AppRoutes.complaintDetail: (context) =>
+            ComplaintDetailScreen(complaintId: ''),
 
-    if (authState.isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+        // Admin
+        AppRoutes.adminDashboard: (context) => const DashboardScreen(),
+        AppRoutes.adminComplaints: (context) => const AdminComplaintsScreen(),
+        AppRoutes.adminUsers: (context) => const AdminUsersScreen(),
 
-    if (authState.isAuthenticated && authState.user != null) {
-      return HomeScreen(
-        onLogout: () => ref.read(authProvider.notifier).logout(),
-        userRole: authState.user!.role,
-        userName: authState.user!.fullName,
-      );
-    }
+        // Agent
+        AppRoutes.agentComplaints: (context) => const AgentComplaintsScreen(),
 
-    return LoginScreen(
-      onLoginSuccess: (_) {
-        // Auth state is managed by Riverpod — no manual setState needed
+        // Manager
+        AppRoutes.managerDashboard: (context) => const ManagerDashboardScreen(),
+        AppRoutes.managerTeamPerformance: (context) =>
+            const TeamPerformanceScreen(),
+
+        // Technician
+        AppRoutes.technicianTasks: (context) => const TechnicianTasksScreen(),
+        AppRoutes.technicianTaskDetail: (context) =>
+            const TechnicianTaskDetailScreen(taskId: ''),
       },
     );
   }

@@ -20,6 +20,8 @@ import {
   CheckCircle,
   Camera,
   FileText,
+  Copy,
+  Search,
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
@@ -108,6 +110,9 @@ export default function ComplaintDetailPage() {
   // BL-28: Confirm/Upvote state
   const [isConfirming, setIsConfirming] = useState(false);
   const [isUpvoting, setIsUpvoting] = useState(false);
+  const [checkDuplicateLoading, setCheckDuplicateLoading] = useState(false);
+  const [duplicateResults, setDuplicateResults] = useState<any[]>([]);
+  const [showDuplicateResults, setShowDuplicateResults] = useState(false);
 
   // Add note handler
   const handleAddNote = async (type: string, content: string) => {
@@ -201,6 +206,37 @@ export default function ComplaintDetailPage() {
       console.error("Upvote error:", err);
     } finally {
       setIsUpvoting(false);
+    }
+  };
+
+  // BL-25: Handle duplicate check
+  const handleCheckDuplicates = async () => {
+    if (!complaint) return;
+    setCheckDuplicateLoading(true);
+    setDuplicateResults([]);
+    setShowDuplicateResults(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: complaint.title,
+          description: complaint.description,
+          category: complaint.category,
+          municipality: complaint.municipalityName,
+        }),
+      });
+      const result = await response.json();
+      const data = result.data || result;
+      
+      if (data?.topMatches && data.topMatches.length > 0) {
+        setDuplicateResults(data.topMatches);
+      }
+    } catch (err) {
+      console.error("Duplicate check error:", err);
+    } finally {
+      setCheckDuplicateLoading(false);
     }
   };
 
@@ -1412,6 +1448,15 @@ export default function ComplaintDetailPage() {
                           >
                             {t("complaintDetail.rejectComplaint")}
                           </Button>
+                          {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                            <Button
+                              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700"
+                              icon={<Search className="w-4 h-4" />}
+                              onClick={handleCheckDuplicates}
+                            >
+                              {checkDuplicateLoading ? t("common.loading") : "Check Duplicates"}
+                            </Button>
+                          )}
                         </>
                       )}
                     </>
@@ -2000,8 +2045,59 @@ export default function ComplaintDetailPage() {
             )}
           </div>
         </div>
+)}
+      </div>
+
+      {/* Duplicate Check Results Modal */}
+      {showDuplicateResults && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Search className="w-5 h-5 text-amber-600" />
+                Duplicate Detection
+              </h3>
+              <button onClick={() => setShowDuplicateResults(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {checkDuplicateLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
+                <span className="ml-3 text-slate-600">Checking for duplicates...</span>
+              </div>
+            ) : duplicateResults.length === 0 ? (
+              <div className="text-center py-8">
+                <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-3" />
+                <p className="text-green-700 font-medium">No duplicates found!</p>
+                <p className="text-sm text-slate-500 mt-1">This complaint appears to be unique.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-amber-700 font-medium">
+                  Found {duplicateResults.length} potential duplicate(s):
+                </p>
+                {duplicateResults.slice(0, 5).map((dup: any, idx: number) => (
+                  <div key={idx} className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <p className="font-medium text-slate-800">{dup.title || `Complaint #${idx + 1}`}</p>
+                    <p className="text-sm text-slate-600 line-clamp-2">{dup.description}</p>
+                    <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+                      <span className="px-2 py-1 bg-amber-100 rounded">{dup.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4">
+              <Button onClick={() => setShowDuplicateResults(false)}>
+                {t("common.close")}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
     </DashboardLayout>
   );
 }

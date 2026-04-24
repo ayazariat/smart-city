@@ -10,6 +10,7 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { managerService } from "@/services/manager.service";
 import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
+import { showToast } from "@/components/ui/Toast";
 import {
   PageHeader,
   LoadingSpinner,
@@ -121,16 +122,17 @@ export default function ManagerPendingPage() {
         result = await managerService.assignTeam(assignTechTarget, selectedTechnicians);
       }
       if (result.success) {
+        showToast("Technician(s) assigned successfully!", "success");
         setAssignTechTarget(null);
         setSelectedTechnicians([]);
         await refreshComplaints();
       } else {
-        alert((result as { message?: string }).message || "Failed to assign technician(s)");
+        showToast((result as { message?: string }).message || "Failed to assign technician(s)", "error");
       }
     } catch (err: unknown) {
       console.error("Error assigning technician(s):", err);
       const errorObj = err as { message?: string };
-      alert(errorObj?.message || "Failed to assign technician(s)");
+      showToast(errorObj?.message || "Failed to assign technician(s)", "error");
     } finally {
       setActionLoading(null);
     }
@@ -499,14 +501,14 @@ export default function ManagerPendingPage() {
                     index={index}
                     actions={
                       <>
-                        {complaint.status === "ASSIGNED" && (
+                        {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
                           <button
                             onClick={() => { setAssignTechTarget(id); setSelectedTechnicians([]); }}
                             disabled={actionLoading === id}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
                           >
                             <Wrench className="w-4 h-4" />
-                            Assign Technician
+                            {complaint.status === "ASSIGNED" ? "Reassign" : "Assign Technician"}
                           </button>
                         )}
                         {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:smart_city_app/main.dart' show AppColors;
+import 'package:smart_city_app/core/constants/colors.dart';
 
 class CategoryBarChart extends StatelessWidget {
   final Map<String, int> data;
@@ -12,17 +12,17 @@ class CategoryBarChart extends StatelessWidget {
     this.title = 'By Category',
   });
 
-  static const categoryColors = {
-    'ROAD': Color(0xFF2196F3),
-    'LIGHTING': Color(0xFFFFC107),
-    'WASTE': Color(0xFF4CAF50),
-    'WATER': Color(0xFF03A9F4),
-    'SAFETY': Color(0xFFF44336),
-    'PUBLIC_PROPERTY': Color(0xFF9C27B0),
-    'OTHER': Color(0xFF607D8B),
+  static final categoryColors = {
+    'ROAD': const Color(0xFF2196F3),
+    'LIGHTING': const Color(0xFFFFC107),
+    'WASTE': const Color(0xFF4CAF50),
+    'WATER': const Color(0xFF03A9F4),
+    'SAFETY': const Color(0xFFF44336),
+    'PUBLIC_PROPERTY': const Color(0xFF9C27B0),
+    'OTHER': const Color(0xFF607D8B),
   };
 
-  static const categoryLabels = {
+  static final categoryLabels = {
     'ROAD': 'Roads',
     'LIGHTING': 'Lighting',
     'WASTE': 'Waste',
@@ -298,24 +298,24 @@ class StatusPieChart extends StatelessWidget {
 
   const StatusPieChart({super.key, required this.data});
 
-  static const statusColors = {
-    'SUBMITTED': AppColors.submitted,
-    'VALIDATED': AppColors.validated,
-    'ASSIGNED': AppColors.assigned,
-    'IN_PROGRESS': AppColors.inProgress,
-    'RESOLVED': AppColors.resolved,
-    'CLOSED': AppColors.closed,
-    'REJECTED': AppColors.rejected,
+  static final statusColors = {
+    'SUBMITTED': AppColors.statusSoumise,
+    'VALIDATED': AppColors.statusValidee,
+    'ASSIGNED': AppColors.statusAssignee,
+    'IN_PROGRESS': AppColors.statusEnCours,
+    'RESOLVED': AppColors.statusResolue,
+    'CLOSED': AppColors.statusCloturee,
+    'REJECTED': AppColors.statusRejetee,
   };
 
   static const statusLabels = {
-    'SUBMITTED': 'Pending',
-    'VALIDATED': 'Validated',
-    'ASSIGNED': 'Assigned',
-    'IN_PROGRESS': 'In Progress',
-    'RESOLVED': 'Resolved',
-    'CLOSED': 'Closed',
-    'REJECTED': 'Rejected',
+    'SUBMITTED': 'Soumise',
+    'VALIDATED': 'Validée',
+    'ASSIGNED': 'Assignée',
+    'IN_PROGRESS': 'En cours',
+    'RESOLVED': 'Résolue',
+    'CLOSED': 'Clôturée',
+    'REJECTED': 'Rejetée',
   };
 
   @override

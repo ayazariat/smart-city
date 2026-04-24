@@ -68,6 +68,7 @@ function getSidebarItems(role: string, stats: DashboardSidebarProps["stats"] | u
         return [
           { id: "users", label: t("sidebar.userManagement"), href: "/admin/users", icon: Users },
           { id: "all-complaints", label: t("sidebar.allComplaints"), href: "/admin/complaints", icon: FileText, badge: overdue > 0 ? overdue : undefined },
+          { id: "new-complaint", label: t("sidebar.newComplaint"), href: "/admin/complaints/new", icon: Plus, isAction: true },
         ];
       default:
         return [];

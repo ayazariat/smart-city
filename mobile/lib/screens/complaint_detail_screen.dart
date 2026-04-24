@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
-import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/core/constants/colors.dart';
+import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 
 class ComplaintDetailScreen extends ConsumerStatefulWidget {
   final String complaintId;
@@ -25,6 +28,8 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   List<dynamic> _departments = [];
   List<dynamic> _technicians = [];
   bool _loadingAction = false;
+  int _currentPhotoIndex = 0;
+  bool _isExpanded = false;
 
   @override
   void initState() {
@@ -56,41 +61,118 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
 
   String get _baseUrl => ApiClient.baseUrl.replaceAll('/api', '');
   String get _userRole => ref.read(authProvider).user?.role ?? '';
-  String get _status => _complaint?.status ?? '';
 
   Color _getStatusColor(String status) {
     switch (status) {
       case 'SUBMITTED':
-        return Colors.blue;
+        return AppColors.statusSoumise;
       case 'VALIDATED':
-        return Colors.purple;
+        return AppColors.statusValidee;
       case 'ASSIGNED':
-        return Colors.orange;
+        return AppColors.statusAssignee;
       case 'IN_PROGRESS':
-        return Colors.deepOrange;
+        return AppColors.statusEnCours;
       case 'RESOLVED':
-        return Colors.green;
+        return AppColors.statusResolue;
       case 'CLOSED':
-        return Colors.grey;
+        return AppColors.statusCloturee;
       case 'REJECTED':
-        return Colors.red;
+        return AppColors.statusRejetee;
       default:
         return Colors.grey;
     }
   }
 
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'SUBMITTED':
+        return 'Soumis';
+      case 'VALIDATED':
+        return 'Validé';
+      case 'ASSIGNED':
+        return 'Assigné';
+      case 'IN_PROGRESS':
+        return 'En cours';
+      case 'RESOLVED':
+        return 'Résolu';
+      case 'CLOSED':
+        return 'Clôturé';
+      case 'REJECTED':
+        return 'Rejeté';
+      default:
+        return status;
+    }
+  }
+
   Color _getUrgencyColor(String? urgency) {
     switch (urgency) {
-      case 'URGENT':
-        return Colors.red;
+      case 'CRITICAL':
+        return const Color(0xFFEF4444);
       case 'HIGH':
-        return Colors.deepOrange;
+        return const Color(0xFFF97316);
       case 'MEDIUM':
-        return Colors.orange;
+        return const Color(0xFFEAB308);
       case 'LOW':
-        return Colors.green;
+        return const Color(0xFF22C55E);
       default:
         return Colors.grey;
+    }
+  }
+
+  String _urgencyLabel(String? urgency) {
+    switch (urgency) {
+      case 'CRITICAL':
+        return 'Urgente';
+      case 'HIGH':
+        return 'Haute';
+      case 'MEDIUM':
+        return 'Moyenne';
+      case 'LOW':
+        return 'Basse';
+      default:
+        return 'Non définie';
+    }
+  }
+
+  String _categoryLabel(String? cat) {
+    switch (cat) {
+      case 'WASTE':
+        return 'Déchets';
+      case 'ROAD':
+        return 'Routes';
+      case 'LIGHTING':
+        return 'Éclairage';
+      case 'WATER':
+        return 'Eau';
+      case 'SAFETY':
+        return 'Sécurité';
+      case 'PUBLIC_PROPERTY':
+        return 'Domaine public';
+      case 'GREEN_SPACE':
+        return 'Espaces verts';
+      default:
+        return 'Autre';
+    }
+  }
+
+  IconData _categoryIcon(String? cat) {
+    switch (cat) {
+      case 'WASTE':
+        return Icons.delete_sweep;
+      case 'ROAD':
+        return Icons.add_road;
+      case 'LIGHTING':
+        return Icons.lightbulb;
+      case 'WATER':
+        return Icons.water_drop;
+      case 'SAFETY':
+        return Icons.shield;
+      case 'PUBLIC_PROPERTY':
+        return Icons.account_balance;
+      case 'GREEN_SPACE':
+        return Icons.park;
+      default:
+        return Icons.help_outline;
     }
   }
 
@@ -98,7 +180,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
     if (date == null) return '';
     try {
       final dt = DateTime.parse(date.toString());
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} à ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {
       return date.toString();
     }
@@ -150,7 +232,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Erreur: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -165,22 +247,23 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reject Complaint'),
+        title: const Text('Rejeter le signalement'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(
-            labelText: 'Reason for rejection',
-            hintText: 'Enter reason...',
-          ),
           maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Motif du rejet',
+            hintText: 'Expliquez pourquoi vous rejetez ce signalement...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Annuler'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
               Navigator.pop(ctx);
               if (ctrl.text.trim().isNotEmpty) {
@@ -189,107 +272,76 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                     widget.complaintId,
                     ctrl.text.trim(),
                   ),
-                  'Complaint rejected',
+                  'Signalement rejeté',
                 );
               }
             },
-            child: const Text('Reject'),
+            child: const Text('Rejeter'),
           ),
         ],
       ),
     );
   }
 
-  void _showAssignDeptDialog() {
-    if (_departments.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No departments available')));
-      return;
-    }
-    String? selectedDeptId;
+  void _showAssignDialog() {
+    String? selectedDept;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Assign to Department'),
-          content: DropdownButtonFormField<String>(
-            decoration: const InputDecoration(labelText: 'Department'),
-            items: _departments.map((d) {
-              final id = d['_id']?.toString() ?? d['id']?.toString() ?? '';
-              final name = d['name']?.toString() ?? id;
-              return DropdownMenuItem(value: id, child: Text(name));
-            }).toList(),
-            onChanged: (v) => setS(() => selectedDeptId = v),
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Confirmer la validation'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Voulez-vous valider ce signalement et l\'affecter à un département?',
+              ),
+              const SizedBox(height: 16),
+              if (_departments.isNotEmpty) ...[
+                const Text(
+                  'Département:',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
+                  ),
+                  hint: const Text('Sélectionner...'),
+                  items: _departments
+                      .map<DropdownMenuItem<String>>(
+                        (d) => DropdownMenuItem(
+                          value: d['_id'] ?? d['id']?.toString(),
+                          child: Text(d['name'] ?? ''),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => selectedDept = v,
+                ),
+              ],
+            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
+              child: const Text('Annuler'),
             ),
             ElevatedButton(
-              onPressed: selectedDeptId == null
-                  ? null
-                  : () {
-                      Navigator.pop(ctx);
-                      _doAction(
-                        () => _complaintService.assignDepartment(
-                          widget.complaintId,
-                          selectedDeptId!,
-                        ),
-                        'Department assigned',
-                      );
-                    },
-              child: const Text('Assign'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAssignTechDialog() {
-    if (_technicians.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No technicians available')));
-      return;
-    }
-    String? selectedTechId;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Assign to Technician'),
-          content: DropdownButtonFormField<String>(
-            decoration: const InputDecoration(labelText: 'Technician'),
-            items: _technicians.map((t) {
-              final id = t['_id']?.toString() ?? t['id']?.toString() ?? '';
-              final name =
-                  t['fullName']?.toString() ?? t['name']?.toString() ?? id;
-              return DropdownMenuItem(value: id, child: Text(name));
-            }).toList(),
-            onChanged: (v) => setS(() => selectedTechId = v),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: selectedTechId == null
-                  ? null
-                  : () {
-                      Navigator.pop(ctx);
-                      _doAction(
-                        () => _complaintService.assignTechnician(
-                          widget.complaintId,
-                          selectedTechId!,
-                        ),
-                        'Technician assigned',
-                      );
-                    },
-              child: const Text('Assign'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _doAction(
+                  () => _complaintService.validateComplaint(widget.complaintId),
+                  'Signalement validé',
+                );
+              },
+              child: const Text('Valider'),
             ),
           ],
         ),
@@ -300,1166 +352,482 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Complaint Details')),
+      backgroundColor: const Color(0xFFF5F7FA),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : _error != null
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: Colors.red.shade300,
-                  ),
+                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
                   const SizedBox(height: 16),
                   Text(
-                    'Failed to load complaint',
-                    style: TextStyle(color: Colors.red.shade700),
+                    'Erreur: $_error',
+                    style: TextStyle(color: Colors.red[700]),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadData,
-                    child: const Text('Retry'),
+                    child: const Text('Réessayer'),
                   ),
                 ],
               ),
             )
-          : _complaint == null
-          ? const Center(child: Text('Complaint not found'))
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 16),
-                  _buildDescription(),
-                  const SizedBox(height: 16),
-                  if (_hasMedia()) ...[
-                    _buildMediaGallery(),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildLocation(),
-                  const SizedBox(height: 16),
-                  _buildStats(),
-                  const SizedBox(height: 16),
-                  if (_hasSLA()) ...[
-                    _buildSLAInfo(),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_hasBeforeAfterPhotos()) ...[
-                    _buildBeforeAfterPhotos(),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_hasResolution()) ...[
-                    _buildResolutionReport(),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_hasTimeline()) ...[
-                    _buildStatusTimeline(),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_hasDuplicateInfo()) ...[
-                    _buildDuplicateBanner(),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_userRole == 'CITIZEN') _buildCitizenActions(),
-                  if (_userRole == 'MUNICIPAL_AGENT') _buildAgentActions(),
-                  if (_userRole == 'DEPARTMENT_MANAGER') _buildManagerActions(),
-                  if (_userRole == 'TECHNICIAN') _buildTechnicianActions(),
-                  const SizedBox(height: 24),
+          : _buildContent(),
+      bottomNavigationBar: _complaint != null ? _buildBottomActions() : null,
+    );
+  }
+
+  Widget _buildContent() {
+    final c = _complaint!;
+    final photos = c.media.where((m) => m.type == 'photo').toList();
+    final statusColor = _getStatusColor(c.status);
+
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: photos.isNotEmpty ? 300 : 0,
+          pinned: true,
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.textPrimary,
+          leading: IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                  ),
                 ],
               ),
-            ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final category = _complaint!.category;
-    final urgency = _complaint!.urgency ?? '';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _complaint!.title,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(_status).withAlpha(25),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    _status.replaceAll('_', ' '),
-                    style: TextStyle(
-                      color: _getStatusColor(_status),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildChip(category.replaceAll('_', ' '), AppColors.primary),
-                if (urgency.isNotEmpty)
-                  _buildChip(urgency, _getUrgencyColor(urgency)),
-                _buildChip('P${_complaint!.priorityScore}', Colors.deepPurple),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Submitted: ${_formatDate(_complaint!.createdAt.toIso8601String())}',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w500,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDescription() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.description, size: 18, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text(
-                  'Description',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(_complaint!.description, style: const TextStyle(height: 1.5)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _hasMedia() {
-    return _complaint!.media.isNotEmpty;
-  }
-
-  Widget _buildMediaGallery() {
-    final media = _complaint!.media;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.photo_library,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Photos (${media.length})',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 120,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: media.length,
-                itemBuilder: (ctx, i) {
-                  final url = _getPhotoUrl(media[i]);
-                  return Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    width: 120,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: Colors.grey.shade200,
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: url.isNotEmpty
-                        ? Image.network(
-                            url,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) =>
-                                const Icon(Icons.broken_image, size: 40),
-                          )
-                        : const Icon(Icons.image, size: 40),
-                  );
-                },
+              child: const Icon(
+                Icons.arrow_back,
+                color: AppColors.textPrimary,
+                size: 20,
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLocation() {
-    final loc = _complaint!.location;
-    final municipality =
-        _complaint!.municipalityName ??
-        loc?['municipality'] ??
-        loc?['commune'] ??
-        '';
-    final governorate = _complaint!.governorate ?? loc?['governorate'] ?? '';
-    final address = loc?['address'] ?? '';
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.location_on, size: 18, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text(
-                  'Location',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (address.isNotEmpty) Text(address),
-            if (municipality.isNotEmpty || governorate.isNotEmpty)
-              Text(
-                [
-                  municipality,
-                  governorate,
-                ].where((s) => s.isNotEmpty).join(', '),
-                style: TextStyle(color: Colors.grey.shade600),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStats() {
-    final confirmCount = _complaint!.confirmationCount;
-    final upvoteCount = _complaint!.upvoteCount;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildStatItem(
-              Icons.check_circle_outline,
-              '$confirmCount',
-              'Confirmations',
-              AppColors.primary,
-            ),
-            _buildStatItem(
-              Icons.thumb_up_outlined,
-              '$upvoteCount',
-              'Upvotes',
-              Colors.blue,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(
-    IconData icon,
-    String value,
-    String label,
-    Color color,
-  ) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: color,
+            onPressed: () => Navigator.pop(context),
           ),
+          flexibleSpace: photos.isNotEmpty
+              ? FlexibleSpaceBar(
+                  background: Stack(
+                    children: [
+                      PageView.builder(
+                        itemCount: photos.length,
+                        onPageChanged: (i) =>
+                            setState(() => _currentPhotoIndex = i),
+                        itemBuilder: (ctx, i) {
+                          final url = _getPhotoUrl(photos[i]);
+                          return url.isNotEmpty
+                              ? Image.network(
+                                  url,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: AppColors.secondary,
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.image,
+                                        size: 64,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : Container(
+                                  color: AppColors.secondary,
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.image,
+                                      size: 64,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                );
+                        },
+                      ),
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            photos.length,
+                            (i) => Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                color: i == _currentPhotoIndex
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.5),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : null,
         ),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _statusLabel(c.status),
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _getUrgencyColor(
+                              c.urgency,
+                            ).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _urgencyLabel(c.urgency),
+                            style: TextStyle(
+                              color: _getUrgencyColor(c.urgency),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      c.title,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      Icons.calendar_today,
+                      'Soumis le',
+                      _formatDate(c.createdAt),
+                    ),
+                    if (c.municipalityName != null)
+                      _buildInfoRow(
+                        Icons.location_city,
+                        'Commune',
+                        c.municipalityName!,
+                      ),
+                    if (c.governorate != null)
+                      _buildInfoRow(Icons.map, 'Gouvernorat', c.governorate!),
+                    _buildInfoRow(
+                      Icons.category,
+                      'Catégorie',
+                      _categoryLabel(c.category),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildSection(
+                'Description',
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    c.description,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      height: 1.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+              if (c.rejectionReason != null) ...[
+                const SizedBox(height: 12),
+                _buildSection(
+                  'Motif du rejet',
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.red[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            c.rejectionReason!,
+                            style: TextStyle(color: Colors.red[700]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (c.resolutionNotes != null) ...[
+                const SizedBox(height: 12),
+                _buildSection(
+                  'Notes de résolution',
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDCFCE7),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFBBF7D0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green[600]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            c.resolutionNotes!,
+                            style: TextStyle(color: Colors.green[700]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              _buildSection(
+                'Historique du statut',
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: c.statusHistory.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final h = entry.value;
+                      return Column(
+                        children: [
+                          ListTile(
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(
+                                  h.status,
+                                ).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                _getStatusIcon(h.status),
+                                color: _getStatusColor(h.status),
+                                size: 20,
+                              ),
+                            ),
+                            title: Text(
+                              _statusLabel(h.status),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _formatDate(h.updatedAt),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[500],
+                                  ),
+                                ),
+                                if (h.notes != null)
+                                  Text(
+                                    h.notes!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          if (i < c.statusHistory.length - 1)
+                            const Divider(height: 1),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 100),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  bool _hasSLA() {
-    return _complaint!.slaDeadline != null || _complaint!.slaStatus != null;
-  }
-
-  Widget _buildSLAInfo() {
-    final slaStatus = _complaint!.slaStatus ?? 'ON_TRACK';
-    Color slaColor;
-    IconData slaIcon;
-    switch (slaStatus) {
-      case 'ON_TRACK':
-        slaColor = Colors.green;
-        slaIcon = Icons.check_circle;
-        break;
-      case 'AT_RISK':
-        slaColor = Colors.orange;
-        slaIcon = Icons.warning;
-        break;
-      case 'OVERDUE':
-        slaColor = Colors.red;
-        slaIcon = Icons.error;
-        break;
-      default:
-        slaColor = Colors.grey;
-        slaIcon = Icons.schedule;
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(slaIcon, color: slaColor, size: 28),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'SLA Status',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    slaStatus.replaceAll('_', ' '),
-                    style: TextStyle(
-                      color: slaColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (_complaint!.slaDeadline != null)
-                    Text(
-                      'Deadline: ${_formatDate(_complaint!.slaDeadline!.toIso8601String())}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _hasBeforeAfterPhotos() {
-    return _complaint!.beforePhotos.isNotEmpty ||
-        _complaint!.afterPhotos.isNotEmpty;
-  }
-
-  Widget _buildBeforeAfterPhotos() {
-    final beforePhotos = _complaint!.beforePhotos;
-    final afterPhotos = _complaint!.afterPhotos;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.compare, size: 18, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text(
-                  'Before & After',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            if (beforePhotos.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'Before Work',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: beforePhotos.length,
-                  itemBuilder: (_, i) {
-                    final url = _getPhotoUrl(beforePhotos[i]);
-                    return Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      width: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.grey.shade200,
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: url.isNotEmpty
-                          ? Image.network(
-                              url,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
-                                  const Icon(Icons.broken_image),
-                            )
-                          : const Icon(Icons.image),
-                    );
-                  },
-                ),
-              ),
-            ],
-            if (afterPhotos.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'After Work',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: afterPhotos.length,
-                  itemBuilder: (_, i) {
-                    final url = _getPhotoUrl(afterPhotos[i]);
-                    return Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      width: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.grey.shade200,
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: url.isNotEmpty
-                          ? Image.network(
-                              url,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
-                                  const Icon(Icons.broken_image),
-                            )
-                          : const Icon(Icons.image),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _hasResolution() {
-    return _complaint!.resolutionNotes != null ||
-        _complaint!.materialsUsed.isNotEmpty;
-  }
-
-  Widget _buildResolutionReport() {
-    final notes = _complaint!.resolutionNotes ?? '';
-    final materials = _complaint!.materialsUsed;
-    final isClosed = _status == 'CLOSED';
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.assignment_turned_in,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Resolution Report',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (isClosed)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Approved',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            if (notes.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'Notes',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(notes, style: const TextStyle(height: 1.4)),
-            ],
-            if (materials.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text(
-                'Materials Used',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Wrap(
-                spacing: 8,
-                children: materials
-                    .map(
-                      (m) => Chip(
-                        label: Text(
-                          m.toString(),
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-            if (_complaint!.resolvedAt != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Resolved: ${_formatDate(_complaint!.resolvedAt!.toIso8601String())}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _hasTimeline() {
-    return _complaint!.statusHistory.isNotEmpty;
-  }
-
-  bool _hasDuplicateInfo() {
-    final ds = _complaint!.duplicateStatus;
-    return ds == 'PROBABLE_DUPLICATE' || ds == 'POSSIBLE_DUPLICATE';
-  }
-
-  Widget _buildDuplicateBanner() {
-    final isProbable = _complaint!.duplicateStatus == 'PROBABLE_DUPLICATE';
-    final color = isProbable ? Colors.orange : Colors.yellow.shade700;
-    final bgColor = isProbable ? Colors.orange.shade50 : Colors.yellow.shade50;
-    final borderColor = isProbable
-        ? Colors.orange.shade200
-        : Colors.yellow.shade300;
-    final topMatches =
-        _complaint!.aiDuplicateCheck?['topMatches'] as List<dynamic>? ?? [];
-    final recommendation =
-        _complaint!.aiDuplicateCheck?['recommendation'] as String?;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: bgColor,
-        border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(14),
+  Widget _buildSection(String title, Widget child) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.copy_outlined, size: 16, color: color),
-              const SizedBox(width: 8),
-              Text(
-                isProbable ? 'Probable Duplicate' : 'Possible Duplicate',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: color,
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey[500]),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'SUBMITTED':
+        return Icons.send;
+      case 'VALIDATED':
+        return Icons.check_circle;
+      case 'ASSIGNED':
+        return Icons.assignment_ind;
+      case 'IN_PROGRESS':
+        return Icons.engineering;
+      case 'RESOLVED':
+        return Icons.task_alt;
+      case 'CLOSED':
+        return Icons.archive;
+      case 'REJECTED':
+        return Icons.cancel;
+      default:
+        return Icons.circle;
+    }
+  }
+
+  Widget _buildBottomActions() {
+    final c = _complaint!;
+    if (_userRole == 'CITIZEN') return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            if (c.canValidate) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _loadingAction ? null : _showRejectDialog,
+                  icon: const Icon(Icons.close),
+                  label: const Text('Rejeter'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _loadingAction ? null : _showAssignDialog,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Valider'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
                 ),
               ),
             ],
-          ),
-          if (recommendation != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              recommendation,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-            ),
-          ],
-          if (topMatches.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...topMatches.take(2).map((m) {
-              final match = m as Map<String, dynamic>;
-              final refId = match['referenceId'] ?? match['_id'] ?? '';
-              final similarity =
-                  ((match['overallScore'] ?? match['similarity'] ?? 0.0) * 100)
-                      .round();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.link, size: 12, color: color),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '$refId — $similarity% match',
-                        style: TextStyle(fontSize: 11, color: color),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusTimeline() {
-    final history = _complaint!.statusHistory;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.timeline, size: 18, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text(
-                  'Status History',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ...history.reversed.map((entry) {
-              final entryStatus = entry.status;
-              final updatedAt = _formatDate(entry.updatedAt.toIso8601String());
-              final name = entry.updatedByName ?? '';
-              final notes = entry.notes ?? '';
-              final color = _getStatusColor(entryStatus);
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        Container(
-                          width: 2,
-                          height: 30,
-                          color: Colors.grey.shade300,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entryStatus.replaceAll('_', ' '),
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: color,
-                            ),
-                          ),
-                          if (name.isNotEmpty)
-                            Text(
-                              'by $name',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          if (updatedAt.isNotEmpty)
-                            Text(
-                              updatedAt,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                          if (notes.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                notes,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildCitizenActions() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _confirmComplaint,
-                icon: const Icon(Icons.check),
-                label: const Text('Confirm'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _voteComplaint,
-                icon: const Icon(Icons.thumb_up),
-                label: const Text('Upvote'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmComplaint() async {
-    try {
-      await _complaintService.confirmComplaint(widget.complaintId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Thank you for confirming!')),
-        );
-        _loadData();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  Future<void> _voteComplaint() async {
-    try {
-      await _complaintService.upvoteComplaint(widget.complaintId);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Vote recorded!')));
-        _loadData();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  // ─── Agent Actions ───────────────────────────────────────────────────────────
-  Widget _buildAgentActions() {
-    final disabled = _loadingAction;
-    final canValidate = _status == 'SUBMITTED';
-    final canAssign = _status == 'VALIDATED';
-    final canClose = _status == 'RESOLVED';
-
-    return Card(
-      color: Colors.blue.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.admin_panel_settings,
-                  size: 18,
-                  color: Colors.blue,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Agent Actions',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                if (_loadingAction) ...[
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (canValidate)
-                  ElevatedButton.icon(
-                    onPressed: disabled
-                        ? null
-                        : () => _doAction(
-                            () => _complaintService.validateComplaint(
-                              widget.complaintId,
-                            ),
-                            'Complaint validated',
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                    ),
-                    icon: const Icon(Icons.check_circle_outline, size: 16),
-                    label: const Text('Validate'),
-                  ),
-                if (canValidate)
-                  ElevatedButton.icon(
-                    onPressed: disabled ? null : _showRejectDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                    ),
-                    icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Reject'),
-                  ),
-                if (canAssign)
-                  ElevatedButton.icon(
-                    onPressed: disabled ? null : _showAssignDeptDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                    ),
-                    icon: const Icon(Icons.apartment, size: 16),
-                    label: const Text('Assign Dept.'),
-                  ),
-                if (canClose)
-                  ElevatedButton.icon(
-                    onPressed: disabled
-                        ? null
-                        : () => _doAction(
-                            () => _complaintService.closeComplaint(
-                              widget.complaintId,
-                            ),
-                            'Complaint closed',
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey,
-                    ),
-                    icon: const Icon(Icons.lock_outline, size: 16),
-                    label: const Text('Close'),
-                  ),
-                if (_status == 'RESOLVED')
-                  ElevatedButton.icon(
-                    onPressed: disabled
-                        ? null
-                        : () => _doAction(
-                            () => _complaintService.approveResolution(
-                              widget.complaintId,
-                            ),
-                            'Resolution approved',
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                    ),
-                    icon: const Icon(Icons.verified, size: 16),
-                    label: const Text('Approve Resolution'),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Manager Actions ─────────────────────────────────────────────────────────
-  Widget _buildManagerActions() {
-    final disabled = _loadingAction;
-    final canAssignTech = _status == 'VALIDATED' || _status == 'ASSIGNED';
-
-    return Card(
-      color: Colors.purple.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.manage_accounts,
-                  size: 18,
-                  color: Colors.purple,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Manager Actions',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.purple,
-                  ),
-                ),
-                if (_loadingAction) ...[
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (canAssignTech)
-                  ElevatedButton.icon(
-                    onPressed: disabled ? null : _showAssignTechDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
-                    ),
-                    icon: const Icon(Icons.engineering, size: 16),
-                    label: const Text('Assign Technician'),
-                  ),
-                // Priority updater
-                PopupMenuButton<String>(
-                  onSelected: (urgency) => _doAction(
-                    () => _complaintService.updatePriority(
-                      widget.complaintId,
-                      urgency,
-                    ),
-                    'Priority updated to $urgency',
-                  ),
-                  itemBuilder: (_) => ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
-                      .map((u) => PopupMenuItem(value: u, child: Text(u)))
-                      .toList(),
-                  child: ElevatedButton.icon(
-                    onPressed: null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      disabledBackgroundColor: Colors.deepPurple,
-                      disabledForegroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.flag_outlined, size: 16),
-                    label: const Text('Set Priority'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ─── Technician Actions ──────────────────────────────────────────────────────
-  Widget _buildTechnicianActions() {
-    final disabled = _loadingAction;
-
-    return Card(
-      color: Colors.teal.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.engineering, size: 18, color: Colors.teal),
-                const SizedBox(width: 8),
-                const Text(
-                  'Technician Actions',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.teal,
-                  ),
-                ),
-                if (_loadingAction) ...[
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (_status == 'ASSIGNED')
-                  ElevatedButton.icon(
-                    onPressed: disabled
-                        ? null
-                        : () => _doAction(
-                            () =>
-                                _complaintService.startTask(widget.complaintId),
-                            'Task started',
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal,
-                    ),
-                    icon: const Icon(Icons.play_arrow, size: 16),
-                    label: const Text('Start Work'),
-                  ),
-                if (_status == 'IN_PROGRESS')
-                  ElevatedButton.icon(
-                    onPressed: disabled ? null : _showCompleteTaskDialog,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                    ),
-                    icon: const Icon(Icons.check_circle, size: 16),
-                    label: const Text('Mark Complete'),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showCompleteTaskDialog() {
-    final notesCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Complete Task'),
-        content: TextField(
-          controller: notesCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Resolution notes',
-            hintText: 'Describe what was done...',
-          ),
-          maxLines: 4,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _doAction(
-                () => _complaintService.completeTask(widget.complaintId, {
-                  'resolutionNotes': notesCtrl.text.trim(),
-                }),
-                'Task marked as complete',
-              );
-            },
-            child: const Text('Complete'),
-          ),
-        ],
       ),
     );
   }

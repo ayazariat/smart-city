@@ -921,6 +921,26 @@
     "statsAssigned": "Assigned",
     "statsInProgress": "In Progress",
     "statsResolved": "Resolved",
-    "statsOverdue": "Overdue"
+    "statsOverdue": "Overdue",
+    "notification": {
+      "status": {
+        "validated": "Complaint Validated",
+        "validated.desc": "Your complaint has been validated and will be processed.",
+        "rejected": "Complaint Rejected",
+        "rejected.desc": "Your complaint has been rejected.",
+        "assigned": "Complaint Assigned",
+        "assigned.desc": "Your complaint has been assigned to a team.",
+        "inProgress": "In Progress",
+        "inProgress.desc": "Your complaint is being processed.",
+        "resolved": "Complaint Resolved",
+        "resolved.desc": "Your complaint has been resolved.",
+        "closed": "Complaint Closed",
+        "closed.desc": "Your complaint has been closed."
+      },
+      "newComplaint": "New Complaint",
+      "newComplaint.desc": "A new complaint has been submitted.",
+      "assignedToYou": "Assigned to You",
+      "assignedToYou.desc": "A complaint has been assigned to you."
+    }
   }
 }

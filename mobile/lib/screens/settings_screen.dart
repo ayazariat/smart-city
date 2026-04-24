@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/providers/theme_provider.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,7 +40,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            trimmed.isEmpty ? 'Reset to default server' : 'Server URL saved',
+            trimmed.isEmpty
+                ? 'Serveur réinitialisé'
+                : 'URL du serveur enregistrée',
           ),
           backgroundColor: Colors.green,
         ),
@@ -54,218 +56,346 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Appearance section
-          const _SectionHeader(title: 'Appearance'),
-          Card(
-            child: Column(
-              children: [
-                _ThemeTile(
-                  title: 'System Default',
-                  subtitle: 'Follow device theme',
-                  icon: Icons.brightness_auto,
-                  isSelected: themeMode == ThemeMode.system,
-                  onTap: () => ref
-                      .read(themeModeProvider.notifier)
-                      .setThemeMode(ThemeMode.system),
-                ),
-                const Divider(height: 1),
-                _ThemeTile(
-                  title: 'Light Mode',
-                  subtitle: 'Always use light theme',
-                  icon: Icons.light_mode,
-                  isSelected: themeMode == ThemeMode.light,
-                  onTap: () => ref
-                      .read(themeModeProvider.notifier)
-                      .setThemeMode(ThemeMode.light),
-                ),
-                const Divider(height: 1),
-                _ThemeTile(
-                  title: 'Dark Mode',
-                  subtitle: 'Always use dark theme',
-                  icon: Icons.dark_mode,
-                  isSelected: themeMode == ThemeMode.dark,
-                  onTap: () => ref
-                      .read(themeModeProvider.notifier)
-                      .setThemeMode(ThemeMode.dark),
-                ),
-              ],
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppColors.primary, AppColors.primary.withAlpha(204)],
           ),
-          const SizedBox(height: 24),
-
-          // Developer section
-          const _SectionHeader(title: 'Server'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'API Server URL',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : Colors.black87,
+        ),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Paramètres',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Leave empty to use default (emulator: 10.0.2.2).\nFor real device on same Wi-Fi: http://192.168.x.x:5000/api',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _serverUrlController,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          decoration: InputDecoration(
-                            hintText: 'http://192.168.1.x:5000/api',
-                            hintStyle: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 13,
-                            ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () =>
-                            _saveServerUrl(_serverUrlController.text),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          minimumSize: Size.zero,
-                        ),
-                        child: const Text('Save'),
-                      ),
+                      _buildSectionTitle('Apparence'),
+                      const SizedBox(height: 12),
+                      _buildThemeCard(themeMode),
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('Serveur'),
+                      const SizedBox(height: 12),
+                      _buildServerCard(isDark),
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('À propos'),
+                      const SizedBox(height: 12),
+                      _buildAboutCard(isDark),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 24),
+        ),
+      ),
+    );
+  }
 
-          // About section
-          const _SectionHeader(title: 'About'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isDark
-                        ? AppColors.primaryLight.withAlpha(40)
-                        : AppColors.primary.withAlpha(26),
-                    child: Icon(
-                      Icons.info_outline,
-                      color: isDark
-                          ? AppColors.primaryLight
-                          : AppColors.primary,
-                    ),
-                  ),
-                  title: const Text('App Version'),
-                  subtitle: const Text('1.0.0'),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isDark
-                        ? AppColors.primaryLight.withAlpha(40)
-                        : AppColors.primary.withAlpha(26),
-                    child: Icon(
-                      Icons.location_city,
-                      color: isDark
-                          ? AppColors.primaryLight
-                          : AppColors.primary,
-                    ),
-                  ),
-                  title: const Text('Smart City Tunisia'),
-                  subtitle: const Text('Municipal complaint management'),
-                ),
-              ],
-            ),
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: AppColors.primary,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  Widget _buildThemeCard(ThemeMode themeMode) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _buildThemeOption(
+            title: 'Par défaut',
+            subtitle: 'Suivre le thème de l\'appareil',
+            icon: Icons.brightness_auto,
+            isSelected: themeMode == ThemeMode.system,
+            onTap: () => ref
+                .read(themeModeProvider.notifier)
+                .setThemeMode(ThemeMode.system),
+          ),
+          Divider(height: 1, color: Colors.grey.shade200),
+          _buildThemeOption(
+            title: 'Mode clair',
+            subtitle: 'Toujours utiliser le thème clair',
+            icon: Icons.light_mode,
+            isSelected: themeMode == ThemeMode.light,
+            onTap: () => ref
+                .read(themeModeProvider.notifier)
+                .setThemeMode(ThemeMode.light),
+          ),
+          Divider(height: 1, color: Colors.grey.shade200),
+          _buildThemeOption(
+            title: 'Mode sombre',
+            subtitle: 'Toujours utiliser le thème sombre',
+            icon: Icons.dark_mode,
+            isSelected: themeMode == ThemeMode.dark,
+            onTap: () => ref
+                .read(themeModeProvider.notifier)
+                .setThemeMode(ThemeMode.dark),
           ),
         ],
       ),
     );
   }
-}
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemeTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ThemeTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-
+  Widget _buildThemeOption({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: isSelected
-            ? primary.withAlpha(26)
-            : Colors.grey.withAlpha(26),
-        child: Icon(icon, color: isSelected ? primary : Colors.grey),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withAlpha(26)
+              : Colors.grey.withAlpha(26),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: isSelected ? AppColors.primary : Colors.grey),
       ),
       title: Text(
         title,
         style: TextStyle(
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          color: AppColors.textPrimary,
         ),
       ),
-      subtitle: Text(subtitle),
-      trailing: isSelected ? Icon(Icons.check_circle, color: primary) : null,
-      onTap: onTap,
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      trailing: isSelected
+          ? Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: AppColors.success,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check, color: Colors.white, size: 14),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildServerCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withAlpha(26),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.dns, color: AppColors.primary),
+              ),
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'URL de l\'API',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Serveur de l\'application',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Laissez vide pour utiliser le serveur par défaut (émulateur: 10.0.2.2).',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _serverUrlController,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white : AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'http://192.168.1.x:5000/api',
+                    hintStyle: TextStyle(color: Colors.grey.shade400),
+                    filled: true,
+                    fillColor: AppColors.secondary,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: () => _saveServerUrl(_serverUrlController.text),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text('Enregistrer'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutCard(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withAlpha(26),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.info_outline, color: AppColors.primary),
+            ),
+            title: const Text(
+              'Version de l\'application',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: const Text('1.0.0'),
+          ),
+          Divider(height: 1, color: Colors.grey.shade200),
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withAlpha(26),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.location_city, color: AppColors.primary),
+            ),
+            title: const Text(
+              'Smart City Tunisia',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: const Text('Gestion des plaintes municipales'),
+          ),
+        ],
+      ),
     );
   }
 }

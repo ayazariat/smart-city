@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/main.dart' show AppColors;
+import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
@@ -15,11 +15,12 @@ class AgentComplaintsScreen extends ConsumerStatefulWidget {
 }
 
 class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
-  String _statusFilter = 'ALL';
+  String _statusFilter = 'ACTIVE';
+  String _categoryFilter = '';
   String _searchTerm = '';
-  final TextEditingController _searchController = TextEditingController();
+  final _searchController = TextEditingController();
   List<dynamic> _departments = [];
-  bool _loadingDepts = false;
+  bool _showFilters = false;
 
   @override
   void initState() {
@@ -36,17 +37,11 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
     super.dispose();
   }
 
-  void _loadDepartments() async {
-    setState(() => _loadingDepts = true);
+  Future<void> _loadDepartments() async {
     try {
       final depts = await ComplaintService().getAgentDepartments();
-      setState(() {
-        _departments = depts;
-        _loadingDepts = false;
-      });
-    } catch (e) {
-      setState(() => _loadingDepts = false);
-    }
+      if (mounted) setState(() => _departments = depts);
+    } catch (_) {}
   }
 
   Future<void> _loadComplaints() async {
@@ -55,567 +50,611 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
         .load(status: _statusFilter);
   }
 
+  String _getStatusLabel(String status) {
+    switch (status) {
+      case 'ACTIVE':
+        return 'Actifs';
+      case 'PENDING':
+        return 'En attente';
+      case 'RESOLVED':
+        return 'Résolus';
+      case 'ALL':
+        return 'Tous';
+      default:
+        return status;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'SUBMITTED':
+        return AppColors.statusSoumise;
+      case 'VALIDATED':
+        return AppColors.statusValidee;
+      case 'ASSIGNED':
+        return AppColors.statusAssignee;
+      case 'IN_PROGRESS':
+        return AppColors.statusEnCours;
+      case 'RESOLVED':
+        return AppColors.statusResolue;
+      case 'CLOSED':
+        return AppColors.statusCloturee;
+      case 'REJECTED':
+        return AppColors.statusRejetee;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'SUBMITTED':
+        return 'Soumis';
+      case 'VALIDATED':
+        return 'Validé';
+      case 'ASSIGNED':
+        return 'Assigné';
+      case 'IN_PROGRESS':
+        return 'En cours';
+      case 'RESOLVED':
+        return 'Résolu';
+      case 'CLOSED':
+        return 'Clôturé';
+      case 'REJECTED':
+        return 'Rejeté';
+      default:
+        return status;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(agentComplaintsProvider);
 
-    // Calculate stats
-    final total = state.complaints.length;
-    final submitted = state.complaints
-        .where((c) => c.status == 'SUBMITTED')
+    final totalCount = state.complaints.length;
+    final resolvedCount = state.complaints
+        .where((c) => c.status == 'RESOLVED' || c.status == 'CLOSED')
         .length;
-    final inProgress = state.complaints
+    final overdueCount = state.complaints.where((c) {
+      final days = DateTime.now().difference(c.createdAt).inDays;
+      return ['ASSIGNED', 'IN_PROGRESS'].contains(c.status) && days > 7;
+    }).length;
+    final inProgressCount = state.complaints
         .where((c) => c.status == 'IN_PROGRESS')
         .length;
-    final resolved = state.complaints
-        .where((c) => c.status == 'RESOLVED')
-        .length;
+    final resolutionRate = totalCount > 0
+        ? (resolvedCount / totalCount * 100).round()
+        : 0;
 
     return Scaffold(
-      body: Column(
-        children: [
-          // Stats Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(13),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        'Total',
-                        '$total',
-                        Icons.summarize,
-                        const Color(0xFF3B82F6),
-                      ),
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: RefreshIndicator(
+        onRefresh: _loadComplaints,
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 140,
+              floating: false,
+              pinned: true,
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.textPrimary,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.primary, AppColors.primaryDark],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatItem(
-                        'Pending',
-                        '$submitted',
-                        Icons.pending_actions,
-                        const Color(0xFFF59E0B),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        'In Progress',
-                        '$inProgress',
-                        Icons.engineering,
-                        const Color(0xFFF97316),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatItem(
-                        'Resolved',
-                        '$resolved',
-                        Icons.check_circle,
-                        const Color(0xFF22C55E),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search complaints...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchTerm.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchTerm = '');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-              ),
-              onChanged: (v) => setState(() => _searchTerm = v),
-            ),
-          ),
-
-          // Filter Chips
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip('ALL', 'All'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('SUBMITTED', 'Submitted'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('VALIDATED', 'Validated'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('ASSIGNED', 'Assigned'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('IN_PROGRESS', 'In Progress'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('RESOLVED', 'Resolved'),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Complaints List
-          Expanded(
-            child: state.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _getFilteredList(state.complaints).isEmpty
-                ? _buildEmptyState()
-                : RefreshIndicator(
-                    onRefresh: _loadComplaints,
-                    child: ListView.builder(
+                  ),
+                  child: SafeArea(
+                    child: Padding(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _getFilteredList(state.complaints).length,
-                      itemBuilder: (ctx, i) => _buildComplaintCard(
-                        _getFilteredList(state.complaints)[i],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.assignment,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Mes actions',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${state.complaints.length} signalements',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
-          ),
-        ],
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.notifications_outlined,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {},
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.4,
+                      children: [
+                        _buildStatCard(
+                          'Total',
+                          '$totalCount',
+                          Icons.summarize,
+                          const Color(0xFF3B82F6),
+                        ),
+                        _buildStatCard(
+                          'Résolus',
+                          '$resolvedCount',
+                          Icons.check_circle,
+                          AppColors.primary,
+                          subtitle: '$resolutionRate%',
+                        ),
+                        _buildStatCard(
+                          'En cours',
+                          '$inProgressCount',
+                          Icons.engineering,
+                          const Color(0xFFF97316),
+                        ),
+                        _buildStatCard(
+                          'En retard',
+                          '$overdueCount',
+                          Icons.warning,
+                          const Color(0xFFEF4444),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildStatusFilters(state.complaints),
+                    const SizedBox(height: 16),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Rechercher un signalement...',
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.grey,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => _searchTerm = v),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (state.isLoading)
+              const SliverFillRemaining(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              )
+            else if (state.complaints.isEmpty)
+              SliverFillRemaining(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.inbox,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Aucun signalement trouvé',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final complaint = state.complaints[index];
+                    return _buildComplaintCard(complaint);
+                  }, childCount: state.complaints.length),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+        ),
       ),
     );
   }
 
-  List<Complaint> _getFilteredList(List<Complaint> complaints) {
-    var filtered = complaints;
-    if (_statusFilter != 'ALL') {
-      filtered = filtered.where((c) => c.status == _statusFilter).toList();
-    }
-    if (_searchTerm.isNotEmpty) {
-      final q = _searchTerm.toLowerCase();
-      filtered = filtered
-          .where(
-            (c) =>
-                c.title.toLowerCase().contains(q) ||
-                c.description.toLowerCase().contains(q) ||
-                c.category.toLowerCase().contains(q),
-          )
-          .toList();
-    }
-    return filtered;
-  }
-
-  Widget _buildStatItem(
+  Widget _buildStatCard(
     String label,
     String value,
     IconData icon,
-    Color color,
-  ) {
+    Color color, {
+    String? subtitle,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withAlpha(26),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: Icon(icon, color: color, size: 18),
               ),
-              Text(
-                label,
-                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-              ),
+              if (subtitle != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String status, String label) {
-    final isSelected = _statusFilter == status;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) {
-        setState(() => _statusFilter = status);
-        _loadComplaints();
-      },
-      selectedColor: AppColors.primary,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : null,
-        fontSize: 12,
-      ),
-      checkmarkColor: Colors.white,
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[300]),
-          const SizedBox(height: 16),
+          const Spacer(),
           Text(
-            'No complaints found',
+            value,
             style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusFilters(List<Complaint> complaints) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildFilterChip(
+            'ACTIVE',
+            'Actifs',
+            complaints
+                .where(
+                  (c) => [
+                    'SUBMITTED',
+                    'VALIDATED',
+                    'ASSIGNED',
+                    'IN_PROGRESS',
+                  ].contains(c.status),
+                )
+                .length,
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'SUBMITTED',
+            'Soumis',
+            complaints.where((c) => c.status == 'SUBMITTED').length,
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'VALIDATED',
+            'Validés',
+            complaints.where((c) => c.status == 'VALIDATED').length,
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'IN_PROGRESS',
+            'En cours',
+            complaints.where((c) => c.status == 'IN_PROGRESS').length,
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'RESOLVED',
+            'Résolus',
+            complaints.where((c) => c.status == 'RESOLVED').length,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String value, String label, int count) {
+    final isSelected = _statusFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _statusFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[700],
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : Colors.grey[200],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isSelected ? Colors.white : Colors.grey[600],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildComplaintCard(Complaint complaint) {
-    return Card(
+    final statusColor = _statusColor(complaint.status);
+    final isOverdue =
+        ['ASSIGNED', 'IN_PROGRESS'].contains(complaint.status) &&
+        DateTime.now().difference(complaint.createdAt).inDays > 7;
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
-          ),
-        ).then((_) => _loadComplaints()),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      complaint.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildStatusChip(complaint.status),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                complaint.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _buildCategoryChip(complaint.categoryLabel),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getPriorityColor(
-                        complaint.priorityScore,
-                      ).withAlpha(26),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'P${complaint.priorityScore}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _getPriorityColor(complaint.priorityScore),
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-              if (complaint.canValidate ||
-                  complaint.canReject ||
-                  complaint.canAssign ||
-                  complaint.status == 'RESOLVED') ...[
-                const SizedBox(height: 12),
-                _buildActionButtons(complaint),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(Complaint complaint) {
-    if (complaint.canValidate) {
-      return Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () async {
-                await ref
-                    .read(agentComplaintsProvider.notifier)
-                    .validate(complaint.id);
-                if (mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Complaint validated'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-              },
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text('Validate'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.validated,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => _showRejectDialog(complaint),
-              icon: const Icon(Icons.close, size: 18),
-              label: const Text('Reject'),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            ),
-          ),
-        ],
-      );
-    } else if (complaint.canAssign) {
-      return ElevatedButton.icon(
-        onPressed: () => _showAssignDialog(complaint),
-        icon: const Icon(Icons.assignment, size: 18),
-        label: const Text('Assign to Department'),
-        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-      );
-    } else if (complaint.status == 'RESOLVED') {
-      return ElevatedButton.icon(
-        onPressed: () async {
-          await ref
-              .read(agentComplaintsProvider.notifier)
-              .assignDepartment(complaint.id, '');
-          if (mounted)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Complaint closed'),
-                backgroundColor: AppColors.success,
-              ),
-            );
-        },
-        icon: const Icon(Icons.archive, size: 18),
-        label: const Text('Close'),
-        style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
-  void _showRejectDialog(Complaint complaint) {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Complaint'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            hintText: 'Enter rejection reason...',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await ref
-                  .read(agentComplaintsProvider.notifier)
-                  .reject(complaint.id, reasonController.text);
-              if (mounted)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Complaint rejected'),
-                    backgroundColor: AppColors.warning,
-                  ),
-                );
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Reject'),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: isOverdue
+            ? Border.all(color: Colors.red.withValues(alpha: 0.3))
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-    );
-  }
-
-  void _showAssignDialog(Complaint complaint) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Assign to Department'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _loadingDepts
-              ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _departments.length,
-                  itemBuilder: (ctx, i) {
-                    final dept = _departments[i];
-                    final deptName = dept is Map
-                        ? (dept['name'] ?? '')
-                        : dept.toString();
-                    final deptId = dept is Map
-                        ? (dept['_id'] ?? dept['id'] ?? '')
-                        : '';
-                    return ListTile(
-                      title: Text(deptName),
-                      onTap: () async {
-                        Navigator.pop(ctx);
-                        await ref
-                            .read(agentComplaintsProvider.notifier)
-                            .assignDepartment(complaint.id, deptId.toString());
-                        if (mounted)
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Assigned to $deptName'),
-                              backgroundColor: AppColors.success,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _statusLabel(complaint.status),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                    if (isOverdue) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.warning,
+                              size: 12,
+                              color: Colors.red[600],
                             ),
-                          );
-                      },
-                    );
-                  },
+                            const SizedBox(width: 4),
+                            Text(
+                              'En retard',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ],
                 ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+                const SizedBox(height: 12),
+                Text(
+                  complaint.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  complaint.description,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.category, size: 14, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    Text(
+                      complaint.category,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                    if (complaint.municipalityName != null) ...[
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.location_city,
+                        size: 14,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        complaint.municipalityName!,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      ),
+                    ],
+                    const Spacer(),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Color _getPriorityColor(int priority) {
-    if (priority >= 15) return AppColors.error;
-    if (priority >= 8) return AppColors.warning;
-    return AppColors.success;
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
-    switch (status) {
-      case 'SUBMITTED':
-        color = const Color(0xFF3B82F6);
-        break;
-      case 'VALIDATED':
-        color = const Color(0xFF8B5CF6);
-        break;
-      case 'ASSIGNED':
-        color = const Color(0xFFF59E0B);
-        break;
-      case 'IN_PROGRESS':
-        color = const Color(0xFFF97316);
-        break;
-      case 'RESOLVED':
-        color = const Color(0xFF22C55E);
-        break;
-      case 'CLOSED':
-        color = const Color(0xFF6B7280);
-        break;
-      case 'REJECTED':
-        color = const Color(0xFFEF4444);
-        break;
-      default:
-        color = Colors.grey;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        status.replaceAll('_', ' '),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
         ),
       ),
-    );
-  }
-
-  Widget _buildCategoryChip(String category) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(category, style: const TextStyle(fontSize: 11)),
     );
   }
 }

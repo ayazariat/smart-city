@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
@@ -18,25 +18,12 @@ class _AdminComplaintsScreenState extends ConsumerState<AdminComplaintsScreen> {
 
   List<Complaint> _complaints = [];
   bool _isLoading = true;
+  String? _error;
   String _statusFilter = '';
+  String _categoryFilter = '';
   String _searchQuery = '';
   final _searchController = TextEditingController();
-
-  // Stats
-  int get _total => _complaints.length;
-  int get _resolved => _complaints
-      .where((c) => c.status == 'RESOLVED' || c.status == 'CLOSED')
-      .length;
-  int get _overdue => _complaints.where((c) {
-    final days = DateTime.now().difference(c.createdAt).inDays;
-    return ['ASSIGNED', 'IN_PROGRESS'].contains(c.status) && days > 7;
-  }).length;
-  int get _atRisk => _complaints.where((c) {
-    final days = DateTime.now().difference(c.createdAt).inDays;
-    return ['ASSIGNED', 'IN_PROGRESS'].contains(c.status) &&
-        days > 4 &&
-        days <= 7;
-  }).length;
+  bool _showFilters = false;
 
   @override
   void initState() {
@@ -51,7 +38,10 @@ class _AdminComplaintsScreenState extends ConsumerState<AdminComplaintsScreen> {
   }
 
   Future<void> _loadComplaints() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
       final data = await _complaintService.getAllComplaints(
         status: _statusFilter.isEmpty ? null : _statusFilter,
@@ -63,306 +53,291 @@ class _AdminComplaintsScreenState extends ConsumerState<AdminComplaintsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
     }
   }
 
   List<Complaint> get _filtered {
-    if (_searchQuery.isEmpty) return _complaints;
-    final q = _searchQuery.toLowerCase();
     return _complaints.where((c) {
-      return c.title.toLowerCase().contains(q) ||
-          c.description.toLowerCase().contains(q) ||
-          (c.municipalityName?.toLowerCase().contains(q) ?? false);
+      if (_categoryFilter.isNotEmpty && c.category != _categoryFilter)
+        return false;
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        return c.title.toLowerCase().contains(q) ||
+            c.description.toLowerCase().contains(q);
+      }
+      return true;
     }).toList();
   }
 
-  Color _getStatusColor(String status) {
+  int get _total => _complaints.length;
+  int get _resolved => _complaints
+      .where((c) => c.status == 'RESOLVED' || c.status == 'CLOSED')
+      .length;
+  int get _inProgress => _complaints
+      .where((c) => c.status == 'IN_PROGRESS' || c.status == 'ASSIGNED')
+      .length;
+  int get _pending => _complaints.where((c) => c.status == 'SUBMITTED').length;
+  int get _overdue => _complaints.where((c) {
+    final days = DateTime.now().difference(c.createdAt).inDays;
+    return ['ASSIGNED', 'IN_PROGRESS'].contains(c.status) && days > 7;
+  }).length;
+
+  Color _statusColor(String status) {
     switch (status) {
       case 'SUBMITTED':
-        return Colors.blue;
+        return AppColors.statusSoumise;
       case 'VALIDATED':
-        return Colors.purple;
+        return AppColors.statusValidee;
       case 'ASSIGNED':
-        return Colors.orange;
+        return AppColors.statusAssignee;
       case 'IN_PROGRESS':
-        return Colors.deepOrange;
+        return AppColors.statusEnCours;
       case 'RESOLVED':
-        return Colors.green;
+        return AppColors.statusResolue;
       case 'CLOSED':
-        return Colors.grey;
+        return AppColors.statusCloturee;
       case 'REJECTED':
-        return Colors.red;
+        return AppColors.statusRejetee;
       default:
         return Colors.grey;
     }
   }
 
-  bool _isOverdue(Complaint c) {
-    final days = DateTime.now().difference(c.createdAt).inDays;
-    return ['ASSIGNED', 'IN_PROGRESS'].contains(c.status) && days > 7;
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'SUBMITTED':
+        return 'Soumis';
+      case 'VALIDATED':
+        return 'Validé';
+      case 'ASSIGNED':
+        return 'Assigné';
+      case 'IN_PROGRESS':
+        return 'En cours';
+      case 'RESOLVED':
+        return 'Résolu';
+      case 'CLOSED':
+        return 'Clôturé';
+      case 'REJECTED':
+        return 'Rejeté';
+      default:
+        return status;
+    }
   }
 
-  bool _isAtRisk(Complaint c) {
-    final days = DateTime.now().difference(c.createdAt).inDays;
-    return ['ASSIGNED', 'IN_PROGRESS'].contains(c.status) &&
-        days > 4 &&
-        days <= 7;
+  String _categoryLabel(String cat) {
+    switch (cat) {
+      case 'WASTE':
+        return 'Déchets';
+      case 'ROAD':
+        return 'Routes';
+      case 'LIGHTING':
+        return 'Éclairage';
+      case 'WATER':
+        return 'Eau';
+      case 'SAFETY':
+        return 'Sécurité';
+      case 'PUBLIC_PROPERTY':
+        return 'Domaine public';
+      case 'GREEN_SPACE':
+        return 'Espaces verts';
+      default:
+        return 'Autre';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _filtered;
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('All Complaints'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Tous les signalements',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadComplaints,
           ),
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                '${_total}',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadComplaints,
-        child: CustomScrollView(
+        child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // ─── Stats Cards ────────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 2.2,
-                  children: [
-                    _buildStatCard(
-                      'Total',
-                      _total,
-                      Icons.list_alt,
-                      Colors.blue,
-                      onTap: () => setState(() {
-                        _statusFilter = '';
-                        _loadComplaints();
-                      }),
-                    ),
-                    _buildStatCard(
-                      'Resolved',
-                      _resolved,
-                      Icons.check_circle,
-                      Colors.green,
-                      onTap: () => setState(() {
-                        _statusFilter = 'RESOLVED';
-                        _loadComplaints();
-                      }),
-                    ),
-                    _buildStatCard(
-                      'At Risk',
-                      _atRisk,
-                      Icons.warning_amber,
-                      Colors.amber,
-                      onTap: () => setState(() {
-                        _statusFilter = 'IN_PROGRESS';
-                        _loadComplaints();
-                      }),
-                    ),
-                    _buildStatCard(
-                      'Overdue',
-                      _overdue,
-                      Icons.alarm_off,
-                      Colors.red,
-                      onTap: () => setState(() {
-                        _statusFilter = 'ASSIGNED';
-                        _loadComplaints();
-                      }),
-                    ),
-                  ],
-                ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.5,
+                children: [
+                  _buildStatCard(
+                    'Total',
+                    '$_total',
+                    Icons.summarize,
+                    const Color(0xFF3B82F6),
+                  ),
+                  _buildStatCard(
+                    'En attente',
+                    '$_pending',
+                    Icons.pending,
+                    const Color(0xFFF59E0B),
+                  ),
+                  _buildStatCard(
+                    'En cours',
+                    '$_inProgress',
+                    Icons.engineering,
+                    const Color(0xFFF97316),
+                  ),
+                  _buildStatCard(
+                    'Résolus',
+                    '$_resolved',
+                    Icons.check_circle,
+                    const Color(0xFF22C55E),
+                  ),
+                ],
               ),
-            ),
-
-            // ─── SLA Bar ─────────────────────────────────────────────────────
-            if (_total > 0)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'SLA Overview',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Row(
-                              children: [
-                                Flexible(
-                                  flex: (_total - _overdue - _atRisk).clamp(
-                                    0,
-                                    _total,
-                                  ),
-                                  child: Container(
-                                    height: 12,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                                Flexible(
-                                  flex: _atRisk,
-                                  child: Container(
-                                    height: 12,
-                                    color: Colors.amber,
-                                  ),
-                                ),
-                                Flexible(
-                                  flex: _overdue,
-                                  child: Container(
-                                    height: 12,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              _buildLegendDot(Colors.green, 'Compliant'),
-                              const SizedBox(width: 12),
-                              _buildLegendDot(Colors.amber, 'At Risk'),
-                              const SizedBox(width: 12),
-                              _buildLegendDot(Colors.red, 'Overdue'),
-                            ],
-                          ),
-                        ],
-                      ),
+              const SizedBox(height: 16),
+              if (_overdue > 0)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.3),
                     ),
                   ),
-                ),
-              ),
-
-            // ─── Search + Filter ─────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _searchController,
-                      onChanged: (v) {
-                        setState(() => _searchQuery = v);
-                        if (v.isEmpty) _loadComplaints();
-                      },
-                      onSubmitted: (_) => _loadComplaints(),
-                      decoration: InputDecoration(
-                        hintText: 'Search complaints...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                  _loadComplaints();
-                                },
-                              )
-                            : null,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children:
-                            [
-                              'ALL',
-                              'SUBMITTED',
-                              'VALIDATED',
-                              'ASSIGNED',
-                              'IN_PROGRESS',
-                              'RESOLVED',
-                              'CLOSED',
-                              'REJECTED',
-                            ].map((s) {
-                              final selected =
-                                  _statusFilter == (s == 'ALL' ? '' : s);
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: ChoiceChip(
-                                  label: Text(
-                                    s.replaceAll('_', ' '),
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  selected: selected,
-                                  selectedColor: AppColors.primary.withAlpha(
-                                    40,
-                                  ),
-                                  onSelected: (_) {
-                                    setState(
-                                      () => _statusFilter = s == 'ALL' ? '' : s,
-                                    );
-                                    _loadComplaints();
-                                  },
-                                ),
-                              );
-                            }).toList(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ─── List ─────────────────────────────────────────────────────────
-            if (_isLoading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_filtered.isEmpty)
-              SliverFillRemaining(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Row(
                     children: [
-                      Icon(
-                        Icons.inbox_outlined,
-                        size: 60,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 12),
+                      Icon(Icons.warning, color: Colors.red[600]),
+                      const SizedBox(width: 8),
                       Text(
-                        'No complaints found',
-                        style: TextStyle(color: Colors.grey.shade500),
+                        '$_overdue signalements en retard',
+                        style: TextStyle(
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (ctx, i) => _buildComplaintTile(_filtered[i]),
-                    childCount: _filtered.length,
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Rechercher un signalement...',
+                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
+                  onChanged: (v) => setState(() => _searchQuery = v),
                 ),
               ),
-          ],
+              const SizedBox(height: 12),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip('', 'Tous'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('SUBMITTED', 'Soumis'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('IN_PROGRESS', 'En cours'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('RESOLVED', 'Résolus'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('CLOSED', 'Clôturés'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '${filtered.length} résultats',
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              if (_isLoading)
+                const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                )
+              else if (filtered.isEmpty)
+                Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Aucun signalement trouvé',
+                        style: TextStyle(color: Colors.grey[700]),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ...filtered.map((c) => _buildComplaintCard(c)),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
     );
@@ -370,196 +345,228 @@ class _AdminComplaintsScreenState extends ConsumerState<AdminComplaintsScreen> {
 
   Widget _buildStatCard(
     String label,
-    int count,
+    String value,
     IconData icon,
-    Color color, {
-    VoidCallback? onTap,
-  }) {
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String value, String label) {
+    final isSelected = _statusFilter == value;
     return GestureDetector(
-      onTap: onTap,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(30),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '$count',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ],
+      onTap: () => setState(() => _statusFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.grey[700],
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLegendDot(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11)),
-      ],
-    );
-  }
+  Widget _buildComplaintCard(Complaint complaint) {
+    final statusColor = _statusColor(complaint.status);
+    final isOverdue =
+        ['ASSIGNED', 'IN_PROGRESS'].contains(complaint.status) &&
+        DateTime.now().difference(complaint.createdAt).inDays > 7;
 
-  Widget _buildComplaintTile(Complaint c) {
-    final statusColor = _getStatusColor(c.status);
-    final isOverdue = _isOverdue(c);
-    final isAtRisk = _isAtRisk(c);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isOverdue
-            ? const BorderSide(color: Colors.red, width: 1.5)
-            : isAtRisk
-            ? const BorderSide(color: Colors.amber, width: 1.5)
-            : BorderSide.none,
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ComplaintDetailScreen(complaintId: c.id),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: isOverdue
+            ? Border.all(color: Colors.red.withValues(alpha: 0.3))
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-        ).then((_) => _loadComplaints()),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      c.title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withAlpha(25),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      c.status.replaceAll('_', ' '),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(
-                    Icons.location_on,
-                    size: 12,
-                    color: Colors.grey.shade500,
-                  ),
-                  const SizedBox(width: 2),
-                  Expanded(
-                    child: Text(
-                      [
-                        c.municipalityName,
-                        c.governorate,
-                      ].where((s) => s != null && s.isNotEmpty).join(', '),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    _daysSince(c.createdAt),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isOverdue
-                          ? Colors.red
-                          : isAtRisk
-                          ? Colors.amber.shade700
-                          : Colors.grey.shade500,
-                    ),
-                  ),
-                ],
-              ),
-              if (isOverdue || isAtRisk) ...[
-                const SizedBox(height: 4),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Row(
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _statusLabel(complaint.status),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F7FA),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _categoryLabel(complaint.category),
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ),
+                    if (isOverdue) ...[
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.warning,
+                              size: 12,
+                              color: Colors.red[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'En retard',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  complaint.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  complaint.description,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.person, size: 14, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    Text(
+                      complaint.createdBy?.fullName ?? 'Anonyme',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                    const SizedBox(width: 12),
                     Icon(
-                      isOverdue ? Icons.alarm_off : Icons.warning_amber,
-                      size: 12,
-                      color: isOverdue ? Colors.red : Colors.amber.shade700,
+                      Icons.calendar_today,
+                      size: 14,
+                      color: Colors.grey[400],
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      isOverdue ? 'SLA Overdue' : 'SLA At Risk',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isOverdue ? Colors.red : Colors.amber.shade700,
-                      ),
+                      '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: AppColors.primary,
                     ),
                   ],
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
-  }
-
-  String _daysSince(DateTime dt) {
-    final days = DateTime.now().difference(dt).inDays;
-    if (days == 0) return 'Today';
-    if (days == 1) return '1 day ago';
-    return '$days days ago';
   }
 }

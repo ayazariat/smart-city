@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   FileText, CheckCircle, XCircle, Building, TrendingUp,
-  Clock, AlertTriangle, Filter, Download, Search, CheckCircle2, X
+  Clock, AlertTriangle, Filter, Download, Search, CheckCircle2, X,
+  Copy, Merge
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
@@ -54,6 +55,12 @@ export default function AgentComplaintsPage() {
     targetId: string | null;
     targetName: string;
   }>({ type: null, targetId: null, targetName: "" });
+
+  // Duplicate handling states (BL-25)
+  const [duplicateTarget, setDuplicateTarget] = useState<string | null>(null);
+  const [duplicateComplaints, setDuplicateComplaints] = useState<Complaint[]>([]);
+  const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
 
   const refreshComplaints = async () => {
     const response = await agentService.getAgentComplaints({ status: statusFilter === "ACTIVE" ? "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : (statusFilter || "ALL") });
@@ -215,6 +222,98 @@ export default function AgentComplaintsPage() {
       console.error("Error rejecting resolution:", err);
       const errorObj = err as { message?: string };
       alert(errorObj?.message || "Failed to reject resolution");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle duplicate check (BL-25) - Using direct API call
+  const handleCheckDuplicate = async (complaintId: string) => {
+    setDuplicateTarget(complaintId);
+    setDuplicateLoading(true);
+    setDuplicateComplaints([]);
+    try {
+      const c = complaints.find(x => (x._id || x.id) === complaintId);
+      if (!c) return;
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: c.title,
+          description: c.description,
+          category: c.category,
+          municipality: c.municipalityName,
+        }),
+      });
+      const result = await response.json();
+      
+      // Check inside result.data (backend wraps response)
+      const data = result.data || result;
+      if (data && data.topMatches && data.topMatches.length > 0) {
+        const matchIds = data.topMatches.map((m: { complaintId: string }) => m.complaintId);
+        const matched = complaints.filter(x => matchIds.includes(x._id || x.id));
+        setDuplicateComplaints(matched);
+      }
+    } catch (err) {
+      console.error("Error checking duplicates:", err);
+    } finally {
+      setDuplicateLoading(false);
+    }
+  };
+
+  // Handle merge complaints (BL-25)
+  const handleMergeComplaints = async (targetId: string, sourceIds: string[]) => {
+    setActionLoading(targetId);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      for (const sourceId of sourceIds) {
+        await fetch(`${apiUrl}/ai/duplicate/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            newComplaintId: targetId,
+            existingComplaintId: sourceId,
+            action: "merge",
+          }),
+        });
+      }
+      alert(`Successfully merged ${sourceIds.length + 1} complaints!`);
+      setDuplicateTarget(null);
+      setDuplicateComplaints([]);
+      setMergeSourceId(null);
+      await refreshComplaints();
+    } catch (err) {
+      console.error("Error merging complaints:", err);
+      alert("Failed to merge complaints");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Handle keep separate (BL-25)
+  const handleKeepSeparate = async (targetId: string) => {
+    setActionLoading(targetId);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      await fetch(`${apiUrl}/ai/duplicate/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newComplaintId: targetId,
+          existingComplaintId: "",
+          action: "keep_separate",
+        }),
+      });
+      alert("Complaints will be kept separate.");
+      setDuplicateTarget(null);
+      setDuplicateComplaints([]);
+      setMergeSourceId(null);
+      await refreshComplaints();
+    } catch (err) {
+      console.error("Error keeping separate:", err);
+      alert("Failed to process decision");
     } finally {
       setActionLoading(null);
     }
@@ -638,6 +737,22 @@ export default function AgentComplaintsPage() {
                               : 'Department Assigned'}
                           </div>
                         )}
+                        {/* BL-25: Duplicate check button */}
+                        {(complaint.status === "SUBMITTED" || complaint.status === "VALIDATED") && (
+                          <button
+                            onClick={() => handleCheckDuplicate(id)}
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-100 text-amber-700 rounded-xl hover:bg-amber-200 transition-all text-sm font-medium"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Duplicates
+                          </button>
+                        )}
+                        {(complaint.duplicateStatus === "MERGED" || complaint.duplicateStatus === "POSSIBLE_DUPLICATE" || complaint.duplicateStatus === "PROBABLE_DUPLICATE") && (
+                          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-100 text-purple-700 rounded-xl text-sm font-semibold">
+                            <Merge className="w-4 h-4" />
+                            {complaint.confirmationCount || 0} confirmed
+                          </div>
+                        )}
                         <button
                           onClick={() => router.push(`/dashboard/complaints/${id}?from=agent`)}
                           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-all text-sm font-medium"
@@ -815,6 +930,114 @@ export default function AgentComplaintsPage() {
         variant="warning"
         isLoading={actionLoading !== null}
       />
+
+      {/* BL-25: Duplicate Detection Modal */}
+      <Modal
+        isOpen={duplicateTarget !== null}
+        onClose={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); }}
+        title="Duplicate Detection"
+        description="Review potential duplicate complaints and decide whether to merge."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); }}>
+              Cancel
+            </Button>
+            {duplicateComplaints.length > 0 && (
+              <Button onClick={() => handleKeepSeparate(duplicateTarget!)}>
+                Keep Separate
+              </Button>
+            )}
+            {mergeSourceId && duplicateComplaints.length > 0 && (
+              <Button onClick={() => handleMergeComplaints(duplicateTarget!, [mergeSourceId])} className="bg-purple-600 hover:bg-purple-700">
+                <Merge className="w-4 h-4 mr-2" />
+                Merge Selected
+              </Button>
+            )}
+          </>
+        }
+      >
+        {duplicateLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="ml-3 text-slate-600">Checking for duplicates...</span>
+          </div>
+        ) : duplicateComplaints.length === 0 ? (
+          <div className="text-center py-8">
+            <Copy className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+            <p className="text-slate-600">No similar complaints found.</p>
+            <p className="text-sm text-slate-500 mt-1">This appears to be a unique complaint.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-amber-800">
+                <AlertTriangle className="w-5 h-5" />
+                <span className="font-medium">Potential duplicates found!</span>
+              </div>
+              <p className="text-sm text-amber-700 mt-1">
+                These complaints appear similar. You can merge them or keep them separate.
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-xs text-slate-500">Main complaint (target)</p>
+                {(() => {
+                  const c = complaints.find(x => (x._id || x.id) === duplicateTarget);
+                  return c ? (
+                    <>
+                      <p className="font-medium text-slate-900">{c.title}</p>
+                      <p className="text-sm text-slate-600 line-clamp-2">{c.description}</p>
+                    </>
+                  ) : null;
+                })()}
+              </div>
+              
+              <div className="text-sm text-slate-500 mb-2">Select to merge:</div>
+              {duplicateComplaints.map((c) => {
+                const cid = c._id || c.id || "";
+                return (
+                  <div
+                    key={cid}
+                    onClick={() => setMergeSourceId(mergeSourceId === cid ? null : cid)}
+                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      mergeSourceId === cid 
+                        ? "border-purple-500 bg-purple-50" 
+                        : "border-slate-200 hover:border-purple-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        mergeSourceId === cid ? "border-purple-500 bg-purple-500" : "border-slate-300"
+                      }`}>
+                        {mergeSourceId === cid && <CheckCircle className="w-3 h-3 text-white" />}
+                      </div>
+                      <p className="font-medium text-slate-900">{c.title}</p>
+                    </div>
+                    <p className="text-sm text-slate-600 line-clamp-2 mt-1 ml-7">{c.description}</p>
+                    <div className="text-xs text-slate-500 mt-2 ml-7">
+                      {c.status} • {categoryLabels[c.category] || c.category}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {mergeSourceId && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mt-4">
+                <div className="flex items-center gap-2 text-purple-800">
+                  <Merge className="w-5 h-5" />
+                  <span className="font-medium">Merge ready</span>
+                </div>
+                <p className="text-sm text-purple-700 mt-1">
+                  Click "Merge Selected" to combine these complaints into one.
+                  The confirmation count will be updated.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
     </DashboardLayout>
   );

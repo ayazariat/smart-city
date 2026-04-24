@@ -191,8 +191,8 @@ class AgentController {
         try {
           await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
             type: "validated",
-            title: "Complaint Validated",
-            message: `Your complaint "${complaint.title}" has been validated and is being processed.`,
+            title: "notification.status.validated",
+            message: `notification.status.validated.desc`,
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -252,8 +252,8 @@ class AgentController {
         try {
           await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
             type: "rejected",
-            title: "Complaint Rejected",
-            message: `Your complaint "${complaint.title}" has been rejected. Reason: ${reason}`,
+            title: "notification.status.rejected",
+            message: `notification.status.rejected.desc`,
             complaintId: complaint._id,
           });
         } catch (notifError) {

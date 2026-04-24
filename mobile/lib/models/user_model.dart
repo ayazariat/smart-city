@@ -7,6 +7,7 @@ class User {
   final String? municipalityName;
   final String? governorate;
   final String? department;
+  final bool isActive;
 
   User({
     required this.id,
@@ -17,6 +18,7 @@ class User {
     this.municipalityName,
     this.governorate,
     this.department,
+    this.isActive = true,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class User {
       municipalityName: json['municipalityName'],
       governorate: json['governorate'],
       department: json['department'],
+      isActive: json['isActive'] ?? true,
     );
   }
 

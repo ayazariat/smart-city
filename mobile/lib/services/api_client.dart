@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,12 +14,13 @@ class ApiClient {
     if (overrideBaseUrl != null && overrideBaseUrl!.isNotEmpty) {
       return overrideBaseUrl!;
     }
+    // Web uses localhost, mobile emulators use 10.0.2.2
+    if (kIsWeb) {
+      return 'http://localhost:5000/api';
+    }
     // Android emulator uses 10.0.2.2 to reach host machine localhost.
     // For a real Android/iOS device on the same WiFi, set overrideBaseUrl to your machine IP.
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:5000/api';
-    }
-    return 'http://localhost:5000/api';
+    return 'http://10.0.2.2:5000/api';
   }
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();

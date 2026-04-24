@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/main.dart' show AppColors;
+import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
-import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
+import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/screens/manager/team_performance_screen.dart';
 
@@ -18,7 +18,7 @@ class ManagerDashboardScreen extends ConsumerStatefulWidget {
 class _ManagerDashboardScreenState
     extends ConsumerState<ManagerDashboardScreen> {
   Map<String, dynamic> _stats = {};
-  String _selectedFilter = 'ALL';
+  bool _isLoadingStats = true;
 
   @override
   void initState() {
@@ -33,7 +33,10 @@ class _ManagerDashboardScreenState
     try {
       final stats = await ComplaintService().getManagerStats();
       if (mounted) setState(() => _stats = stats);
-    } catch (e) {}
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingStats = false);
+    }
   }
 
   Future<void> _loadData() async {
@@ -44,53 +47,72 @@ class _ManagerDashboardScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(managerComplaintsProvider);
-    final total = state.complaints.length;
-    final inProgress = state.complaints
-        .where((c) => c.status == 'IN_PROGRESS')
-        .length;
-    final resolved = state.complaints
-        .where((c) => c.status == 'RESOLVED')
-        .length;
+    final total = _stats['total'] ?? state.complaints.length;
+    final resolved = _stats['resolved'] ?? 0;
+    final inProgress = _stats['inProgress'] ?? 0;
+    final overdue = _stats['totalOverdue'] ?? 0;
+    final resolutionRate = _stats['resolutionRate'] ?? 0;
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _loadData,
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryDark],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+            SliverAppBar(
+              expandedHeight: 160,
+              floating: false,
+              pinned: true,
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.textPrimary,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.primary, AppColors.primaryDark],
                     ),
-                    child: SafeArea(
-                      bottom: false,
+                  ),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Row(
                             children: [
-                              const Icon(
-                                Icons.dashboard,
-                                color: Colors.white,
-                                size: 28,
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(
+                                  Icons.dashboard,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
                               ),
                               const SizedBox(width: 12),
-                              const Expanded(
-                                child: Text(
-                                  'Manager Dashboard',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Tableau de bord',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Gestion des signalements',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               IconButton(
@@ -115,123 +137,130 @@ class _ManagerDashboardScreenState
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Manage your department complaints',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
                         ],
                       ),
                     ),
                   ),
-                  Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withAlpha(13),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.3,
+                      children: [
+                        _buildStatCard(
+                          'Total',
+                          '$total',
+                          Icons.summarize,
+                          const Color(0xFF3B82F6),
+                        ),
+                        _buildStatCard(
+                          'En cours',
+                          '$inProgress',
+                          Icons.engineering,
+                          const Color(0xFFF97316),
+                        ),
+                        _buildStatCard(
+                          'Résolus',
+                          '$resolved',
+                          Icons.check_circle,
+                          const Color(0xFF22C55E),
+                        ),
+                        _buildStatCard(
+                          'En retard',
+                          '$overdue',
+                          Icons.warning,
+                          const Color(0xFFEF4444),
                         ),
                       ],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    if (resolutionRate > 0) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Taux de résolution',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  '${resolutionRate.toStringAsFixed(1)}%',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: resolutionRate / 100,
+                                minHeight: 10,
+                                backgroundColor: Colors.grey[200],
+                                valueColor: AlwaysStoppedAnimation(
+                                  AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Department Overview',
+                          'Signalements récents',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildStatCard(
-                                'Total',
-                                total,
-                                Icons.summarize,
-                                const Color(0xFF3B82F6),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildStatCard(
-                                'Active',
-                                inProgress,
-                                Icons.engineering,
-                                const Color(0xFFF97316),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildStatCard(
-                                'Resolved',
-                                resolved,
-                                Icons.check_circle,
-                                const Color(0xFF22C55E),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildStatCard(
-                                'Overdue',
-                                _stats['overdue'] ?? 0,
-                                Icons.warning,
-                                const Color(0xFFEF4444),
-                              ),
-                            ),
-                          ],
+                        TextButton(
+                          onPressed: () {},
+                          child: const Text('Voir tout'),
                         ),
                       ],
                     ),
-                  ),
-                  Container(
-                    height: 40,
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED']
-                          .map(
-                            (s) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(
-                                  s == 'ALL' ? 'All' : s.replaceAll('_', ' '),
-                                ),
-                                selected: _selectedFilter == s,
-                                onSelected: (_) {
-                                  setState(() => _selectedFilter = s);
-                                  ref
-                                      .read(managerComplaintsProvider.notifier)
-                                      .load(status: s);
-                                },
-                                selectedColor: AppColors.primary,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             ),
             if (state.isLoading)
               const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
               )
             else if (state.complaints.isEmpty)
               SliverFillRemaining(
@@ -239,67 +268,107 @@ class _ManagerDashboardScreenState
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.inbox_outlined,
-                        size: 64,
-                        color: Colors.grey[400],
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.inbox,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No complaints found',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                        'Aucun signalement',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[700],
+                        ),
                       ),
                     ],
                   ),
                 ),
               )
             else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => _buildComplaintCard(state.complaints[i]),
-                  childCount: state.complaints.length,
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) =>
+                        _buildComplaintCard(state.complaints[index]),
+                    childCount: state.complaints.length,
+                  ),
                 ),
               ),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(String label, int value, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withAlpha(13),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const Spacer(),
           Text(
-            '$value',
+            value,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: color,
             ),
           ),
-          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         ],
       ),
     );
   }
 
   Widget _buildComplaintCard(Complaint complaint) {
+    final statusColor = _statusColor(complaint.status);
+    final isOverdue =
+        ['ASSIGNED', 'IN_PROGRESS'].contains(complaint.status) &&
+        DateTime.now().difference(complaint.createdAt).inDays > 7;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: isOverdue
+            ? Border.all(color: Colors.red.withValues(alpha: 0.3))
+            : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -307,14 +376,15 @@ class _ManagerDashboardScreenState
       ),
       child: Material(
         color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
+          borderRadius: BorderRadius.circular(16),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
             ),
-          ).then((_) => _loadData()),
-          borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -322,62 +392,95 @@ class _ManagerDashboardScreenState
               children: [
                 Row(
                   children: [
-                    Expanded(
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: Text(
-                        complaint.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                        _statusLabel(complaint.status),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    _buildStatusChip(complaint.status),
+                    if (complaint.assignedDepartmentName != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F7FA),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          complaint.assignedDepartmentName!,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Text(
+                      '${complaint.createdAt.day}/${complaint.createdAt.month}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+                Text(
+                  complaint.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
                 Text(
                   complaint.description,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    _buildCategoryChip(complaint.categoryLabel),
+                    Icon(Icons.category, size: 14, color: Colors.grey[400]),
+                    const SizedBox(width: 4),
+                    Text(
+                      complaint.category,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                     if (complaint.assignedToName != null) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 12),
+                      Icon(Icons.person, size: 14, color: Colors.grey[400]),
+                      const SizedBox(width: 4),
                       Text(
-                        'Tech: ${complaint.assignedToName}',
-                        style: TextStyle(fontSize: 12, color: AppColors.accent),
+                        complaint.assignedToName!,
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ],
                     const Spacer(),
-                    Text(
-                      '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: AppColors.primary,
                     ),
                   ],
                 ),
-                if (complaint.status == 'ASSIGNED' &&
-                    complaint.assignedToName == null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _showAssignTechnicianDialog(complaint),
-                        icon: const Icon(Icons.person_add, size: 16),
-                        label: const Text('Assign Technician'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -386,129 +489,45 @@ class _ManagerDashboardScreenState
     );
   }
 
-  Future<void> _showAssignTechnicianDialog(Complaint complaint) async {
-    List<dynamic> technicians = [];
-    bool loading = true;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          if (loading) {
-            ComplaintService()
-                .getDepartmentTechnicians()
-                .then(
-                  (techs) => setDialogState(() {
-                    technicians = techs;
-                    loading = false;
-                  }),
-                )
-                .catchError((_) => setDialogState(() => loading = false));
-          }
-          return AlertDialog(
-            title: const Text('Assign Technician'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300,
-              child: loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : technicians.isEmpty
-                  ? const Center(child: Text('No technicians available'))
-                  : ListView.builder(
-                      itemCount: technicians.length,
-                      itemBuilder: (_, i) {
-                        final tech = technicians[i];
-                        final name =
-                            tech['fullName'] ?? tech['name'] ?? 'Unknown';
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.accent.withAlpha(25),
-                            child: const Icon(
-                              Icons.engineering,
-                              color: AppColors.accent,
-                            ),
-                          ),
-                          title: Text(name),
-                          subtitle: Text(
-                            tech['email'] ?? '',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          onTap: () async {
-                            Navigator.pop(ctx);
-                            try {
-                              final techId = tech['_id'] ?? tech['id'];
-                              await ComplaintService().assignTechnician(
-                                complaint.id,
-                                techId.toString(),
-                              );
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Assigned to $name')),
-                                );
-                                _loadData();
-                              }
-                            } catch (e) {
-                              if (mounted)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Failed: $e')),
-                                );
-                            }
-                          },
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
+  Color _statusColor(String status) {
     switch (status) {
+      case 'SUBMITTED':
+        return AppColors.statusSoumise;
+      case 'VALIDATED':
+        return AppColors.statusValidee;
       case 'ASSIGNED':
-        color = const Color(0xFF8B5CF6);
-        break;
+        return AppColors.statusAssignee;
       case 'IN_PROGRESS':
-        color = const Color(0xFFF97316);
-        break;
+        return AppColors.statusEnCours;
       case 'RESOLVED':
-        color = const Color(0xFF22C55E);
-        break;
+        return AppColors.statusResolue;
+      case 'CLOSED':
+        return AppColors.statusCloturee;
+      case 'REJECTED':
+        return AppColors.statusRejetee;
       default:
-        color = Colors.grey;
+        return Colors.grey;
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        status.replaceAll('_', ' '),
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
   }
 
-  Widget _buildCategoryChip(String category) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(category, style: const TextStyle(fontSize: 11)),
-    );
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'SUBMITTED':
+        return 'Soumis';
+      case 'VALIDATED':
+        return 'Validé';
+      case 'ASSIGNED':
+        return 'Assigné';
+      case 'IN_PROGRESS':
+        return 'En cours';
+      case 'RESOLVED':
+        return 'Résolu';
+      case 'CLOSED':
+        return 'Clôturé';
+      case 'REJECTED':
+        return 'Rejeté';
+      default:
+        return status;
+    }
   }
 }

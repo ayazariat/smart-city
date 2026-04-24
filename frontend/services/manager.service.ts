@@ -123,4 +123,18 @@ export const managerService = {
   async getStats() {
     return apiClient.get<ManagerStatsResponse>("/manager/stats");
   },
+
+  /**
+   * Validate a submitted complaint (Manager only)
+   */
+  async validateComplaint(complaintId: string) {
+    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/validate`, {});
+  },
+
+  /**
+   * Reject a submitted complaint (Manager only)
+   */
+  async rejectComplaint(complaintId: string, reason: string) {
+    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/reject`, { reason });
+  },
 };

@@ -31,6 +31,7 @@ class Complaint {
   final List<dynamic> materialsUsed;
   final Map<String, dynamic>? aiDuplicateCheck;
   final String? duplicateStatus;
+  final String? phone;
 
   Complaint({
     required this.id,
@@ -65,6 +66,7 @@ class Complaint {
     this.materialsUsed = const [],
     this.aiDuplicateCheck,
     this.duplicateStatus,
+    this.phone,
   });
 
   factory Complaint.fromJson(Map<String, dynamic> json) {
@@ -127,6 +129,7 @@ class Complaint {
           ? json['aiDuplicateCheck'] as Map<String, dynamic>
           : null,
       duplicateStatus: json['duplicateStatus'],
+      phone: json['phone'],
     );
   }
 

@@ -917,6 +917,26 @@
     "statsAssigned": "Assignées",
     "statsInProgress": "En cours",
     "statsResolved": "Résolues",
-    "statsOverdue": "En retard"
+    "statsOverdue": "En retard",
+    "notification": {
+      "status": {
+        "validated": "Réclamation validée",
+        "validated.desc": "Votre réclamation a été validée et sera traitée.",
+        "rejected": "Réclamation rejetée",
+        "rejected.desc": "Votre réclamation a été rejetée.",
+        "assigned": "Réclamation assignée",
+        "assigned.desc": "Votre réclamation a été assignée à une équipe.",
+        "inProgress": "Traitement en cours",
+        "inProgress.desc": "Votre réclamation est en cours de traitement.",
+        "resolved": "Réclamation résolue",
+        "resolved.desc": "Votre réclamation a été résolue.",
+        "closed": "Réclamation fermée",
+        "closed.desc": "Votre réclamation a été fermée."
+      },
+      "newComplaint": "Nouvelle réclamation",
+      "newComplaint.desc": "Une nouvelle réclamation a été soumise.",
+      "assignedToYou": "Réclamation assignée",
+      "assignedToYou.desc": "Une réclamation vous a été assignée."
+    }
   }
 }

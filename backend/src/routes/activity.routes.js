@@ -12,48 +12,75 @@ const { authenticate } = require("../middleware/auth");
 router.get("/recent", authenticate, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 5, 20);
-    const { userId, role, municipality, department } = req.user;
+    const { userId, role, municipality, department, municipalityName } = req.user;
+    const mongoose = require('mongoose');
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    console.log("[Activity] User:", { userId, role, municipality, department, municipalityName });
 
     // Build query based on role scope
-    const query = {};
+    let query = {};
     switch (role) {
       case "CITIZEN":
-        query.createdBy = userId;
+        query.createdBy = userObjectId;
         break;
       case "MUNICIPAL_AGENT":
-        if (municipality) {
-          query.$or = [
-            { municipality: municipality },
-            { municipalityName: municipality },
-            { "location.municipality": municipality },
-          ];
+        // Try to match by municipality name OR ID - simplified approach
+        if (municipalityName) {
+          query = { municipalityName: municipalityName };
+        } else if (municipality && mongoose.Types.ObjectId.isValid(municipality)) {
+          query = { municipality: new mongoose.Types.ObjectId(municipality) };
+        } else {
+          // No municipality set - show recent from all (agent should have municipality assigned)
+          console.log("[Activity] Agent has no municipality, showing all");
         }
         break;
       case "DEPARTMENT_MANAGER":
-        if (department) {
-          query.assignedDepartment = department;
+        if (department && mongoose.Types.ObjectId.isValid(department)) {
+          query.assignedDepartment = new mongoose.Types.ObjectId(department);
+        } else {
+          query = {};
         }
         break;
       case "TECHNICIAN":
-        query.assignedTo = userId;
+        query.assignedTo = userObjectId;
         break;
       case "ADMIN":
         // No filter — see everything
+        query = {};
         break;
       default:
-        break;
+        query = {};
     }
+
+    console.log("[Activity] Query:", JSON.stringify(query));
+    console.log("[Activity] Role:", role);
 
     // Fetch complaints with statusHistory, sorted by latest update
     const complaints = await Complaint.find(query)
       .sort({ updatedAt: -1 })
       .limit(50)
-      .select("referenceId title municipality status statusHistory assignedTo assignedDepartment")
+      .select("referenceId title municipality status statusHistory assignedTo assignedDepartment createdBy")
       .lean();
 
     // Flatten all statusHistory entries and sort by date desc
     const activities = [];
     for (const complaint of complaints) {
+      // Add initial submission as activity if no statusHistory
+      if (!complaint.statusHistory || complaint.statusHistory.length === 0) {
+        activities.push({
+          action: complaint.status || "SUBMITTED",
+          notes: "Complaint created",
+          complaintId: complaint._id,
+          referenceId: complaint.referenceId || "",
+          title: complaint.title || "",
+          municipality: complaint.municipality || "",
+          department: complaint.assignedDepartment || "",
+          actorId: complaint.createdBy || null,
+          timestamp: complaint.createdAt || complaint.updatedAt,
+        });
+      }
+      
       const history = complaint.statusHistory || [];
       for (const entry of history) {
         activities.push({

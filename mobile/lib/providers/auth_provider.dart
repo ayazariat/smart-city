@@ -1,159 +1,105 @@
+// ========== AUTH PROVIDER ==========
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/user_model.dart';
-import '../services/api_client.dart';
-import 'notifications_provider.dart';
+import 'package:smart_city_app/services/auth_service.dart';
+import 'package:smart_city_app/models/user_model.dart';
 
-// Auth state
-class AuthState {
-  final User? user;
-  final bool isLoading;
-  final String? error;
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+  return AuthNotifier(ref.read(authServiceProvider));
+});
 
-  AuthState({this.user, this.isLoading = false, this.error});
-
-  AuthState copyWith({User? user, bool? isLoading, String? error}) {
-    return AuthState(
-      user: user ?? this.user,
-      isLoading: isLoading ?? this.isLoading,
-      error: error,
-    );
-  }
-
-  bool get isAuthenticated => user != null;
-}
-
-// Auth notifier
 class AuthNotifier extends StateNotifier<AuthState> {
-  final ApiClient _api;
-  final Ref _ref;
+  final AuthService _authService;
 
-  AuthNotifier(this._api, this._ref) : super(AuthState()) {
-    _checkAuth();
-  }
+  AuthNotifier(this._authService) : super(const AuthState());
 
-  Future<void> _checkAuth() async {
-    await _api.loadTokens();
-    if (_api.isAuthenticated) {
-      try {
-        final response = await _api.get('/auth/me');
-        final user = User.fromJson(response['user'] ?? response);
-        state = state.copyWith(user: user);
-
-        // Connect socket if we have a valid session
-        if (_api.token != null && user.id.isNotEmpty) {
-          _ref
-              .read(notificationsProvider.notifier)
-              .connectSocket(_api.token!, user.id);
-        }
-      } catch (e) {
-        await _api.clearTokens();
-      }
-    }
-  }
-
-  Future<void> login(String email, String password) async {
-    state = state.copyWith(isLoading: true, error: null);
-    try {
-      final response = await _api.post('/auth/login', {
-        'email': email,
-        'password': password,
-      });
-
-      final token = response['accessToken'];
-      final refreshToken = response['refreshToken'];
-
-      if (token == null) throw Exception('No token received');
-
-      await _api.setTokens(token, refreshToken ?? '');
-      final user = User.fromJson(response['user'] ?? {});
-
-      state = state.copyWith(user: user, isLoading: false);
-
-      // Connect socket after login
-      if (user.id.isNotEmpty) {
-        _ref.read(notificationsProvider.notifier).connectSocket(token, user.id);
-      }
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString().replaceAll('Exception: ', ''),
-      );
-      rethrow;
-    }
-  }
-
-  Future<void> register({
-    required String email,
-    required String password,
-    required String fullName,
-    required String role,
-    String? phone,
-    String? municipality,
-    String? governorate,
+  Future<void> login(
+    String email,
+    String password, {
+    String? captchaToken,
   }) async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, errorMessage: null);
     try {
-      await _api.post('/auth/register', {
-        'email': email,
-        'password': password,
-        'fullName': fullName,
-        'role': role,
-        'phone': ?phone,
-        'municipality': ?municipality,
-        'governorate': ?governorate,
-      });
-      state = state.copyWith(isLoading: false);
-    } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString().replaceAll('Exception: ', ''),
+      final user = await _authService.login(
+        email,
+        password,
+        captchaToken: captchaToken,
       );
-      rethrow;
+      state = state.copyWith(isLoading: false, user: user, errorMessage: null);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+    }
+  }
+
+  Future<void> register(
+    String email,
+    String password,
+    String fullName,
+    String role,
+    String? phone,
+    String? governorate,
+    String? municipality, {
+    String? captchaToken,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      final user = await _authService.register(
+        email,
+        password,
+        fullName,
+        role,
+        phone,
+        governorate,
+        municipality,
+        captchaToken: captchaToken,
+      );
+      state = state.copyWith(isLoading: false, user: user, errorMessage: null);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+    }
+  }
+
+  Future<void> forgotPassword(String email) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      await _authService.forgotPassword(email);
+      state = state.copyWith(isLoading: false, errorMessage: null);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
+    }
+  }
+
+  Future<void> updateProfile(
+    String firstName,
+    String lastName,
+    String phone,
+  ) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      final user = await _authService.updateProfile(firstName, lastName, phone);
+      state = state.copyWith(isLoading: false, user: user, errorMessage: null);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, errorMessage: e.toString());
     }
   }
 
   Future<void> logout() async {
-    // Disconnect socket before logout
-    _ref.read(notificationsProvider.notifier).disconnectSocket();
-    await _api.clearTokens();
-    state = AuthState();
-  }
-
-  Future<void> updateProfile({
-    String? fullName,
-    String? phone,
-    String? municipality,
-    String? governorate,
-  }) async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final response = await _api.put('/auth/profile', {
-        'fullName': ?fullName,
-        'phone': ?phone,
-        'municipality': ?municipality,
-        'governorate': ?governorate,
-      });
-      final user = User.fromJson(response['user'] ?? response);
-      state = state.copyWith(user: user, isLoading: false);
-    } catch (e) {
-      state = state.copyWith(isLoading: false);
-      rethrow;
-    }
+    await _authService.logout();
+    state = const AuthState();
   }
 }
 
-// Providers
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
+class AuthState {
+  final bool isLoading;
+  final String? errorMessage;
+  final User? user;
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final api = ref.watch(apiClientProvider);
-  return AuthNotifier(api, ref);
-});
+  const AuthState({this.isLoading = false, this.errorMessage, this.user});
 
-final currentUserProvider = Provider<User?>((ref) {
-  return ref.watch(authProvider).user;
-});
-
-final isAuthenticatedProvider = Provider<bool>((ref) {
-  return ref.watch(authProvider).isAuthenticated;
-});
+  AuthState copyWith({bool? isLoading, String? errorMessage, User? user}) {
+    return AuthState(
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage ?? this.errorMessage,
+      user: user ?? this.user,
+    );
+  }
+}

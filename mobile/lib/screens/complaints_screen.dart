@@ -1,10 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
-import 'package:smart_city_app/main.dart';
+import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
+
+const Map<String, Map<String, dynamic>> _statusConfig = {
+  'SUBMITTED': {
+    'label': 'Submitted',
+    'bg': Color(0xFFFFF3E0),
+    'text': Color(0xFFE65100),
+    'dot': Color(0xFFFF9800),
+  },
+  'VALIDATED': {
+    'label': 'Validated',
+    'bg': Color(0xFFE3F2FD),
+    'text': Color(0xFF1565C0),
+    'dot': Color(0xFF2196F3),
+  },
+  'ASSIGNED': {
+    'label': 'Assigned',
+    'bg': Color(0xFFF3E5F5),
+    'text': Color(0xFF6A1B9A),
+    'dot': Color(0xFF9C27B0),
+  },
+  'IN_PROGRESS': {
+    'label': 'In Progress',
+    'bg': Color(0xFFFFF3E0),
+    'text': Color(0xFFEF6C00),
+    'dot': Color(0xFFFF9800),
+  },
+  'RESOLVED': {
+    'label': 'Resolved',
+    'bg': Color(0xFFE8F5E9),
+    'text': Color(0xFF2E7D32),
+    'dot': Color(0xFF4CAF50),
+  },
+  'CLOSED': {
+    'label': 'Closed',
+    'bg': Color(0xFFF1F5F9),
+    'text': Color(0xFF475569),
+    'dot': Color(0xFF64748B),
+  },
+  'REJECTED': {
+    'label': 'Rejected',
+    'bg': Color(0xFFFFEBEE),
+    'text': Color(0xFFC62828),
+    'dot': Color(0xFFEF5350),
+  },
+};
+
+const Map<String, String> _categoryLabels = {
+  'ROAD': 'Roads & Infrastructure',
+  'LIGHTING': 'Public Lighting',
+  'WASTE': 'Waste Management',
+  'WATER': 'Water & Sanitation',
+  'SAFETY': 'Public Safety',
+  'PUBLIC_PROPERTY': 'Public Property',
+  'GREEN_SPACE': 'Parks & Green Spaces',
+  'OTHER': 'Other',
+};
 
 class ComplaintsScreen extends ConsumerStatefulWidget {
   final VoidCallback? onLogout;
@@ -16,7 +72,7 @@ class ComplaintsScreen extends ConsumerStatefulWidget {
 }
 
 class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
-  String _statusFilter = 'ALL';
+  String _statusFilter = '';
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
 
@@ -41,158 +97,228 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(myComplaintsProvider);
-    final stats = state.stats;
+    final complaints = _buildFilteredList(state.complaints);
+
+    final submitted = state.complaints
+        .where((c) => c.status == 'SUBMITTED')
+        .length;
+    final inProgress = state.complaints
+        .where(
+          (c) => ['VALIDATED', 'ASSIGNED', 'IN_PROGRESS'].contains(c.status),
+        )
+        .length;
+    final resolved = state.complaints
+        .where((c) => c.status == 'RESOLVED')
+        .length;
+    final total = state.complaints.length;
 
     return Scaffold(
-      body: Column(
-        children: [
-          // Stats Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(13),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: _loadComplaints,
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              floating: true,
+              pinned: true,
+              backgroundColor: Colors.white,
+              elevation: 0,
+              surfaceTintColor: Colors.transparent,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: AppColors.textPrimary,
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // Stats Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        'Total',
-                        '${stats?.total ?? state.complaints.length}',
-                        Icons.summarize,
-                        const Color(0xFF3B82F6),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatItem(
-                        'Pending',
-                        '${(stats?.submitted ?? 0) + (stats?.pending ?? 0)}',
-                        Icons.pending_actions,
-                        const Color(0xFFF59E0B),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatItem(
-                        'In Progress',
-                        '${stats?.inProgress ?? 0}',
-                        Icons.engineering,
-                        const Color(0xFFF97316),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildStatItem(
-                        'Resolved',
-                        '${(stats?.resolved ?? 0) + (stats?.closed ?? 0)}',
-                        Icons.check_circle,
-                        const Color(0xFF22C55E),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search complaints...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchTerm.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchTerm = '');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade50,
+                onPressed: () => Navigator.pop(context),
               ),
-              onChanged: (value) => setState(() => _searchTerm = value),
-            ),
-          ),
-
-          // Filter Chips
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildFilterChip('ALL', 'All'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('SUBMITTED', 'Submitted'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('VALIDATED', 'Validated'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('IN_PROGRESS', 'In Progress'),
-                  const SizedBox(width: 8),
-                  _buildFilterChip('RESOLVED', 'Resolved'),
-                ],
+              title: const Text(
+                'My Complaints',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Complaints List
-          Expanded(
-            child: state.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildFilteredList(state.complaints).isEmpty
-                ? _buildEmptyState()
-                : RefreshIndicator(
-                    onRefresh: _loadComplaints,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _buildFilteredList(state.complaints).length,
-                      itemBuilder: (context, index) {
-                        final complaint = _buildFilteredList(
-                          state.complaints,
-                        )[index];
-                        return _buildComplaintCard(complaint);
-                      },
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NewComplaintScreen(
+                            onComplaintSubmitted: _loadComplaints,
+                            onBack: () => Navigator.pop(context),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('New'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-          ),
-        ],
+                ),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(color: const Color(0xFFE2E8F0), height: 1),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Submitted',
+                            submitted,
+                            Icons.access_time,
+                            const Color(0xFFFF9800),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            'In Progress',
+                            inProgress,
+                            Icons.trending_up,
+                            const Color(0xFF2196F3),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Resolved',
+                            resolved,
+                            Icons.check_circle,
+                            const Color(0xFF4CAF50),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Total',
+                            total,
+                            Icons.description,
+                            AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search complaints...',
+                          hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: AppColors.textSecondary,
+                          ),
+                          suffixIcon: _searchTerm.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchTerm = '');
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                        ),
+                        onChanged: (value) =>
+                            setState(() => _searchTerm = value),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildFilterChip('', 'All'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('SUBMITTED', 'Submitted'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('IN_PROGRESS', 'In Progress'),
+                          const SizedBox(width: 8),
+                          _buildFilterChip('RESOLVED', 'Resolved'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            if (state.isLoading)
+              const SliverFillRemaining(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              )
+            else if (complaints.isEmpty)
+              SliverFillRemaining(child: _buildEmptyState())
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final complaint = complaints[index];
+                    return _buildComplaintCard(complaint);
+                  }, childCount: complaints.length),
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  NewComplaintScreen(onComplaintSubmitted: _loadComplaints),
+              builder: (context) => NewComplaintScreen(
+                onComplaintSubmitted: _loadComplaints,
+                onBack: () => Navigator.pop(context),
+              ),
             ),
           );
         },
@@ -205,12 +331,16 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
   List<Complaint> _buildFilteredList(List<Complaint> complaints) {
     var filtered = complaints;
 
-    // Status filter
-    if (_statusFilter != 'ALL') {
+    if (_statusFilter == 'IN_PROGRESS') {
+      filtered = filtered
+          .where(
+            (c) => ['VALIDATED', 'ASSIGNED', 'IN_PROGRESS'].contains(c.status),
+          )
+          .toList();
+    } else if (_statusFilter.isNotEmpty) {
       filtered = filtered.where((c) => c.status == _statusFilter).toList();
     }
 
-    // Search filter
     if (_searchTerm.isNotEmpty) {
       final q = _searchTerm.toLowerCase();
       filtered = filtered
@@ -218,7 +348,8 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
             (c) =>
                 c.title.toLowerCase().contains(q) ||
                 c.description.toLowerCase().contains(q) ||
-                c.category.toLowerCase().contains(q) ||
+                (_categoryLabels[c.category]?.toLowerCase().contains(q) ??
+                    false) ||
                 (c.municipalityName?.toLowerCase().contains(q) ?? false),
           )
           .toList();
@@ -227,44 +358,49 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
     return filtered;
   }
 
-  Widget _buildStatItem(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildStatCard(String label, int value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: color.withAlpha(26),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: 18),
+            child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                value,
-                style: TextStyle(
-                  fontSize: 18,
+                '$value',
+                style: const TextStyle(
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: color,
+                  color: AppColors.textPrimary,
                 ),
               ),
               Text(
                 label,
-                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -275,18 +411,26 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
 
   Widget _buildFilterChip(String status, String label) {
     final isSelected = _statusFilter == status;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) {
-        setState(() => _statusFilter = status);
-      },
-      selectedColor: AppColors.primary,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : null,
-        fontSize: 12,
+    return GestureDetector(
+      onTap: () => setState(() => _statusFilter = status),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
-      checkmarkColor: Colors.white,
     );
   }
 
@@ -295,24 +439,25 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[300]),
+          const Icon(Icons.inbox_outlined, size: 80, color: Color(0xFFCBD5E1)),
           const SizedBox(height: 16),
           Text(
-            _searchTerm.isNotEmpty || _statusFilter != 'ALL'
+            _searchTerm.isNotEmpty || _statusFilter.isNotEmpty
                 ? 'No complaints match your filters'
-                : 'No complaints yet',
-            style: TextStyle(
+                : "You haven't submitted any complaints yet.",
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
+              color: AppColors.textSecondary,
             ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            _searchTerm.isNotEmpty || _statusFilter != 'ALL'
+            _searchTerm.isNotEmpty || _statusFilter.isNotEmpty
                 ? 'Try adjusting your search or filters'
                 : 'Tap + to report an issue',
-            style: TextStyle(color: Colors.grey[400]),
+            style: const TextStyle(color: AppColors.textTertiary, fontSize: 14),
           ),
         ],
       ),
@@ -320,190 +465,247 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
   }
 
   Widget _buildComplaintCard(Complaint complaint) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
-            ),
-          ).then((_) => _loadComplaints());
-        },
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  _buildCategoryIcon(complaint.category),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    final statusCfg =
+        _statusConfig[complaint.status] ??
+        {
+          'label': complaint.status,
+          'bg': const Color(0xFFF1F5F9),
+          'text': const Color(0xFF475569),
+          'dot': const Color(0xFF64748B),
+        };
+    final categoryLabel =
+        _categoryLabels[complaint.category] ?? complaint.category;
+    final locationAddress = complaint.location?['address'] as String?;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ComplaintDetailScreen(complaintId: complaint.id),
+              ),
+            ).then((_) => _loadComplaints());
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'RC-${complaint.id.substring(complaint.id.length > 6 ? complaint.id.length - 6 : 0).toUpperCase()}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textSecondary,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: statusCfg['bg'] as Color,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: statusCfg['dot'] as Color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  statusCfg['label'] as String,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: statusCfg['text'] as Color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withAlpha(26),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              categoryLabel,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          complaint.title,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.access_time,
+                              size: 14,
+                              color: Color(0xFF94A3B8),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  complaint.description,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                    height: 1.5,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    if (locationAddress != null) ...[
+                      const Icon(
+                        Icons.location_on,
+                        size: 14,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          locationAddress,
                           style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          complaint.description,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 14,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    if (complaint.municipalityName != null) ...[
+                      const Icon(
+                        Icons.location_city,
+                        size: 14,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        complaint.municipalityName!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
                         ),
-                      ],
-                    ),
-                  ),
-                  _buildStatusChip(complaint.status),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Meta info
-              Row(
-                children: [
-                  if (complaint.municipalityName != null) ...[
-                    Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
-                    const SizedBox(width: 4),
-                    Text(
-                      complaint.municipalityName!,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  const Spacer(),
-                  if (complaint.media.isNotEmpty)
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    if (complaint.media.isNotEmpty) ...[
+                      const Icon(
+                        Icons.photo,
+                        size: 14,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${complaint.media.length}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.photo, size: 14, color: Colors.grey[500]),
-                        const SizedBox(width: 4),
                         Text(
-                          '${complaint.media.length}',
+                          'View details',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
                           ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(
+                          Icons.chevron_right,
+                          size: 16,
+                          color: AppColors.primary,
                         ),
                       ],
                     ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoryIcon(String category) {
-    IconData icon;
-    Color color;
-
-    switch (category.toUpperCase()) {
-      case 'ROAD':
-        icon = Icons.add_road;
-        color = const Color(0xFF6B7280);
-        break;
-      case 'LIGHTING':
-        icon = Icons.lightbulb;
-        color = const Color(0xFFF59E0B);
-        break;
-      case 'WASTE':
-        icon = Icons.delete;
-        color = const Color(0xFF22C55E);
-        break;
-      case 'WATER':
-        icon = Icons.water_drop;
-        color = const Color(0xFF3B82F6);
-        break;
-      case 'SAFETY':
-        icon = Icons.shield;
-        color = const Color(0xFFEF4444);
-        break;
-      case 'PUBLIC_PROPERTY':
-        icon = Icons.account_balance;
-        color = const Color(0xFF8B5CF6);
-        break;
-      case 'GREEN_SPACE':
-        icon = Icons.park;
-        color = const Color(0xFF22C55E);
-        break;
-      default:
-        icon = Icons.report_problem;
-        color = const Color(0xFF6B7280);
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Icon(icon, color: color, size: 22),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
-    switch (status.toUpperCase()) {
-      case 'SUBMITTED':
-        color = const Color(0xFF3B82F6);
-        break;
-      case 'VALIDATED':
-        color = const Color(0xFF8B5CF6);
-        break;
-      case 'ASSIGNED':
-        color = const Color(0xFFF59E0B);
-        break;
-      case 'IN_PROGRESS':
-        color = const Color(0xFFF97316);
-        break;
-      case 'RESOLVED':
-        color = const Color(0xFF22C55E);
-        break;
-      case 'CLOSED':
-        color = const Color(0xFF6B7280);
-        break;
-      case 'REJECTED':
-        color = const Color(0xFFEF4444);
-        break;
-      default:
-        color = Colors.grey;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        status.replaceAll('_', ' '),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
