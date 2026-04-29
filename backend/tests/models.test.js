@@ -12,8 +12,8 @@ const Confirmation = require("./src/models/Confirmation");
 // Connect to MongoDB
 mongoose
   .connect("mongodb://127.0.0.1:27017/smartcitydb")
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.log("❌ MongoDB connection error:", err));
+  .then(() => {})
+  .catch((err) => {});
 
 async function runTests() {
   try {

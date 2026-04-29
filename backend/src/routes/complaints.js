@@ -96,7 +96,7 @@ router.get("/", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), com
 router.get("/stats", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getStats);
 router.get("/technicians", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getTechnicians);
 router.patch("/:id/status", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updateStatus);
-router.patch("/:id/assign", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignComplaint);
+router.patch("/:id/assign", authorize("ADMIN", "DEPARTMENT_MANAGER"), complaintController.assignComplaint);
 router.patch("/:id/department", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignDepartment);
 router.patch("/:id/priority", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updatePriority);
 router.patch("/:id/archive", authorize("ADMIN"), complaintController.archiveComplaint);
@@ -370,8 +370,9 @@ router.get("/:id/priority", async (req, res) => {
   }
 });
 
-// Common routes - both citizens and admin can access
+// Analytics endpoint added\n// Common routes - both citizens and admin can access
 router.get("/:id", complaintController.getComplaintById);
 router.post("/:id/comments", complaintController.addComment);
 
 module.exports = router;
+

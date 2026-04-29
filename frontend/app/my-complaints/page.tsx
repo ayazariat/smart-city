@@ -73,9 +73,9 @@ export default function MyComplaintsPage() {
   }, [user, statusFilter, hydrated]);
 
   const filteredComplaints = complaints.filter((c) => {
-    // Exclude CLOSED and ARCHIVED — those belong in the Archive page
+    // Exclude archive statuses from active citizen views.
     const status = c.status as string;
-    if (status === "CLOSED" || status === "ARCHIVED") return false;
+    if (status === "CLOSED" || status === "REJECTED" || status === "ARCHIVED") return false;
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -87,7 +87,7 @@ export default function MyComplaintsPage() {
   // Stats (excluding closed/archived)
   const activeComplaints = complaints.filter(c => {
     const s = c.status as string;
-    return s !== "CLOSED" && s !== "ARCHIVED";
+    return s !== "CLOSED" && s !== "REJECTED" && s !== "ARCHIVED";
   });
   const submitted = activeComplaints.filter(c => c.status === "SUBMITTED").length;
   const inProgress = activeComplaints.filter(c => ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(c.status)).length;
@@ -341,4 +341,3 @@ export default function MyComplaintsPage() {
     </DashboardLayout>
   );
 }
-

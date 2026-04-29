@@ -124,10 +124,12 @@ class MyComplaintsNotifier extends StateNotifier<ComplaintsState> {
         'title': title,
         'description': description,
         'category': category,
-        if (municipality != null) 'municipality': municipality,
-        if (governorate != null) 'governorate': governorate,
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
+        if (municipality != null && municipality.isNotEmpty)
+          'municipality': municipality,
+        if (governorate != null && governorate.isNotEmpty)
+          'governorate': governorate,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
         if (mediaUrls != null && mediaUrls.isNotEmpty) 'media': mediaUrls,
       };
       await _service.createComplaint(data);

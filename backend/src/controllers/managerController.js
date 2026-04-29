@@ -4,6 +4,13 @@ const RepairTeam = require("../models/RepairTeam");
 const Department = require("../models/Department");
 const notificationService = require("../services/notification.service");
 
+const MANAGER_ACTIVE_STATUSES = [
+  "VALIDATED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RESOLVED",
+];
+
 async function getManagerDepartment(userId) {
   const user = await User.findById(userId)
     .select("department")
@@ -38,12 +45,10 @@ class ManagerController {
         }
       }
       
-      if (status) {
-        if (status !== "ALL") {
-          query.status = status;
-        }
+      if (status && status !== "ALL") {
+        query.status = status;
       } else {
-        query.status = { $in: ["ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
+        query.status = { $in: MANAGER_ACTIVE_STATUSES };
       }
       
       if (category) {
@@ -141,8 +146,8 @@ class ManagerController {
       try {
         await notificationService.sendNotification(io, technicianId, {
           type: "assigned",
-          title: "New Task Assigned",
-          message: `A new task "${complaint.title || 'Unknown'}" has been assigned to you.`,
+          title: "notification.status.assigned",
+          message: "notification.status.assigned.desc",
           complaintId: complaint._id,
         });
       } catch (notifError) {
@@ -153,8 +158,8 @@ class ManagerController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "assigned",
-            title: "Complaint Assigned",
-            message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a technician.`,
+            title: "notification.status.assigned",
+            message: "notification.status.assigned.desc",
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -228,8 +233,8 @@ class ManagerController {
       try {
         await notificationService.sendNotification(io, technicianId, {
           type: "assigned",
-          title: "New Task Assigned",
-          message: `A new task "${complaint.title || 'Unknown'}" has been assigned to you.`,
+          title: "notification.status.assigned",
+          message: "notification.status.assigned.desc",
           complaintId: complaint._id,
         });
       } catch (notifError) {
@@ -240,8 +245,8 @@ class ManagerController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "technician_reassigned",
-            title: "Technician Reassigned",
-            message: `A new technician has been assigned to your complaint "${complaint.title || 'Unknown'}".`,
+            title: "notification.status.assigned",
+            message: "notification.status.assigned.desc",
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -326,8 +331,8 @@ class ManagerController {
         try {
           await notificationService.sendNotification(io, tech._id, {
             type: "assigned",
-            title: "New Task Assigned",
-            message: `A new task "${complaint.title || 'Unknown'}" has been assigned to your team.`,
+            title: "notification.status.assigned",
+            message: "notification.status.assigned.desc",
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -339,8 +344,8 @@ class ManagerController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "assigned",
-            title: "Complaint Assigned",
-            message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to a repair team.`,
+            title: "notification.status.assigned",
+            message: "notification.status.assigned.desc",
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -472,21 +477,27 @@ class ManagerController {
         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
       }
 
-      const baseQuery = { assignedDepartment: departmentId, isArchived: false };
+      const historicalBaseQuery = { assignedDepartment: departmentId };
+      const activeBaseQuery = {
+        ...historicalBaseQuery,
+        isArchived: false,
+        status: { $in: MANAGER_ACTIVE_STATUSES },
+      };
       
-      const [total, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory] = await Promise.all([
-        Complaint.countDocuments(baseQuery),
-        Complaint.countDocuments({ ...baseQuery, status: "SUBMITTED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "VALIDATED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "ASSIGNED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "REJECTED" }),
-        Complaint.countDocuments({ ...baseQuery, slaStatus: "OVERDUE", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] } }),
-        Complaint.countDocuments({ ...baseQuery, slaStatus: "AT_RISK", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] } }),
+      const [historicalTotal, total, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory] = await Promise.all([
+        Complaint.countDocuments(historicalBaseQuery),
+        Complaint.countDocuments(activeBaseQuery),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "SUBMITTED", isArchived: false }),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "VALIDATED" }),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
+        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
         Complaint.aggregate([
-          { $match: baseQuery },
+          { $match: activeBaseQuery },
           { $group: { _id: "$category", count: { $sum: 1 } } }
         ])
       ]);
@@ -495,7 +506,7 @@ class ManagerController {
       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
       const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...baseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+        { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
       ]);
       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
@@ -504,6 +515,7 @@ class ManagerController {
         success: true,
         data: {
           total,
+          historicalTotal,
           submitted,
           validated,
           assigned,
@@ -733,8 +745,8 @@ class ManagerController {
 
       await notificationService.sendNotification(io, technicianId, {
         type: "assigned",
-        title: "Task Assigned",
-        message: `A new task "${complaint.title || complaint.referenceId}" has been assigned to you.`,
+        title: "notification.status.assigned",
+        message: "notification.status.assigned.desc",
         complaintId: complaint._id,
       });
 
@@ -782,9 +794,9 @@ class ManagerController {
 
       if (complaint.createdBy) {
         await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
-          type: "validated",
-          title: "notification.status.validated",
-          message: "notification.status.validated.desc",
+          type: "assigned",
+          title: "notification.status.assigned",
+          message: "notification.status.assigned.desc",
           complaintId: complaint._id,
         });
       }

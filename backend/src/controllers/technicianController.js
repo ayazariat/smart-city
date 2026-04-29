@@ -2,6 +2,12 @@ const Complaint = require("../models/Complaint");
 const RepairTeam = require("../models/RepairTeam");
 const notificationService = require("../services/notification.service");
 
+const TECHNICIAN_ACTIVE_STATUSES = [
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RESOLVED",
+];
+
 class TechnicianController {
   async getComplaints(req, res) {
     try {
@@ -18,12 +24,10 @@ class TechnicianController {
         ]
       };
       
-      if (status) {
-        if (status !== "ALL") {
-          query.status = status;
-        }
+      if (status && status !== "ALL") {
+        query.status = status;
       } else {
-        query.status = { $in: ["ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
+        query.status = { $in: TECHNICIAN_ACTIVE_STATUSES };
       }
       
       if (category) {
@@ -180,8 +184,8 @@ class TechnicianController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "in_progress",
-            title: "Work Started",
-            message: `Work started on your complaint "${complaint.title}".`,
+            title: "notification.status.inProgress",
+            message: "notification.status.inProgress.desc",
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -288,8 +292,8 @@ class TechnicianController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "resolved",
-            title: "Complaint Resolved",
-            message: `Your complaint "${complaint.title}" has been resolved.`,
+            title: "notification.status.resolved",
+            message: "notification.status.resolved.desc",
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -350,11 +354,47 @@ class TechnicianController {
         takenBy: req.user.userId
       });
 
-      if (complaint.status === "ASSIGNED") {
+      const transitionedToInProgress = complaint.status === "ASSIGNED";
+      if (transitionedToInProgress) {
         complaint.status = "IN_PROGRESS";
+        if (!complaint.statusHistory) complaint.statusHistory = [];
+        complaint.statusHistory.push({
+          status: "IN_PROGRESS",
+          updatedBy: req.user.userId,
+          updatedAt: new Date(),
+          notes: "Work started via before-photo upload"
+        });
       }
 
       await complaint.save();
+
+      if (transitionedToInProgress) {
+        const io = req.app?.get?.('io');
+        if (io && complaint.assignedDepartment) {
+          try {
+            await notificationService.notifyManagersByDepartment(io, complaint.assignedDepartment, {
+              type: "in_progress",
+              title: "Work Started",
+              message: `Technician started work on "${complaint.title}".`,
+              complaintId: complaint._id,
+            });
+          } catch (notifError) {
+            console.error("Failed to notify managers:", notifError);
+          }
+        }
+        if (io && complaint.createdBy) {
+          try {
+            await notificationService.sendNotification(io, complaint.createdBy, {
+              type: "in_progress",
+              title: "notification.status.inProgress",
+              message: "notification.status.inProgress.desc",
+              complaintId: complaint._id,
+            });
+          } catch (notifError) {
+            console.error("Failed to notify citizen:", notifError);
+          }
+        }
+      }
 
       res.json({
         success: true,
@@ -504,30 +544,35 @@ class TechnicianController {
       const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
       const teamIds = teams.map(t => t._id);
       
-      const baseQuery = {
+      const historicalBaseQuery = {
         $or: [
           { assignedTo: technicianId },
           { assignedTeam: { $in: teamIds } }
         ],
-        isArchived: false
+      };
+      const activeBaseQuery = {
+        ...historicalBaseQuery,
+        isArchived: false,
+        status: { $in: TECHNICIAN_ACTIVE_STATUSES },
       };
 
-      const [total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk] = await Promise.all([
-        Complaint.countDocuments(baseQuery),
-        Complaint.countDocuments({ ...baseQuery, status: "ASSIGNED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "REJECTED" }),
-        Complaint.countDocuments({ ...baseQuery, slaStatus: "OVERDUE", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] } }),
-        Complaint.countDocuments({ ...baseQuery, slaStatus: "AT_RISK", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] } })
+      const [historicalTotal, total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk] = await Promise.all([
+        Complaint.countDocuments(historicalBaseQuery),
+        Complaint.countDocuments(activeBaseQuery),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
+        Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
+        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } })
       ]);
 
       const resolvedCount = resolved + closed;
       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
       const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...baseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+        { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
       ]);
       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
@@ -536,6 +581,7 @@ class TechnicianController {
         success: true,
         data: {
           total,
+          historicalTotal,
           assigned,
           inProgress,
           resolved,

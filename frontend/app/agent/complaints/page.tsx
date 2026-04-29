@@ -61,6 +61,7 @@ export default function AgentComplaintsPage() {
   const [duplicateComplaints, setDuplicateComplaints] = useState<Complaint[]>([]);
   const [duplicateLoading, setDuplicateLoading] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
+  const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([]);
 
   const refreshComplaints = async () => {
     const response = await agentService.getAgentComplaints({ status: statusFilter === "ACTIVE" ? "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : (statusFilter || "ALL") });
@@ -94,7 +95,6 @@ export default function AgentComplaintsPage() {
           }
         }
       } catch (err: unknown) {
-        console.error("Error fetching complaints:", err);
         const error = err as { message?: string };
         if (error.message?.includes("Municipality not configured")) {
           alert("Your account doesn't have a municipality configured. Please contact an administrator.");
@@ -195,7 +195,6 @@ export default function AgentComplaintsPage() {
         alert(result.message || "Failed to approve resolution");
       }
     } catch (err: unknown) {
-      console.error("Error accepting resolution:", err);
       const errorObj = err as { message?: string };
       alert(errorObj?.message || "Failed to approve resolution");
     } finally {
@@ -219,7 +218,6 @@ export default function AgentComplaintsPage() {
         alert(result.message || "Failed to reject resolution");
       }
     } catch (err: unknown) {
-      console.error("Error rejecting resolution:", err);
       const errorObj = err as { message?: string };
       alert(errorObj?.message || "Failed to reject resolution");
     } finally {
@@ -240,6 +238,7 @@ export default function AgentComplaintsPage() {
       const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           title: c.title,
           description: c.description,
@@ -257,7 +256,6 @@ export default function AgentComplaintsPage() {
         setDuplicateComplaints(matched);
       }
     } catch (err) {
-      console.error("Error checking duplicates:", err);
     } finally {
       setDuplicateLoading(false);
     }
@@ -272,6 +270,7 @@ export default function AgentComplaintsPage() {
         await fetch(`${apiUrl}/ai/duplicate/confirm`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({
             newComplaintId: targetId,
             existingComplaintId: sourceId,
@@ -283,9 +282,9 @@ export default function AgentComplaintsPage() {
       setDuplicateTarget(null);
       setDuplicateComplaints([]);
       setMergeSourceId(null);
+      setMergeSourceIds([]);
       await refreshComplaints();
     } catch (err) {
-      console.error("Error merging complaints:", err);
       alert("Failed to merge complaints");
     } finally {
       setActionLoading(null);
@@ -300,6 +299,7 @@ export default function AgentComplaintsPage() {
       await fetch(`${apiUrl}/ai/duplicate/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           newComplaintId: targetId,
           existingComplaintId: "",
@@ -310,9 +310,9 @@ export default function AgentComplaintsPage() {
       setDuplicateTarget(null);
       setDuplicateComplaints([]);
       setMergeSourceId(null);
+      setMergeSourceIds([]);
       await refreshComplaints();
     } catch (err) {
-      console.error("Error keeping separate:", err);
       alert("Failed to process decision");
     } finally {
       setActionLoading(null);
@@ -369,7 +369,7 @@ export default function AgentComplaintsPage() {
     return false;
   }).length;
 
-  const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+  const resolvedCount = complaints.filter(c => c.status === "RESOLVED").length;
   const highPriorityCount = complaints.filter(c => (c.priorityScore || 0) >= 15).length;
   const avgDays = complaints.length > 0 
     ? Math.round(complaints.reduce((acc, c) => {
@@ -934,12 +934,12 @@ export default function AgentComplaintsPage() {
       {/* BL-25: Duplicate Detection Modal */}
       <Modal
         isOpen={duplicateTarget !== null}
-        onClose={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); }}
+        onClose={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); setMergeSourceIds([]); }}
         title="Duplicate Detection"
         description="Review potential duplicate complaints and decide whether to merge."
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); }}>
+            <Button variant="ghost" onClick={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); setMergeSourceIds([]); }}>
               Cancel
             </Button>
             {duplicateComplaints.length > 0 && (
@@ -947,10 +947,10 @@ export default function AgentComplaintsPage() {
                 Keep Separate
               </Button>
             )}
-            {mergeSourceId && duplicateComplaints.length > 0 && (
-              <Button onClick={() => handleMergeComplaints(duplicateTarget!, [mergeSourceId])} className="bg-purple-600 hover:bg-purple-700">
+            {(mergeSourceIds.length > 0 || mergeSourceId) && duplicateComplaints.length > 0 && (
+              <Button onClick={() => handleMergeComplaints(duplicateTarget!, mergeSourceIds.length > 0 ? mergeSourceIds : [mergeSourceId!])} className="bg-purple-600 hover:bg-purple-700">
                 <Merge className="w-4 h-4 mr-2" />
-                Merge Selected
+                Merge Selected ({mergeSourceIds.length > 0 ? mergeSourceIds.length : 1})
               </Button>
             )}
           </>
@@ -999,18 +999,23 @@ export default function AgentComplaintsPage() {
                 return (
                   <div
                     key={cid}
-                    onClick={() => setMergeSourceId(mergeSourceId === cid ? null : cid)}
+                    onClick={() => {
+                      setMergeSourceId(mergeSourceId === cid ? null : cid);
+                      setMergeSourceIds((prev) =>
+                        prev.includes(cid) ? prev.filter((id) => id !== cid) : [...prev, cid]
+                      );
+                    }}
                     className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                      mergeSourceId === cid 
+                      mergeSourceIds.includes(cid)
                         ? "border-purple-500 bg-purple-50" 
                         : "border-slate-200 hover:border-purple-300"
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        mergeSourceId === cid ? "border-purple-500 bg-purple-500" : "border-slate-300"
+                        mergeSourceIds.includes(cid) ? "border-purple-500 bg-purple-500" : "border-slate-300"
                       }`}>
-                        {mergeSourceId === cid && <CheckCircle className="w-3 h-3 text-white" />}
+                        {mergeSourceIds.includes(cid) && <CheckCircle className="w-3 h-3 text-white" />}
                       </div>
                       <p className="font-medium text-slate-900">{c.title}</p>
                     </div>
@@ -1023,15 +1028,15 @@ export default function AgentComplaintsPage() {
               })}
             </div>
             
-            {mergeSourceId && (
+            {(mergeSourceIds.length > 0 || mergeSourceId) && (
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mt-4">
                 <div className="flex items-center gap-2 text-purple-800">
                   <Merge className="w-5 h-5" />
                   <span className="font-medium">Merge ready</span>
                 </div>
                 <p className="text-sm text-purple-700 mt-1">
-                  Click "Merge Selected" to combine these complaints into one.
-                  The confirmation count will be updated.
+                  Click Merge Selected to combine complaints into one transparent case.
+                  Citizen confirmations and support count will be preserved.
                 </p>
               </div>
             )}

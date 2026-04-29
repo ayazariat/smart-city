@@ -143,11 +143,7 @@ function DashboardContent() {
       );
       const data = await response.json();
       if (data.success && data.complaints) {
-        const filtered = (data.complaints as MunicipalityComplaint[]).filter((c) => {
-          const ownerId = getOwnerId(c);
-          return !ownerId || !currentUserId || ownerId !== currentUserId;
-        });
-        setMunicipalityComplaints(filtered);
+        setMunicipalityComplaints(data.complaints as MunicipalityComplaint[]);
       }
     } catch (err) {
       console.error("Error fetching municipality complaints:", err);
@@ -202,7 +198,7 @@ function DashboardContent() {
         try {
           const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
           const res = await fetch(
-            `${apiUrl}/public/my-municipality-complaints?limit=6&status=RESOLVED,CLOSED&sort=-updatedAt`,
+            `${apiUrl}/public/my-municipality-complaints?limit=6&status=RESOLVED&sort=-updatedAt`,
             { credentials: "include", headers: { Authorization: `Bearer ${token}` } }
           );
           const data = await res.json();
@@ -268,6 +264,15 @@ function DashboardContent() {
       router.replace("/login");
     }
   }, [hydrated, user, router]);
+
+  // Auto-refresh stats every 60 seconds
+  useEffect(() => {
+    if (!hydrated || !user) return;
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [hydrated, user, fetchStats]);
 
   // Show loading while hydrating
   if (!hydrated) {
@@ -887,7 +892,10 @@ function DashboardContent() {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {municipalityComplaints.slice(0, 6).map((complaint) => (
+                {municipalityComplaints.slice(0, 6).map((complaint) => {
+                  const isOwnComplaint = Boolean(currentUserId && getOwnerId(complaint) === currentUserId);
+
+                  return (
                   <div
                     key={complaint._id}
                     className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
@@ -925,6 +933,12 @@ function DashboardContent() {
 
                     {/* Content */}
                     <div className="p-3">
+                      {isOwnComplaint && (
+                        <div className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                          Your complaint
+                        </div>
+                      )}
+
                       <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
                         {complaint.title}
                       </h4>
@@ -937,17 +951,27 @@ function DashboardContent() {
 
                       {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED" || complaint.status === "IN_PROGRESS") && (
                         <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleConfirm(complaint._id); }}
-                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
-                            title={t('municipality.confirmTitle')}
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            <span>{t('municipality.confirmBtn')}</span>
-                            <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
-                              {complaint.confirmationCount || 0}
-                            </span>
-                          </button>
+                          {isOwnComplaint ? (
+                            <div className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Your complaint</span>
+                              <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                                {complaint.confirmationCount || 0}
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleConfirm(complaint._id); }}
+                              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
+                              title={t('municipality.confirmTitle')}
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>{t('municipality.confirmBtn')}</span>
+                              <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                                {complaint.confirmationCount || 0}
+                              </span>
+                            </button>
+                          )}
                           <Link
                             href={`/transparency/complaints/${complaint._id}#comments`}
                             onClick={(e) => e.stopPropagation()}
@@ -961,7 +985,8 @@ function DashboardContent() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 

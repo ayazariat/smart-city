@@ -254,7 +254,6 @@ export default function NewComplaintPage() {
         }
       } catch (err) {
         // Fallback to keyword detection on error
-        console.error("AI prediction failed, using keyword detection:", err);
         const detected = detectCategory(title, description);
         setAiSuggestedCategory(detected);
       } finally {
@@ -445,7 +444,6 @@ export default function NewComplaintPage() {
         throw new Error(result.message || 'Upload failed');
       }
     } catch (err) {
-      console.error('Upload error:', err);
       setError('Failed to upload files. Please try again.');
     } finally {
       setIsUploading(false);
@@ -655,7 +653,6 @@ export default function NewComplaintPage() {
       setComplaintId(complaintIdValue ?? null);
       setSuccess(true);
     } catch (err) {
-      console.error("Complaint submission error:", err);
       const rawMessage = err instanceof Error ? err.message : t('complaint.errors.submitFailed');
       const normalized = rawMessage.toLowerCase();
 

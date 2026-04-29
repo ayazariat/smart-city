@@ -5,6 +5,14 @@ const { normalizeMunicipality } = require("../utils/normalize");
 const notificationService = require("../services/notification.service");
 const { calculateSLADeadline } = require("../utils/sla");
 
+const ACTIVE_STATUSES = [
+  "SUBMITTED",
+  "VALIDATED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RESOLVED",
+];
+
 async function getAgentMunicipality(userId) {
   const user = await User.findById(userId)
     .populate('municipality', 'name governorate')
@@ -66,6 +74,8 @@ class AgentController {
         } else {
           query.status = status;
         }
+      } else {
+        query.status = { $in: ACTIVE_STATUSES };
       }
 
       if (category) {
@@ -370,16 +380,16 @@ class AgentController {
 
       await notificationService.notifyManagersByDepartment(req.app?.get?.('io'), departmentId, {
         type: "assigned",
-        title: "New Complaint Assigned",
-        message: `Complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
+        title: "notification.status.assigned",
+        message: "notification.status.assigned.desc",
         complaintId: complaint._id,
       });
       
       if (complaint.createdBy) {
         await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
           type: "assigned",
-          title: "Complaint Assigned",
-          message: `Your complaint "${complaint.title || 'Unknown'}" has been assigned to ${department.name}.`,
+          title: "notification.status.assigned",
+          message: "notification.status.assigned.desc",
           complaintId: complaint._id,
         });
       }
@@ -445,8 +455,8 @@ class AgentController {
         if (citizenId) {
           await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
             type: "closed",
-            title: "Complaint Closed",
-            message: `Your complaint "${complaint.title}" has been resolved and closed.`,
+            title: "notification.status.closed",
+            message: "notification.status.closed.desc",
             complaintId: complaint._id,
           });
         }
@@ -473,7 +483,7 @@ class AgentController {
 
   async rejectResolution(req, res) {
     try {
-      const { rejectionReason } = req.body;
+      const rejectionReason = req.body?.rejectionReason || req.body?.reason;
       
       if (!rejectionReason) {
         return res.status(400).json({ success: false, message: "Rejection reason is required" });
@@ -528,8 +538,8 @@ class AgentController {
         if (citizenId) {
           await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
             type: "resolution_rejected",
-            title: "Resolution Under Review",
-            message: `The proposed resolution for "${complaint.title}" requires additional work. The technician will continue working on it.`,
+            title: "notification.status.inProgress",
+            message: "notification.status.inProgress.desc",
             complaintId: complaint._id,
           });
         }

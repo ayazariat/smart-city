@@ -40,8 +40,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (password.length >= 6) strength++;
     if (password.length >= 10) strength++;
     if (password.contains(RegExp(r'[a-z]')) &&
-        password.contains(RegExp(r'[A-Z]')))
+        password.contains(RegExp(r'[A-Z]'))) {
       strength++;
+    }
     if (password.contains(RegExp(r'\d'))) strength++;
     setState(() => _passwordStrength = strength);
   }
@@ -221,7 +222,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<GovernorateData>(
-                      value: _selectedGovernorate,
+                      initialValue: _selectedGovernorate,
                       decoration: InputDecoration(
                         labelText: 'Gouvernorat (optionnel)',
                         prefixIcon: const Icon(Icons.location_on_outlined),
@@ -245,7 +246,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     if (_selectedGovernorate != null) ...[
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
-                        value: _selectedMunicipality,
+                        initialValue: _selectedMunicipality,
                         decoration: InputDecoration(
                           labelText: 'Municipalité',
                           prefixIcon: const Icon(Icons.location_city_outlined),

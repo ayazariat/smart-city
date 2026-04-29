@@ -1,18 +1,13 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
+import '../core/env.dart';
 import '../models/complaint_model.dart';
-import '../services/complaint_service.dart';
-import 'complaints_provider.dart';
+import '../services/api_client.dart';
+import '../services/notification_service.dart';
 
 // Socket URL - matches ApiClient base URL but without /api
-String get _socketUrl {
-  if (kIsWeb) {
-    return 'http://localhost:5000';
-  }
-  return 'http://10.0.2.2:5000';
-}
+String get _socketUrl => ApiClient.socketBaseUrl;
 
 // Notifications state
 class NotificationsState {
@@ -45,11 +40,34 @@ class NotificationsState {
 
 // Notifications notifier
 class NotificationsNotifier extends StateNotifier<NotificationsState> {
-  final ComplaintService _service;
+  final NotificationService _service;
   io.Socket? _socket;
   Timer? _pollTimer;
 
   NotificationsNotifier(this._service) : super(NotificationsState());
+
+  void _handleIncomingNotification(dynamic data) {
+    try {
+      if (data is! Map) {
+        return;
+      }
+
+      final notification = Notification.fromJson(Map<String, dynamic>.from(data));
+      final alreadyExists = state.notifications.any((n) => n.id == notification.id);
+      final notifications = alreadyExists
+          ? state.notifications
+                .map((n) => n.id == notification.id ? notification : n)
+                .toList()
+          : [notification, ...state.notifications];
+
+      state = state.copyWith(
+        notifications: notifications,
+        unreadCount: notifications.where((n) => !n.isRead).length,
+      );
+    } catch (_) {
+      // Ignore malformed realtime payloads and keep polling fallback active.
+    }
+  }
 
   void connectSocket(String token, String userId) {
     // Disconnect existing socket first
@@ -57,14 +75,15 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 
     // Start periodic polling as fallback (every 60 seconds)
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) => load());
+    _pollTimer = Timer.periodic(MobileEnv.scheduledRefreshInterval, (_) => load());
 
     try {
       _socket = io.io(
         _socketUrl,
         io.OptionBuilder()
-            .setTransports(['websocket'])
+            .setTransports(['websocket', 'polling'])
             .disableAutoConnect()
+            .setAuth({'token': token})
             .setExtraHeaders({'Authorization': 'Bearer $token'})
             .build(),
       );
@@ -82,17 +101,8 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
         state = state.copyWith(isConnected: false);
       });
 
-      _socket?.on('notification', (data) {
-        try {
-          final notification = Notification.fromJson(data);
-          state = state.copyWith(
-            notifications: [notification, ...state.notifications],
-            unreadCount: state.unreadCount + 1,
-          );
-        } catch (e) {
-          // Silently handle parse errors
-        }
-      });
+      _socket?.on('notification:new', _handleIncomingNotification);
+      _socket?.on('notification', _handleIncomingNotification);
 
       _socket?.connect();
     } catch (e) {
@@ -114,10 +124,7 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
   Future<void> load() async {
     state = state.copyWith(isLoading: true);
     try {
-      final notificationsJson = await _service.getNotifications();
-      final notifications = notificationsJson
-          .map((json) => Notification.fromJson(json))
-          .toList();
+      final notifications = await _service.getNotifications();
       final unreadCount = await _service.getUnreadCount();
       state = state.copyWith(
         notifications: notifications,
@@ -178,7 +185,11 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
 }
 
 // Providers
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});
+
 final notificationsProvider =
     StateNotifierProvider<NotificationsNotifier, NotificationsState>(
-      (ref) => NotificationsNotifier(ref.watch(complaintServiceProvider)),
-    );
+  (ref) => NotificationsNotifier(ref.watch(notificationServiceProvider)),
+);

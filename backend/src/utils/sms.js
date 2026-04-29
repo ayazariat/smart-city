@@ -6,9 +6,7 @@
 
 // Example interface; replace with concrete implementation if you integrate a real SMS provider.
 const sendVerificationSms = async (phone, code) => {
-  console.log(
-    `[sms] Would send verification SMS to ${phone} with code: ${code}`
-  );
+  // Would send verification SMS via provider in production
 };
 
 module.exports = {

@@ -3,8 +3,8 @@ dotenv.config();
 
 const app = require('./app');
 const http = require('http');
-const jwt = require('jsonwebtoken');
 const connectDB = require('./config/db');
+const { verifyAccessToken, extractToken } = require('./utils/jwt');
 
 connectDB();
 require('./utils/mailer');
@@ -20,26 +20,18 @@ const PORT = process.env.PORT || 5000;
 
 // Create HTTP server
 const server = http.createServer(app);
+const isAllowedOrigin = app.get("isAllowedOrigin");
 
 // Socket.io setup
 const { Server } = require('socket.io');
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://localhost:3001",
-      "http://127.0.0.1:3001",
-      "http://10.0.2.2:3000",
-      "http://localhost:5000",
-      "http://127.0.0.1:5000",
-      "http://10.0.2.2:5000",
-      "http://localhost:5500",
-      "http://127.0.0.1:5500",
-      "http://localhost:51271",
-      "http://127.0.0.1:51271",
-      "http://10.0.2.2:51271",
-    ],
+    origin: (origin, callback) => {
+      if (!isAllowedOrigin || isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin not allowed by Socket.IO CORS: ${origin}`));
+    },
     credentials: true,
     methods: ["GET", "POST"]
   },
@@ -48,14 +40,26 @@ const io = new Server(server, {
 // Store io instance on app for use in controllers
 app.set("io", io);
 
+const getSocketToken = (socket) => {
+  const authToken =
+    typeof socket.handshake.auth?.token === 'string'
+      ? socket.handshake.auth.token
+      : null;
+  const headerToken = extractToken(socket.handshake.headers?.authorization);
+  return authToken || headerToken || null;
+};
+
 // Socket.io authentication middleware
 io.use((socket, next) => {
   try {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    const token = getSocketToken(socket);
     if (!token) {
       return next();
     }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = verifyAccessToken(token);
+    if (!decoded) {
+      return next();
+    }
     socket.userId = decoded.userId;
     socket.userRole = decoded.role;
   } catch {
@@ -66,16 +70,30 @@ io.use((socket, next) => {
 
 // Socket.io connection handling
 io.on("connection", (socket) => {
+  if (socket.userId) {
+    socket.join(`user:${socket.userId}`);
+  }
+
   // Join user-specific room
   socket.on("join", (room) => {
-    if (room && typeof room === "string") {
+    if (
+      socket.userId &&
+      room &&
+      typeof room === "string" &&
+      room === `user:${socket.userId}`
+    ) {
       socket.join(room);
     }
   });
 
   // Leave room
   socket.on("leave", (room) => {
-    if (room && typeof room === "string") {
+    if (
+      socket.userId &&
+      room &&
+      typeof room === "string" &&
+      room === `user:${socket.userId}`
+    ) {
       socket.leave(room);
     }
   });

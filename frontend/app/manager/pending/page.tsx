@@ -37,7 +37,7 @@ export default function ManagerPendingPage() {
   const [complaints, setComplaints] = useState<ManagerComplaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("IN_PROGRESS");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [departmentName, setDepartmentName] = useState<string>("");
   const [technicians, setTechnicians] = useState<Array<{ _id: string; fullName: string }>>([]);
@@ -202,7 +202,7 @@ export default function ManagerPendingPage() {
     return false;
   }).length;
 
-  const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+  const resolvedCount = complaints.filter(c => c.status === "RESOLVED").length;
   const highPriorityCount = complaints.filter(c => (c.priorityScore || 0) >= 15).length;
   const avgDays = complaints.length > 0 
     ? Math.round(complaints.reduce((acc, c) => {
@@ -294,7 +294,7 @@ export default function ManagerPendingPage() {
     <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
-        title="All Complaints"
+        title="Active Complaints"
         subtitle={departmentName ? `Complaints in ${departmentName}` : "Manager complaint management"}
         backHref="/dashboard"
         rightContent={

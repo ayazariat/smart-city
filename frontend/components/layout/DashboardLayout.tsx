@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguagePicker from "@/components/ui/LanguagePicker";
+import { showToast } from "@/components/ui/Toast";
 import { notificationService } from "@/services/notification.service";
 import { agentService } from "@/services/agent.service";
 import { managerService } from "@/services/manager.service";
@@ -30,6 +31,52 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [isRTL, setIsRTL] = useState(false);
+
+  const translateOrFallback = useCallback(
+    (key: string, fallback: string) => {
+      const translated = t(key);
+      return translated === key ? fallback : translated;
+    },
+    [t]
+  );
+
+  const humanizeNotificationKey = useCallback((value: string) => {
+    const notificationFallbacks: Record<string, string> = {
+      "notification.status.validated": "Complaint validated",
+      "notification.status.validated.desc": "Your complaint has been validated and will be processed.",
+      "notification.status.rejected": "Complaint rejected",
+      "notification.status.rejected.desc": "Your complaint has been rejected.",
+      "notification.status.assigned": "Complaint assigned",
+      "notification.status.assigned.desc": "Your complaint has been assigned to a team.",
+      "notification.status.inProgress": "In progress",
+      "notification.status.inProgress.desc": "Your complaint is being processed.",
+      "notification.status.resolved": "Complaint resolved",
+      "notification.status.resolved.desc": "Your complaint has been resolved.",
+      "notification.status.closed": "Complaint closed",
+      "notification.status.closed.desc": "Your complaint has been closed.",
+      "notification.newComplaint": "New complaint",
+      "notification.newComplaint.desc": "A new complaint has been submitted.",
+      "notification.assignedToYou": "Assigned to you",
+      "notification.assignedToYou.desc": "A complaint has been assigned to you.",
+    };
+
+    return notificationFallbacks[value] || "Notification";
+  }, []);
+
+  const resolveNotificationText = useCallback(
+    (value?: string) => {
+      if (!value) {
+        return "";
+      }
+      if (!value.startsWith("notification.")) {
+        return value;
+      }
+
+      const translated = t(value);
+      return translated === value ? humanizeNotificationKey(value) : translated;
+    },
+    [humanizeNotificationKey, t]
+  );
 
   // Track RTL changes reactively (when user switches language)
   useEffect(() => {
@@ -64,7 +111,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       const interval = setInterval(fetchNotifCount, 60000);
       return () => clearInterval(interval);
     }
-  }, [hydrated, user]);
+  }, [hydrated, resolveNotificationText, user]);
 
   // Connect socket for real-time notifications
   useEffect(() => {
@@ -75,15 +122,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     const unsub = subscribeToNotifications((notif: unknown) => {
       const n = notif as Notification;
-      setUnreadCount(prev => prev + 1);
-      setNotifications(prev => [n, ...prev]);
+      const title = resolveNotificationText(n.title);
+      const message = resolveNotificationText(n.message);
+
+      setNotifications((prev) => {
+        const alreadyExists = prev.some((item) => item._id === n._id);
+        if (alreadyExists) {
+          return prev.map((item) => (item._id === n._id ? n : item));
+        }
+        return [n, ...prev];
+      });
+      setUnreadCount((prev) => prev + (n.isRead ? 0 : 1));
+      showToast(title || message || "New notification", "info");
     });
 
     return () => {
       unsub();
       disconnectSocket();
     };
-  }, [hydrated, user]);
+  }, [hydrated, resolveNotificationText, user]);
 
   // Fetch stats for sidebar badges
   useEffect(() => {
@@ -184,11 +241,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <LanguagePicker />
               {/* Notification Bell */}
               <div className="relative">
-                <button
-                  onClick={handleNotificationsClick}
-                  className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
-                  title={t('nav.notifications')}
-                >
+                  <button
+                    onClick={handleNotificationsClick}
+                    className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
+                    title={translateOrFallback("sidebar.notifications", "Notifications")}
+                  >
                   <Bell className="w-5 h-5 text-slate-600" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
@@ -206,7 +263,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                         <div className="flex items-center gap-2">
                           <Bell className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-semibold text-slate-800">{t('nav.notifications')}</span>
+                          <span className="text-sm font-semibold text-slate-800">
+                            {translateOrFallback("sidebar.notifications", "Notifications")}
+                          </span>
                           {unreadCount > 0 && (
                             <span className="min-w-[18px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
                               {unreadCount}
@@ -238,20 +297,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         ) : (
                           <div className="divide-y divide-slate-100">
                             {notifications.map((notif) => {
-                              // Translate notification title and message using i18n
-                              const title = notif.title?.startsWith('notification.') ? t(notif.title) : notif.title;
-                              const message = notif.message?.startsWith('notification.') ? t(notif.message) : notif.message;
+                              const title = resolveNotificationText(notif.title);
+                              const message = resolveNotificationText(notif.message);
                               return (
                               <div
                                 key={notif._id}
                                 className={`px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.isRead ? "bg-primary/5" : ""}`}
                                 onClick={() => {
                                   if (!notif.isRead) handleMarkRead(notif._id);
-                                  if (notif.complaint?._id) {
+                                  const targetComplaintId = notif.complaint?._id || notif.relatedId;
+                                  if (targetComplaintId) {
                                     setShowNotifications(false);
                                     const dest = user.role === "CITIZEN"
-                                      ? `/my-complaints/${notif.complaint._id}`
-                                      : `/dashboard/complaints/${notif.complaint._id}`;
+                                      ? `/my-complaints/${targetComplaintId}`
+                                      : `/dashboard/complaints/${targetComplaintId}`;
                                     router.push(dest);
                                   }
                                 }}
@@ -292,4 +351,3 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     </div>
   );
 }
-

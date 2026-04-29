@@ -6,6 +6,15 @@ const { getStatus: getSlaStatus } = require("../utils/slaCalculator");
 const { normalizeMunicipality, getMunicipalityGovernorate } = require("../utils/normalize");
 const { logAction } = require("../services/audit.service");
 
+const ACTIVE_STATUSES = [
+  "SUBMITTED",
+  "VALIDATED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RESOLVED",
+];
+const ARCHIVE_STATUSES = ["REJECTED", "CLOSED"];
+
 class ComplaintController {
   // Create new complaint (citizen)
   async create(req, res) {
@@ -284,21 +293,22 @@ class ComplaintController {
 
       // Separate internal notes (from comments marked isInternal)
       const allComments = complaint.comments || [];
-      const publicComments =
-        userRole === "CITIZEN"
-          ? []
-          : allComments
-              .filter((c) => !c.isInternal)
-              .map((n) => ({
-                content: n.text,
-                author: n.author
-                  ? {
-                      _id: n.author._id,
-                      fullName: n.author.fullName,
-                    }
-                  : null,
-                date: n.createdAt,
-              }));
+      const publicComments = allComments
+        .filter((c) => !c.isInternal && (c.type === "PUBLIC" || !c.type))
+        .map((n) => ({
+          content: n.text,
+          text: n.text,
+          author: n.author
+            ? {
+                _id: n.author._id,
+                fullName: n.author.fullName,
+              }
+            : null,
+          authorName: n.authorName || n.author?.fullName || "Citizen",
+          authorRole: n.authorRole || "CITIZEN",
+          date: n.createdAt,
+          createdAt: n.createdAt,
+        }));
       const internalNotes =
         userRole === "CITIZEN"
           ? []
@@ -345,7 +355,11 @@ class ComplaintController {
         beforePhotos: complaint.beforePhotos || [],
         afterPhotos: complaint.afterPhotos || [],
         proofPhotos: (complaint.afterPhotos || []).map((m) => m.url).filter(Boolean),
-        confirmations: [], // can be populated later if confirmation model exists
+        confirmations: complaint.confirmations || [],
+        confirmationCount:
+          complaint.confirmationCount ?? complaint.confirmations?.length ?? 0,
+        upvotes: complaint.upvotes || [],
+        upvoteCount: complaint.upvoteCount ?? complaint.upvotes?.length ?? 0,
         history,
         publicComments,
         internalNotes, // empty array for CITIZEN
@@ -379,12 +393,37 @@ class ComplaintController {
       const municipality = req.query.municipality;
       const search = req.query.search;
       const includeArchived = req.query.includeArchived === "true";
+      const requestedStatuses =
+        typeof status === "string"
+          ? status
+              .split(",")
+              .map((value) => value.trim().toUpperCase())
+              .filter((value) => value && value !== "ALL")
+          : [];
+      const allowedStatuses = includeArchived
+        ? [...ACTIVE_STATUSES, ...ARCHIVE_STATUSES]
+        : ACTIVE_STATUSES;
 
       const query = {};
 
       // Filter out archived complaints by default (unless explicitly requested)
       if (!includeArchived) {
-        query.isArchived = false;
+        query.isArchived = { $ne: true };
+        query.status = { $in: ACTIVE_STATUSES };
+      }
+
+      if (requestedStatuses.length > 0) {
+        const filteredStatuses = requestedStatuses.filter((value) =>
+          allowedStatuses.includes(value),
+        );
+
+        if (filteredStatuses.length === 0) {
+          query._id = null;
+        } else if (filteredStatuses.length === 1) {
+          query.status = filteredStatuses[0];
+        } else {
+          query.status = { $in: filteredStatuses };
+        }
       }
 
       // Role-based filtering
@@ -409,9 +448,9 @@ class ComplaintController {
         if (myDepartmentId) {
           // Filter by assigned department
           query.assignedDepartment = myDepartmentId;
-          // Managers see all active statuses in their department
-          if (!status) {
-            query.status = { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] };
+          // Managers default to active complaints only when no explicit status filter is requested.
+          if (!status && !includeArchived) {
+            query.status = { $in: ACTIVE_STATUSES };
           }
         } else {
           // Manager has no department assigned - return empty
@@ -459,7 +498,6 @@ class ComplaintController {
         }
       }
 
-      if (status) query.status = status;
       if (category) query.category = category;
       if (governorate && req.user.role === "ADMIN") query.governorate = governorate; // Admin can filter by governorate
       if (municipality && req.user.role === "ADMIN") {
@@ -644,8 +682,7 @@ class ComplaintController {
             io,
             complaint.createdBy.toString(),
             complaint._id,
-            status,
-            status.toLowerCase()
+            status
           );
         } else {
           await Notification.create({
@@ -820,16 +857,16 @@ class ComplaintController {
           // Notify department managers
           await notificationService.notifyManagersByDepartment(io, departmentId, {
             type: "assigned",
-            title: "New Complaint Assigned",
-            message: `Complaint "${complaint.title || complaint.description?.slice(0, 50)}" assigned to ${department.name}`,
+            title: "notification.status.assigned",
+            message: "notification.status.assigned.desc",
             complaintId: complaint._id,
           });
           // Notify citizen
           if (complaint.createdBy) {
             await notificationService.sendNotification(io, complaint.createdBy.toString(), {
               type: "assigned",
-              title: "Complaint Update",
-              message: `Your complaint has been assigned to the ${department.name} department`,
+              title: "notification.status.assigned",
+              message: "notification.status.assigned.desc",
               complaintId: complaint._id,
             });
           }
@@ -1119,35 +1156,43 @@ class ComplaintController {
         }
       }
 
-      const [total, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk] = await Promise.all([
-        Complaint.countDocuments({ ...query, isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "SUBMITTED", isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "VALIDATED", isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "ASSIGNED", isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "IN_PROGRESS", isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "RESOLVED", isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "CLOSED", isArchived: false }),
-        Complaint.countDocuments({ ...query, status: "REJECTED", isArchived: false }),
+      const activeQuery = {
+        ...query,
+        status: { $in: ACTIVE_STATUSES },
+        isArchived: { $ne: true },
+      };
+      const historicalQuery = { ...query };
+
+      const [historicalTotal, total, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk] = await Promise.all([
+        Complaint.countDocuments(historicalQuery),
+        Complaint.countDocuments(activeQuery),
+        Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
+        Complaint.countDocuments({ ...activeQuery, status: "VALIDATED" }),
+        Complaint.countDocuments({ ...activeQuery, status: "ASSIGNED" }),
+        Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
+        Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
         Complaint.aggregate([
-          { $match: { ...query, isArchived: false } },
+          { $match: activeQuery },
           { $group: { _id: "$category", count: { $sum: 1 } } }
         ]),
         Complaint.aggregate([
-          { $match: { ...query, isArchived: false, createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
+          { $match: { ...activeQuery, createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
           { $group: { _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] }, count: { $sum: 1 } } },
           { $sort: { _id: 1 } },
           { $limit: 6 }
         ]),
         // Only count overdue for unresolved complaints (exclude COMPLETED status)
-        Complaint.countDocuments({ ...query, slaStatus: "OVERDUE", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] }, isArchived: false }),
-        Complaint.countDocuments({ ...query, slaStatus: "AT_RISK", status: { $nin: ["RESOLVED", "CLOSED", "REJECTED"] }, isArchived: false }),
+        Complaint.countDocuments({ ...activeQuery, slaStatus: "OVERDUE", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...activeQuery, slaStatus: "AT_RISK", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
       ]);
 
       const resolvedCount = resolved + closed;
       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
       const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...query, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true }, isArchived: false } },
+        { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
       ]);
       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
@@ -1156,6 +1201,7 @@ class ComplaintController {
         success: true,
         data: {
           total,
+          historicalTotal,
           submitted,
           validated,
           assigned,

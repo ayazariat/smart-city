@@ -26,8 +26,6 @@ async function predictCategory(description) {
     });
     return response.data;
   } catch (error) {
-    console.error('[AI Service] Category prediction error:', error.message);
-    // Always fallback on error - never block HTTP
     return {
       predicted: 'AUTRE',
       confidence: 0,
@@ -51,8 +49,6 @@ async function extractKeywords(description) {
     });
     return response.data;
   } catch (error) {
-    console.error('[AI Service] Keyword extraction error:', error.message);
-    // Return empty keywords on error - never block HTTP
     return {
       keywords: [],
       locationKeywords: [],
@@ -80,8 +76,6 @@ async function calculateSLA(category, urgency, createdAt) {
     });
     return response.data;
   } catch (error) {
-    console.error('[AI Service] SLA calculation error:', error.message);
-    // Default SLA on error - 7 days for MEDIUM
     const defaultDeadline = new Date();
     defaultDeadline.setDate(defaultDeadline.getDate() + 7);
     return {
@@ -114,7 +108,6 @@ async function processNewComplaint(complaint) {
         });
       }
     } catch (error) {
-      console.error('[AI Service] Error processing new complaint:', error.message);
       // Never throw - this runs in background
     }
   });

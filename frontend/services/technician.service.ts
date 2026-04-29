@@ -182,7 +182,6 @@ export function startLocationTracking(
 
   const startTracking = () => {
     if (!navigator.geolocation) {
-      console.error("Geolocation not supported");
       return;
     }
 
@@ -199,7 +198,6 @@ export function startLocationTracking(
         onLocationUpdate?.(location);
       },
       (error) => {
-        console.error("Failed to get initial location:", error);
       },
       { enableHighAccuracy: true }
     );
@@ -217,7 +215,6 @@ export function startLocationTracking(
         onLocationUpdate?.(location);
       },
       (error) => {
-        console.error("Location watch error:", error);
       },
       {
         enableHighAccuracy: true,
@@ -240,7 +237,6 @@ export function startLocationTracking(
           onLocationUpdate?.(location);
         },
         (error) => {
-          console.error("Failed to get location for periodic update:", error);
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );

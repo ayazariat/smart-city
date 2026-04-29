@@ -3,40 +3,96 @@
  * Handles sending notifications to users via Socket.IO and in-app store
  */
 
+const { sendComplaintStatusEmail } = require('../utils/mailer');
+const User = require('../models/User');
+
+const normalizeRecipientId = (recipientId) => {
+  if (!recipientId) return null;
+  if (typeof recipientId === 'string') return recipientId;
+  if (typeof recipientId === 'object') {
+    if (recipientId._id) return recipientId._id.toString();
+    if (recipientId.id) return recipientId.id.toString();
+  }
+  return null;
+};
+
 const sendNotification = async (io, recipientId, data) => {
-  const { type, title, message, complaintId, priority = 'normal', relatedId } = data;
+  const { type, title, message, complaintId, relatedId } = data;
   
   const Notification = require('../models/Notification');
   const mongoose = require('mongoose');
   
   // Store notification in database
   try {
+    const normalizedRecipientId = normalizeRecipientId(recipientId);
+    if (!normalizedRecipientId) throw new Error('Invalid recipient id');
+    const safeTitle = title || 'Notification';
+    const safeMessage = message || safeTitle;
+    const targetComplaintId = complaintId || relatedId;
+
     const notification = await Notification.create({
-      recipient: new mongoose.Types.ObjectId(recipientId),
+      recipient: new mongoose.Types.ObjectId(normalizedRecipientId),
       type,
-      title, // This should be a status key like 'notification.validated'
-      message,
-      relatedId: complaintId || relatedId,
-      priority,
-      status: 'UNREAD'
+      title: safeTitle,
+      message: safeMessage,
+      complaint: targetComplaintId,
+      relatedId: targetComplaintId,
     });
     
     // Emit real-time notification via Socket.IO
     if (io) {
-      io.to(`user:${recipientId}`).emit('notification', {
+      const realtimePayload = {
         _id: notification._id,
         type,
-        title, // Pass the key for i18n translation
-        message,
-        relatedId: complaintId || relatedId,
+        title: safeTitle,
+        message: safeMessage,
+        relatedId: targetComplaintId,
+        complaint: targetComplaintId,
         isRead: false,
         createdAt: notification.createdAt
-      });
+      };
+
+      io.to(`user:${normalizedRecipientId}`).emit('notification:new', realtimePayload);
+      io.to(`user:${normalizedRecipientId}`).emit('notification', realtimePayload);
+    }
+
+    const statusMap = {
+      validated: 'VALIDATED',
+      rejected: 'REJECTED',
+      assigned: 'ASSIGNED',
+      in_progress: 'IN_PROGRESS',
+      resolved: 'RESOLVED',
+      closed: 'CLOSED',
+      resolution_approved: 'CLOSED',
+      resolution_rejected: 'IN_PROGRESS',
+    };
+    const normalizedStatus = statusMap[(type || '').toLowerCase()];
+    if (normalizedStatus) {
+      Promise.resolve()
+        .then(async () => {
+          const user = await User.findById(normalizedRecipientId).select('email fullName').lean();
+          if (!user?.email) return;
+          let complaintTitle = 'Your complaint';
+          if (targetComplaintId) {
+            const Complaint = require('../models/Complaint');
+            const complaint = await Complaint.findById(targetComplaintId).select('title').lean();
+            if (complaint?.title) complaintTitle = complaint.title;
+          }
+          await sendComplaintStatusEmail(
+            user.email,
+            user.fullName,
+            complaintTitle,
+            normalizedStatus,
+            targetComplaintId
+          );
+        })
+        .catch((emailErr) => {
+          // Email send failure should not block notification
+        });
     }
     
     return notification;
   } catch (err) {
-    console.error('[notification] Save error:', err.message);
     throw err;
   }
 };
@@ -51,7 +107,7 @@ const sendNotificationToMultiple = async (io, recipientIds, data) => {
       const notif = await sendNotification(io, recipientId, data);
       notifications.push(notif);
     } catch (err) {
-      console.error(`[notification] Failed for ${recipientId}:`, err.message);
+      // Individual notification failure should not block others
     }
   }
   return notifications;
@@ -104,19 +160,10 @@ const notifyTechnicians = async (io, complaintId, data) => {
 };
 
 /**
- * Send email notification
- */
-const sendComplaintStatusEmail = async (email, fullName, complaintTitle, status) => {
-  // Placeholder for email service integration
-  console.log(`[email] Would send to ${email}: Complaint "${complaintTitle}" status: ${status}`);
-  return Promise.resolve();
-};
-
-/**
  * Notify citizen about complaint status change
  * Uses status keys for i18n translation on frontend
  */
-const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, statusLabel) => {
+const notifyCitizenStatusChange = async (io, citizenId, complaintId, status) => {
   // Use status keys for i18n translation on frontend
   const statusKeys = {
     'VALIDATED': 'notification.status.validated',
@@ -146,20 +193,6 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, sta
     message: messageKey, // Use key like 'notification.status.validated.desc'
     complaintId
   });
-
-  // Send email notification (non-blocking)
-  try {
-    const citizen = await User.findById(citizenId).select('email fullName').lean();
-    if (citizen?.email) {
-      const Complaint = require('../models/Complaint');
-      const complaint = await Complaint.findById(complaintId).select('title').lean();
-      const complaintTitle = complaint?.title || 'Your complaint';
-      sendComplaintStatusEmail(citizen.email, citizen.fullName, complaintTitle, status)
-        .catch(err => console.error('[notification] Email send error:', err.message));
-    }
-  } catch (emailErr) {
-    console.error('[notification] Email lookup error:', emailErr.message);
-  }
 
   return notif;
   

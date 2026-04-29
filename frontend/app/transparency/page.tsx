@@ -42,7 +42,8 @@ import {
   Building2,
   Calendar,
   Menu,
-  LayoutDashboard
+  LayoutDashboard,
+  Activity
 } from "lucide-react";
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, ComposedChart, Line, CartesianGrid, XAxis, YAxis, Bar, Legend } from "recharts";
@@ -50,8 +51,14 @@ import { useTranslation } from "react-i18next";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const getPhotoUrl = (complaint: ComplaintItem, explicitUrl?: string): string | null => {
-  const mediaItem = complaint.media?.[0];
-  const url = explicitUrl || (typeof mediaItem === 'string' ? mediaItem : mediaItem?.url);
+  const resolvedMediaItem =
+    complaint.afterPhotos?.[0] || complaint.proofPhotos?.[0] || complaint.media?.[0];
+  const defaultMediaItem = complaint.media?.[0];
+  const sourceMediaItem =
+    complaint.status === "RESOLVED" || complaint.status === "CLOSED"
+      ? resolvedMediaItem
+      : defaultMediaItem;
+  const url = explicitUrl || (typeof sourceMediaItem === 'string' ? sourceMediaItem : sourceMediaItem?.url);
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.startsWith('//')) return 'https:' + url;
@@ -167,10 +174,26 @@ interface MonthlyTrend {
   avgResolutionDays: number;
 }
 
+interface ActivityItem {
+  action: string;
+  complaintId: string;
+  referenceId: string;
+  title: string;
+  municipality: string;
+  department: string;
+  actorName: string;
+  actorRole: string;
+  notes: string;
+  timestamp: string;
+  description: string;
+}
+
 interface ComplaintItem {
-  _id: string;
+  _id?: string;
+  id?: string;
   title: string;
   description?: string;
+  resolutionNotes?: string;
   category: string;
   status: string;
   confirmationCount: number;
@@ -191,6 +214,12 @@ interface ComplaintItem {
   resolvedAt?: string;
   updatedAt?: string;
 }
+
+const getComplaintId = (complaint: ComplaintItem): string =>
+  complaint._id || complaint.id || "";
+
+const getComplaintKey = (complaint: ComplaintItem): string =>
+  getComplaintId(complaint) || complaint.referenceId || `${complaint.title}-${complaint.createdAt}`;
 
 type ApiMunicipalityStat = Omit<MunicipalityStats, "rank" | "tma" | "overdue">;
 
@@ -224,6 +253,7 @@ export default function TransparencyPage() {
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [filteredComplaints, setFilteredComplaints] = useState<ComplaintItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState("month");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -277,10 +307,13 @@ export default function TransparencyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, activeView]);
 
-  const fetchData = async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    
-    try {
+   const fetchData = async (isRefresh = false) => {
+      setError(null);
+      if (!isRefresh) {
+        setLoading(true);
+      }
+     
+     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       
       const [statsRes, totalStatsRes, catRes, munRes, trendsRes, complaintsRes, zoneRes, recurringRes, allMunRes] = await Promise.all([
@@ -289,7 +322,7 @@ export default function TransparencyPage() {
         fetch(`${apiUrl}/public/stats/by-category?period=${period}`),
         fetch(`${apiUrl}/public/stats/by-municipality?period=${period}`),
         fetch(`${apiUrl}/public/stats/monthly-trends?months=6`),
-        fetch(`${apiUrl}/public/complaints?limit=100&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED,CLOSED`),
+        fetch(`${apiUrl}/public/complaints?limit=100&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`),
         fetch(`${apiUrl}/public/stats/by-zone?period=all`),  // All-time zone data
         fetch(`${apiUrl}/public/top-recurring?limit=5`),
         fetch(`${apiUrl}/public/stats/all-municipalities?period=all`)  // All-time municipality data
@@ -372,11 +405,12 @@ export default function TransparencyPage() {
         setComplaints(scoredComplaints);
         setFilteredComplaints(scoredComplaints);
       }
-    } catch (error) {
-      console.error("Failed to fetch stats:", error);
-    } finally {
-      setLoading(false);
-    }
+     } catch (error) {
+       console.error("Failed to fetch data:", error);
+       setError(error instanceof Error ? error.message : String(error));
+     } finally {
+       setLoading(false);
+     }
   };
 
   useEffect(() => {
@@ -596,7 +630,21 @@ export default function TransparencyPage() {
       )}
 
       <main className={`relative max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 ${isRTL ? 'mr-0 md:mr-[260px]' : 'ml-0 md:ml-[260px]'}`}>
-        {loading ? (
+        {error ? (
+          <div className="flex items-center justify-center py-24">
+            <div className="text-center">
+              <X className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <p className="text-red-600 font-medium mb-2">Erreur</p>
+              <p className="text-slate-500 mb-4">{error}</p>
+              <button
+                onClick={() => fetchData(true)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Réessayer
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
               <Loader2 className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
@@ -750,7 +798,7 @@ export default function TransparencyPage() {
                         <Target className="w-5 h-5 text-green-600" />
                         {t('transparency.metrics.resolutionStatus')}
                       </h3>
-                      <div className="flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-12">
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-10 items-start">
                         <div className="w-56 h-56 min-w-[224px] relative">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -804,6 +852,51 @@ export default function TransparencyPage() {
                             </p>
                           </div>
                         </div>
+
+                        {/* Operational insights panel */}
+                        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                          <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-blue-500" />
+                            Operational insights
+                          </h4>
+                          <div className="space-y-2.5">
+                            <div className="bg-white rounded-xl p-3 border border-slate-100">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <p className="text-sm font-medium text-slate-700">Average resolution time</p>
+                                <span className="text-xs font-semibold text-blue-600">{stats.avgResolutionDays.toFixed(1)} d</span>
+                              </div>
+                              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full"
+                                  style={{ width: `${Math.min(100, Math.max(8, 100 - stats.avgResolutionDays * 8))}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div className="bg-white rounded-xl p-3 border border-slate-100">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <p className="text-sm font-medium text-slate-700">Citizen engagement</p>
+                                <span className="text-xs font-semibold text-violet-600">
+                                  {complaints.reduce((acc, c) => acc + (c.confirmationCount || 0) + (c.upvoteCount || 0), 0)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500">Total confirmations and likes from residents.</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 pt-3 border-t border-slate-200">
+                            <h5 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-2">
+                              Verified interventions
+                            </h5>
+                            <p className="text-xs text-slate-600">
+                              {
+                                complaints.filter((c) =>
+                                  (c.status === "RESOLVED" || c.status === "CLOSED") &&
+                                  ((c.afterPhotos?.length || 0) > 0 || (c.proofPhotos?.length || 0) > 0)
+                                ).length
+                              }{" "}
+                              resolved complaints include proof photos.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -837,9 +930,12 @@ export default function TransparencyPage() {
                         : null;
                       return (
                       <div 
-                        key={complaint._id}
+                        key={getComplaintKey(complaint)}
                         className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer"
-                        onClick={() => router.push(`/transparency/complaints/${complaint._id}`)}
+                        onClick={() => {
+                          const complaintId = getComplaintId(complaint);
+                          if (complaintId) router.push(`/transparency/complaints/${complaintId}`);
+                        }}
                       >
                         <div className="relative h-40 bg-gradient-to-br from-green-50 to-slate-50">
                           {photoUrl ? (
@@ -1231,20 +1327,24 @@ export default function TransparencyPage() {
                           </div>
                           {total > 0 ? (
                             <>
-                              <p className="text-xs text-slate-500 mb-2">{total} {categoryFilter ? categoryLabels[categoryFilter]?.split(" ")[0] : t('transparency.governorates.reports')}</p>
+                              <p className="text-xs text-slate-500 mb-2">
+                                {total} {categoryFilter ? categoryLabels[categoryFilter]?.split(" ")[0] : t('transparency.governorates.reports')}
+                              </p>
                               {!categoryFilter && (
                                 <>
                                   <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                                    <div 
+                                    <div
                                       className={`h-full rounded-full transition-all duration-500 ${
                                         rate >= 70 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
                                       }`}
                                       style={{ width: `${rate}%` }}
                                     />
                                   </div>
-                                  <p className={`text-xs font-bold mt-1 ${
-                                    rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'
-                                  }`}>
+                                  <p
+                                    className={`text-xs font-bold mt-1 ${
+                                      rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'
+                                    }`}
+                                  >
                                     {rate}% {t('transparency.governorates.resolved')}
                                   </p>
                                 </>
@@ -1349,7 +1449,7 @@ export default function TransparencyPage() {
                       
                       return (
                       <div 
-                        key={complaint._id}
+                        key={getComplaintKey(complaint)}
                         className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer"
                         onClick={() => setSelectedComplaint(complaint)}
                       >
@@ -1414,7 +1514,10 @@ export default function TransparencyPage() {
                               <button
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
-                                  router.push(`/transparency/complaints/${complaint._id}`);
+                                  const complaintId = getComplaintId(complaint);
+                                  if (complaintId) {
+                                    router.push(`/transparency/complaints/${complaintId}`);
+                                  }
                                 }}
                                 className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-green-600 transition-colors"
                               >
@@ -1453,7 +1556,7 @@ export default function TransparencyPage() {
                       
                       return (
                       <div 
-                        key={complaint._id}
+                        key={getComplaintKey(complaint)}
                         className="group bg-white rounded-xl border border-slate-200 p-4 hover:shadow-lg transition-all cursor-pointer"
                         onClick={() => setSelectedComplaint(complaint)}
                       >
@@ -1728,8 +1831,11 @@ export default function TransparencyPage() {
                                       const cPhoto = getPhotoUrl(complaint);
                                       return (
                                       <div 
-                                        key={complaint._id}
-                                        onClick={() => router.push(`/transparency/complaints/${complaint._id}`)}
+                                        key={getComplaintKey(complaint)}
+                                        onClick={() => {
+                                          const complaintId = getComplaintId(complaint);
+                                          if (complaintId) router.push(`/transparency/complaints/${complaintId}`);
+                                        }}
                                         className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-green-50 cursor-pointer transition-colors"
                                       >
                                         <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-green-100 flex items-center justify-center">
@@ -1992,6 +2098,16 @@ export default function TransparencyPage() {
         const statusInfo = statusLabels[c.status] || { label: c.status, color: "bg-slate-100 text-slate-600" };
         const municipality = c.municipalityName || c.location?.municipality || t('transparency.complaintsView.unknown');
         const createdDate = new Date(c.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+        const resolvedDate = c.resolvedAt
+          ? new Date(c.resolvedAt).toLocaleDateString(undefined, {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })
+          : null;
+        const reportPhotos = (c.afterPhotos && c.afterPhotos.length > 0)
+          ? c.afterPhotos
+          : (c.proofPhotos || []);
         const cleanDesc = (c.description || "")
           .replace(/Contact\s*phone\s*:?[\s\d+\-]*/gi, "")
           .replace(/(\+?\d[\d\s\-]{7,})/g, "")
@@ -2027,6 +2143,38 @@ export default function TransparencyPage() {
                   <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-green-500" />{municipality}</span>
                   <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-slate-400" />{createdDate}</span>
                 </div>
+
+                {(c.status === "RESOLVED" || c.status === "CLOSED") && (
+                  <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-green-700 mb-1">
+                      Technician report
+                    </p>
+                    {c.resolutionNotes ? (
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.resolutionNotes}</p>
+                    ) : (
+                      <p className="text-sm text-slate-500">No technician description provided.</p>
+                    )}
+                    {resolvedDate && (
+                      <p className="text-xs text-slate-500 mt-2">Resolved on {resolvedDate}</p>
+                    )}
+                    {reportPhotos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        {reportPhotos.slice(0, 3).map((photo, idx) => {
+                          const src = getPhotoUrl(c, photo.url);
+                          if (!src) return null;
+                          return (
+                            <img
+                              key={`${getComplaintKey(c)}-proof-${idx}`}
+                              src={src}
+                              alt={`Proof ${idx + 1}`}
+                              className="w-full h-20 object-cover rounded-lg border border-green-200"
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                   <div className="flex items-center gap-4">
@@ -2036,7 +2184,11 @@ export default function TransparencyPage() {
                     </span>
                   </div>
                   <button
-                    onClick={() => { setSelectedComplaint(null); router.push(`/transparency/complaints/${c._id}`); }}
+                    onClick={() => {
+                      const complaintId = getComplaintId(c);
+                      setSelectedComplaint(null);
+                      if (complaintId) router.push(`/transparency/complaints/${complaintId}`);
+                    }}
                     className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"
                   >
                     {t('transparency.modal.fullDetails')}
@@ -2227,13 +2379,5 @@ export default function TransparencyPage() {
         </div>
       )}
     </div>
-  );
-}
-
-function Activity({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
   );
 }

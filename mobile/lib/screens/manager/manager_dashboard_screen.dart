@@ -64,6 +64,10 @@ class _ManagerDashboardScreenState
               pinned: true,
               backgroundColor: Colors.white,
               foregroundColor: AppColors.textPrimary,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
                   decoration: const BoxDecoration(

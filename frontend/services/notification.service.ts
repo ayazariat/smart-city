@@ -1,5 +1,5 @@
 import { Notification } from "@/types";
-import { clientGet, clientPut } from "@/lib/api";
+import { clientGet, clientPatch, clientPut } from "@/lib/api";
 
 /**
  * Get notification count
@@ -8,7 +8,7 @@ export const getNotificationCount = async (): Promise<{ success: boolean; count?
   try {
     const data = await clientGet<{ success: boolean; unread?: number }>("/notifications/count");
     return { success: data.success, count: data.unread ?? 0 };
-  } catch (error) {
+  } catch {
     // 401 = not authenticated yet, return 0 silently
     return { success: true, count: 0 };
   }
@@ -17,11 +17,21 @@ export const getNotificationCount = async (): Promise<{ success: boolean; count?
 /**
  * Get all notifications
  */
-export const getNotifications = async (): Promise<{ success: boolean; data?: Notification[]; message?: string }> => {
+export const getNotifications = async (
+  options: { unreadOnly?: boolean } = {}
+): Promise<{ success: boolean; data?: Notification[]; message?: string }> => {
+  const searchParams = new URLSearchParams();
+  if (options.unreadOnly) {
+    searchParams.set("unread", "true");
+  }
+
+  const queryString = searchParams.toString();
+  const endpoint = `/notifications${queryString ? `?${queryString}` : ""}`;
+
   try {
-    const data = await clientGet<{ success: boolean; notifications?: Notification[] }>("/notifications");
-    return { success: data.success, data: data.notifications };
-  } catch (error) {
+    const data = await clientGet<{ success: boolean; notifications?: Notification[] }>(endpoint);
+    return { success: data.success, data: Array.isArray(data.notifications) ? data.notifications : [] };
+  } catch {
     // 401 = not authenticated yet, return empty silently
     return { success: true, data: [] };
   }
@@ -32,10 +42,15 @@ export const getNotifications = async (): Promise<{ success: boolean; data?: Not
  */
 export const markNotificationAsRead = async (id: string): Promise<{ success: boolean; message?: string }> => {
   try {
-    const data = await clientPut<{ success: boolean }>(`/notifications/${id}/read`);
+    const data = await clientPatch<{ success: boolean }>(`/notifications/${id}/read`);
     return data;
   } catch {
-    return { success: false, message: "Failed to mark notification as read" };
+    try {
+      const data = await clientPut<{ success: boolean }>(`/notifications/${id}/read`);
+      return data;
+    } catch {
+      return { success: false, message: "Failed to mark notification as read" };
+    }
   }
 };
 
@@ -44,10 +59,15 @@ export const markNotificationAsRead = async (id: string): Promise<{ success: boo
  */
 export const markAllNotificationsAsRead = async (): Promise<{ success: boolean; message?: string }> => {
   try {
-    const data = await clientPut<{ success: boolean }>("/notifications/read-all");
+    const data = await clientPatch<{ success: boolean }>("/notifications/read-all");
     return data;
   } catch {
-    return { success: false, message: "Failed to mark all notifications as read" };
+    try {
+      const data = await clientPut<{ success: boolean }>("/notifications/read-all");
+      return data;
+    } catch {
+      return { success: false, message: "Failed to mark all notifications as read" };
+    }
   }
 };
 

@@ -23,18 +23,77 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
   }
 
   Future<void> _loadStats() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
+
     try {
       final stats = await _complaintService.getPublicStats();
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _stats = stats;
+        _error = null;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
-        _error = e.toString();
+        _error = _formatError(e);
         _isLoading = false;
       });
     }
+  }
+
+  String _formatError(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '').trim();
+    if (message.isEmpty) {
+      return 'Unable to load the public dashboard right now.';
+    }
+    return message;
+  }
+
+  Map<String, dynamic> _readMap(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+    return {};
+  }
+
+  Map<String, dynamic> _readGovernorateCounts() {
+    final directCounts = _readMap(_stats?['byGovernorate']);
+    if (directCounts.isNotEmpty) {
+      return directCounts;
+    }
+
+    final governorates = _stats?['governorates'];
+    if (governorates is! List) {
+      return {};
+    }
+
+    final counts = <String, dynamic>{};
+    for (final item in governorates) {
+      if (item is! Map) {
+        continue;
+      }
+
+      final governorate = item['governorate']?.toString();
+      if (governorate == null || governorate.isEmpty) {
+        continue;
+      }
+
+      counts[governorate] = item['total'] ?? 0;
+    }
+
+    return counts;
   }
 
   @override
@@ -309,7 +368,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
   }
 
   Widget _buildCategorySection() {
-    final byCategory = _stats?['byCategory'] as Map<String, dynamic>? ?? {};
+    final byCategory = _readMap(_stats?['byCategory']);
     if (byCategory.isEmpty) return const SizedBox.shrink();
 
     final maxCount = byCategory.values.fold<int>(0, (max, v) {
@@ -418,8 +477,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
   }
 
   Widget _buildGovernorateSection() {
-    final byGovernorate =
-        _stats?['byGovernorate'] as Map<String, dynamic>? ?? {};
+    final byGovernorate = _readGovernorateCounts();
     if (byGovernorate.isEmpty) return const SizedBox.shrink();
 
     final maxCount = byGovernorate.values.fold<int>(0, (max, v) {

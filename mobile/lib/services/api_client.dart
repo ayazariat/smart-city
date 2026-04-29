@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io' show SocketException;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/env.dart';
 
 class ApiClient {
   /// Override this to use a custom API base URL (e.g. on a real device).
@@ -11,17 +13,14 @@ class ApiClient {
   static String? overrideBaseUrl;
 
   static String get baseUrl {
-    if (overrideBaseUrl != null && overrideBaseUrl!.isNotEmpty) {
-      return overrideBaseUrl!;
-    }
-    // Web uses localhost, mobile emulators use 10.0.2.2
-    if (kIsWeb) {
-      return 'http://localhost:5000/api';
-    }
-    // Android emulator uses 10.0.2.2 to reach host machine localhost.
-    // For a real Android/iOS device on the same WiFi, set overrideBaseUrl to your machine IP.
-    return 'http://10.0.2.2:5000/api';
+    return MobileEnv.resolveApiBaseUrl(override: overrideBaseUrl);
   }
+
+   static String get socketBaseUrl =>
+       MobileEnv.resolveSocketBaseUrl(baseUrl);
+
+   /// Returns the server base URL (without /api) for constructing image URLs
+   static String get serverBaseUrl => socketBaseUrl;
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   String? _token;
@@ -48,7 +47,10 @@ class ApiClient {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString('server_url');
     if (savedUrl != null && savedUrl.isNotEmpty) {
-      overrideBaseUrl = savedUrl;
+      overrideBaseUrl = MobileEnv.normalizeApiBaseUrl(savedUrl);
+      if (kDebugMode) {
+        debugPrint('[ApiClient] Restored server_url override: $overrideBaseUrl');
+      }
     }
   }
 
@@ -68,95 +70,168 @@ class ApiClient {
     if (_token != null) 'Authorization': 'Bearer $_token',
   };
 
+  // Execute request with retry logic for transient failures
+  Future<http.Response> _executeWithRetry(Future<http.Response> Function() request) async {
+    int attempt = 0;
+    const maxAttempts = 3;
+    while (true) {
+      try {
+        final response = await request();
+        // Retry on server errors (5xx)
+        if (response.statusCode >= 500 && response.statusCode < 600) {
+          attempt++;
+          if (attempt >= maxAttempts) {
+            throw ApiException('Server error. Please try again later.');
+          }
+          await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
+          continue;
+        }
+        return response;
+      } on TimeoutException {
+        attempt++;
+        if (attempt >= maxAttempts) {
+          throw ApiException('Request timed out. Check your connection.');
+        }
+        await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
+      } on SocketException {
+        attempt++;
+        if (attempt >= maxAttempts) {
+          throw ApiException('Network error. Please check your connection.');
+        }
+        await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
+      } on http.ClientException {
+        attempt++;
+        if (attempt >= maxAttempts) {
+          throw ApiException('Network error. Please try again later.');
+        }
+        await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
+      } catch (e) {
+        rethrow;
+      }
+    }
+  }
+
   // Generic GET request
   Future<dynamic> get(String endpoint) async {
     try {
-      var response = await http
-          .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
-          .timeout(const Duration(seconds: 15));
+      var response = await _executeWithRetry(() async {
+        return await http
+            .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+            .timeout(MobileEnv.requestTimeout);
+      });
       if (response.statusCode == 401) {
         await _refreshTokens();
-        response = await http
-            .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
-            .timeout(const Duration(seconds: 15));
+        response = await _executeWithRetry(() async {
+          return await http
+              .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+              .timeout(MobileEnv.requestTimeout);
+        });
       }
       return _handleResponse(response);
+    } on TimeoutException {
+      throw ApiException(
+        'Request timed out. Check that the app can reach $socketBaseUrl.',
+      );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e');
+      throw ApiException('Network error while reaching $socketBaseUrl: $e');
     }
   }
 
   // Generic POST request
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
     try {
-      var response = await http
-          .post(
-            Uri.parse('$baseUrl$endpoint'),
-            headers: _headers,
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode == 401) {
-        await _refreshTokens();
-        response = await http
+      var response = await _executeWithRetry(() async {
+        return await http
             .post(
               Uri.parse('$baseUrl$endpoint'),
               headers: _headers,
               body: jsonEncode(body),
             )
-            .timeout(const Duration(seconds: 15));
+            .timeout(MobileEnv.requestTimeout);
+      });
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await _executeWithRetry(() async {
+          return await http
+              .post(
+                Uri.parse('$baseUrl$endpoint'),
+                headers: _headers,
+                body: jsonEncode(body),
+              )
+              .timeout(MobileEnv.requestTimeout);
+        });
       }
       return _handleResponse(response);
+    } on TimeoutException {
+      throw ApiException(
+        'Request timed out. Check that the app can reach $socketBaseUrl.',
+      );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e');
+      throw ApiException('Network error while reaching $socketBaseUrl: $e');
     }
   }
 
   // Generic PUT request
   Future<dynamic> put(String endpoint, Map<String, dynamic> body) async {
     try {
-      var response = await http
-          .put(
-            Uri.parse('$baseUrl$endpoint'),
-            headers: _headers,
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
+      var response = await _executeWithRetry(() async {
+        return await http
+            .put(
+                Uri.parse('$baseUrl$endpoint'),
+                headers: _headers,
+                body: jsonEncode(body),
+              )
+            .timeout(MobileEnv.requestTimeout);
+      });
       if (response.statusCode == 401) {
         await _refreshTokens();
-        response = await http
-            .put(
-              Uri.parse('$baseUrl$endpoint'),
-              headers: _headers,
-              body: jsonEncode(body),
-            )
-            .timeout(const Duration(seconds: 15));
+        response = await _executeWithRetry(() async {
+          return await http
+              .put(
+                Uri.parse('$baseUrl$endpoint'),
+                headers: _headers,
+                body: jsonEncode(body),
+              )
+              .timeout(MobileEnv.requestTimeout);
+        });
       }
       return _handleResponse(response);
+    } on TimeoutException {
+      throw ApiException(
+        'Request timed out. Check that the app can reach $socketBaseUrl.',
+      );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e');
+      throw ApiException('Network error while reaching $socketBaseUrl: $e');
     }
   }
 
   // Generic DELETE request
   Future<dynamic> delete(String endpoint) async {
     try {
-      var response = await http
-          .delete(Uri.parse('$baseUrl$endpoint'), headers: _headers)
-          .timeout(const Duration(seconds: 15));
+      var response = await _executeWithRetry(() async {
+        return await http
+            .delete(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+            .timeout(MobileEnv.requestTimeout);
+      });
       if (response.statusCode == 401) {
         await _refreshTokens();
-        response = await http
-            .delete(Uri.parse('$baseUrl$endpoint'), headers: _headers)
-            .timeout(const Duration(seconds: 15));
+        response = await _executeWithRetry(() async {
+          return await http
+              .delete(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+              .timeout(MobileEnv.requestTimeout);
+        });
       }
       return _handleResponse(response);
+    } on TimeoutException {
+      throw ApiException(
+        'Request timed out. Check that the app can reach $socketBaseUrl.',
+      );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e');
+      throw ApiException('Network error while reaching $socketBaseUrl: $e');
     }
   }
 
@@ -189,33 +264,41 @@ class ApiClient {
   // PATCH request
   Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
     try {
-      var response = await http
-          .patch(
-            Uri.parse('$baseUrl$endpoint'),
-            headers: _headers,
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 15));
-      if (response.statusCode == 401) {
-        await _refreshTokens();
-        response = await http
+      var response = await _executeWithRetry(() async {
+        return await http
             .patch(
               Uri.parse('$baseUrl$endpoint'),
               headers: _headers,
               body: jsonEncode(body),
             )
-            .timeout(const Duration(seconds: 15));
+            .timeout(MobileEnv.requestTimeout);
+      });
+      if (response.statusCode == 401) {
+        await _refreshTokens();
+        response = await _executeWithRetry(() async {
+          return await http
+              .patch(
+                Uri.parse('$baseUrl$endpoint'),
+                headers: _headers,
+                body: jsonEncode(body),
+              )
+              .timeout(MobileEnv.requestTimeout);
+        });
       }
       return _handleResponse(response);
+    } on TimeoutException {
+      throw ApiException(
+        'Request timed out. Check that the app can reach $socketBaseUrl.',
+      );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e');
+      throw ApiException('Network error while reaching $socketBaseUrl: $e');
     }
   }
 
   // Handle response and errors
   dynamic _handleResponse(http.Response response) {
-    final body = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+    final body = _decodeResponseBody(response.body);
 
     switch (response.statusCode) {
       case 200:
@@ -236,6 +319,37 @@ class ApiClient {
     }
   }
 
+  dynamic _decodeResponseBody(String body) {
+    if (body.isEmpty) {
+      return null;
+    }
+
+    final trimmed = body.trimLeft();
+    if (trimmed.startsWith('<!DOCTYPE html') || trimmed.startsWith('<html')) {
+      if (kDebugMode) {
+        final preview = trimmed.length > 180
+            ? '${trimmed.substring(0, 180)}...'
+            : trimmed;
+        debugPrint('[ApiClient] HTML response from $baseUrl: $preview');
+      }
+
+      return {
+        'message':
+            'Invalid API response from $baseUrl. The app is reaching a web page instead of the backend API. Check the configured server URL.',
+      };
+    }
+
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      final preview = body.length > 180 ? '${body.substring(0, 180)}...' : body;
+      if (kDebugMode) {
+        debugPrint('[ApiClient] Non-JSON response from $baseUrl: $preview');
+      }
+      return {'message': preview};
+    }
+  }
+
   // Refresh tokens when 401 is received
   Future<void> _refreshTokens() async {
     if (_refreshToken == null) {
@@ -248,7 +362,7 @@ class ApiClient {
         Uri.parse('$baseUrl/auth/refresh-token'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': _refreshToken}),
-      );
+      ).timeout(MobileEnv.requestTimeout);
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);

@@ -109,7 +109,8 @@ export const ComplaintCard = ({
     : complaint.createdBy?._id;
   const isOwnComplaint = !!userId && userId === createdById;
 
-  const canConfirmUpvote = user?.role === "CITIZEN" && !isOwnComplaint && !!complaint._id && !!userId;
+  // Keep card actions neutral; interaction buttons are handled on the detail page.
+  const canConfirmUpvote = false;
 
   const handleConfirm = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -140,7 +141,6 @@ export const ComplaintCard = ({
         }
       }
     } catch (err) {
-      console.error("Confirm error:", err);
     } finally {
       setIsConfirming(false);
     }

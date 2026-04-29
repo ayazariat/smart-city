@@ -5,6 +5,7 @@ import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
+import 'package:smart_city_app/services/api_client.dart';
 
 const Map<String, Map<String, dynamic>> _statusConfig = {
   'SUBMITTED': {
@@ -75,6 +76,19 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
   String _statusFilter = '';
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
+   String get _baseUrl => ApiClient.serverBaseUrl;
+
+  String _firstPhotoUrl(Complaint complaint) {
+    String url = '';
+    for (final media in complaint.media) {
+      if (media.type == 'photo' && media.url.isNotEmpty) {
+        url = media.url;
+        break;
+      }
+    }
+    if (url.isEmpty) return '';
+    return url.startsWith('http') ? url : '$_baseUrl$url';
+  }
 
   @override
   void initState() {
@@ -617,15 +631,40 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  complaint.description,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: AppColors.textPrimary,
-                    height: 1.5,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_firstPhotoUrl(complaint).isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          _firstPhotoUrl(complaint),
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 72,
+                            height: 72,
+                            color: const Color(0xFFE2E8F0),
+                            child: const Icon(Icons.broken_image),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Text(
+                        complaint.description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textPrimary,
+                          height: 1.5,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(

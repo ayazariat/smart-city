@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
+import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 
 class NewComplaintScreen extends StatefulWidget {
   final VoidCallback onComplaintSubmitted;
@@ -84,6 +84,15 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
   List<Map<String, dynamic>> _proactiveDuplicates = [];
   bool _isCheckingDuplicates = false;
   bool _duplicateOverride = false;
+
+  String? _matchComplaintId(Map<String, dynamic> match) {
+    final id =
+        match['complaintId'] ??
+        match['id'] ??
+        match['_id'] ??
+        match['existingComplaintId'];
+    return id?.toString();
+  }
 
   // Check for duplicates proactively (BL-25)
   @protected
@@ -332,22 +341,79 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                             ),
                         ],
                       ),
-                      ..._proactiveDuplicates
-                          .take(2)
-                          .map(
-                            (m) => Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                '- ${m['title'] ?? 'Similar complaint'}',
+                      ..._proactiveDuplicates.take(2).map((m) {
+                        final complaintId = _matchComplaintId(m);
+                        return Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.amber.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                m['title']?.toString() ?? 'Similar complaint',
                                 style: TextStyle(
                                   fontSize: 13,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.amber.shade900,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Similarity: ${(((m['overallScore'] ?? 0) as num).toDouble() * 100).round()}%',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.amber.shade700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: complaintId == null
+                                          ? null
+                                          : () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      ComplaintDetailScreen(
+                                                        complaintId: complaintId,
+                                                      ),
+                                                ),
+                                              );
+                                            },
+                                      child: const Text('Confirm existing'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: () => setState(
+                                        () => _duplicateOverride = true,
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                      ),
+                                      child: const Text(
+                                        'Ignore and continue',
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
+                        );
+                      }),
                     ],
                   ),
                 ),

@@ -115,7 +115,9 @@ export const apiClient = {
     }
     
     if (requiresAuth && (!token || !user)) {
-      throw new Error("Please login to view this content");
+      // Allow request to proceed without auth header so callers can
+      // handle 401/403 gracefully or fallback to public endpoints.
+      // This avoids hard client-side failures on hydration edge cases.
     }
 
     const requestHeaders: HeadersInit = {

@@ -16,9 +16,7 @@ const transporter = nodemailer.createTransport({
 // Verify SMTP connection on startup
 transporter.verify((error) => {
   if (error) {
-    console.error("[mailer] SMTP Error:", error.message);
-  } else {
-    console.log("[mailer] SMTP Ready ✅");
+    // SMTP connection error
   }
 });
 
@@ -34,31 +32,11 @@ const sendMagicLinkEmail = async (to, userId, token, fullName) => {
     await transporter.sendMail({
       from,
       to,
-      subject: "Smart City Tunisia - Verify your account",
-      text: `Hi ${userName}, click to verify your account: ${magicLink} (expires in 15 minutes)`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
-          </div>
-          <p>Hi <strong>${userName}</strong>,</p>
-          <p>Thank you for signing up for Smart City Tunisia!</p>
-          <p>Click the button below to verify your account:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${magicLink}" style="background: #2E7D32; color: white; padding: 15px 30px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-              Verify My Account
-            </a>
-          </div>
-          <p style="color: #666; font-size: 12px;">
-            This link expires in <strong>15 minutes</strong>.<br/>
-            If you didn't request this, you can ignore this email.
-          </p>
-        </div>
-      `,
+      subject: "Smart City Tunisia - Reset your password",
+      text: `Hi ${userName}, click to reset your password: ${resetLink} (expires in 1 hour)`,
+      html,
     });
-    console.log(`[mailer] Verification email sent to ${to}`);
   } catch (error) {
-    console.error(`[mailer] Failed to send verification email to ${to}:`, error.message);
     throw error;
   }
 };

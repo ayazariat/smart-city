@@ -106,13 +106,11 @@ export const uploadMedia = async (
     const result = await response.json();
     
     if (!response.ok) {
-      console.error('Upload failed:', result.message);
       return { success: false, message: result.message || 'Upload failed' };
     }
 
     return { success: true, data: result.data };
   } catch (error) {
-    console.error('Upload error:', error);
     return { success: false, message: 'Failed to upload files' };
   }
 };
@@ -154,7 +152,6 @@ export const getMyComplaints = async (params?: {
   const queryString = searchParams.toString();
   const endpoint = `/citizen/complaints${queryString ? `?${queryString}` : ""}`;
 
-  console.log("Fetching from endpoint:", endpoint);
   const result = await apiClient.get<{
     message: string;
     complaints: Complaint[];
@@ -165,7 +162,6 @@ export const getMyComplaints = async (params?: {
       pages: number;
     };
   }>(endpoint);
-  console.log("API response:", result);
   return result;
 };
 
@@ -212,7 +208,18 @@ export const deleteComplaint = async (
 export const getComplaintDetail = async (
   id: string
 ): Promise<{ success: boolean; data: Complaint }> => {
-  return apiClient.get<{ success: boolean; data: Complaint }>(`/complaints/${id}`);
+  try {
+    return await apiClient.get<{ success: boolean; data: Complaint }>(
+      `/complaints/${id}`
+    );
+  } catch (error) {
+    // Public/transparency pages may request detail without auth.
+    // Fallback to public endpoint to avoid hard auth failures.
+    return apiClient.get<{ success: boolean; data: Complaint }>(
+      `/public/complaints/${id}`,
+      { requiresAuth: false }
+    );
+  }
 };
 
 /**
@@ -480,7 +487,6 @@ export const predictUrgency = async (
     const result = await response.json();
     return result.data || null;
   } catch (error) {
-    console.error("Urgency prediction failed:", error);
     return null;
   }
 };
@@ -564,6 +570,25 @@ export const removeUpvote = async (
   );
 };
 
+export const getPublicComments = async (
+  id: string
+): Promise<{ success: boolean; data: Comment[] }> => {
+  return apiClient.get<{ success: boolean; data: Comment[] }>(
+    `/public/complaints/${id}/comments`
+  );
+};
+
+export const addPublicComment = async (
+  id: string,
+  text: string,
+  anonymous: boolean = false
+): Promise<{ success: boolean; message: string }> => {
+  return apiClient.post<{ success: boolean; message: string }>(
+    `/public/complaints/${id}/comment`,
+    { text, anonymous }
+  );
+};
+
 export const complaintService = {
   submitComplaint,
   getMyComplaints,
@@ -590,6 +615,8 @@ export const complaintService = {
   unconfirmComplaint,
   upvoteComplaint,
   removeUpvote,
+  getPublicComments,
+  addPublicComment,
 };
 
 /**
@@ -619,7 +646,6 @@ export const getTrendForecast = async (
     const result = await response.json();
     return result.data || null;
   } catch (error) {
-    console.error("Trend forecast failed:", error);
     return null;
   }
 };

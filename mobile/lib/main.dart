@@ -4,11 +4,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/core/constants/strings.dart';
+import 'package:smart_city_app/services/api_client.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/screens/auth/login_screen.dart';
 import 'package:smart_city_app/screens/auth/register_screen.dart';
 import 'package:smart_city_app/screens/auth/forgot_password_screen.dart';
-import 'package:smart_city_app/screens/dashboard_screen.dart';
+import 'package:smart_city_app/screens/auth/reset_password_screen.dart';
+import 'package:smart_city_app/screens/auth/set_password_screen.dart';
+import 'package:smart_city_app/screens/verify_email_screen.dart';
 import 'package:smart_city_app/screens/home_screen.dart';
+import 'package:smart_city_app/screens/dashboard_screen.dart'
+    as citizen_dashboard;
 import 'package:smart_city_app/screens/complaints_screen.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
@@ -16,28 +22,30 @@ import 'package:smart_city_app/screens/profile_screen.dart';
 import 'package:smart_city_app/screens/settings_screen.dart';
 import 'package:smart_city_app/screens/transparency_screen.dart';
 import 'package:smart_city_app/screens/archive_screen.dart';
-import 'package:smart_city_app/screens/public_stats_screen.dart';
-import 'package:smart_city_app/screens/verify_email_screen.dart';
-import 'package:smart_city_app/screens/admin/admin_complaints_screen.dart';
-import 'package:smart_city_app/screens/admin/admin_users_screen.dart';
-import 'package:smart_city_app/screens/agent/agent_complaints_screen.dart';
-import 'package:smart_city_app/screens/manager/manager_dashboard_screen.dart';
-import 'package:smart_city_app/screens/manager/team_performance_screen.dart';
+import 'package:smart_city_app/screens/notifications_screen.dart';
 import 'package:smart_city_app/screens/technician/technician_tasks_screen.dart';
 import 'package:smart_city_app/screens/technician/technician_task_detail_screen.dart';
+import 'package:smart_city_app/screens/dashboard/heatmap_screen.dart';
 import 'package:smart_city_app/routes/app_routes.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
     ),
   );
-
+  await _initializeApp();
   runApp(const ProviderScope(child: MyApp()));
+}
+
+Future<void> _initializeApp() async {
+  try {
+    await ApiClient().loadTokens();
+  } catch (e) {
+    debugPrint('Auth init: $e');
+  }
 }
 
 class MyApp extends ConsumerWidget {
@@ -45,61 +53,73 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
+    // Route guard: redirect to login if not authenticated
+    // and to role-based home if authenticated
+    String initialRoute;
+    if (user == null) {
+      initialRoute = AppRoutes.login;
+    } else {
+      initialRoute = AppRoutes.home;
+    }
+
     return MaterialApp(
       title: AppStrings.appName,
-      theme: ThemeData(
-        primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: ColorScheme.light(
-          primary: AppColors.primary,
-          secondary: AppColors.accent,
-        ),
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
+      theme: _buildTheme(),
       debugShowCheckedModeBanner: false,
-      initialRoute: AppRoutes.login,
+      initialRoute: initialRoute,
       routes: {
         // Auth
-        AppRoutes.login: (context) => const LoginScreen(),
-        AppRoutes.register: (context) => const RegisterScreen(),
-        AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
-        AppRoutes.verifyEmail: (context) => const VerifyEmailScreen(email: ''),
-
-        // Main
-        AppRoutes.home: (context) => const HomeScreen(),
-        AppRoutes.dashboard: (context) => const DashboardScreen(),
-        AppRoutes.transparency: (context) => const TransparencyScreen(),
-        AppRoutes.profile: (context) =>
-            ProfileScreen(onLogout: () {}, userName: '', userRole: ''),
-        AppRoutes.settings: (context) => const SettingsScreen(),
-
-        // Complaints
-        AppRoutes.complaints: (context) => const ComplaintsScreen(),
-        AppRoutes.newComplaint: (context) => NewComplaintScreen(
-          onComplaintSubmitted: () {},
-          onBack: () => Navigator.pop(context),
+        AppRoutes.login: (_) => const LoginScreen(),
+        AppRoutes.register: (_) => const RegisterScreen(),
+        AppRoutes.forgotPassword: (_) => const ForgotPasswordScreen(),
+        AppRoutes.resetPassword: (_) => const ResetPasswordScreen(token: ''),
+        AppRoutes.setPassword: (_) =>
+            const SetPasswordScreen(token: '', email: ''),
+        AppRoutes.verifyEmail: (_) => const VerifyEmailScreen(email: ''),
+        // Role-based home (redirects based on role)
+        AppRoutes.home: (_) => HomeScreen(
+          userRole: user?.role ?? '',
+          userName: user?.fullName ?? '',
+          onLogout: () => ref.read(authProvider.notifier).logout(),
         ),
-        AppRoutes.complaintDetail: (context) =>
+        // Citizen
+        AppRoutes.complaints: (_) => ComplaintsScreen(
+          onLogout: () => ref.read(authProvider.notifier).logout(),
+        ),
+        AppRoutes.newComplaint: (_) =>
+            NewComplaintScreen(onComplaintSubmitted: () {}, onBack: () {}),
+        AppRoutes.complaintDetail: (_) =>
             ComplaintDetailScreen(complaintId: ''),
-
-        // Admin
-        AppRoutes.adminDashboard: (context) => const DashboardScreen(),
-        AppRoutes.adminComplaints: (context) => const AdminComplaintsScreen(),
-        AppRoutes.adminUsers: (context) => const AdminUsersScreen(),
-
-        // Agent
-        AppRoutes.agentComplaints: (context) => const AgentComplaintsScreen(),
-
-        // Manager
-        AppRoutes.managerDashboard: (context) => const ManagerDashboardScreen(),
-        AppRoutes.managerTeamPerformance: (context) =>
-            const TeamPerformanceScreen(),
-
+        AppRoutes.profile: (_) => ProfileScreen(
+          onLogout: () => ref.read(authProvider.notifier).logout(),
+          userName: user?.fullName ?? '',
+          userRole: user?.role ?? '',
+        ),
+        AppRoutes.settings: (_) => const SettingsScreen(),
+        // Public
+        AppRoutes.transparency: (_) => const TransparencyScreen(),
+        AppRoutes.archive: (_) => const ArchiveScreen(),
+        AppRoutes.notifications: (_) => const NotificationsScreen(),
+        AppRoutes.heatmap: (_) => const HeatmapScreen(),
         // Technician
-        AppRoutes.technicianTasks: (context) => const TechnicianTasksScreen(),
-        AppRoutes.technicianTaskDetail: (context) =>
-            const TechnicianTaskDetailScreen(taskId: ''),
+        AppRoutes.technicianTasks: (_) => const TechnicianTasksScreen(),
+        AppRoutes.technicianTaskDetail: (_) =>
+            TechnicianTaskDetailScreen(taskId: ''),
       },
     );
   }
+
+  ThemeData _buildTheme() => ThemeData(
+    primaryColor: AppColors.primary,
+    scaffoldBackgroundColor: AppColors.background,
+    colorScheme: const ColorScheme.light(
+      primary: AppColors.primary,
+      secondary: AppColors.accent,
+    ),
+    useMaterial3: true,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+  );
 }

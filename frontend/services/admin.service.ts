@@ -172,8 +172,21 @@ export const adminService = {
    * Get all departments
    */
   async getDepartments(): Promise<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>> {
-    const response = await apiClient.get<ApiResponse<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>>>("/admin/departments");
-    return response.data;
+    const response = await apiClient.get<
+      ApiResponse<Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>> & {
+        departments?: Array<{_id: string; name: string; description?: string; email?: string; phone?: string}>;
+      }
+    >("/admin/departments");
+
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+
+    if (Array.isArray(response.departments)) {
+      return response.departments;
+    }
+
+    return [];
   },
 
   /**

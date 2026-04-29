@@ -79,7 +79,6 @@ export async function getLocationWithDetails(): Promise<LocationData | null> {
     );
     
     if (!response.ok) {
-      console.error("Nominatim API error:", response.status, response.statusText);
       // Return location with coordinates even if geocoding fails
       return {
         governorate: "",
@@ -149,7 +148,6 @@ export async function getLocationWithDetails(): Promise<LocationData | null> {
       longitude: coords.longitude,
     };
   } catch (error) {
-    console.error("Failed to get location:", error);
     return null;
   }
 }

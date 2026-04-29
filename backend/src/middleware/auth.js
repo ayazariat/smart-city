@@ -31,8 +31,11 @@ const authenticate = (req, res, next) => {
  * Attaches user if token is valid, but doesn't reject if missing
  */
 const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = extractToken(authHeader);
+  let token = extractToken(req.headers.authorization);
+
+  if (!token && req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken;
+  }
 
   if (token) {
     const decoded = verifyToken(token);
@@ -51,6 +54,10 @@ const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required" });
+    }
+
+    if (req.user.role === "ADMIN" || roles.includes("*")) {
+      return next();
     }
 
     if (!roles.includes(req.user.role)) {

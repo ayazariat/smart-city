@@ -119,6 +119,8 @@ export default function AdminUsersPage() {
     return getMunicipalitiesByGovernorate(editForm.governorate);
   }, [editForm.governorate]);
 
+  const departmentOptions = Array.isArray(departments) ? departments : [];
+
   // Check admin access
   const { hydrated } = useAuthStore();
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -170,9 +172,9 @@ export default function AdminUsersPage() {
   const fetchDepartments = async () => {
     try {
       const depts = await adminService.getDepartments();
-      setDepartments(depts);
+      setDepartments(Array.isArray(depts) ? depts : []);
     } catch {
-      // Silently handle departments fetch error
+      setDepartments([]);
     }
   };
 
@@ -886,7 +888,7 @@ export default function AdminUsersPage() {
                     className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.department ? "border-red-500" : "border-slate-200"}`}
                   >
                     <option value="">Select a department</option>
-                    {departments.map((dept) => (
+                    {departmentOptions.map((dept) => (
                       <option key={dept._id} value={dept._id}>
                         {dept.name}
                       </option>
@@ -1038,7 +1040,7 @@ export default function AdminUsersPage() {
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="">Select a department</option>
-                    {departments.map((dept) => (
+                    {departmentOptions.map((dept) => (
                       <option key={dept._id} value={dept._id}>
                         {dept.name}
                       </option>

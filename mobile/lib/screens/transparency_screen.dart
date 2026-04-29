@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/api_client.dart';
@@ -20,7 +21,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
   Map<String, dynamic> _categoryStats = {};
   List<dynamic> _monthlyTrends = [];
   List<dynamic> _municipalityStats = [];
-  List<dynamic> _governorateStats = [];
+  final List<dynamic> _governorateStats = [];
   bool _isLoading = true;
   String _error = '';
   String _searchQuery = '';
@@ -28,7 +29,8 @@ class _TransparencyScreenState extends State<TransparencyScreen>
   String _selectedGovernorate = '';
   bool _isGridView = true;
   final _searchController = TextEditingController();
-  bool _showHelp = false;
+  final bool _showHelp = false;
+  Timer? _refreshTimer;
 
   static const _governoratePhotos = {
     'Tunis':
@@ -112,33 +114,64 @@ class _TransparencyScreenState extends State<TransparencyScreen>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _loadData(showLoader: false),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _error = '';
-    });
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) {
+      return int.tryParse(value) ?? double.tryParse(value)?.round() ?? 0;
+    }
+    return 0;
+  }
+
+  double _asDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  Future<void> _loadData({bool showLoader = true}) async {
+    if (showLoader) {
+      setState(() {
+        _isLoading = true;
+        _error = '';
+      });
+    }
+
     try {
-      final statsRes = await _apiClient.get('/public/stats?period=month');
-      final allTimeRes = await _apiClient.get('/public/stats?period=all');
-      final catRes = await _apiClient.get(
-        '/public/stats/by-category?period=month',
-      );
-      final munRes = await _apiClient.get(
-        '/public/stats/by-municipality?period=month',
-      );
-      final trendsRes = await _apiClient.get(
-        '/public/stats/monthly-trends?months=6',
-      );
-      final complaintsRes = await _apiClient.get('/public/complaints?limit=50');
+       final responses = await Future.wait<dynamic>([
+         _apiClient.get('/public/stats?period=month'),
+         _apiClient.get('/public/stats?period=all'),
+         _apiClient.get('/public/stats/by-category?period=month'),
+         _apiClient.get('/public/stats/by-municipality?period=month'),
+         _apiClient.get('/public/stats/monthly-trends?months=6'),
+         _apiClient.get('/public/complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED'),
+       ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      final statsRes = responses[0];
+      final allTimeRes = responses[1];
+      final catRes = responses[2];
+      final munRes = responses[3];
+      final trendsRes = responses[4];
+      final complaintsRes = responses[5];
 
       setState(() {
         _stats = statsRes is Map ? (statsRes['data'] ?? statsRes) : {};
@@ -170,9 +203,14 @@ class _TransparencyScreenState extends State<TransparencyScreen>
           found = complaintData.map((c) => Complaint.fromJson(c)).toList();
         }
         _complaints = found;
+        _error = '';
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _error = 'Erreur de connexion: ${e.toString()}';
         _isLoading = false;
@@ -290,6 +328,10 @@ class _TransparencyScreenState extends State<TransparencyScreen>
         centerTitle: true,
         backgroundColor: AppColors.primary,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -336,15 +378,19 @@ class _TransparencyScreenState extends State<TransparencyScreen>
   }
 
   Widget _buildOverview() {
-    final total = _stats['total'] ?? 0;
-    final resolved = _stats['resolved'] ?? 0;
-    final inProgress = _stats['inProgress'] ?? 0;
-    final pending = _stats['pending'] ?? 0;
+    final total = _asInt(_stats['total']);
+    final resolved = _asInt(_stats['resolved']);
+    final inProgress = _asInt(_stats['inProgress']);
+    final pending = _asInt(_stats['pending']);
     final rate = total > 0 ? ((resolved / total) * 100).round() : 0;
-    final avgDays = _stats['avgResolutionDays'] ?? 0;
-    final slaRate = _stats['slaComplianceRate'] ?? 0;
-    final allTimeTotal = _allTimeStats['total'] ?? total;
-    final allTimeResolved = _allTimeStats['resolved'] ?? resolved;
+    final avgDays = _asDouble(_stats['avgResolutionDays']);
+    final slaRate = _asInt(_stats['slaComplianceRate']);
+    final allTimeTotal = _asInt(_allTimeStats['total']) == 0
+        ? total
+        : _asInt(_allTimeStats['total']);
+    final allTimeResolved = _asInt(_allTimeStats['resolved']) == 0
+        ? resolved
+        : _asInt(_allTimeStats['resolved']);
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -524,9 +570,13 @@ class _TransparencyScreenState extends State<TransparencyScreen>
     int resolved,
     int inProgress,
     int rate,
-    int avgDays,
+    double avgDays,
     int slaRate,
   ) {
+    final avgDaysLabel = avgDays % 1 == 0
+        ? '${avgDays.toInt()}j'
+        : '${avgDays.toStringAsFixed(1)}j';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -556,7 +606,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
               'Total',
               '$total',
               Icons.description,
-              const Color(0xFF3B82F6),
+              AppColors.primary,
             ),
             _buildStatCardWithTrend(
               'Résolus',
@@ -573,7 +623,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
             ),
             _buildStatCard(
               'Délai moy.',
-              '${avgDays}j',
+              avgDaysLabel,
               Icons.timer,
               const Color(0xFF8B5CF6),
             ),
@@ -792,7 +842,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
                     _buildLegendItem(
                       'En attente',
                       pending,
-                      const Color(0xFF3B82F6),
+                      AppColors.primary,
                     ),
                   ],
                 ),
@@ -898,11 +948,11 @@ class _TransparencyScreenState extends State<TransparencyScreen>
               width: double.infinity,
               color: AppColors.secondary,
               child: hasPhoto
-                  ? Image.network(
-                      media[0].url.startsWith('http')
-                          ? media[0].url
-                          : '${ApiClient.baseUrl.replaceAll('/api', '')}${media[0].url}',
-                      fit: BoxFit.cover,
+                   ? Image.network(
+                       media[0].url.startsWith('http')
+                           ? media[0].url
+                           : '${ApiClient.serverBaseUrl}${media[0].url}',
+                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Center(
                         child: Icon(Icons.image, color: Colors.grey),
                       ),
@@ -979,14 +1029,16 @@ class _TransparencyScreenState extends State<TransparencyScreen>
 
     final entries = _categoryStats.entries.toList()
       ..sort(
-        (a, b) => ((b.value is Map) ? (b.value['total'] ?? 0) : 0).compareTo(
-          (a.value is Map) ? (a.value['total'] ?? 0) : 0,
+        (a, b) => _asInt(
+          (b.value is Map) ? b.value['total'] : 0,
+        ).compareTo(
+          _asInt((a.value is Map) ? a.value['total'] : 0),
         ),
       );
     final maxVal = entries.isNotEmpty
-        ? ((entries.first.value is Map)
-              ? (entries.first.value['total'] ?? 1)
-              : 1)
+        ? _asInt(
+            (entries.first.value is Map) ? entries.first.value['total'] : 1,
+          )
         : 1;
 
     return Container(
@@ -1016,8 +1068,8 @@ class _TransparencyScreenState extends State<TransparencyScreen>
           const SizedBox(height: 16),
           ...entries.take(7).map((e) {
             final data = e.value is Map ? e.value : {};
-            final total = data['total'] ?? 0;
-            final rate = data['rate'] ?? 0;
+            final total = _asInt(data['total']);
+            final rate = _asInt(data['rate']);
             final pct = maxVal > 0 ? (total / maxVal) : 0.0;
             final color = _categoryColors[e.key] ?? AppColors.primary;
 
@@ -1129,7 +1181,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
     if (_monthlyTrends.isEmpty) return const SizedBox.shrink();
 
     final maxVal = _monthlyTrends.fold<int>(0, (max, t) {
-      final submitted = t['submitted'] ?? 0;
+      final submitted = _asInt(t['submitted']);
       return submitted > max ? submitted : max;
     });
 
@@ -1138,9 +1190,10 @@ class _TransparencyScreenState extends State<TransparencyScreen>
         return Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: _monthlyTrends.map<Widget>((t) {
-            final submitted = t['submitted'] ?? 0;
-            final resolved = t['resolved'] ?? 0;
+            final submitted = _asInt(t['submitted']);
+            final resolved = _asInt(t['resolved']);
             final month = t['month'] ?? '';
+            final monthLabel = month.toString();
             final barHeight = maxVal > 0
                 ? (submitted / maxVal * constraints.maxHeight * 0.9)
                 : 0.0;
@@ -1186,7 +1239,9 @@ class _TransparencyScreenState extends State<TransparencyScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      month.toString().substring(3, 5),
+                      monthLabel.length >= 5
+                          ? monthLabel.substring(3, 5)
+                          : monthLabel,
                       style: const TextStyle(
                         fontSize: 10,
                         color: AppColors.textSecondary,
@@ -1293,7 +1348,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                name as String,
+                                name,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
@@ -1618,9 +1673,9 @@ class _TransparencyScreenState extends State<TransparencyScreen>
                   color: AppColors.secondary,
                   child: hasPhoto
                       ? Image.network(
-                          media[0].url.startsWith('http')
-                              ? media[0].url
-                              : '${ApiClient.baseUrl.replaceAll('/api', '')}${media[0].url}',
+                           media[0].url.startsWith('http')
+                               ? media[0].url
+                               : '${ApiClient.serverBaseUrl}${media[0].url}',
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => const Center(
                             child: Icon(Icons.image, color: Colors.grey),
@@ -1758,7 +1813,7 @@ class _TransparencyScreenState extends State<TransparencyScreen>
                       child: Image.network(
                         media[0].url.startsWith('http')
                             ? media[0].url
-                            : '${ApiClient.baseUrl.replaceAll('/api', '')}${media[0].url}',
+                            : '${ApiClient.serverBaseUrl}${media[0].url}',
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) =>
                             const Icon(Icons.image, color: Colors.grey),

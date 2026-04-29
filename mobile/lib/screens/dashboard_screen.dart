@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/providers/auth_provider.dart';
+import 'dart:async';
 import 'package:smart_city_app/core/constants/colors.dart';
-import 'package:smart_city_app/providers/complaints_provider.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
+import 'package:smart_city_app/services/ai_service.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 
@@ -17,19 +17,31 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final ComplaintService _complaintService = ComplaintService();
+  final AiService _aiService = AiService();
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, int> _stats = {};
   List<Complaint> _recentComplaints = [];
+  List<Complaint> _resolvedComplaints = [];
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _loadData(showLoader: false),
+    );
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool showLoader = true}) async {
+    if (showLoader) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
     try {
       final statsData = await _complaintService.getCitizenStats();
       if (mounted) {
@@ -37,37 +49,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _stats = {
             'total': (statsData['total'] ?? 0) as int,
             'submitted': (statsData['submitted'] ?? 0) as int,
+            'pending': (statsData['pending'] ?? 0) as int,
             'inProgress': (statsData['inProgress'] ?? 0) as int,
             'resolved': (statsData['resolved'] ?? 0) as int,
             'closed': (statsData['closed'] ?? 0) as int,
+            'overdue': (statsData['overdue'] ?? 0) as int,
           };
         });
       }
-      final complaints = await _complaintService.getMyComplaints(limit: 10);
+      final complaints = await _complaintService.getMyComplaints(limit: 20);
+      // Filter out archived statuses (CLOSED, REJECTED) from active dashboard
+      final activeComplaints = complaints
+          .where((c) => c.status != 'CLOSED' && c.status != 'REJECTED')
+          .toList();
+      final resolved = complaints
+          .where((c) => c.status == 'RESOLVED')
+          .take(6)
+          .toList();
       if (mounted) {
         setState(() {
-          _recentComplaints = complaints;
+          _recentComplaints = activeComplaints.take(6).toList();
+          _resolvedComplaints = resolved;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _errorMessage = e.toString();
         });
-    }
-  }
-
-  Future<void> _confirmComplaint(String id) async {
-    try {
-      await _complaintService.confirmComplaint(id);
-      _loadData();
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      }
     }
   }
 
@@ -115,14 +127,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authProvider).user;
     final hour = DateTime.now().hour;
     final greeting = hour < 12
         ? 'Bonjour'
         : hour < 18
         ? 'Bon après-midi'
         : 'Bonsoir';
-    final firstName = (user?.fullName ?? 'Citoyen').split(' ').first;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -173,7 +183,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 Text(
-                                  '$greeting, $firstName!',
+                                  '$greeting!',
                                   style: const TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
@@ -202,26 +212,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                         onPressed: () {},
                       ),
-                      PopupMenuButton<String>(
-                        icon: const Icon(
-                          Icons.person_outline,
-                          color: Colors.white,
-                        ),
-                        onSelected: (v) =>
-                            ref.read(authProvider.notifier).logout(),
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'logout',
-                            child: Row(
-                              children: [
-                                const Icon(Icons.logout, size: 18),
-                                const SizedBox(width: 8),
-                                const Text('Déconnexion'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                   SliverToBoxAdapter(
@@ -234,6 +224,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           const SizedBox(height: 24),
                           _buildQuickActions(),
                           const SizedBox(height: 24),
+                          if (_resolvedComplaints.isNotEmpty) ...[
+                            _buildResolvedComplaints(),
+                            const SizedBox(height: 24),
+                          ],
                           _buildRecentComplaints(),
                           const SizedBox(height: 32),
                         ],
@@ -271,11 +265,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               'Total',
               '${_stats['total'] ?? 0}',
               Icons.summarize,
-              const Color(0xFF3B82F6),
+              AppColors.primary,
             ),
             _buildStatCard(
               'En attente',
-              '${_stats['submitted'] ?? 0}',
+              '${(_stats['submitted'] ?? 0) + (_stats['pending'] ?? 0)}',
               Icons.pending_actions,
               const Color(0xFFF59E0B),
             ),
@@ -378,7 +372,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               child: _buildActionCard(
                 'Mes signalements',
                 Icons.list_alt,
-                const Color(0xFF3B82F6),
+                AppColors.attention,
                 () {},
               ),
             ),
@@ -442,6 +436,130 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+  Widget _buildResolvedComplaints() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Résolutions récentes',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            TextButton(onPressed: () {}, child: const Text('Voir tout')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 180,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _resolvedComplaints.length,
+            itemBuilder: (context, index) {
+              final c = _resolvedComplaints[index];
+              return Container(
+                width: 280,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ComplaintDetailScreen(complaintId: c.id),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.statusResolue.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'RÉSOLU',
+                                  style: TextStyle(
+                                    color: AppColors.statusResolue,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            c.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const Spacer(),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                size: 14,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  c.municipalityName ?? 'Non spécifié',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[500],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildRecentComplaints() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,6 +615,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Widget _buildComplaintCard(Complaint complaint) {
     final statusColor = _statusColor(complaint.status);
+    String photoUrl = '';
+    for (final media in complaint.media) {
+      if (media.type == 'photo' && media.url.isNotEmpty) {
+        photoUrl = media.url;
+        break;
+      }
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -560,11 +685,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  complaint.description,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (photoUrl.isNotEmpty) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          photoUrl,
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 64,
+                            height: 64,
+                            color: const Color(0xFFE2E8F0),
+                            child: const Icon(Icons.broken_image),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Text(
+                        complaint.description,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -593,5 +743,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 }

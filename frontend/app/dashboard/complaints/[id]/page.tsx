@@ -108,11 +108,11 @@ export default function ComplaintDetailPage() {
   const [internalNotes, setInternalNotes] = useState<InternalNoteItem[]>([]);
 
   // BL-28: Confirm/Upvote state
-  const [isConfirming, setIsConfirming] = useState(false);
   const [isUpvoting, setIsUpvoting] = useState(false);
-  const [checkDuplicateLoading, setCheckDuplicateLoading] = useState(false);
   const [duplicateResults, setDuplicateResults] = useState<any[]>([]);
   const [showDuplicateResults, setShowDuplicateResults] = useState(false);
+  const [publicCommentText, setPublicCommentText] = useState("");
+  const [postingPublicComment, setPostingPublicComment] = useState(false);
 
   // Add note handler
   const handleAddNote = async (type: string, content: string) => {
@@ -131,19 +131,22 @@ export default function ComplaintDetailPage() {
         }
       }
     } catch (error) {
-      console.error("Error adding note:", error);
     }
   };
 
   // BL-28: Check if current user has confirmed/upvoted
   // citizenId is stored as ObjectId in DB, so we must compare as strings
   const userId = user?.id;
-  const hasConfirmed = complaint?.confirmations?.some(
-    c => c.citizenId?.toString() === userId?.toString()
-  );
-  const hasUpvoted = complaint?.upvotes?.some(
-    u => u.citizenId?.toString() === userId?.toString()
-  );
+  const hasUpvoted = (
+    complaint?.upvotes as Array<{ citizenId?: string | { _id?: string } | null }> | undefined
+  )?.some((u) => {
+    const citizenId = u?.citizenId;
+    const id =
+      typeof citizenId === "object" && citizenId !== null
+        ? citizenId._id
+        : citizenId;
+    return id?.toString() === userId?.toString();
+  });
   const isOwnComplaint = (() => {
     if (!complaint || !userId) return false;
     const createdById = typeof complaint.createdBy === "string" 
@@ -151,35 +154,11 @@ export default function ComplaintDetailPage() {
       : complaint.createdBy?._id;
     return createdById === userId;
   })();
-  const canConfirmUpvote = user?.role === "CITIZEN" && !isOwnComplaint && complaint?._id;
-
-  const handleConfirm = async () => {
-    if (!complaint?._id || isConfirming) return;
-    setIsConfirming(true);
-    try {
-      if (hasConfirmed) {
-        const result = await complaintService.unconfirmComplaint(complaint._id);
-        if (result.success) {
-          const detailResponse = await complaintService.getComplaintDetail(complaint._id);
-          if (detailResponse.success) {
-            setComplaint(detailResponse.data);
-          }
-        }
-      } else {
-        const result = await complaintService.confirmComplaint(complaint._id);
-        if (result.success) {
-          const detailResponse = await complaintService.getComplaintDetail(complaint._id);
-          if (detailResponse.success) {
-            setComplaint(detailResponse.data);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Confirm error:", err);
-    } finally {
-      setIsConfirming(false);
-    }
-  };
+  const canConfirmUpvote =
+    user?.role === "CITIZEN" &&
+    !isOwnComplaint &&
+    complaint?._id &&
+    (complaint?.status === "RESOLVED" || complaint?.status === "CLOSED");
 
   const handleUpvote = async () => {
     if (!complaint?._id || isUpvoting) return;
@@ -203,43 +182,38 @@ export default function ComplaintDetailPage() {
         }
       }
     } catch (err) {
-      console.error("Upvote error:", err);
     } finally {
       setIsUpvoting(false);
     }
   };
 
-  // BL-25: Handle duplicate check
-  const handleCheckDuplicates = async () => {
-    if (!complaint) return;
-    setCheckDuplicateLoading(true);
-    setDuplicateResults([]);
-    setShowDuplicateResults(true);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: complaint.title,
-          description: complaint.description,
-          category: complaint.category,
-          municipality: complaint.municipalityName,
-        }),
-      });
-      const result = await response.json();
-      const data = result.data || result;
-      
-      if (data?.topMatches && data.topMatches.length > 0) {
-        setDuplicateResults(data.topMatches);
-      }
-    } catch (err) {
-      console.error("Duplicate check error:", err);
-    } finally {
-      setCheckDuplicateLoading(false);
+  const refreshComplaint = async () => {
+    if (!complaint?._id) return;
+    const detailResponse = await complaintService.getComplaintDetail(complaint._id);
+    if (detailResponse.success) {
+      setComplaint(processComplaintMedia(detailResponse.data));
     }
   };
 
+  const handleAddPublicComment = async () => {
+    if (!complaint?._id || !publicCommentText.trim() || postingPublicComment) return;
+    setPostingPublicComment(true);
+    try {
+      const result = await complaintService.addPublicComment(
+        complaint._id,
+        publicCommentText.trim()
+      );
+      if (result.success) {
+        setPublicCommentText("");
+        await refreshComplaint();
+      }
+    } catch (err) {
+    } finally {
+      setPostingPublicComment(false);
+    }
+  };
+
+  // BL-25: Handle duplicate check
   useEffect(() => {
     const fetchComplaintDetail = async () => {
       try {
@@ -252,6 +226,13 @@ export default function ComplaintDetailPage() {
           // Process media URLs to ensure they are full URLs
           const processedComplaint = processComplaintMedia(response.data);
           setComplaint(processedComplaint);
+          if (Array.isArray(processedComplaint?.aiDuplicateCheck?.topMatches) && processedComplaint.aiDuplicateCheck.topMatches.length > 0) {
+            setDuplicateResults(processedComplaint.aiDuplicateCheck.topMatches);
+            setShowDuplicateResults(true);
+          } else {
+            setDuplicateResults([]);
+            setShowDuplicateResults(false);
+          }
           // Load internal notes if available
           if (processedComplaint.internalNotes) {
             setInternalNotes(processedComplaint.internalNotes as InternalNoteItem[]);
@@ -260,7 +241,6 @@ export default function ComplaintDetailPage() {
           setError(t("complaintDetail.errorNotFound"));
         }
       } catch (err: unknown) {
-        console.error("Error fetching complaint:", err);
         
         // Handle ApiError from client
         if (err && typeof err === 'object' && 'status' in err) {
@@ -310,8 +290,7 @@ export default function ComplaintDetailPage() {
               setDepartments(response.data);
             }
           }
-        } catch (error) {
-          console.error("Error fetching departments:", error);
+      } catch (error) {
           // Set empty departments on error
           setDepartments([]);
         }
@@ -324,8 +303,7 @@ export default function ComplaintDetailPage() {
           if (techData.data) {
             setTechnicians(techData.data);
           }
-        } catch (error) {
-          console.error("Error fetching technicians:", error);
+      } catch (error) {
         }
       }
     };
@@ -365,12 +343,8 @@ export default function ComplaintDetailPage() {
         setActionModal(null);
         setRejectionReason("");
       }
-    } catch (err) {
-      console.error("Error updating status:", err);
-      // Show error message to user but don't throw
-    } finally {
-      setActionLoading(false);
-    }
+      } catch (err) {
+      }
   };
 
   const handlePriorityUpdate = async () => {
@@ -407,11 +381,8 @@ export default function ComplaintDetailPage() {
         setSelectedUrgency("");
         setSelectedPriorityScore("");
       }
-    } catch (err) {
-      console.error("Error updating priority:", err);
-    } finally {
-      setActionLoading(false);
-    }
+      } catch (err) {
+      }
   };
 
   const handleDepartmentUpdate = async () => {
@@ -431,11 +402,8 @@ export default function ComplaintDetailPage() {
         setActionModal(null);
         setSelectedDepartment("");
       }
-    } catch (err) {
-      console.error("Error updating department:", err);
-    } finally {
-      setActionLoading(false);
-    }
+      } catch (err) {
+      }
   };
 
   const handleTechnicianUpdate = async () => {
@@ -472,20 +440,26 @@ export default function ComplaintDetailPage() {
         setSelectedTechnician("");
         setSelectedTechnicians([]);
       }
-    } catch (err) {
-      console.error("Error assigning technician:", err);
-      alert(t("complaintDetail.failedAssignTechnician"));
-    } finally {
-      setActionLoading(false);
-    }
+      } catch (err) {
+      }
   };
 
   const isAgentOrManager =
     user?.role === "MUNICIPAL_AGENT" ||
     user?.role === "DEPARTMENT_MANAGER" ||
     user?.role === "ADMIN";
-  const canSeeAiInsights = user?.role !== "CITIZEN";
+  const canSeeAiInsights =
+    user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
   const canSeeUrgencyPrediction = user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
+  const showUrgencyAi =
+    canSeeUrgencyPrediction &&
+    complaint?.status === "ASSIGNED" &&
+    !!complaint?.aiUrgencyPrediction;
+  const showDuplicateAi =
+    complaint?.status === "VALIDATED" &&
+    !!complaint?.aiDuplicateCheck &&
+    Array.isArray(complaint?.aiDuplicateCheck?.topMatches) &&
+    complaint.aiDuplicateCheck.topMatches.length > 0;
 
   // Check if current user is a technician assigned to this complaint
   const isAssignedTechnician = user?.role === "TECHNICIAN" && 
@@ -684,9 +658,7 @@ export default function ComplaintDetailPage() {
             </section>
 
             {/* AI Analysis Section (BL-24, BL-25) */}
-            {canSeeAiInsights && (
-              (canSeeUrgencyPrediction && complaint.aiUrgencyPrediction) || complaint.aiDuplicateCheck
-            ) && (
+            {canSeeAiInsights && (showUrgencyAi || showDuplicateAi) && (
               <section className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-violet-200">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <span className="text-2xl">🤖</span>
@@ -694,7 +666,7 @@ export default function ComplaintDetailPage() {
                 </h2>
                 
                 {/* BL-24: Urgency Prediction — Manager/Admin only */}
-                {canSeeUrgencyPrediction && complaint.aiUrgencyPrediction && (
+                {showUrgencyAi && complaint.aiUrgencyPrediction && (
                   <div className="mb-4 p-4 bg-white rounded-xl border border-violet-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-700">{t("complaintDetail.aiUrgencyPrediction")}</span>
@@ -734,7 +706,7 @@ export default function ComplaintDetailPage() {
                 )}
 
                 {/* BL-25: Duplicate Detection */}
-                {complaint.aiDuplicateCheck && (
+                {showDuplicateAi && complaint.aiDuplicateCheck && (
                   <div className={`p-4 rounded-xl border ${
                     complaint.duplicateStatus === 'PROBABLE_DUPLICATE' ? 'bg-orange-50 border-orange-200' :
                     complaint.duplicateStatus === 'POSSIBLE_DUPLICATE' ? 'bg-yellow-50 border-yellow-200' :
@@ -987,13 +959,13 @@ export default function ComplaintDetailPage() {
             )}
 
             {/* Comments */}
-            {complaint.publicComments && complaint.publicComments.length > 0 && (
-              <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="comments-title">
+            <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="comments-title">
                 <h2 id="comments-title" className="text-lg font-semibold text-slate-900 mb-4">
-                  {t("complaintDetail.comments")} ({complaint.publicComments.length})
+                  {t("complaintDetail.comments")} ({complaint.publicComments?.length || 0})
                 </h2>
-                <div className="space-y-4">
-                  {complaint.publicComments.map((comment: PublicComment, idx: number) => {
+                {(complaint.publicComments?.length || 0) > 0 ? (
+                  <div className="space-y-4">
+                    {complaint.publicComments?.map((comment: PublicComment, idx: number) => {
                     const commentDate = comment.date || comment.createdAt || "";
                     const formattedDate = commentDate
                       ? new Date(commentDate).toLocaleDateString("fr-FR", {
@@ -1017,10 +989,32 @@ export default function ComplaintDetailPage() {
                         <p className="text-slate-700">{comment.content || comment.text}</p>
                       </div>
                     );
-                  })}
-                </div>
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">{t("complaintDetail.noCommentsYet")}</p>
+                )}
+
+                {user?.role === "CITIZEN" && (
+                  <div className="mt-4 border-t pt-4">
+                    <textarea
+                      value={publicCommentText}
+                      onChange={(e) => setPublicCommentText(e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      placeholder={t("complaintDetail.addCommentPlaceholder")}
+                    />
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        onClick={handleAddPublicComment}
+                        disabled={postingPublicComment || !publicCommentText.trim()}
+                      >
+                        {postingPublicComment ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.addComment")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </section>
-            )}
 
             {/* Internal Notes - Only for staff */}
             {isAgentOrManager && (
@@ -1049,7 +1043,7 @@ export default function ComplaintDetailPage() {
           {/* Sidebar */}
           <aside className="space-y-6" role="complementary" aria-label="Additional information">
             {/* AI Analysis */}
-            {canSeeAiInsights && (
+            {canSeeAiInsights && (showUrgencyAi || showDuplicateAi) && (
               <AIAnalysisCard
                 complaintId={complaint._id || complaintId}
                 title={complaint.title || ""}
@@ -1320,8 +1314,8 @@ export default function ComplaintDetailPage() {
                   </div>
                 )}
 
-                {/* Agent Actions - Approve/Reject for RESOLVED status */}
-                {complaint.status === "RESOLVED" && (user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                {/* Manager/Admin Actions - Approve/Reject for RESOLVED status */}
+                {complaint.status === "RESOLVED" && (user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
                   <div className="flex gap-3 pt-4 border-t border-amber-200">
                     <button
                       onClick={async () => {
@@ -1335,12 +1329,8 @@ export default function ComplaintDetailPage() {
                           } else {
                             alert(result.message || t("complaintDetail.failedApproveResolution"));
                           }
-                        } catch (err) {
-                          console.error("Error approving resolution:", err);
-                          alert(t("complaintDetail.failedApproveResolution"));
-                        } finally {
-                          setActionLoading(false);
-                        }
+                           } catch (err) {
+                           }
                       }}
                       disabled={actionLoading}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all text-sm font-semibold disabled:opacity-50"
@@ -1387,20 +1377,16 @@ export default function ComplaintDetailPage() {
                   </div>
                 </div>
 
+                {(complaint.confirmationCount || 0) > 1 && (
+                  <div className="mb-4 p-3 bg-emerald-100/60 rounded-xl border border-emerald-200">
+                    <p className="text-sm text-emerald-800 font-medium">
+                      {t("complaintDetail.supportedByCitizens", { count: complaint.confirmationCount || 0 })}
+                    </p>
+                  </div>
+                )}
+
                 {/* Action buttons */}
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleConfirm}
-                    disabled={isConfirming}
-                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${
-                      hasConfirmed
-                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                        : "bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50"
-                    } disabled:opacity-50`}
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    {isConfirming ? "..." : hasConfirmed ? t("complaintDetail.confirmed") : t("complaintDetail.confirmIssue")}
-                  </button>
                   <button
                     onClick={handleUpvote}
                     disabled={isUpvoting}
@@ -1416,7 +1402,7 @@ export default function ComplaintDetailPage() {
                 </div>
                 
                 <p className="text-xs text-slate-500 mt-3 text-center">
-                  {t("complaintDetail.communityHelpHint")}
+                  Community actions are available only while this complaint is resolved.
                 </p>
               </section>
             )}
@@ -1448,15 +1434,6 @@ export default function ComplaintDetailPage() {
                           >
                             {t("complaintDetail.rejectComplaint")}
                           </Button>
-                          {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
-                            <Button
-                              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700"
-                              icon={<Search className="w-4 h-4" />}
-                              onClick={handleCheckDuplicates}
-                            >
-                              {checkDuplicateLoading ? t("common.loading") : "Check Duplicates"}
-                            </Button>
-                          )}
                         </>
                       )}
                     </>
@@ -1938,12 +1915,8 @@ export default function ComplaintDetailPage() {
                         } else {
                           alert(result.message || "Failed to approve resolution");
                         }
-                      } catch (err) {
-                        console.error("Error approving:", err);
-                        alert("Failed to approve resolution");
-                      } finally {
-                        setActionLoading(false);
-                      }
+                         } catch (err) {
+                         }
                     }}
                     disabled={actionLoading}
                   >
@@ -1993,12 +1966,8 @@ export default function ComplaintDetailPage() {
                         } else {
                           alert(result.message || t("complaintDetail.failedRejectResolution"));
                         }
-                      } catch (err) {
-                        console.error("Error rejecting resolution:", err);
-                        alert(t("complaintDetail.failedRejectResolution"));
-                      } finally {
-                        setActionLoading(false);
-                      }
+                         } catch (err) {
+                         }
                     }}
                     disabled={actionLoading || !rejectionReason.trim()}
                   >
@@ -2049,32 +2018,20 @@ export default function ComplaintDetailPage() {
       </div>
 
       {/* Duplicate Check Results Modal */}
-      {showDuplicateResults && (
+      {showDuplicateResults && duplicateResults.length > 0 && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <Search className="w-5 h-5 text-amber-600" />
-                Duplicate Detection
+                Similar Complaints
               </h3>
               <button onClick={() => setShowDuplicateResults(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {checkDuplicateLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
-                <span className="ml-3 text-slate-600">Checking for duplicates...</span>
-              </div>
-            ) : duplicateResults.length === 0 ? (
-              <div className="text-center py-8">
-                <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-3" />
-                <p className="text-green-700 font-medium">No duplicates found!</p>
-                <p className="text-sm text-slate-500 mt-1">This complaint appears to be unique.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
+            <div className="space-y-3">
                 <p className="text-amber-700 font-medium">
                   Found {duplicateResults.length} potential duplicate(s):
                 </p>
@@ -2082,13 +2039,29 @@ export default function ComplaintDetailPage() {
                   <div key={idx} className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                     <p className="font-medium text-slate-800">{dup.title || `Complaint #${idx + 1}`}</p>
                     <p className="text-sm text-slate-600 line-clamp-2">{dup.description}</p>
-                    <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+                    <div className="flex items-center justify-between gap-2 mt-2 text-xs text-slate-500">
+                      <div className="flex items-center gap-2">
                       <span className="px-2 py-1 bg-amber-100 rounded">{dup.status}</span>
+                        {typeof dup.overallScore === "number" && (
+                          <span className="px-2 py-1 bg-white rounded border border-amber-200">
+                            {(dup.overallScore * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
+                      {(dup.complaintId || dup._id) && (
+                        <button
+                          className="text-primary font-medium hover:underline"
+                          onClick={() =>
+                            router.push(`/dashboard/complaints/${dup.complaintId || dup._id}`)
+                          }
+                        >
+                          Open
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
-            )}
 
             <div className="flex justify-end mt-4">
               <Button onClick={() => setShowDuplicateResults(false)}>

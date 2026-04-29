@@ -27,7 +27,7 @@ export default function AdminComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("IN_PROGRESS");
   const [governorateFilter, setGovernorateFilter] = useState<string>("");
   const [municipalityFilter, setMunicipalityFilter] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
@@ -183,7 +183,7 @@ export default function AdminComplaintsPage() {
     const daysSinceCreation = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
     return ["ASSIGNED", "IN_PROGRESS"].includes(c.status) && daysSinceCreation > 4 && daysSinceCreation <= 7;
   }).length;
-  const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+  const resolvedCount = complaints.filter(c => c.status === "RESOLVED").length;
   const avgDays = complaints.length > 0 
     ? Math.round(complaints.reduce((acc, c) => {
         const days = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60 * 24);
@@ -207,12 +207,12 @@ export default function AdminComplaintsPage() {
     <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
-        title="All Complaints"
+        title="Active Complaints"
         subtitle="System-wide complaint overview"
         backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
-            {filteredComplaints.length} complaints
+            {stats.total ?? complaints.length} active total · {filteredComplaints.length} shown
           </span>
         }
       />
@@ -227,7 +227,7 @@ export default function AdminComplaintsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Total Complaints</p>
-                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total || complaints.length}</p>
+                <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total ?? complaints.length}</p>
               </div>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-slate-600" />
@@ -242,7 +242,7 @@ export default function AdminComplaintsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Resolved</p>
-                <p className="text-3xl font-bold text-green-600 mt-1">{stats.resolved || resolvedCount}</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{stats.resolved ?? resolvedCount}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -258,7 +258,7 @@ export default function AdminComplaintsPage() {
               <div>
                 <p className="text-sm text-slate-500">At Risk (SLA)</p>
                 <p className="text-xs text-amber-500 mt-1">Close to deadline</p>
-                <p className="text-3xl font-bold text-amber-600 mt-1">{stats.totalAtRisk || atRiskCount}</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">{stats.totalAtRisk ?? atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
                 <Clock className="w-6 h-6 text-amber-600" />
@@ -274,7 +274,7 @@ export default function AdminComplaintsPage() {
               <div>
                 <p className="text-sm text-slate-500">Overdue</p>
                 <p className="text-xs text-red-500 mt-1">Past deadline</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue || overdueCount}</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue ?? overdueCount}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-red-600" />
@@ -449,77 +449,6 @@ export default function AdminComplaintsPage() {
                     className="w-full pl-10 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
                   />
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* SLA Monitoring Section — always visible */}
-        <div className="bg-white rounded-2xl shadow-sm p-5 mb-6 border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-700">SLA Monitoring</h3>
-            <span className="text-xs text-slate-400">{complaints.length} total tracked</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            {/* Compliant */}
-            <div className="p-3 bg-green-50 rounded-xl border border-green-100">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-green-700">Compliant</span>
-                <span className="text-lg font-bold text-green-600">
-                  {complaints.length - overdueCount - atRiskCount}
-                </span>
-              </div>
-              <div className="w-full bg-green-100 rounded-full h-2">
-                <div
-                  className="bg-green-500 h-2 rounded-full transition-all"
-                  style={{ width: complaints.length ? `${((complaints.length - overdueCount - atRiskCount) / complaints.length) * 100}%` : '0%' }}
-                />
-              </div>
-              <p className="text-[10px] text-green-600 mt-1">
-                {complaints.length ? Math.round(((complaints.length - overdueCount - atRiskCount) / complaints.length) * 100) : 0}% on time
-              </p>
-            </div>
-            {/* At Risk */}
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-amber-700">At Risk</span>
-                <span className="text-lg font-bold text-amber-600">{atRiskCount}</span>
-              </div>
-              <div className="w-full bg-amber-100 rounded-full h-2">
-                <div
-                  className="bg-amber-500 h-2 rounded-full transition-all"
-                  style={{ width: complaints.length ? `${(atRiskCount / complaints.length) * 100}%` : '0%' }}
-                />
-              </div>
-              <p className="text-[10px] text-amber-600 mt-1">4–7 days active, no resolution</p>
-            </div>
-            {/* Overdue */}
-            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-red-700">Overdue</span>
-                <span className="text-lg font-bold text-red-600">{overdueCount}</span>
-              </div>
-              <div className="w-full bg-red-100 rounded-full h-2">
-                <div
-                  className="bg-red-500 h-2 rounded-full transition-all"
-                  style={{ width: complaints.length ? `${(overdueCount / complaints.length) * 100}%` : '0%' }}
-                />
-              </div>
-              <p className="text-[10px] text-red-600 mt-1">&gt;7 days active, past deadline</p>
-            </div>
-          </div>
-          {/* Combined SLA bar */}
-          {complaints.length > 0 && (
-            <div>
-              <div className="flex rounded-full overflow-hidden h-3">
-                <div className="bg-green-500 transition-all" style={{ width: `${((complaints.length - overdueCount - atRiskCount) / complaints.length) * 100}%` }} />
-                <div className="bg-amber-400 transition-all" style={{ width: `${(atRiskCount / complaints.length) * 100}%` }} />
-                <div className="bg-red-500 transition-all" style={{ width: `${(overdueCount / complaints.length) * 100}%` }} />
-              </div>
-              <div className="flex gap-4 mt-2">
-                <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Compliant</span>
-                <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> At Risk</span>
-                <span className="flex items-center gap-1 text-[10px] text-slate-500"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Overdue</span>
               </div>
             </div>
           )}

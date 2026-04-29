@@ -65,7 +65,6 @@ const verifyAccessToken = (token) => {
   try {
     return jwt.verify(token, ACCESS_TOKEN_SECRET);
   } catch (error) {
-    console.error("Access token verification failed:", error.message);
     return null;
   }
 };
@@ -79,7 +78,6 @@ const verifyRefreshToken = (token) => {
   try {
     return jwt.verify(token, REFRESH_TOKEN_SECRET);
   } catch (error) {
-    console.error("Refresh token verification failed:", error.message);
     return null;
   }
 };

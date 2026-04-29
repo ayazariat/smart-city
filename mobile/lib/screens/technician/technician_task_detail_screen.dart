@@ -1,9 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
+import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
 
 class TechnicianTaskDetailScreen extends ConsumerStatefulWidget {
@@ -19,6 +21,8 @@ class TechnicianTaskDetailScreen extends ConsumerStatefulWidget {
 class _TechnicianTaskDetailScreenState
     extends ConsumerState<TechnicianTaskDetailScreen> {
   final ComplaintService _complaintService = ComplaintService();
+  final ApiClient _apiClient = ApiClient();
+  final ImagePicker _picker = ImagePicker();
   Complaint? _task;
   bool _isLoading = true;
   String? _error;
@@ -320,15 +324,33 @@ class _TechnicianTaskDetailScreenState
   }
 
   Future<List<File>?> _pickImages() async {
-    return [];
+    final files = await _picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
+    if (files.isEmpty) return [];
+    return files.map((file) => File(file.path)).toList();
   }
 
   Future<void> _resolveTask(String notes, List<File> photos) async {
     setState(() => _actionLoading = true);
     try {
+      List<String> uploadedUrls = [];
+      if (photos.isNotEmpty) {
+        final uploadResult = await _apiClient.uploadFiles(
+          '/upload',
+          photos.map((p) => p.path).toList(),
+          fieldName: 'photos',
+        );
+        if (uploadResult != null && uploadResult['urls'] is List) {
+          uploadedUrls = (uploadResult['urls'] as List)
+              .map((e) => e.toString())
+              .toList();
+        }
+      }
       await ref
           .read(technicianTasksProvider.notifier)
           .completeTask(widget.taskId, notes: notes);
+      if (uploadedUrls.isNotEmpty) {
+        await _complaintService.addAfterPhoto(widget.taskId, uploadedUrls);
+      }
       await _loadTask();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -520,7 +542,7 @@ class _TechnicianTaskDetailScreenState
             ),
           ),
           const Spacer(),
-          if (_task!.priorityScore != null && _task!.priorityScore >= 15)
+          if (_task!.priorityScore >= 15)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(

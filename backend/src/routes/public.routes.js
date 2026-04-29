@@ -3,8 +3,16 @@ const router = express.Router();
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const Department = require("../models/Department");
-const { authenticate, authorize } = require("../middleware/auth");
+const { authenticate, authorize, optionalAuth } = require("../middleware/auth");
 const { normalizeMunicipality } = require("../utils/normalize");
+
+const PUBLIC_ACTIVE_STATUSES = [
+  "VALIDATED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RESOLVED",
+];
+const PUBLIC_ARCHIVE_STATUSES = ["REJECTED", "CLOSED"];
 
 // Simple AI department prediction based on category and description keywords
 const predictDepartment = (category, description) => {
@@ -132,7 +140,7 @@ router.get("/stats", async (req, res) => {
     };
 
     // Get complaints within period - only show VALIDATED and above for public
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({
       ...dateFilter,
@@ -142,7 +150,7 @@ router.get("/stats", async (req, res) => {
 
     // Total counts
     const total = complaints.length;
-    const resolved = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+    const resolved = complaints.filter(c => c.status === "RESOLVED").length;
     const inProgress = complaints.filter(c => ["ASSIGNED", "IN_PROGRESS"].includes(c.status)).length;
     const pending = complaints.filter(c => c.status === "VALIDATED").length;
 
@@ -171,7 +179,7 @@ router.get("/stats", async (req, res) => {
     }).length;
 
     // Calculate SLA compliance rate (resolved within deadline)
-    const resolvedWithinPeriod = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED");
+    const resolvedWithinPeriod = complaints.filter(c => c.status === "RESOLVED");
     const resolvedWithDeadline = resolvedWithinPeriod.filter(c => {
       if (!c.slaDeadline || !c.resolvedAt) return true; // If no SLA, count as OK
       return new Date(c.resolvedAt) <= new Date(c.slaDeadline);
@@ -199,7 +207,7 @@ router.get("/stats", async (req, res) => {
     });
 
     const prevTotal = previousComplaints.length;
-    const prevResolved = previousComplaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+    const prevResolved = previousComplaints.filter(c => c.status === "RESOLVED").length;
     const prevAvgDays = previousComplaints.filter(c => c.resolvedAt).reduce((sum, c) => {
       return sum + (new Date(c.resolvedAt).getTime() - new Date(c.createdAt).getTime());
     }, 0) / (previousComplaints.filter(c => c.resolvedAt).length || 1) / (1000 * 60 * 60 * 24);
@@ -209,6 +217,63 @@ router.get("/stats", async (req, res) => {
     const resolvedTrend = prevResolved > 0 ? Math.round(((resolved - prevResolved) / prevResolved) * 100) : 0;
     const avgResolutionTrend = prevAvgDays > 0 ? Math.round(((parseFloat(avgResolutionDays) - prevAvgDays) / prevAvgDays) * 100) : 0;
     const resolutionRateTrend = prevTotal > 0 ? Math.round(((resolved / total) - (prevResolved / prevTotal)) * 100) : 0;
+
+    const byCategory = {};
+    for (const categoryName of [
+      "WASTE",
+      "ROAD",
+      "LIGHTING",
+      "WATER",
+      "SAFETY",
+      "PUBLIC_PROPERTY",
+      "GREEN_SPACE",
+      "OTHER",
+    ]) {
+      byCategory[categoryName] = complaints.filter(
+        (complaint) => complaint.category === categoryName,
+      ).length;
+    }
+
+    const governorates = (() => {
+      const governorateStats = {};
+      const allGovernorates = ["Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", "Jendouba", "Kairouan", "Kasserine", "Kébili", "Le Kef", "Mahdia", "Manouba", "Médenine", "Monastir", "Nabeul", "Sfax", "Sidi Bouzid", "Siliana", "Sousse", "Tataouine", "Tozeur", "Tunis", "Zaghouan"];
+
+      for (const gov of allGovernorates) {
+        governorateStats[gov] = { total: 0, resolved: 0 };
+      }
+
+      for (const c of complaints) {
+        let gov = c.governorate;
+        if (!gov && c.location?.governorate) {
+          const locGov = c.location.governorate.replace(/^Gouvernorat\s+/i, '');
+          if (governorateStats[locGov]) gov = locGov;
+        }
+        if (!gov && c.municipalityName) {
+          gov = municipalityToGovernorate[c.municipalityName] || municipalityToGovernorate[c.location?.municipality];
+        }
+        if (gov && governorateStats[gov]) {
+          governorateStats[gov].total++;
+          if (c.status === "RESOLVED") {
+            governorateStats[gov].resolved++;
+          }
+        }
+      }
+
+      return Object.entries(governorateStats)
+        .filter(([, data]) => data.total > 0)
+        .map(([governorate, data]) => ({
+          governorate,
+          total: data.total,
+          resolved: data.resolved,
+          resolutionRate: data.total > 0 ? Math.round((data.resolved / data.total) * 100) : 0,
+        }))
+        .sort((a, b) => b.total - a.total);
+    })();
+
+    const byGovernorate = governorates.reduce((acc, item) => {
+      acc[item.governorate] = item.total;
+      return acc;
+    }, {});
 
     res.json({
       success: true,
@@ -229,43 +294,11 @@ router.get("/stats", async (req, res) => {
         avgResolutionTrend,
         slaComplianceTrend: 0,
         generatedAt: new Date().toISOString(),
+        byCategory,
+        byGovernorate,
         
         // Governorate breakdown
-        governorates: (() => {
-          const governorateStats = {};
-          const allGovernorates = ["Ariana", "Béja", "Ben Arous", "Bizerte", "Gabès", "Gafsa", "Jendouba", "Kairouan", "Kasserine", "Kébili", "Le Kef", "Mahdia", "Manouba", "Médenine", "Monastir", "Nabeul", "Sfax", "Sidi Bouzid", "Siliana", "Sousse", "Tataouine", "Tozeur", "Tunis", "Zaghouan"];
-          
-          for (const gov of allGovernorates) {
-            governorateStats[gov] = { total: 0, resolved: 0 };
-          }
-          
-          for (const c of complaints) {
-            let gov = c.governorate;
-            if (!gov && c.location?.governorate) {
-              const locGov = c.location.governorate.replace(/^Gouvernorat\s+/i, '');
-              if (governorateStats[locGov]) gov = locGov;
-            }
-            if (!gov && c.municipalityName) {
-              gov = municipalityToGovernorate[c.municipalityName] || municipalityToGovernorate[c.location?.municipality];
-            }
-            if (gov && governorateStats[gov]) {
-              governorateStats[gov].total++;
-              if (c.status === "RESOLVED" || c.status === "CLOSED") {
-                governorateStats[gov].resolved++;
-              }
-            }
-          }
-          
-          return Object.entries(governorateStats)
-            .filter(([, data]) => data.total > 0)
-            .map(([governorate, data]) => ({
-              governorate,
-              total: data.total,
-              resolved: data.resolved,
-              resolutionRate: data.total > 0 ? Math.round((data.resolved / data.total) * 100) : 0
-            }))
-            .sort((a, b) => b.total - a.total);
-        })()
+        governorates,
       }
     });
   } catch (error) {
@@ -287,7 +320,7 @@ router.get("/stats/by-category", async (req, res) => {
     else startDate.setHours(0, 0, 0, 0);
 
     // Only show VALIDATED and above for public
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
@@ -296,7 +329,7 @@ router.get("/stats/by-category", async (req, res) => {
     
     for (const cat of categories) {
       const catComplaints = complaints.filter(c => c.category === cat);
-      const resolved = catComplaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
+      const resolved = catComplaints.filter(c => c.status === "RESOLVED").length;
       categoryStats[cat] = {
         total: catComplaints.length,
         resolved,
@@ -327,7 +360,7 @@ router.get("/stats/by-municipality", async (req, res) => {
     else startDate.setHours(0, 0, 0, 0);
 
     // Only show VALIDATED and above for public
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
@@ -347,7 +380,7 @@ router.get("/stats/by-municipality", async (req, res) => {
       }
       municipalityStats[municipality].total++;
       
-      if (complaint.status === "RESOLVED" || complaint.status === "CLOSED") {
+      if (complaint.status === "RESOLVED") {
         municipalityStats[municipality].resolved++;
         
         // Calculate resolution time
@@ -407,7 +440,7 @@ router.get("/stats/all-municipalities", async (req, res) => {
     else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
@@ -468,7 +501,7 @@ router.get("/stats/all-municipalities", async (req, res) => {
       
       if (matched && munStats[mun]) {
         munStats[mun].total++;
-        if (c.status === "RESOLVED" || c.status === "CLOSED") {
+        if (c.status === "RESOLVED") {
           munStats[mun].resolved++;
         }
       } else if (c.governorate) {
@@ -476,7 +509,7 @@ router.get("/stats/all-municipalities", async (req, res) => {
         const govCapital = allMunicipalities.find(m => m.name === c.governorate && m.governorate === c.governorate);
         if (govCapital && munStats[govCapital.name]) {
           munStats[govCapital.name].total++;
-          if (c.status === "RESOLVED" || c.status === "CLOSED") {
+          if (c.status === "RESOLVED") {
             munStats[govCapital.name].resolved++;
           }
         }
@@ -505,7 +538,7 @@ router.get("/stats/monthly-trends", async (req, res) => {
     startDate.setDate(1);
     startDate.setHours(0, 0, 0, 0);
 
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     
     const complaints = await Complaint.find({
       createdAt: { $gte: startDate },
@@ -529,7 +562,7 @@ router.get("/stats/monthly-trends", async (req, res) => {
       if (monthlyData[key]) {
         monthlyData[key].submitted++;
         
-        if (complaint.status === "RESOLVED" || complaint.status === "CLOSED") {
+        if (complaint.status === "RESOLVED") {
           monthlyData[key].resolved++;
           
           if (complaint.resolvedAt && complaint.createdAt) {
@@ -569,7 +602,7 @@ router.get("/stats/by-zone", async (req, res) => {
     else if (period === "all") startDate = new Date(0);
     else startDate.setHours(0, 0, 0, 0);
 
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     const dateFilter = startDate.getTime() > 0 ? { createdAt: { $gte: startDate } } : {};
     const complaints = await Complaint.find({ ...dateFilter, status: { $in: publicStatuses }, isArchived: { $ne: true } });
 
@@ -667,7 +700,7 @@ router.get("/top-recurring", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
     
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     const complaints = await Complaint.find({ 
       status: { $in: publicStatuses }, 
       isArchived: { $ne: true },
@@ -682,7 +715,7 @@ router.get("/top-recurring", async (req, res) => {
           titleCounts[normalizedTitle] = { originalTitle: c.title, category: c.category, count: 0, resolvedCount: 0 };
         }
         titleCounts[normalizedTitle].count++;
-        if (c.status === "RESOLVED" || c.status === "CLOSED") {
+        if (c.status === "RESOLVED") {
           titleCounts[normalizedTitle].resolvedCount++;
         }
       }
@@ -713,7 +746,7 @@ router.get("/top-urgent", async (req, res) => {
     
     const urgentComplaints = await Complaint.find({
       $expr: { $gte: [{ $size: { $ifNull: ["$confirmations", []] } }, 5] },
-      status: { $nin: ["CLOSED", "REJECTED"] }
+      status: { $nin: PUBLIC_ARCHIVE_STATUSES }
     })
       .select("title category status confirmationCount location createdAt")
       .sort({ confirmationCount: -1, createdAt: -1 })
@@ -850,10 +883,10 @@ router.get("/complaints", async (req, res) => {
 });
 
 // GET /api/public/complaints/:id - Get single complaint by ID (public, no personal data)
-router.get("/complaints/:id", async (req, res) => {
+router.get("/complaints/:id", optionalAuth, async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id)
-      .select("title description category status priorityScore municipalityName governorate location createdAt updatedAt resolvedAt media afterPhotos beforePhotos proofPhotos confirmationCount upvoteCount viewsCount referenceId")
+      .select("title description category status priorityScore municipalityName governorate location createdAt updatedAt resolvedAt media afterPhotos beforePhotos proofPhotos confirmationCount upvoteCount viewsCount referenceId createdBy")
       .lean();
     
     if (!complaint) {
@@ -861,17 +894,27 @@ router.get("/complaints/:id", async (req, res) => {
     }
     
     // Only show public statuses
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+    const publicStatuses = PUBLIC_ACTIVE_STATUSES;
     if (!publicStatuses.includes(complaint.status)) {
       return res.status(404).json({ success: false, message: "Complaint not available" });
     }
 
     // Increment views (fire-and-forget, no dedup for v1)
     Complaint.updateOne({ _id: req.params.id }, { $inc: { viewsCount: 1 } }).catch(() => {});
+
+    const isOwnComplaint =
+      !!req.user?.userId &&
+      complaint.createdBy?.toString() === req.user.userId.toString();
+
+    const { createdBy, ...publicComplaint } = complaint;
     
     res.json({
       success: true,
-      data: { ...complaint, viewsCount: (complaint.viewsCount || 0) + 1 }
+      data: {
+        ...publicComplaint,
+        viewsCount: (complaint.viewsCount || 0) + 1,
+        isOwnComplaint,
+      }
     });
   } catch {
     res.status(500).json({ success: false, message: "Failed to fetch complaint" });
@@ -908,13 +951,16 @@ router.get("/my-municipality-complaints", authenticate, authorize("CITIZEN"), as
     }
     
     if (status) {
-      const statusList = status.split(",");
+      const statusList = status
+        .split(",")
+        .map((value) => value.trim().toUpperCase())
+        .filter(Boolean);
       query.status = { $in: statusList };
     }
     
     const total = await Complaint.countDocuments(query);
     const complaints = await Complaint.find(query)
-      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId media upvoteCount confirmationCount')
+      .select('title description category status priorityScore municipalityName location createdAt upvotes confirmations referenceId media upvoteCount confirmationCount createdBy')
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit))
       .sort({ createdAt: -1 });
@@ -940,10 +986,18 @@ router.post("/complaints/:id/confirm", authenticate, async (req, res) => {
     if (!complaint) {
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
+
+    if (req.user.role !== "CITIZEN") {
+      return res.status(403).json({ success: false, message: "Only citizens can confirm complaints" });
+    }
+
+    if (complaint.createdBy?.toString() === req.user.userId.toString()) {
+      return res.status(400).json({ success: false, message: "You cannot confirm your own complaint" });
+    }
     
     // Check if already confirmed
     const existingIndex = (complaint.confirmations || []).findIndex(
-      c => c.userId.toString() === req.user.userId.toString()
+      c => (c.citizenId || c.userId)?.toString() === req.user.userId.toString()
     );
     
     if (existingIndex >= 0) {
@@ -953,7 +1007,7 @@ router.post("/complaints/:id/confirm", authenticate, async (req, res) => {
       // Add confirmation
       complaint.confirmations = complaint.confirmations || [];
       complaint.confirmations.push({
-        userId: req.user.userId,
+        citizenId: req.user.userId,
         confirmedAt: new Date()
       });
     }
@@ -982,30 +1036,30 @@ router.post("/complaints/:id/upvote", authenticate, async (req, res) => {
     }
     
     // Check if already upvoted
-    const existingIndex = (complaint.votes || []).findIndex(
-      v => v.userId.toString() === req.user.userId.toString()
+    const existingIndex = (complaint.upvotes || []).findIndex(
+      v => (v.citizenId || v.userId)?.toString() === req.user.userId.toString()
     );
     
     if (existingIndex >= 0) {
       // Remove upvote
-      complaint.votes.splice(existingIndex, 1);
+      complaint.upvotes.splice(existingIndex, 1);
     } else {
       // Add upvote
-      complaint.votes = complaint.votes || [];
-      complaint.votes.push({
-        userId: req.user.userId,
-        votedAt: new Date()
+      complaint.upvotes = complaint.upvotes || [];
+      complaint.upvotes.push({
+        citizenId: req.user.userId,
+        upvotedAt: new Date()
       });
     }
     
-    complaint.upvoteCount = complaint.votes?.length || 0;
+    complaint.upvoteCount = complaint.upvotes?.length || 0;
     await complaint.save();
     
     res.json({
       success: true,
       message: existingIndex >= 0 ? "Upvote removed" : "Complaint upvoted",
-      voteCount: complaint.votes?.length || 0,
-      upvoteCount: complaint.votes?.length || 0
+      voteCount: complaint.upvotes?.length || 0,
+      upvoteCount: complaint.upvotes?.length || 0
     });
   } catch (error) {
     console.error("Upvote error:", error);

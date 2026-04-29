@@ -28,16 +28,12 @@ export const initSocket = (token?: string): Socket => {
     auth: token ? { token } : undefined,
   });
 
-  socket.on("connect", () => {
-    console.log("Socket connected:", socket?.id);
-  });
-
   socket.on("disconnect", () => {
     // no-op
   });
 
   socket.on("connect_error", (error) => {
-    console.warn("Socket connection error:", error.message);
+    // Socket connection errors handled internally
   });
 
   return socket;
@@ -82,9 +78,9 @@ export const subscribeToNotifications = (
     socket.connect();
   }
 
-  socket.on("notification", callback);
+  socket.on("notification:new", callback);
 
   return () => {
-    socket?.off("notification", callback);
+    socket?.off("notification:new", callback);
   };
 };

@@ -4,7 +4,7 @@ class Complaint {
   final String description;
   final String category;
   final String status;
-  final int priorityScore;
+  final double priorityScore;
   final String? urgency;
   final String? municipalityName;
   final String? governorate;
@@ -23,6 +23,7 @@ class Complaint {
   final int upvoteCount;
   final List<dynamic> confirmations;
   final List<dynamic> upvotes;
+  final List<PublicComment> publicComments;
   final Map<String, dynamic>? location;
   final DateTime? slaDeadline;
   final String? slaStatus;
@@ -58,6 +59,7 @@ class Complaint {
     this.upvoteCount = 0,
     this.confirmations = const [],
     this.upvotes = const [],
+    this.publicComments = const [],
     this.location,
     this.slaDeadline,
     this.slaStatus,
@@ -76,7 +78,7 @@ class Complaint {
       description: json['description'] ?? '',
       category: json['category'] ?? 'OTHER',
       status: json['status'] ?? 'SUBMITTED',
-      priorityScore: json['priorityScore'] ?? 0,
+      priorityScore: (json['priorityScore'] ?? 0).toDouble(),
       urgency: json['urgency'],
       municipalityName: json['municipalityName'],
       governorate: json['governorate'],
@@ -115,6 +117,11 @@ class Complaint {
       upvoteCount: json['upvoteCount'] ?? 0,
       confirmations: json['confirmations'] ?? [],
       upvotes: json['upvotes'] ?? [],
+      publicComments:
+          (json['publicComments'] as List<dynamic>?)
+              ?.map((c) => PublicComment.fromJson(c))
+              .toList() ??
+          [],
       location: json['location'] is Map<String, dynamic>
           ? json['location'] as Map<String, dynamic>
           : null,
@@ -265,6 +272,38 @@ class UserInfo {
       fullName: json['fullName'] ?? '',
       email: json['email'],
       phone: json['phone'],
+    );
+  }
+}
+
+class PublicComment {
+  final String text;
+  final String authorName;
+  final String? authorRole;
+  final DateTime? createdAt;
+
+  PublicComment({
+    required this.text,
+    required this.authorName,
+    this.authorRole,
+    this.createdAt,
+  });
+
+  factory PublicComment.fromJson(Map<String, dynamic> json) {
+    final author = json['author'];
+    final authorName =
+        json['authorName'] ??
+        (author is Map ? author['fullName'] : null) ??
+        'Citizen';
+    return PublicComment(
+      text: (json['text'] ?? json['content'] ?? '').toString(),
+      authorName: authorName.toString(),
+      authorRole: json['authorRole']?.toString(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : (json['date'] != null
+                ? DateTime.tryParse(json['date'].toString())
+                : null),
     );
   }
 }

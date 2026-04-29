@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
+import 'package:smart_city_app/core/env.dart';
 import 'package:smart_city_app/providers/theme_provider.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,11 +15,43 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _serverUrlController = TextEditingController();
+  double _textScale = 1.0;
+  bool _highContrast = false;
+  bool _reduceMotion = false;
+  bool _screenReader = false;
+  bool _sessionTimeout = true;
+  int _sessionMinutes = 30;
 
   @override
   void initState() {
     super.initState();
+    _loadSettings();
     _serverUrlController.text = ApiClient.overrideBaseUrl ?? '';
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _textScale = prefs.getDouble('text_scale') ?? 1.0;
+      _highContrast = prefs.getBool('high_contrast') ?? false;
+      _reduceMotion = prefs.getBool('reduce_motion') ?? false;
+      _screenReader = prefs.getBool('screen_reader') ?? false;
+      _sessionTimeout = prefs.getBool('session_timeout') ?? true;
+      _sessionMinutes = prefs.getInt('session_minutes') ?? 30;
+    });
+  }
+
+  Future<void> _saveSetting(String key, dynamic value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value is bool) {
+      await prefs.setBool(key, value);
+    } else if (value is int) {
+      await prefs.setInt(key, value);
+    } else if (value is double) {
+      await prefs.setDouble(key, value);
+    } else {
+      await prefs.setString(key, value as String);
+    }
   }
 
   @override
@@ -29,12 +62,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _saveServerUrl(String url) async {
     final trimmed = url.trim();
-    ApiClient.overrideBaseUrl = trimmed.isEmpty ? null : trimmed;
+    final normalized = trimmed.isEmpty
+        ? null
+        : MobileEnv.normalizeApiBaseUrl(trimmed);
+    ApiClient.overrideBaseUrl = normalized;
     final prefs = await SharedPreferences.getInstance();
     if (trimmed.isEmpty) {
       await prefs.remove('server_url');
     } else {
-      await prefs.setString('server_url', trimmed);
+      await prefs.setString('server_url', normalized!);
+      _serverUrlController.text = normalized;
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -42,7 +79,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           content: Text(
             trimmed.isEmpty
                 ? 'Serveur réinitialisé'
-                : 'URL du serveur enregistrée',
+                : 'URL API enregistrée: $normalized',
           ),
           backgroundColor: Colors.green,
         ),
@@ -84,10 +121,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
-                    ),
-                  ],
-                ),
-              ),
+            ),
+          ],
+        ),
+      ),
               Expanded(
                 child: Container(
                   decoration: const BoxDecoration(
@@ -99,9 +136,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(20),
                     children: [
+                      _buildSectionTitle('Accessibilité'),
+                      const SizedBox(height: 12),
+                      _buildAccessibilityCard(),
+                      const SizedBox(height: 24),
                       _buildSectionTitle('Apparence'),
                       const SizedBox(height: 12),
                       _buildThemeCard(themeMode),
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('Sécurité'),
+                      const SizedBox(height: 12),
+                      _buildSecurityCard(),
                       const SizedBox(height: 24),
                       _buildSectionTitle('Serveur'),
                       const SizedBox(height: 12),
@@ -133,6 +178,235 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Widget _buildAccessibilityCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withAlpha(26),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.accessibility_new, color: Colors.blue),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Options d\'accessibilité',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Améliorez l\'expérience pour tous',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('Taille du texte:', style: TextStyle(fontSize: 14)),
+                    const Spacer(),
+                    Text('${(_textScale * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Slider(
+                  value: _textScale,
+                  min: 0.8,
+                  max: 1.5,
+                  divisions: 7,
+                  label: '${(_textScale * 100).round()}%',
+                  onChanged: (v) {
+                    setState(() => _textScale = v);
+                    _saveSetting('text_scale', v);
+                  },
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text('Contraste élevé'),
+                  subtitle: const Text('Couleurs plus contrastées'),
+                  value: _highContrast,
+                  onChanged: (v) {
+                    setState(() => _highContrast = v);
+                    _saveSetting('high_contrast', v);
+                  },
+                  secondary: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withAlpha(26),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.contrast, color: Colors.purple, size: 20),
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('Réduire les animations'),
+                  subtitle: const Text('Désactive les animations'), 
+                  value: _reduceMotion,
+                  onChanged: (v) {
+                    setState(() => _reduceMotion = v);
+                    _saveSetting('reduce_motion', v);
+                  },
+                  secondary: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withAlpha(26),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.animation, color: Colors.orange, size: 20),
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('Mode lecteur d\'écran'),
+                  subtitle: const Text('Optimisé pour NVDA/VoiceOver'),
+                  value: _screenReader,
+                  onChanged: (v) {
+                    setState(() => _screenReader = v);
+                    _saveSetting('screen_reader', v);
+                  },
+                  secondary: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withAlpha(26),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.record_voice_over, color: Colors.teal, size: 20),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurityCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withAlpha(26),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.security, color: Colors.red),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sécurité',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Protégez votre compte',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text('Déconnexion automatique'),
+                  subtitle: const Text('Déconnecter après inactivité'),
+                  value: _sessionTimeout,
+                  onChanged: (v) {
+                    setState(() => _sessionTimeout = v);
+                    _saveSetting('session_timeout', v);
+                  },
+                  contentPadding: EdgeInsets.zero,
+                ),
+                if (_sessionTimeout) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('Délai:', style: TextStyle(fontSize: 14)),
+                      const Spacer(),
+                      Text('$_sessionMinutes min', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Slider(
+                    value: _sessionMinutes.toDouble(),
+                    min: 5,
+                    max: 60,
+                    divisions: 11,
+                    label: '$_sessionMinutes min',
+                    onChanged: (v) {
+                      setState(() => _sessionMinutes = v.round());
+                      _saveSetting('session_minutes', v.round());
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildThemeCard(ThemeMode themeMode) {
     return Container(
       decoration: BoxDecoration(
@@ -153,9 +427,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'Suivre le thème de l\'appareil',
             icon: Icons.brightness_auto,
             isSelected: themeMode == ThemeMode.system,
-            onTap: () => ref
-                .read(themeModeProvider.notifier)
-                .setThemeMode(ThemeMode.system),
+            onTap: () =>
+                ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.system),
           ),
           Divider(height: 1, color: Colors.grey.shade200),
           _buildThemeOption(
@@ -163,9 +436,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'Toujours utiliser le thème clair',
             icon: Icons.light_mode,
             isSelected: themeMode == ThemeMode.light,
-            onTap: () => ref
-                .read(themeModeProvider.notifier)
-                .setThemeMode(ThemeMode.light),
+            onTap: () =>
+                ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light),
           ),
           Divider(height: 1, color: Colors.grey.shade200),
           _buildThemeOption(
@@ -173,9 +445,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'Toujours utiliser le thème sombre',
             icon: Icons.dark_mode,
             isSelected: themeMode == ThemeMode.dark,
-            onTap: () => ref
-                .read(themeModeProvider.notifier)
-                .setThemeMode(ThemeMode.dark),
+            onTap: () =>
+                ref.read(themeModeProvider.notifier).setThemeMode(ThemeMode.dark),
           ),
         ],
       ),
@@ -277,9 +548,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Text(
+          const Text(
             'Laissez vide pour utiliser le serveur par défaut (émulateur: 10.0.2.2).',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 12),
           Row(
@@ -289,10 +560,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   controller: _serverUrlController,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.white : AppColors.textPrimary,
-                  ),
+                  style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'http://192.168.1.x:5000/api',
                     hintStyle: TextStyle(color: Colors.grey.shade400),

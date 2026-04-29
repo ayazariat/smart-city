@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -25,9 +25,6 @@ import {
   Menu,
   Home,
   List,
-  BarChart3,
-  Search,
-  HelpCircle,
   Globe
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -65,6 +62,7 @@ interface Complaint {
   confirmationCount?: number;
   upvoteCount?: number;
   viewsCount?: number;
+  isOwnComplaint?: boolean;
   resolutionNote?: string;
   statusHistory?: Array<{ status: string; timestamp: string }>;
 }
@@ -107,13 +105,17 @@ export default function PublicComplaintDetailPage() {
   const [comments, setComments] = useState<Array<{ _id: string; text: string; authorName: string; authorRoleLabel?: string; createdAt: string }>>([]);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const handledActionRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fetchComplaint = async () => {
       try {
         setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-        const response = await fetch(`${apiUrl}/public/complaints/${complaintId}`);
+        const response = await fetch(`${apiUrl}/public/complaints/${complaintId}`, {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
         
         if (!response.ok) {
           throw new Error("Complaint not found");
@@ -135,7 +137,7 @@ export default function PublicComplaintDetailPage() {
     if (complaintId) {
       fetchComplaint();
     }
-  }, [complaintId]);
+  }, [complaintId, token]);
 
   // Fetch public comments
   const fetchComments = async () => {
@@ -158,15 +160,22 @@ export default function PublicComplaintDetailPage() {
 
   // Handle action after login redirect
   useEffect(() => {
-    if (hydrated && user && token && actionParam) {
+    if (hydrated && user && token && actionParam && complaint) {
+      const actionKey = `${complaintId}:${actionParam}`;
+      if (handledActionRef.current === actionKey) {
+        return;
+      }
+
+      handledActionRef.current = actionKey;
+
       if (actionParam === "upvote") {
         handleUpvote();
-      } else if (actionParam === "confirm") {
+      } else if (actionParam === "confirm" && !complaint.isOwnComplaint) {
         handleConfirm();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, user, token, actionParam]);
+  }, [actionParam, complaint, complaintId, hydrated, token, user]);
 
   const handleUpvote = async () => {
     if (!user || !token) {
@@ -192,9 +201,12 @@ export default function PublicComplaintDetailPage() {
       router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
       return;
     }
+    if (complaint?.isOwnComplaint) {
+      return;
+    }
     try {
       const data = await apiClient.post<{ success: boolean; confirmationCount?: number }>(
-        `/citizen/complaints/${complaintId}/confirm`,
+        `/complaints/${complaintId}/confirm`,
         {}
       );
       if (data.success && complaint) {
@@ -284,6 +296,7 @@ export default function PublicComplaintDetailPage() {
   const municipality = complaint.municipalityName || complaint.location?.municipality || "Unknown";
   const governorate = complaint.location?.governorate || "";
   const canEngage = ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(complaint.status);
+  const canConfirm = canEngage && !complaint.isOwnComplaint;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
@@ -677,15 +690,22 @@ export default function PublicComplaintDetailPage() {
                   <Heart className="w-4 h-4" />
                   {t("publicComplaint.likeReport")}
                 </button>
-                <button
-                  onClick={(e) => { e.preventDefault(); handleConfirm(); }}
-                  disabled={!canEngage}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-600 font-medium rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ThumbsUp className="w-4 h-4" />
-                  {t("publicComplaint.confirmIssue")}
-                </button>
-                {!canEngage && (
+                {complaint.isOwnComplaint ? (
+                  <div className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-100 text-slate-600 font-medium rounded-xl text-sm border border-slate-200">
+                    <ThumbsUp className="w-4 h-4" />
+                    Your complaint
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => { e.preventDefault(); handleConfirm(); }}
+                    disabled={!canConfirm}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-600 font-medium rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                    {t("publicComplaint.confirmIssue")}
+                  </button>
+                )}
+                {!canEngage && !complaint.isOwnComplaint && (
                   <p className="text-xs text-slate-500 text-center pt-1">
                     {t("publicComplaint.actionsDisabled")}
                   </p>

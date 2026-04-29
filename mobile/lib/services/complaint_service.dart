@@ -18,8 +18,15 @@ class ComplaintService {
   }
 
   Future<Complaint> getComplaintById(String id) async {
-    final response = await _apiClient.get('/citizen/complaints/$id');
-    return Complaint.fromJson(response['complaint'] ?? response['data'] ?? {});
+    try {
+      final response = await _apiClient.get('/citizen/complaints/$id');
+      return Complaint.fromJson(response['complaint'] ?? response['data'] ?? {});
+    } catch (_) {
+      final publicResponse = await _apiClient.get('/public/complaints/$id');
+      return Complaint.fromJson(
+        publicResponse['complaint'] ?? publicResponse['data'] ?? {},
+      );
+    }
   }
 
   Future<Map<String, dynamic>> createComplaint(
@@ -46,14 +53,30 @@ class ComplaintService {
     return response['data'] ?? {};
   }
 
-  // ─── Confirm / Upvote (public routes) ───
+  // ─── Confirm / Upvote ───
 
   Future<void> confirmComplaint(String id) async {
-    await _apiClient.post('/public/complaints/$id/confirm', {});
+    await _apiClient.post('/complaints/$id/confirm', {});
+  }
+
+  Future<void> removeComplaintConfirmation(String id) async {
+    await _apiClient.delete('/complaints/$id/confirm');
   }
 
   Future<void> upvoteComplaint(String id) async {
     await _apiClient.post('/public/complaints/$id/upvote', {});
+  }
+
+  Future<List<dynamic>> getPublicComments(String id) async {
+    final response = await _apiClient.get('/public/complaints/$id/comments');
+    return response['data'] ?? response['comments'] ?? [];
+  }
+
+  Future<void> addPublicComment(String id, String text, {bool anonymous = false}) async {
+    await _apiClient.post('/public/complaints/$id/comment', {
+      'text': text,
+      'anonymous': anonymous,
+    });
   }
 
   // ─── Agent ───
@@ -95,13 +118,13 @@ class ComplaintService {
 
   Future<void> approveResolution(String id, {String? notes}) async {
     await _apiClient.post('/agent/complaints/$id/approve-resolution', {
-      'notes': ?notes,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes,
     });
   }
 
   Future<void> rejectResolution(String id, {String? reason}) async {
     await _apiClient.post('/agent/complaints/$id/reject-resolution', {
-      'reason': ?reason,
+      if (reason != null && reason.trim().isNotEmpty) 'reason': reason,
     });
   }
 
@@ -118,6 +141,9 @@ class ComplaintService {
     int limit = 50,
   }) async {
     String endpoint = '/technician/complaints?page=$page&limit=$limit';
+    if (status != null && status.isNotEmpty && status != 'ALL') {
+      endpoint += '&status=$status';
+    }
     final response = await _apiClient.get(endpoint);
     final data = response['data'];
     final list = data is Map
@@ -223,14 +249,18 @@ class ComplaintService {
   }) async {
     String endpoint = '/complaints?page=$page&limit=$limit';
     if (status != null && status.isNotEmpty) endpoint += '&status=$status';
-    if (category != null && category.isNotEmpty)
+    if (category != null && category.isNotEmpty) {
       endpoint += '&category=$category';
-    if (priority != null && priority.isNotEmpty)
+    }
+    if (priority != null && priority.isNotEmpty) {
       endpoint += '&priority=$priority';
-    if (governorate != null && governorate.isNotEmpty)
+    }
+    if (governorate != null && governorate.isNotEmpty) {
       endpoint += '&governorate=$governorate';
-    if (municipality != null && municipality.isNotEmpty)
+    }
+    if (municipality != null && municipality.isNotEmpty) {
       endpoint += '&municipality=$municipality';
+    }
     if (search != null && search.isNotEmpty) endpoint += '&search=$search';
     final response = await _apiClient.get(endpoint);
     final data = response['data'];
@@ -284,6 +314,49 @@ class ComplaintService {
         ? (data['complaints'] ?? [])
         : (response['complaints'] ?? []);
     return (list as List).map((c) => Complaint.fromJson(c)).toList();
+  }
+
+  // ─── Municipality & Public ───
+
+  Future<List<Complaint>> getMunicipalityComplaints({int limit = 20}) async {
+    final response = await _apiClient.get(
+      '/public/my-municipality-complaints?limit=$limit&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED',
+    );
+    final list = response['complaints'] ?? [];
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
+  }
+
+  Future<List<Complaint>> getRecentResolutions({int limit = 6}) async {
+    final response = await _apiClient.get(
+      '/public/my-municipality-complaints?limit=$limit&status=RESOLVED&sort=-updatedAt',
+    );
+    final list = response['complaints'] ?? [];
+    return (list as List).map((c) => Complaint.fromJson(c)).toList();
+  }
+
+  Future<List<dynamic>> getTrendAlerts() async {
+    try {
+      final response = await _apiClient.get('/ai/trend/alerts');
+      return response['data'] ?? [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ─── Upload Media ───
+
+  Future<List<dynamic>> uploadMedia(List<String> filePaths) async {
+    // Simulate upload - in real app use multipart
+    final response = await _apiClient.post('/upload', {
+      'files': filePaths,
+    });
+    return response['data'] ?? [];
+  }
+
+  Future<void> confirmResolution(String id) async {
+    await _apiClient.patch('/complaints/$id/status', {
+      'status': 'CLOSED',
+    });
   }
 
   // ─── Notifications ───

@@ -6,6 +6,14 @@ const notificationService = require("../services/notification.service");
 const { calculatePriorityAndSLA } = require("../utils/priorityCalculator");
 const { normalizeMunicipality } = require("../utils/normalize");
 
+const CITIZEN_ACTIVE_STATUSES = [
+  "SUBMITTED",
+  "VALIDATED",
+  "ASSIGNED",
+  "IN_PROGRESS",
+  "RESOLVED",
+];
+
 // Category to department mapping
 const categoryToDepartment = {
   ROAD: "Roads & Infrastructure",
@@ -226,8 +234,11 @@ class CitizenController {
   async getComplaints(req, res) {
     try {
       const { status, category, sort = "-createdAt", limit = 20, page = 1 } = req.query;
-      const query = { createdBy: req.user.userId };
-      if (status) query.status = status;
+      const query = {
+        createdBy: req.user.userId,
+        status: { $in: CITIZEN_ACTIVE_STATUSES },
+      };
+      if (status && status !== "ALL") query.status = status;
       if (category) query.category = category;
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -316,27 +327,32 @@ class CitizenController {
   async getStats(req, res) {
     try {
       const userId = req.user.userId;
-      const baseQuery = { createdBy: userId, isArchived: false };
+      const historicalQuery = { createdBy: userId, isArchived: false };
+      const activeQuery = {
+        ...historicalQuery,
+        status: { $in: CITIZEN_ACTIVE_STATUSES },
+      };
 
-      const [total, submitted, inProgress, resolved, closed, rejected] = await Promise.all([
-        Complaint.countDocuments(baseQuery),
-        Complaint.countDocuments({ ...baseQuery, status: "SUBMITTED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...baseQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...baseQuery, status: "REJECTED" }),
+      const [historicalTotal, total, submitted, inProgress, resolved, closed, rejected] = await Promise.all([
+        Complaint.countDocuments(historicalQuery),
+        Complaint.countDocuments(activeQuery),
+        Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
+        Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
+        Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
       ]);
 
       const resolvedCount = resolved + closed;
       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
       const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...baseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+        { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
       ]);
       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
-      res.json({ success: true, data: { total, submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime } });
+      res.json({ success: true, data: { total, historicalTotal, submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime } });
     } catch (error) {
       console.error("Citizen stats error:", error);
       res.status(500).json({ success: false, message: "Failed to retrieve statistics" });

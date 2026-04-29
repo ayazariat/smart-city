@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   MapPin,
@@ -28,6 +27,7 @@ interface MunicipalityComplaint {
   category: string;
   status: string;
   referenceId?: string;
+  createdBy?: string | { _id?: string; id?: string };
   municipalityName?: string;
   location?: { municipality?: string; address?: string };
   media?: { url: string; type?: string }[];
@@ -53,6 +53,18 @@ export default function MunicipalityComplaintsPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
+
+  const getOwnerId = (complaint: MunicipalityComplaint): string | undefined => {
+    if (!complaint.createdBy) return undefined;
+    if (typeof complaint.createdBy === "string") return complaint.createdBy;
+    return complaint.createdBy._id || complaint.createdBy.id;
+  };
+
+  const currentUserId = (() => {
+    if (!user) return undefined;
+    const current = user as { id?: string; _id?: string; sub?: string };
+    return current.id || current._id || current.sub;
+  })();
 
   const fetchComplaints = useCallback(async () => {
     if (!token) return;
@@ -101,6 +113,11 @@ export default function MunicipalityComplaintsPage() {
   };
 
   const handleConfirm = async (id: string) => {
+    const target = complaints.find((complaint) => complaint._id === id);
+    if (target && currentUserId && getOwnerId(target) === currentUserId) {
+      return;
+    }
+
     try {
       const data = await confirmComplaint(id);
       if (data.success) {
@@ -192,7 +209,10 @@ export default function MunicipalityComplaintsPage() {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((complaint) => (
+            {filtered.map((complaint) => {
+              const isOwnComplaint = Boolean(currentUserId && getOwnerId(complaint) === currentUserId);
+
+              return (
               <div
                 key={complaint._id}
                 className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer"
@@ -229,6 +249,11 @@ export default function MunicipalityComplaintsPage() {
 
                 {/* Content */}
                 <div className="p-3">
+                  {isOwnComplaint && (
+                    <div className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                      Your complaint
+                    </div>
+                  )}
                   <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
                     {complaint.title}
                   </h4>
@@ -245,16 +270,26 @@ export default function MunicipalityComplaintsPage() {
                   {/* Confirm + Upvote */}
                   {(["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(complaint.status)) ? (
                     <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleConfirm(complaint._id); }}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>{t('complaintsList.confirm')}</span>
-                        <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
-                          {complaint.confirmationCount || 0}
-                        </span>
-                      </button>
+                      {isOwnComplaint ? (
+                        <div className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Your complaint</span>
+                          <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                            {complaint.confirmationCount || 0}
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleConfirm(complaint._id); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>{t('complaintsList.confirm')}</span>
+                          <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                            {complaint.confirmationCount || 0}
+                          </span>
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); handleUpvote(complaint._id); }}
                         className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium transition-colors"
@@ -273,7 +308,8 @@ export default function MunicipalityComplaintsPage() {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

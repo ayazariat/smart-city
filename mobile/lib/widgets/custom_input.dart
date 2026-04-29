@@ -16,7 +16,7 @@ class CustomInput extends StatelessWidget {
   final String? initialValue;
 
   const CustomInput({
-    Key? key,
+    super.key,
     required this.label,
     this.hintText,
     this.prefixIcon,
@@ -28,7 +28,7 @@ class CustomInput extends StatelessWidget {
     this.enabled = true,
     this.maxLines = 1,
     this.initialValue,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

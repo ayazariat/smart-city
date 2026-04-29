@@ -17,7 +17,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
   String _statusFilter = 'ALL';
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
-  bool _actionLoading = false;
+  final bool _actionLoading = false;
 
   @override
   void initState() {
@@ -46,7 +46,17 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(technicianTasksProvider);
     final stats = state.stats;
-    final tasks = state.complaints;
+    final tasks = state.complaints.where((task) {
+      final statusMatch =
+          _statusFilter == 'ALL' ? true : task.status == _statusFilter;
+      final q = _searchTerm.trim().toLowerCase();
+      final searchMatch =
+          q.isEmpty ||
+          task.title.toLowerCase().contains(q) ||
+          task.description.toLowerCase().contains(q) ||
+          task.category.toLowerCase().contains(q);
+      return statusMatch && searchMatch;
+    }).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -143,7 +153,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                           'Total',
                           '${stats?.total ?? 0}',
                           Icons.summarize,
-                          const Color(0xFF3B82F6),
+                          AppColors.primary,
                         ),
                         _buildStatCard(
                           'Assignées',
@@ -311,7 +321,10 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
   Widget _buildFilterChip(String value, String label) {
     final isSelected = _statusFilter == value;
     return GestureDetector(
-      onTap: () => setState(() => _statusFilter = value),
+      onTap: () {
+        setState(() => _statusFilter = value);
+        _loadTasks();
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(

@@ -48,8 +48,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       await ref
           .read(authProvider.notifier)
           .login(_emailController.text.trim(), _passwordController.text);
-      if (mounted)
-        Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      }
     } catch (_) {}
   }
 

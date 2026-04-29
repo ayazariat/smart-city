@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { complaintService } from "@/services/complaint.service";
+import { agentService } from "@/services/agent.service";
+import { managerService } from "@/services/manager.service";
+import { technicianService } from "@/services/technician.service";
 import { Complaint } from "@/types";
 import { categoryLabels } from "@/lib/complaints";
 import {
@@ -23,7 +26,7 @@ export default function DashboardComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("IN_PROGRESS");
 
   // Guard: redirect if not authorised
   useEffect(() => {
@@ -41,8 +44,37 @@ export default function DashboardComplaintsPage() {
 
       try {
         setLoading(true);
-        const response = await complaintService.getAllComplaints({ page: 1, limit: 50 });
-        setComplaints(response.data?.complaints ?? []);
+        if (user.role === "MUNICIPAL_AGENT") {
+          const response = await agentService.getAgentComplaints({
+            page: 1,
+            limit: 100,
+            status: statusFilter || "IN_PROGRESS",
+          });
+          setComplaints((response.data?.complaints ?? []) as unknown as Complaint[]);
+        } else if (user.role === "DEPARTMENT_MANAGER") {
+          const response = await managerService.getManagerComplaints({
+            page: 1,
+            limit: 100,
+            status: statusFilter || "IN_PROGRESS",
+          });
+          setComplaints((response.data?.complaints ?? []) as unknown as Complaint[]);
+        } else if (user.role === "TECHNICIAN") {
+          const response = await technicianService.getTechnicianTasks({
+            page: 1,
+            limit: 100,
+            status: statusFilter || "IN_PROGRESS",
+          });
+          setComplaints(
+            (response.data?.complaints ?? response.data?.tasks ?? []) as unknown as Complaint[]
+          );
+        } else {
+          const response = await complaintService.getAllComplaints({
+            page: 1,
+            limit: 100,
+            status: statusFilter || "IN_PROGRESS",
+          });
+          setComplaints(response.data?.complaints ?? []);
+        }
       } catch (err) {
         console.error("Error fetching complaints:", err);
         setComplaints([]);
@@ -52,12 +84,9 @@ export default function DashboardComplaintsPage() {
     };
 
     fetchComplaints();
-  }, [token, user, hydrated]);
+  }, [token, user, hydrated, statusFilter]);
 
   const filteredComplaints = complaints.filter((c) => {
-    // Apply status filter
-    if (statusFilter && c.status !== statusFilter) return false;
-    
     // Apply search filter
     if (!searchTerm) return true;
     const q = searchTerm.toLowerCase();
