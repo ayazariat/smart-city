@@ -114,8 +114,9 @@ class AdminService {
   Future<List<dynamic>> getGeography() async {
     final response = await _apiClient.get('/admin/geography');
     if (response is List) return response;
-    if (response is Map && response['data'] != null)
+    if (response is Map && response['data'] != null) {
       return response['data'] as List;
+    }
     return [];
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
@@ -24,6 +25,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   int _passwordStrength = 0;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  bool _isLoadingLocation = false;
 
   @override
   void dispose() {
@@ -58,6 +60,236 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (_passwordStrength <= 1) return Colors.red;
     if (_passwordStrength <= 2) return Colors.orange;
     return Colors.green;
+  }
+
+  Future<void> _useMyLocation() async {
+    setState(() => _isLoadingLocation = true);
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Services de localisation désactivés'),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Permission de localisation refusée'),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Permissions de localisation bloquées'),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Get current position
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+
+      // Find matching governorate and municipality based on coordinates
+      // Tunisia coordinates roughly between lat 30-37 and lon 7-12
+      final foundLocation = _findGovernorateFromCoords(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (foundLocation != null) {
+        setState(() {
+          _selectedGovernorate = foundLocation;
+          _selectedMunicipality = foundLocation.municipalities.isNotEmpty
+              ? foundLocation.municipalities.first
+              : foundLocation.name;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Position détectée: ${_selectedMunicipality ?? foundLocation.name ?? 'Inconnue'}',
+              ),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Position non reconnue en Tunisie')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingLocation = false);
+      }
+    }
+  }
+
+  GovernorateData? _findGovernorateFromCoords(double lat, double lon) {
+    // Simple coordinate-based matching for Tunisia governorates
+    // This is an approximation - in production you'd use reverse geocoding
+    for (final gov in TunisiaGeography.governorates) {
+      if (_isInGovernorateBounds(lat, lon, gov.name)) {
+        return gov;
+      }
+    }
+    // Default to Tunis if in range
+    if (lat >= 36.7 && lat <= 37.0 && lon >= 9.5 && lon <= 10.3) {
+      return TunisiaGeography.governorates.firstWhere(
+        (g) => g.name == 'Tunis',
+        orElse: () => TunisiaGeography.governorates.first,
+      );
+    }
+    return null;
+  }
+
+  bool _isInGovernorateBounds(double lat, double lon, String governorate) {
+    // Rough bounding boxes for Tunis governorates
+    final bounds = {
+      'Tunis': {'minLat': 36.7, 'maxLat': 37.0, 'minLon': 9.5, 'maxLon': 10.3},
+      'Ariana': {
+        'minLat': 36.8,
+        'maxLat': 37.0,
+        'minLon': 10.0,
+        'maxLon': 10.3,
+      },
+      'Ben Arous': {
+        'minLat': 36.6,
+        'maxLat': 36.9,
+        'minLon': 10.0,
+        'maxLon': 10.3,
+      },
+      'Manouba': {
+        'minLat': 36.8,
+        'maxLat': 37.1,
+        'minLon': 9.5,
+        'maxLon': 10.0,
+      },
+      'Nabeul': {
+        'minLat': 36.4,
+        'maxLat': 36.8,
+        'minLon': 10.4,
+        'maxLon': 11.0,
+      },
+      'Zaghouan': {
+        'minLat': 36.3,
+        'maxLat': 36.6,
+        'minLon': 10.0,
+        'maxLon': 10.5,
+      },
+      'Bizerte': {
+        'minLat': 36.9,
+        'maxLat': 37.5,
+        'minLon': 9.5,
+        'maxLon': 10.0,
+      },
+      'Beja': {'minLat': 36.7, 'maxLat': 37.0, 'minLon': 9.0, 'maxLon': 9.6},
+      'Jendouba': {
+        'minLat': 36.6,
+        'maxLat': 36.9,
+        'minLon': 8.5,
+        'maxLon': 9.2,
+      },
+      'Kef': {'minLat': 36.3, 'maxLat': 36.6, 'minLon': 8.3, 'maxLon': 8.8},
+      'Siliana': {'minLat': 36.0, 'maxLat': 36.4, 'minLon': 9.0, 'maxLon': 9.5},
+      'Kairouan': {
+        'minLat': 35.5,
+        'maxLat': 35.8,
+        'minLon': 10.0,
+        'maxLon': 10.3,
+      },
+      'Kasserine': {
+        'minLat': 35.3,
+        'maxLat': 35.7,
+        'minLon': 8.8,
+        'maxLon': 9.4,
+      },
+      'Sidi Bouzid': {
+        'minLat': 34.8,
+        'maxLat': 35.3,
+        'minLon': 9.0,
+        'maxLon': 9.6,
+      },
+      'Sfax': {'minLat': 34.6, 'maxLat': 35.0, 'minLon': 10.6, 'maxLon': 11.2},
+      'Gabes': {'minLat': 33.8, 'maxLat': 34.4, 'minLon': 9.9, 'maxLon': 10.6},
+      'Medenine': {
+        'minLat': 33.3,
+        'maxLat': 33.8,
+        'minLon': 10.0,
+        'maxLon': 10.8,
+      },
+      'Tataouine': {
+        'minLat': 32.8,
+        'maxLat': 33.3,
+        'minLon': 10.0,
+        'maxLon': 10.6,
+      },
+      'Gafsa': {'minLat': 34.2, 'maxLat': 34.7, 'minLon': 8.3, 'maxLon': 9.2},
+      'Tozeur': {'minLat': 33.8, 'maxLat': 34.2, 'minLon': 7.8, 'maxLon': 8.5},
+      'Kebili': {'minLat': 33.4, 'maxLat': 34.0, 'minLon': 8.5, 'maxLon': 9.5},
+      'Douz': {'minLat': 33.4, 'maxLat': 33.8, 'minLon': 9.0, 'maxLon': 9.6},
+      'Mahdia': {
+        'minLat': 35.3,
+        'maxLat': 35.7,
+        'minLon': 10.8,
+        'maxLon': 11.4,
+      },
+      'Monastir': {
+        'minLat': 35.5,
+        'maxLat': 35.9,
+        'minLon': 10.5,
+        'maxLon': 11.0,
+      },
+      'Sousse': {
+        'minLat': 35.8,
+        'maxLat': 36.2,
+        'minLon': 10.4,
+        'maxLon': 10.8,
+      },
+      'Mornag': {
+        'minLat': 36.5,
+        'maxLat': 36.8,
+        'minLon': 10.2,
+        'maxLon': 10.6,
+      },
+      'Sael': {'minLat': 36.0, 'maxLat': 36.3, 'minLon': 10.0, 'maxLon': 10.5},
+    };
+
+    final b = bounds[governorate];
+    if (b == null) return false;
+    return lat >= b['minLat']! &&
+        lat <= b['maxLat']! &&
+        lon >= b['minLon']! &&
+        lon <= b['maxLon']!;
   }
 
   Future<void> _handleRegister() async {
@@ -226,6 +458,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       decoration: InputDecoration(
                         labelText: 'Gouvernorat (optionnel)',
                         prefixIcon: const Icon(Icons.location_on_outlined),
+                        suffixIcon: IconButton(
+                          icon: _isLoadingLocation
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.my_location),
+                          onPressed: _isLoadingLocation ? null : _useMyLocation,
+                          tooltip: 'Utiliser ma position',
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

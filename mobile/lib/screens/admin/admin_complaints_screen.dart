@@ -74,8 +74,9 @@ class _AdminComplaintsScreenState extends ConsumerState<AdminComplaintsScreen> {
 
   List<Complaint> get _filtered {
     return _complaints.where((c) {
-      if (_categoryFilter.isNotEmpty && c.category != _categoryFilter)
+      if (_categoryFilter.isNotEmpty && c.category != _categoryFilter) {
         return false;
+      }
       if (_priorityFilter.isNotEmpty) {
         final score = c.priorityScore ?? 0;
         switch (_priorityFilter) {
@@ -645,8 +646,7 @@ class _AdminComplaintsScreenState extends ConsumerState<AdminComplaintsScreen> {
                         style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                       ),
                     ),
-                    if (complaint.priorityScore != null &&
-                        complaint.priorityScore! >= 15) ...[
+                    if (complaint.priorityScore >= 15) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(

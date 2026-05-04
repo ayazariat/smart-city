@@ -10,7 +10,8 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
 import { Complaint } from "@/types";
-import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
+import { getCategoryLabel, categoryOptions, categoryLabels } from "@/lib/categories";
+import { STATUS_OPTIONS } from "@/lib/complaints";
 import {
   PageHeader,
   LoadingSpinner,
@@ -21,8 +22,10 @@ import {
   ConfirmationModal,
 } from "@/components/ui";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useTranslation } from "react-i18next";
 
 export default function AgentComplaintsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, token, hydrated } = useAuthStore();
 
@@ -44,10 +47,8 @@ export default function AgentComplaintsPage() {
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState<{ departmentId?: string; departmentName?: string; confidence?: number } | null>(null);
 
-  // Resolution review modal states
-  const [reviewTarget, setReviewTarget] = useState<string | null>(null);
-  const [reviewType, setReviewType] = useState<"accept" | "reject" | null>(null);
-  const [resolutionRejectReason, setResolutionRejectReason] = useState("");
+// NOTE: Resolution approval/rejection moved to Manager/Admin dashboard per Task 10
+  // Agents no longer have resolution review capabilities
 
   // Confirmation modal states
   const [confirmAction, setConfirmAction] = useState<{
@@ -64,7 +65,7 @@ export default function AgentComplaintsPage() {
   const [mergeSourceIds, setMergeSourceIds] = useState<string[]>([]);
 
   const refreshComplaints = async () => {
-    const response = await agentService.getAgentComplaints({ status: statusFilter === "ACTIVE" ? "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : (statusFilter || "ALL") });
+    const response = await agentService.getAgentComplaints({ status: "ALL", limit: 200 });
     if (response.data) {
       setComplaints(response.data.complaints);
       if (response.data.municipalityName) {
@@ -85,8 +86,8 @@ export default function AgentComplaintsPage() {
         setLoading(true);
         const response = await agentService.getAgentComplaints({
           page: 1,
-          limit: 100,
-          status: statusFilter === "ACTIVE" ? "SUBMITTED,VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : (statusFilter || "ALL"),
+          limit: 200,
+          status: "ALL",
         });
         if (response.data?.complaints) {
           setComplaints(response.data.complaints);
@@ -180,70 +181,42 @@ export default function AgentComplaintsPage() {
     }
   };
 
-  // Handle accept resolution
-  const handleAcceptResolution = async () => {
-    if (!reviewTarget) return;
-    setActionLoading(reviewTarget);
-    try {
-      const result = await agentService.approveResolution(reviewTarget);
-      if (result.success) {
-        alert("Resolution approved! Complaint has been closed.");
-        setReviewTarget(null);
-        setReviewType(null);
-        await refreshComplaints();
-      } else {
-        alert(result.message || "Failed to approve resolution");
-      }
-    } catch (err: unknown) {
-      const errorObj = err as { message?: string };
-      alert(errorObj?.message || "Failed to approve resolution");
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
-  // Handle reject resolution
-  const handleRejectResolution = async () => {
-    if (!reviewTarget || !resolutionRejectReason.trim()) return;
-    setActionLoading(reviewTarget);
-    try {
-      const result = await agentService.rejectResolution(reviewTarget, resolutionRejectReason);
-      if (result.success) {
-        alert("Resolution rejected. Complaint returned to IN_PROGRESS.");
-        setReviewTarget(null);
-        setReviewType(null);
-        setResolutionRejectReason("");
-        await refreshComplaints();
-      } else {
-        alert(result.message || "Failed to reject resolution");
-      }
-    } catch (err: unknown) {
-      const errorObj = err as { message?: string };
-      alert(errorObj?.message || "Failed to reject resolution");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+
+  // AI duplicate check result with similarity scores
+  const [duplicateMatchScores, setDuplicateMatchScores] = useState<Record<string, number>>({});
 
   // Handle duplicate check (BL-25) - Using direct API call
   const handleCheckDuplicate = async (complaintId: string) => {
     setDuplicateTarget(complaintId);
     setDuplicateLoading(true);
     setDuplicateComplaints([]);
+    setDuplicateMatchScores({});
     try {
       const c = complaints.find(x => (x._id || x.id) === complaintId);
       if (!c) return;
-      
+
+      // Extract coordinates from GeoJSON or flat fields
+      const lat = c.location?.coordinates?.[1] ?? c.location?.latitude;
+      const lng = c.location?.coordinates?.[0] ?? c.location?.longitude;
+      // Collect image URLs (max 3) for richer duplicate detection
+      const imageUrls = (c.media || []).map(m => m.url).filter(Boolean).slice(0, 3);
+
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
+          complaintId: c._id || c.id || "new",
           title: c.title,
           description: c.description,
           category: c.category,
           municipality: c.municipalityName,
+          latitude: lat,
+          longitude: lng,
+          imageUrls,
+          submittedAt: c.createdAt,
         }),
       });
       const result = await response.json();
@@ -252,10 +225,41 @@ export default function AgentComplaintsPage() {
       const data = result.data || result;
       if (data && data.topMatches && data.topMatches.length > 0) {
         const matchIds = data.topMatches.map((m: { complaintId: string }) => m.complaintId);
+        // Build score map from AI response
+        const scores: Record<string, number> = {};
+        (data.topMatches as Array<{ complaintId: string; overallScore?: number; similarity?: number }>).forEach(m => {
+          scores[m.complaintId] = Math.round((m.overallScore ?? m.similarity ?? 0) * 100);
+        });
+        setDuplicateMatchScores(scores);
+        // Match with loaded complaints first, then fall back to AI-provided titles
         const matched = complaints.filter(x => matchIds.includes(x._id || x.id));
-        setDuplicateComplaints(matched);
+        if (matched.length > 0) {
+          setDuplicateComplaints(matched);
+        } else {
+          // AI returned matches not in loaded list – build minimal objects from topMatches
+          const fallback = (data.topMatches as Array<{
+            complaintId: string; title?: string; status?: string; referenceId?: string;
+          }>).map(m => ({
+            _id: m.complaintId,
+            id: m.complaintId,
+            title: m.title || m.complaintId,
+            description: "",
+            status: (m.status || "UNKNOWN") as import("@/types").ComplaintStatus,
+            category: c.category,
+            urgency: "MEDIUM" as import("@/types").ComplaintUrgency,
+            location: {},
+            media: [],
+            priorityScore: 0,
+            createdBy: "",
+            createdAt: "",
+            updatedAt: "",
+            referenceId: m.referenceId,
+          } as import("@/types").Complaint));
+          setDuplicateComplaints(fallback);
+        }
       }
-    } catch (err) {
+    } catch {
+      // silent
     } finally {
       setDuplicateLoading(false);
     }
@@ -369,7 +373,7 @@ export default function AgentComplaintsPage() {
     return false;
   }).length;
 
-  const resolvedCount = complaints.filter(c => c.status === "RESOLVED").length;
+  const resolvedCount = complaints.filter(c => c.status === "RESOLVED" || c.status === "CLOSED").length;
   const highPriorityCount = complaints.filter(c => (c.priorityScore || 0) >= 15).length;
   const avgDays = complaints.length > 0 
     ? Math.round(complaints.reduce((acc, c) => {
@@ -378,13 +382,13 @@ export default function AgentComplaintsPage() {
       }, 0) / complaints.length * 10) / 10
     : 0;
   const resolutionRate = complaints.length > 0 
-    ? Math.round((resolvedCount / complaints.length) * 100) 
+    ? Math.round((resolvedCount / Math.max(complaints.length, 1)) * 100) 
     : 0;
 
   // Get categories count
   const byCategory: Record<string, number> = {};
   filteredComplaints.forEach(c => {
-    const cat = categoryLabels[c.category] || c.category || "Other";
+    const cat = getCategoryLabel(c.category) || c.category || "Other";
     byCategory[cat] = (byCategory[cat] || 0) + 1;
   });
 
@@ -479,6 +483,7 @@ export default function AgentComplaintsPage() {
               <div>
                 <p className="text-sm text-slate-500">Total Complaints</p>
                 <p className="text-3xl font-bold text-slate-800 mt-1">{complaints.length}</p>
+                <p className="text-xs text-slate-400 mt-0.5">All statuses</p>
               </div>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-slate-600" />
@@ -737,21 +742,23 @@ export default function AgentComplaintsPage() {
                               : 'Department Assigned'}
                           </div>
                         )}
-                        {/* BL-25: Duplicate check button */}
-                        {(complaint.status === "SUBMITTED" || complaint.status === "VALIDATED") && (
+                        {/* BL-25: Duplicate suggestion badge + action button */}
+                        {(complaint.duplicateStatus === "POSSIBLE_DUPLICATE" || complaint.duplicateStatus === "PROBABLE_DUPLICATE") && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+                            <Copy className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>{t("agent.possibleDuplicate", { defaultValue: "Possible duplicate detected" })}</span>
+                          </div>
+                        )}
+                        {/* Check Duplicates button — visible for all active complaints */}
+                        {!["CLOSED", "REJECTED"].includes(complaint.status) && (
                           <button
                             onClick={() => handleCheckDuplicate(id)}
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-100 text-amber-700 rounded-xl hover:bg-amber-200 transition-all text-sm font-medium"
+                            disabled={actionLoading === id}
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-all text-sm font-medium disabled:opacity-50"
                           >
                             <Copy className="w-4 h-4" />
-                            Duplicates
+                            Check Duplicates
                           </button>
-                        )}
-                        {(complaint.duplicateStatus === "MERGED" || complaint.duplicateStatus === "POSSIBLE_DUPLICATE" || complaint.duplicateStatus === "PROBABLE_DUPLICATE") && (
-                          <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-100 text-purple-700 rounded-xl text-sm font-semibold">
-                            <Merge className="w-4 h-4" />
-                            {complaint.confirmationCount || 0} confirmed
-                          </div>
                         )}
                         <button
                           onClick={() => router.push(`/dashboard/complaints/${id}?from=agent`)}
@@ -833,76 +840,7 @@ export default function AgentComplaintsPage() {
         </div>
       </Modal>
 
-      {/* Resolution Review Modal */}
-      <Modal
-        isOpen={reviewTarget !== null && reviewType !== null}
-        onClose={() => { setReviewTarget(null); setReviewType(null); setResolutionRejectReason(""); }}
-        title={reviewType === "accept" ? "Approve Resolution Report" : "Reject Resolution Report"}
-        description={
-          reviewType === "accept" 
-            ? "Are you sure you want to approve this resolution report? The complaint will be closed and the citizen will be notified."
-            : "Please provide a reason for rejecting this resolution report. The technician will be notified and asked to correct the work."
-        }
-        footer={
-          <>
-            <Button 
-              variant="ghost" 
-              onClick={() => { setReviewTarget(null); setReviewType(null); setResolutionRejectReason(""); }} 
-              disabled={actionLoading !== null}
-            >
-              Cancel
-            </Button>
-            {reviewType === "accept" ? (
-              <Button 
-                onClick={handleAcceptResolution} 
-                isLoading={actionLoading !== null}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Approve & Close
-              </Button>
-            ) : (
-              <Button 
-                variant="danger" 
-                onClick={handleRejectResolution} 
-                isLoading={actionLoading !== null}
-                disabled={!resolutionRejectReason.trim()}
-              >
-                <X className="w-4 h-4 mr-2" />
-                Reject & Return
-              </Button>
-            )}
-          </>
-        }
-      >
-        {reviewType === "reject" && (
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Rejection Reason <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={resolutionRejectReason}
-              onChange={(e) => setResolutionRejectReason(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none transition-all"
-              rows={4}
-              placeholder="Explain why this resolution is being rejected (e.g., incomplete work, poor quality photos, etc.)..."
-            />
-          </div>
-        )}
-        {reviewType === "accept" && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-green-700">
-              <CheckCircle2 className="w-5 h-5" />
-              <span className="font-medium">This action will:</span>
-            </div>
-            <ul className="mt-2 text-sm text-green-600 space-y-1">
-              <li>• Close the complaint permanently</li>
-              <li>• Notify the citizen that the issue is resolved</li>
-              <li>• Notify the technician that their work was approved</li>
-            </ul>
-          </div>
-        )}
-      </Modal>
+
 
       {/* Validate Confirmation Modal */}
       <ConfirmationModal
@@ -934,12 +872,12 @@ export default function AgentComplaintsPage() {
       {/* BL-25: Duplicate Detection Modal */}
       <Modal
         isOpen={duplicateTarget !== null}
-        onClose={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); setMergeSourceIds([]); }}
+        onClose={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); setMergeSourceIds([]); setDuplicateMatchScores({}); }}
         title="Duplicate Detection"
         description="Review potential duplicate complaints and decide whether to merge."
         footer={
           <>
-            <Button variant="ghost" onClick={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); setMergeSourceIds([]); }}>
+            <Button variant="ghost" onClick={() => { setDuplicateTarget(null); setDuplicateComplaints([]); setMergeSourceId(null); setMergeSourceIds([]); setDuplicateMatchScores({}); }}>
               Cancel
             </Button>
             {duplicateComplaints.length > 0 && (
@@ -981,21 +919,41 @@ export default function AgentComplaintsPage() {
             
             <div className="space-y-3">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <p className="text-xs text-slate-500">Main complaint (target)</p>
+                <p className="text-xs font-semibold text-slate-500 mb-2">Main complaint (target)</p>
                 {(() => {
                   const c = complaints.find(x => (x._id || x.id) === duplicateTarget);
-                  return c ? (
-                    <>
-                      <p className="font-medium text-slate-900">{c.title}</p>
-                      <p className="text-sm text-slate-600 line-clamp-2">{c.description}</p>
-                    </>
-                  ) : null;
+                  if (!c) return null;
+                  const thumb = c.media?.[0]?.url;
+                  const location = c.location?.address || c.location?.commune || c.municipalityName || "";
+                  return (
+                    <div className="flex gap-3">
+                      {thumb ? (
+                        <img src={thumb} alt={c.title} className="w-14 h-14 object-cover rounded-lg flex-shrink-0" />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-slate-200 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-5 h-5 text-slate-400" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 text-sm">{c.title}</p>
+                        <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">{c.description}</p>
+                        {location && (
+                          <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                            <X className="w-2.5 h-2.5" />{location}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
                 })()}
               </div>
               
-              <div className="text-sm text-slate-500 mb-2">Select to merge:</div>
+              <div className="text-sm text-slate-500 mb-2">Select complaints to merge:</div>
               {duplicateComplaints.map((c) => {
                 const cid = c._id || c.id || "";
+                const score = duplicateMatchScores[cid];
+                const thumb = c.media?.[0]?.url;
+                const location = c.location?.address || c.location?.commune || c.municipalityName || "";
                 return (
                   <div
                     key={cid}
@@ -1005,23 +963,62 @@ export default function AgentComplaintsPage() {
                         prev.includes(cid) ? prev.filter((id) => id !== cid) : [...prev, cid]
                       );
                     }}
-                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    className={`rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
                       mergeSourceIds.includes(cid)
-                        ? "border-purple-500 bg-purple-50" 
+                        ? "border-purple-500 bg-purple-50"
                         : "border-slate-200 hover:border-purple-300"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                        mergeSourceIds.includes(cid) ? "border-purple-500 bg-purple-500" : "border-slate-300"
-                      }`}>
-                        {mergeSourceIds.includes(cid) && <CheckCircle className="w-3 h-3 text-white" />}
+                    <div className="flex gap-3 p-3">
+                      {/* Thumbnail */}
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          alt={c.title}
+                          className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-6 h-6 text-slate-300" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            mergeSourceIds.includes(cid) ? "border-purple-500 bg-purple-500" : "border-slate-300"
+                          }`}>
+                            {mergeSourceIds.includes(cid) && <CheckCircle2 className="w-3 h-3 text-white" />}
+                          </div>
+                          <p className="font-medium text-slate-900 text-sm truncate">{c.title}</p>
+                          {score !== undefined && (
+                            <span className={`ml-auto flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${
+                              score >= 80 ? "bg-red-100 text-red-700" :
+                              score >= 60 ? "bg-amber-100 text-amber-700" :
+                              "bg-slate-100 text-slate-600"
+                            }`}>
+                              {score}% similar
+                            </span>
+                          )}
+                        </div>
+                        {c.description && (
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2 ml-7">{c.description}</p>
+                        )}
+                        <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1.5 ml-7 flex-wrap">
+                          <span className={`px-1.5 py-0.5 rounded font-medium ${
+                            c.status === "RESOLVED" || c.status === "CLOSED" ? "bg-green-100 text-green-700" :
+                            c.status === "IN_PROGRESS" ? "bg-blue-100 text-blue-700" :
+                            "bg-slate-100 text-slate-600"
+                          }`}>{c.status}</span>
+                          <span>{categoryLabels[c.category] || c.category}</span>
+                          {location && (
+                            <span className="flex items-center gap-0.5 truncate max-w-[140px]">
+                              <X className="w-2.5 h-2.5 text-slate-300" />
+                              {location}
+                            </span>
+                          )}
+                          {c.referenceId && <span className="font-mono">{c.referenceId}</span>}
+                        </div>
                       </div>
-                      <p className="font-medium text-slate-900">{c.title}</p>
-                    </div>
-                    <p className="text-sm text-slate-600 line-clamp-2 mt-1 ml-7">{c.description}</p>
-                    <div className="text-xs text-slate-500 mt-2 ml-7">
-                      {c.status} • {categoryLabels[c.category] || c.category}
                     </div>
                   </div>
                 );
@@ -1047,3 +1044,4 @@ export default function AgentComplaintsPage() {
     </DashboardLayout>
   );
 }
+

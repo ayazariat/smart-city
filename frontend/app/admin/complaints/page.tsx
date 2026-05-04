@@ -6,7 +6,8 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { complaintService } from "@/services/complaint.service";
 import { adminService } from "@/services/admin.service";
 import { Complaint } from "@/types";
-import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
+import { getCategoryLabel, categoryLabels } from "@/lib/categories";
+import { STATUS_OPTIONS, categoryOptions } from "@/lib/complaints";
 import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
 import { 
   Download, Filter, Search, TrendingUp, CheckCircle, 
@@ -124,8 +125,9 @@ export default function AdminComplaintsPage() {
     const q = searchTerm.toLowerCase();
     return (
       c.description?.toLowerCase().includes(q) ||
-      categoryLabels[c.category]?.toLowerCase().includes(q)
+      c.category.toLowerCase().includes(q)
     );
+
   });
 
   const exportPDF = () => {
@@ -197,7 +199,7 @@ export default function AdminComplaintsPage() {
   // Get categories count
   const categoryCount: Record<string, number> = {};
   filteredComplaints.forEach(c => {
-    const cat = categoryLabels[c.category] || c.category || "Other";
+    const cat = c.category;
     categoryCount[cat] = (categoryCount[cat] || 0) + 1;
   });
 
@@ -313,11 +315,13 @@ export default function AdminComplaintsPage() {
           <div className="mt-4 pt-4 border-t border-slate-100">
             <p className="text-sm text-slate-600 mb-2">Categories:</p>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(categoryCount).slice(0, 5).map(([cat, count]) => (
-                <span key={cat} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
-                  {categoryLabels[cat] || cat}: {count}
-                </span>
-              ))}
+                {Object.entries(categoryCount).slice(0, 5).map(([cat, count]) => (
+                  <span key={cat} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
+                    {getCategoryLabel(cat)}: {count}
+                  </span>
+                ))}
+
+
             </div>
           </div>
         </div>
@@ -411,8 +415,8 @@ export default function AdminComplaintsPage() {
                 className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
               >
                 <option value="">All Categories</option>
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <option key={key} value={key}>
+                {categoryOptions.map(({value, label}) => (
+                  <option key={value} value={value}>
                     {label}
                   </option>
                 ))}

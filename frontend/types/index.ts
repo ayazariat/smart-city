@@ -14,7 +14,7 @@ export interface User {
 
 export interface RegisterData {
   fullName: string;
-  email: string;
+  email: string; 
   password: string;
   phone?: string;
   // Optional CAPTCHA token (e.g. reCAPTCHA v3)
@@ -47,7 +47,7 @@ export interface VerifyCodePayload {
 }
 
 // Complaint types
-export type ComplaintCategory = "ROAD" | "LIGHTING" | "WASTE" | "WATER" | "SAFETY" | "PUBLIC_PROPERTY" | "GREEN_SPACE" | "OTHER";
+export type ComplaintCategory = "waste" | "roads" | "lighting" | "water" | "safety" | "property" | "parks" | "other";
 export type ComplaintUrgency = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
 export type ComplaintStatus = "SUBMITTED" | "VALIDATED" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "REJECTED";
 export type MediaType = "photo" | "video";
@@ -147,12 +147,9 @@ export interface Complaint {
   resolutionNotes?: string;
   resolutionRejectionReason?: string;
   assignedDepartment?: {
-    _id: string;
+    id: string;
     name: string;
-    email?: string;
-    phone?: string;
-    categories?: string[];
-  };
+  } | null;
   assignedTeam?: {
     _id: string;
     name: string;

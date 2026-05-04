@@ -133,6 +133,12 @@ export const useAuthStore = create<AuthState>()(
         // Clear everything immediately
         localStorage.removeItem('auth-storage');
         clearClientAuthTokens();
+
+        // Disconnect socket so it doesn't reconnect with stale token
+        try {
+          const { disconnectSocket } = await import('@/lib/socket');
+          disconnectSocket();
+        } catch { /* silent */ }
         
         // Reset store
         useAuthStore.setState({
@@ -287,6 +293,15 @@ export const useAuthStore = create<AuthState>()(
             state.isAuthenticated = false;
           }
           
+          // Sync token to cookie so clientApiFetch can read it after page reload
+          if (state.token) {
+            try {
+              setClientAuthTokens(state.token, state.refreshToken ?? undefined);
+            } catch {
+              // non-blocking – cookie may not be available in SSR context
+            }
+          }
+
           const hasUser = state.user !== null && state.user !== undefined;
           useAuthStore.setState({ 
             hydrated: true,

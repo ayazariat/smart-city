@@ -118,16 +118,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                               color: Colors.white,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Plateforme de signalement citoyen',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          const SizedBox(height: 48),
-                          Container(
+                           const SizedBox(height: 8),
+                           Text(
+                             'Plateforme de signalement citoyen',
+                             style: TextStyle(
+                               fontSize: 16,
+                               color: Colors.white.withValues(alpha: 0.9),
+                             ),
+                           ),
+                           const SizedBox(height: 20),
+                           // Public statistics banner (matches web design)
+                           GestureDetector(
+                             onTap: () => Navigator.pushNamed(
+                               context,
+                               AppRoutes.transparency,
+                             ),
+                             child: Container(
+                               margin: const EdgeInsets.only(bottom: 12),
+                               padding: const EdgeInsets.symmetric(
+                                 vertical: 10,
+                                 horizontal: 16,
+                               ),
+                               decoration: BoxDecoration(
+                                 color: const Color(0xFFF0FDF4),
+                                 borderRadius: BorderRadius.circular(50),
+                                 border: Border.all(color: const Color(0xFFBBF7D0)),
+                               ),
+                               child: Row(
+                                 mainAxisSize: MainAxisSize.min,
+                                 mainAxisAlignment: MainAxisAlignment.center,
+                                 children: [
+                                   Icon(
+                                     Icons.bar_chart,
+                                     size: 16,
+                                     color: Colors.green[700],
+                                   ),
+                                   const SizedBox(width: 6),
+                                   Text(
+                                     'View Public Statistics',
+                                     style: TextStyle(
+                                       color: Colors.green[700],
+                                       fontSize: 13,
+                                       fontWeight: FontWeight.w500,
+                                     ),
+                                   ),
+                                 ],
+                               ),
+                             ),
+                           ),
+                           const SizedBox(height: 20),
+                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
                               color: Colors.white,

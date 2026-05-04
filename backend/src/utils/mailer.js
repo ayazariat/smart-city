@@ -32,9 +32,25 @@ const sendMagicLinkEmail = async (to, userId, token, fullName) => {
     await transporter.sendMail({
       from,
       to,
-      subject: "Smart City Tunisia - Reset your password",
-      text: `Hi ${userName}, click to reset your password: ${resetLink} (expires in 1 hour)`,
-      html,
+      subject: "Smart City Tunisia - Verify your account",
+      text: `Hi ${userName}, click here to verify your account: ${magicLink}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
+          </div>
+          <p>Hi <strong>${userName}</strong>,</p>
+          <p>Please click the button below to verify your account:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${magicLink}" style="background: #2E7D32; color: white; padding: 15px 30px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+              Verify Account
+            </a>
+          </div>
+          <p style="color: #666; font-size: 12px;">
+            If you didn't create this account, you can ignore this email.
+          </p>
+        </div>
+      `,
     });
   } catch (error) {
     throw error;
@@ -199,10 +215,161 @@ const sendComplaintStatusEmail = async (to, fullName, complaintTitle, status, co
   }
 };
 
+const emailTemplates = require('./emailTemplates.js');
+
+/**
+ * Send assignment emails to all parties (REQ #4)
+ * @param {Object} complaint - Full complaint object
+ * @param {string} departmentName - Assigned department name
+ * @param {Array} technicianEmails - Tech emails
+ * @param {Object} managerUser - Manager who assigned
+ */
+const sendAssignmentEmails = async (complaint, departmentName, technicianEmails = [], managerUser = {}) => {
+  const { FRONTEND_URL = 'http://localhost:3000' } = process.env;
+  const municipalityZone = complaint.municipalityName || complaint.location?.municipality || 'your area';
+  const submitDate = complaint.createdAt;
+
+  try {
+    // 1. Citizen email
+    if (complaint.createdBy) {
+      const User = require('../models/User');
+      const citizen = await User.findById(complaint.createdBy).select('fullName email firstName').lean();
+      if (citizen?.email && citizen.firstName) {
+        const template = emailTemplates.assignmentCitizenEmail(citizen.firstName, complaint.title, submitDate, departmentName);
+        await transporter.sendMail({
+          from,
+          to: citizen.email,
+          subject: template.subject,
+          html: template.html.replace(/\${FRONTEND_URL}/g, FRONTEND_URL)
+        });
+        console.log(`[mailer] Assignment citizen email → ${citizen.email}`);
+      }
+    }
+
+    // 2. Technician emails
+    for (const techEmail of technicianEmails) {
+      const template = emailTemplates.assignmentTechnicianEmail('Technician', complaint.title, municipalityZone, departmentName);
+      await transporter.sendMail({
+        from,
+        to: techEmail,
+        subject: template.subject,
+        html: template.html.replace(/\${FRONTEND_URL}/g, FRONTEND_URL)
+      });
+      console.log(`[mailer] Assignment tech email → ${techEmail}`);
+    }
+
+    // 3. Manager confirmation
+    if (managerUser.email) {
+      const template = emailTemplates.assignmentManagerEmail(complaint.title, departmentName, new Date());
+      await transporter.sendMail({
+        from,
+        to: managerUser.email,
+        subject: template.subject,
+        html: template.html.replace(/\${FRONTEND_URL}/g, FRONTEND_URL)
+      });
+      console.log(`[mailer] Assignment manager confirmation → ${managerUser.email}`);
+    }
+  } catch (error) {
+    console.error('[mailer] Assignment emails failed:', error.message);
+    // Don't block - log only
+  }
+};
+
+/**
+ * Centralized notification email dispatcher (REQ #4)
+ * @param {string} type - Event type (e.g. 'complaint_submitted', 'validated', 'priority_changed')
+ * @param {Object} recipientUser - User object with role, firstName, email, municipalityName, department.name
+ * @param {Object} complaintData - Complaint with title, municipalityName, zone/location, assignedDepartment {name}
+ * @param {Object} extras - {reason, newPriority, managerName, departmentName, etc.}
+ */
+const sendNotificationEmail = async (type, recipientUser, complaintData = {}, extras = {}) => {
+  const emailTemplates = require('./emailTemplates.js');
+  const { FRONTEND_URL = 'http://localhost:3000' } = process.env;
+  const { role, firstName = 'User', email, municipalityName, department } = recipientUser;
+  const { title = 'Complaint', municipalityName: complaintMunicipality, location } = complaintData;
+  
+  const zone = location?.zone || location?.municipality || complaintMunicipality || 'your area';
+  const departmentName = extras.departmentName || department?.name || 'Technical Department';
+
+  try {
+    let template;
+
+    switch (type) {
+      case 'complaint_submitted':
+        if (role === 'AGENT') {
+          template = emailTemplates.newComplaintAgent(firstName, title, zone, municipalityName);
+        }
+        break;
+      case 'validated':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.complaintValidatedCitizen(firstName, title);
+        }
+        break;
+      case 'rejected':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.complaintRejectedCitizen(firstName, title, extras.reason || 'Not specified');
+        }
+        break;
+      case 'assigned_department':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.complaintAssignedCitizen(firstName, title, departmentName);
+        } else if (role === 'TECHNICIAN') {
+          template = emailTemplates.complaintAssignedTechnician(firstName, title, departmentName, zone);
+        }
+        break;
+      case 'priority_changed':
+        if (role === 'AGENT') {
+          template = emailTemplates.priorityChangedAgent(firstName, title, extras.newPriority, extras.managerName || 'Manager');
+        }
+        break;
+      case 'status_in_progress':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.statusInProgressCitizen(firstName, title);
+        }
+        break;
+      case 'resolved':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.complaintResolvedCitizen(firstName, title);
+        }
+        break;
+      case 'closed':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.complaintClosedCitizen(firstName, title);
+        }
+        break;
+      case 'upvoted':
+        if (role === 'AGENT') {
+          template = emailTemplates.complaintUpvotedAgent(firstName, title);
+        }
+        break;
+      default:
+        console.log(`[mailer] No email template for type: ${type}, role: ${role}`);
+        return;
+    }
+
+    if (template) {
+      const htmlContent = template.html.replace(/\${FRONTEND_URL}/g, FRONTEND_URL);
+      await transporter.sendMail({
+        from,
+        to: email,
+        subject: template.subject,
+        html: htmlContent,
+      });
+      console.log(`[mailer] Notification email (${type}) sent to ${email} for "${title}"`);
+    }
+  } catch (error) {
+    console.error(`[mailer] Failed to send notification email (${type}) to ${email}:`, error.message);
+    // Non-blocking
+  }
+};
+
 module.exports = {
   sendMagicLinkEmail,
   sendPasswordResetEmail,
   sendLoginEmailReminder,
   sendInvitationEmail,
   sendComplaintStatusEmail,
+  sendAssignmentEmails,
+  sendNotificationEmail,  // NEW CENTRALIZED
 };
+

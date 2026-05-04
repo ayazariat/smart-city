@@ -6,10 +6,10 @@ const departmentSchema = new mongoose.Schema(
     description: String,
     email: String,
     phone: String,
-    // Categories this department handles
+    // Categories this department handles (unified lowercase)
     categories: [{
       type: String,
-      enum: ["ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "TRAFFIC", "URBAN_PLANNING", "EQUIPMENT"]
+      enum: ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other"]
     }],
     // Manager responsible for this department
     responsable: { 

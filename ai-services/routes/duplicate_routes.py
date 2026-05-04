@@ -117,36 +117,31 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
         print(f"[DUPLICATE] Found {len(candidates)} candidates")
         
         # Always return test data for demo purposes
-        print("[DUPLICATE] Returning demo test data")
-        result = {
-            "isDuplicate": True,
-            "duplicateLevel": "POSSIBLE_DUPLICATE",
-            "topMatches": [
-                {
-                    "complaintId": "demo-1",
-                    "title": f"Problème similaire: {request.title[:30]}...",
-                    "description": "Another citizen reported a similar issue in this municipality about the same category.",
-                    "category": request.category,
-                    "status": "VALIDATED",
-                    "overallScore": 0.72
-                },
-                {
-                    "complaintId": "demo-2",
-                    "title": f"Issue相同的: {request.category}",
-                    "description": "Ce problème a été signalé par un autre citoyen.",
-                    "category": request.category,
-                    "status": "IN_PROGRESS",
-                    "overallScore": 0.58
-                }
-            ],
-            "recommendation": "Ces plaintes semblent similaires. Envisagez de les fusionner.",
-            "humanReviewRequired": False
-        }
 
+        # Use REAL duplicate detection with DB candidates
+        from services.duplicate_detector import check_duplicate
+        
+        print(f"[DUPLICATE] Checking {len(candidates)} real DB candidates")
+        
+        new_complaint_data = {
+            "title": request.title,
+            "description": request.description,
+            "category": request.category,
+            "latitude": request.latitude,
+            "longitude": request.longitude,
+            "municipality": request.municipality,
+            "submittedAt": submitted_at
+        }
+        
+        result = check_duplicate(new_complaint_data, candidates)
+        
+        print(f"[DUPLICATE] Real result: isDuplicate={result['isDuplicate']}, topScore={result['topMatches'][0]['overallScore'] if result['topMatches'] else 0}")
+        
         return {
             "success": True,
             "data": result
         }
+
 
     except Exception as e:
         print(f"[DUPLICATE] Error in check: {e}")

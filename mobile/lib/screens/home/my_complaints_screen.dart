@@ -303,7 +303,7 @@ class _MyComplaintsScreenState extends ConsumerState<MyComplaintsScreen> {
                       style: TextStyle(color: Colors.grey[500], fontSize: 12),
                     ),
                     const Spacer(),
-                    if (c.priorityScore != null && c.priorityScore! >= 15)
+                    if (c.priorityScore >= 15)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(

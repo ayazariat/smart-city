@@ -30,18 +30,28 @@ interface SLARule {
 }
 
 const ALL_CATEGORIES = [
-  "ROAD", "LIGHTING", "WASTE", "WATER", "SAFETY",
-  "PUBLIC_PROPERTY", "GREEN_SPACE", "TRAFFIC", "URBAN_PLANNING", "EQUIPMENT", "OTHER",
+  "waste", "roads", "lighting", "water", "safety",
+  "property", "parks", "other",
 ];
+
 
 const URGENCY_LEVELS = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ROAD: "Road & Infrastructure", LIGHTING: "Street Lighting", WASTE: "Waste Management",
-  WATER: "Water & Sanitation", SAFETY: "Public Safety", PUBLIC_PROPERTY: "Public Property",
-  GREEN_SPACE: "Green Spaces", TRAFFIC: "Traffic", URBAN_PLANNING: "Urban Planning",
-  EQUIPMENT: "Equipment", OTHER: "Other",
+// Use i18n - static labels deprecated
+const getCategoryLabel = (cat: string) => {
+  const labels = {
+    waste: "Déchets et Propreté",
+    roads: "Routes et Circulation",
+    lighting: "Éclairage public",
+    water: "Eau et Drainage",
+    safety: "Sécurité et Bruit",
+    property: "Propriété publique",
+    parks: "Parcs et Espaces verts",
+    other: "Autre"
+  };
+  return labels[cat as keyof typeof labels] || cat;
 };
+
 
 const DEFAULT_SLA_HOURS: Record<string, number> = {
   LOW: 168, MEDIUM: 72, HIGH: 48, URGENT: 24,
@@ -238,9 +248,9 @@ export default function AdminSettingsPage() {
                               {dept.description && <p className="text-sm text-slate-500 mt-1">{dept.description}</p>}
                               <div className="flex flex-wrap gap-1.5 mt-3">
                                 {(dept.categories || []).map((cat) => (
-                                  <span key={cat} className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                                    {CATEGORY_LABELS[cat] || cat}
-                                  </span>
+                                <span key={cat} className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                                  {getCategoryLabel(cat)}
+                                </span>
                                 ))}
                               </div>
                             </div>
@@ -272,9 +282,10 @@ export default function AdminSettingsPage() {
                     <div key={cat} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                       <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
                         <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded">{cat}</span>
-                        <span className="text-sm font-semibold text-slate-700">{CATEGORY_LABELS[cat] || cat}</span>
+                        <span className="text-sm font-semibold text-slate-700">{getCategoryLabel(cat)}</span>
                       </div>
                       <table className="w-full text-sm">
+
                         <thead>
                           <tr className="border-b border-slate-100">
                             <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">Urgency</th>
@@ -342,9 +353,10 @@ export default function AdminSettingsPage() {
                       return (
                         <div key={cat} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-slate-800 text-sm">{CATEGORY_LABELS[cat] || cat}</span>
+                            <span className="font-semibold text-slate-800 text-sm">{getCategoryLabel(cat)}</span>
                             <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded-lg">{cat}</span>
                           </div>
+
                           <div className="space-y-1">
                             {deptHandling.length > 0 ? (
                               deptHandling.map((d) => (
@@ -420,7 +432,7 @@ export default function AdminSettingsPage() {
                       onChange={() => setDeptForm({ ...deptForm, categories: checked ? deptForm.categories.filter((c) => c !== cat) : [...deptForm.categories, cat] })}
                       className="w-3.5 h-3.5 accent-primary"
                     />
-                    <span className={checked ? "text-primary font-medium" : "text-slate-600"}>{CATEGORY_LABELS[cat] || cat}</span>
+                    <span className={checked ? "text-primary font-medium" : "text-slate-600"}>{getCategoryLabel(cat)}</span>
                   </label>
                 );
               })}
@@ -431,3 +443,4 @@ export default function AdminSettingsPage() {
     </DashboardLayout>
   );
 }
+

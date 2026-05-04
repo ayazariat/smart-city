@@ -45,8 +45,8 @@ const complaintSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: {
       type: String,
-      enum: ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"],
-      default: "OTHER",
+      enum: ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other"],
+      default: "other",
     },
     status: {
       type: String,
@@ -126,8 +126,15 @@ const complaintSchema = new mongoose.Schema(
     ],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     assignedDepartment: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Department",
+      id: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "Department",
+        default: null
+      },
+      name: { 
+        type: String, 
+        default: null 
+      }
     },
     assignedTeam: { type: mongoose.Schema.Types.ObjectId, ref: "RepairTeam" },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

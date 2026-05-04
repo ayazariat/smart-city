@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { managerService } from "@/services/manager.service";
-import { categoryLabels, STATUS_OPTIONS } from "@/lib/complaints";
+import { STATUS_OPTIONS } from "@/lib/complaints";
+import { getCategoryLabel } from "@/lib/categories";
 import { showToast } from "@/components/ui/Toast";
 import {
   PageHeader,
@@ -24,6 +25,15 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import type { BaseComplaint } from "@/components/ui";
 
 interface ManagerComplaint extends BaseComplaint {
+  assignedTeam?: {
+    _id?: string;
+    name?: string;
+    members?: Array<{
+      _id?: string;
+      fullName: string;
+    }>;
+  } | null;
+
   _id: string;
   title?: string;
   updatedAt?: string;
@@ -217,7 +227,7 @@ export default function ManagerPendingPage() {
   // Get categories count
   const byCategory: Record<string, number> = {};
   filteredComplaints.forEach(c => {
-    const cat = categoryLabels[c.category] || c.category || "Other";
+    const cat = getCategoryLabel(c.category || "other");
     byCategory[cat] = (byCategory[cat] || 0) + 1;
   });
 
@@ -501,17 +511,17 @@ export default function ManagerPendingPage() {
                     index={index}
                     actions={
                       <>
-                        {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
+                        {!(complaint.assignedTo || complaint.assignedTeam) && (complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
                           <button
                             onClick={() => { setAssignTechTarget(id); setSelectedTechnicians([]); }}
                             disabled={actionLoading === id}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
                           >
                             <Wrench className="w-4 h-4" />
-                            {complaint.status === "ASSIGNED" ? "Reassign" : "Assign Technician"}
+                            {complaint.status === "ASSIGNED" ? "Reassign Team" : "Assign Repair Team"}
                           </button>
                         )}
-                        {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
+                        {!(complaint.assignedTo || complaint.assignedTeam) && (complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
                         <button
                           onClick={() => {
                             setPriorityTarget(id);
@@ -521,7 +531,7 @@ export default function ManagerPendingPage() {
                           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-all text-sm font-medium disabled:opacity-50 hover:shadow-lg"
                         >
                           <Flag className="w-4 h-4" />
-                          Priority
+                          Set Priority
                         </button>
                         )}
                         <Link
@@ -599,45 +609,53 @@ export default function ManagerPendingPage() {
       </Modal>
 
       {/* Priority Modal */}
+
       <Modal
         isOpen={priorityTarget !== null}
         onClose={() => setPriorityTarget(null)}
         title="Update Priority"
-        description="Set a priority score from 1 (lowest) to 10 (highest)."
+        description="Click pill matching list view colors."
         footer={
           <>
             <Button variant="ghost" onClick={() => setPriorityTarget(null)} disabled={actionLoading !== null}>
               Cancel
             </Button>
-            <Button onClick={handleUpdatePriority} isLoading={actionLoading !== null}>
-              Update
-            </Button>
           </>
         }
       >
         <div className="space-y-4">
-          <input
-            type="number"
-            min="1"
-            max="10"
-            value={priorityScore}
-            onChange={(e) => setPriorityScore(parseInt(e.target.value) || 5)}
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-          />
-          <div className="flex gap-1">
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setPriorityScore(n)}
-                className={`flex-1 h-8 rounded-lg text-xs font-medium transition-all hover:scale-110 ${
-                  n <= priorityScore
-                    ? n >= 8 ? "bg-red-500 text-white" : n >= 5 ? "bg-amber-500 text-white" : "bg-primary text-white"
-                    : "bg-slate-100 text-slate-400"
-                }`}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              {level: 'LOW', color: 'bg-green-500 hover:bg-green-600 text-white border-2 border-green-400', score: 3},
+              {level: 'MEDIUM', color: 'bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-400', score: 6},
+              {level: 'HIGH', color: 'bg-orange-500 hover:bg-orange-600 text-white border-2 border-orange-400', score: 8},
+              {level: 'CRITICAL', color: 'bg-red-500 hover:bg-red-600 text-white border-2 border-red-400 shadow-md shadow-red-200', score: 10}
+            ].map(({level, color, score}) => (
+              <Button
+                key={level}
+                className={`p-3 rounded-xl font-semibold transition-all ${color} shadow-sm hover:shadow-lg hover:scale-[1.02] active:scale-100`}
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  setActionLoading(priorityTarget);
+                  try {
+                    await managerService.updatePriority(priorityTarget!, { urgency: level as string, priorityScore: score });
+                    await refreshComplaints();
+                  } catch (err) {
+                    alert('Priority update failed');
+                  } finally {
+                    setActionLoading(null);
+                    setPriorityTarget(null);
+                  }
+                }}
+                disabled={actionLoading === priorityTarget}
               >
-                {n}
-              </button>
+                <Flag className="w-4 h-4 mr-1" />
+                {level}
+                <div className="text-xs mt-1 opacity-90">
+                  Score: {score}
+                </div>
+              </Button>
             ))}
           </div>
         </div>

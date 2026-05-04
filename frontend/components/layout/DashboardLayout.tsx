@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, X, Bell, Check, Sparkles } from "lucide-react";
+import { Loader2, X, Bell, Check, Sparkles, Menu } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import ThemeToggle from "@/components/ui/ThemeToggle";
@@ -16,6 +16,7 @@ import { adminService } from "@/services/admin.service";
 import { connectSocket, disconnectSocket, subscribeToNotifications } from "@/lib/socket";
 import { Notification } from "@/types";
 import { useTranslation } from "react-i18next";
+import Link from "next/link";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [isRTL, setIsRTL] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const translateOrFallback = useCallback(
     (key: string, fallback: string) => {
@@ -59,26 +61,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       "notification.assignedToYou": "Assigned to you",
       "notification.assignedToYou.desc": "A complaint has been assigned to you.",
     };
-
     return notificationFallbacks[value] || "Notification";
   }, []);
 
   const resolveNotificationText = useCallback(
     (value?: string) => {
-      if (!value) {
-        return "";
-      }
-      if (!value.startsWith("notification.")) {
-        return value;
-      }
-
+      if (!value) return "";
+      if (!value.startsWith("notification.")) return value;
       const translated = t(value);
       return translated === value ? humanizeNotificationKey(value) : translated;
     },
     [humanizeNotificationKey, t]
   );
 
-  // Track RTL changes reactively (when user switches language)
+  // Track RTL changes
   useEffect(() => {
     const checkDir = () => setIsRTL(document.documentElement.dir === "rtl");
     checkDir();
@@ -93,7 +89,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [hydrated, user, router]);
 
-  // Fetch notification count
+  // Fetch notification count — polling every 30s (was 60s)
   useEffect(() => {
     const fetchNotifCount = async () => {
       const { token } = useAuthStore.getState();
@@ -108,15 +104,30 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
     if (hydrated && user) {
       fetchNotifCount();
-      const interval = setInterval(fetchNotifCount, 60000);
+      const interval = setInterval(fetchNotifCount, 30000); // 30s polling
       return () => clearInterval(interval);
     }
-  }, [hydrated, resolveNotificationText, user]);
+  }, [hydrated, user]);
 
-  // Connect socket for real-time notifications
+  // Refresh on window focus
+  useEffect(() => {
+    const handleFocus = () => {
+      const { token } = useAuthStore.getState();
+      if (token && hydrated && user) {
+        notificationService.getNotificationCount().then(result => {
+          if (result.success && typeof result.count === "number") {
+            setUnreadCount(result.count);
+          }
+        });
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [hydrated, user]);
+
+  // Socket for real-time notifications
   useEffect(() => {
     if (!hydrated || !user) return;
-
     const { token: authToken } = useAuthStore.getState();
     connectSocket(user.id || "", authToken || undefined);
 
@@ -124,22 +135,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       const n = notif as Notification;
       const title = resolveNotificationText(n.title);
       const message = resolveNotificationText(n.message);
-
       setNotifications((prev) => {
         const alreadyExists = prev.some((item) => item._id === n._id);
-        if (alreadyExists) {
-          return prev.map((item) => (item._id === n._id ? n : item));
-        }
+        if (alreadyExists) return prev.map((item) => (item._id === n._id ? n : item));
         return [n, ...prev];
       });
       setUnreadCount((prev) => prev + (n.isRead ? 0 : 1));
       showToast(title || message || "New notification", "info");
     });
 
-    return () => {
-      unsub();
-      disconnectSocket();
-    };
+    return () => { unsub(); disconnectSocket(); };
   }, [hydrated, resolveNotificationText, user]);
 
   // Fetch stats for sidebar badges
@@ -149,40 +154,39 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       if (!token || !user) return;
       try {
         let statsRes;
-        if (user.role === "MUNICIPAL_AGENT") {
-          statsRes = await agentService.getStats();
-        } else if (user.role === "DEPARTMENT_MANAGER") {
-          statsRes = await managerService.getStats();
-        } else if (user.role === "TECHNICIAN") {
-          statsRes = await technicianService.getTechnicianStats();
-        } else if (user.role === "ADMIN") {
-          statsRes = await adminService.getStats();
-        }
-        if (statsRes?.data) {
-          setStats(statsRes.data as Record<string, unknown>);
-        }
+        if (user.role === "MUNICIPAL_AGENT") statsRes = await agentService.getStats();
+        else if (user.role === "DEPARTMENT_MANAGER") statsRes = await managerService.getStats();
+        else if (user.role === "TECHNICIAN") statsRes = await technicianService.getTechnicianStats();
+        else if (user.role === "ADMIN") statsRes = await adminService.getStats();
+        if (statsRes?.data) setStats(statsRes.data as Record<string, unknown>);
       } catch { /* silent */ }
     };
-
-    if (hydrated && user) {
-      fetchStats();
-    }
+    if (hydrated && user) fetchStats();
   }, [hydrated, user]);
 
   const handleNotificationsClick = useCallback(async () => {
     const willShow = !showNotifications;
     setShowNotifications(willShow);
-    if (willShow && notifications.length === 0) {
+
+    const { token } = useAuthStore.getState();
+    if (token) {
+      notificationService.getNotificationCount().then(result => {
+        if (result.success && typeof result.count === "number") setUnreadCount(result.count);
+      });
+    }
+
+    if (willShow) {
       setLoadingNotifs(true);
       try {
         const result = await notificationService.getNotifications();
         if (result.success && Array.isArray(result.data)) {
           setNotifications(result.data);
         }
-      } catch { /* silent */ }
-      setLoadingNotifs(false);
+      } catch { /* silent */ } finally {
+        setLoadingNotifs(false);
+      }
     }
-  }, [showNotifications, notifications.length]);
+  }, [showNotifications]);
 
   const handleMarkAllRead = async () => {
     try {
@@ -210,8 +214,132 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (!user) return null;
 
+  // Notification bell + dropdown — extracted as a reusable block
+  const NotificationBell = ({ compact = false }: { compact?: boolean }) => (
+    <div className="relative">
+      <button
+        onClick={handleNotificationsClick}
+        className={`relative ${compact ? "p-2" : "p-2"} hover:bg-slate-100 rounded-xl transition-all duration-200 touch-manipulation`}
+        title={translateOrFallback("sidebar.notifications", "Notifications")}
+        style={{ minWidth: 40, minHeight: 40 }}
+      >
+        <Bell className={`${compact ? "w-5 h-5" : "w-5 h-5"} text-slate-600`} />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {showNotifications && (
+        <>
+          <div className="fixed inset-0 z-[75]" onClick={() => setShowNotifications(false)} />
+          <div
+            className={`fixed sm:absolute top-16 sm:top-full sm:mt-2 ${isRTL ? "left-2 sm:left-0" : "right-2 sm:right-0"} w-[calc(100vw-16px)] sm:w-[360px] max-h-[70vh] sm:max-h-[480px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-[80] flex flex-col overflow-hidden`}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-slate-800">
+                  {translateOrFallback("sidebar.notifications", "Notifications")}
+                </span>
+                {unreadCount > 0 && (
+                  <span className="min-w-[18px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button onClick={handleMarkAllRead} className="text-xs text-primary hover:text-primary/80 font-medium">
+                    {t("dashboard.markAllRead") || "Mark all read"}
+                  </button>
+                )}
+                <Link href="/notifications" className="text-xs text-slate-400 hover:text-primary px-1" onClick={() => setShowNotifications(false)}>
+                  See all
+                </Link>
+                <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-100 rounded-lg">
+                  <X className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto">
+              {loadingNotifs ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                  <Bell className="w-7 h-7 mb-2 opacity-40" />
+                  <p className="text-xs font-medium">{t("dashboard.noNotifications") || "No notifications yet"}</p>
+                  <p className="text-[10px] text-slate-300 mt-1 text-center px-4">
+                    You&apos;ll be notified when complaints are validated, assigned, or resolved.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {notifications.map((notif) => {
+                    const title = resolveNotificationText(notif.title);
+                    const message = resolveNotificationText(notif.message);
+                    return (
+                      <div
+                        key={notif._id}
+                        className={`px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.isRead ? "bg-primary/5" : ""}`}
+                        onClick={() => {
+                          if (!notif.isRead) handleMarkRead(notif._id);
+                          const targetComplaintId = notif.complaint?._id || notif.relatedId;
+                          if (targetComplaintId) {
+                            setShowNotifications(false);
+                            const dest = user.role === "CITIZEN"
+                              ? `/my-complaints/${targetComplaintId}`
+                              : `/dashboard/complaints/${targetComplaintId}`;
+                            router.push(dest);
+                          }
+                        }}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${!notif.isRead ? "bg-primary" : "bg-transparent"}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs leading-tight line-clamp-2 ${!notif.isRead ? "font-semibold text-slate-800" : "font-medium text-slate-700"}`}>{title}</p>
+                            {message && message !== title && (
+                              <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{message}</p>
+                            )}
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              {new Date(notif.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                          {!notif.isRead && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleMarkRead(notif._id); }}
+                              className="p-1 hover:bg-slate-200 rounded flex-shrink-0"
+                              title="Mark as read"
+                            >
+                              <Check className="w-3 h-3 text-slate-400" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-secondary-50 to-primary/10">
+      {/* Mobile overlay */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[55] md:hidden" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+
       <DashboardSidebar
         role={user.role}
         fullName={user.fullName}
@@ -220,9 +348,35 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         stats={stats}
         unreadNotifications={unreadCount}
         onNotificationsClick={handleNotificationsClick}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
       />
 
-      {/* Top bar */}
+      {/* ── MOBILE top bar (visible only on small screens) ── */}
+      <header className={`md:hidden bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30`}>
+        <div className="flex items-center justify-between px-3 py-2.5">
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="p-2 hover:bg-slate-100 rounded-xl transition-colors touch-manipulation"
+            style={{ minWidth: 40, minHeight: 40 }}
+          >
+            <Menu className="w-5 h-5 text-slate-600" />
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="text-sm font-bold text-slate-800">Smart City</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <NotificationBell compact />
+          </div>
+        </div>
+      </header>
+
+      {/* ── DESKTOP top bar (hidden on mobile) ── */}
       <header className={`bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 hidden md:block ${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"}`}>
         <div className="px-4 md:px-6 py-3">
           <div className="flex justify-between items-center">
@@ -235,117 +389,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <p className="text-xs text-slate-500">Dashboard</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              {/* Theme & Language */}
+            <div className="flex items-center gap-2">
               <ThemeToggle />
               <LanguagePicker />
-              {/* Notification Bell */}
-              <div className="relative">
-                  <button
-                    onClick={handleNotificationsClick}
-                    className="relative p-2 hover:bg-slate-100 rounded-xl transition-all duration-200"
-                    title={translateOrFallback("sidebar.notifications", "Notifications")}
-                  >
-                  <Bell className="w-5 h-5 text-slate-600" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Notification Dropdown */}
-                {showNotifications && (
-                  <>
-                    <div className="fixed inset-0 z-[75]" onClick={() => setShowNotifications(false)} />
-                    <div className={`absolute top-full mt-2 w-[360px] max-h-[480px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-[80] flex flex-col overflow-hidden ${isRTL ? "left-0" : "right-0"}`}>
-                      {/* Header */}
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <Bell className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-semibold text-slate-800">
-                            {translateOrFallback("sidebar.notifications", "Notifications")}
-                          </span>
-                          {unreadCount > 0 && (
-                            <span className="min-w-[18px] h-4 flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
-                              {unreadCount}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {unreadCount > 0 && (
-                            <button onClick={handleMarkAllRead} className="text-xs text-primary hover:text-primary/80 font-medium">
-                              {t('dashboard.markAllRead')}
-                            </button>
-                          )}
-                          <button onClick={() => setShowNotifications(false)} className="p-1 hover:bg-slate-100 rounded-lg">
-                            <X className="w-3.5 h-3.5 text-slate-400" />
-                          </button>
-                        </div>
-                      </div>
-                      {/* List */}
-                      <div className="flex-1 overflow-y-auto">
-                        {loadingNotifs ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                          </div>
-                        ) : notifications.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                            <Bell className="w-7 h-7 mb-2 opacity-40" />
-                            <p className="text-xs">{t('dashboard.noNotifications')}</p>
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-slate-100">
-                            {notifications.map((notif) => {
-                              const title = resolveNotificationText(notif.title);
-                              const message = resolveNotificationText(notif.message);
-                              return (
-                              <div
-                                key={notif._id}
-                                className={`px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer ${!notif.isRead ? "bg-primary/5" : ""}`}
-                                onClick={() => {
-                                  if (!notif.isRead) handleMarkRead(notif._id);
-                                  const targetComplaintId = notif.complaint?._id || notif.relatedId;
-                                  if (targetComplaintId) {
-                                    setShowNotifications(false);
-                                    const dest = user.role === "CITIZEN"
-                                      ? `/my-complaints/${targetComplaintId}`
-                                      : `/dashboard/complaints/${targetComplaintId}`;
-                                    router.push(dest);
-                                  }
-                                }}
-                              >
-                                <div className="flex items-start gap-2.5">
-                                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${!notif.isRead ? "bg-primary" : "bg-transparent"}`} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-slate-800 line-clamp-1">{title}</p>
-                                    <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{message}</p>
-                                    <p className="text-[10px] text-slate-400 mt-1">
-                                      {new Date(notif.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                                    </p>
-                                  </div>
-                                  {!notif.isRead && (
-                                    <button onClick={(e) => { e.stopPropagation(); handleMarkRead(notif._id); }} className="p-1 hover:bg-slate-200 rounded flex-shrink-0" title="Mark as read">
-                                      <Check className="w-3 h-3 text-slate-400" />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+              <NotificationBell />
             </div>
           </div>
         </div>
       </header>
 
-      <div className={`${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"} pt-14 md:pt-0`}>
+      <div className={`${isRTL ? "mr-0 md:mr-[260px]" : "ml-0 md:ml-[260px]"} pt-0`}>
         {children}
       </div>
     </div>

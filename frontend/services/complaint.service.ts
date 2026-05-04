@@ -420,18 +420,16 @@ export const predictCategory = async (text: string): Promise<{
   alternatives: string[];
   reasoning: string;
 }> => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-  
-  const response = await fetch(`${apiUrl}/api/ai/predict-category`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify({ text }),
-  });
-
-  if (!response.ok) {
+  try {
+    const { clientPost } = await import("@/lib/api");
+    const data = await clientPost<{
+      predicted: string;
+      confidence: number;
+      alternatives: string[];
+      reasoning: string;
+    }>("/ai/predict-category", { text }, { requiresAuth: false });
+    return data;
+  } catch {
     return {
       predicted: "AUTRE",
       confidence: 0,
@@ -439,8 +437,6 @@ export const predictCategory = async (text: string): Promise<{
       reasoning: "AI service unavailable",
     };
   }
-
-  return response.json();
 };
 
 /**

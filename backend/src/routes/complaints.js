@@ -136,7 +136,35 @@ router.post("/:id/confirm", async (req, res) => {
       confirmedAt: new Date()
     });
     complaint.confirmationCount = (complaint.confirmationCount || 0) + 1;
-    
+
+    // Notify the responsible agent(s) of the municipality
+    try {
+      const io = req.app?.get?.('io');
+      if (io) {
+        const notificationService = require('../services/notification.service');
+        const normalizedMun = normalizeMunicipality(complaint.municipalityName || '');
+        if (normalizedMun) {
+          const agents = await User.find({
+            role: 'MUNICIPAL_AGENT',
+            $or: [
+              { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') } },
+              { municipalityNormalized: normalizedMun },
+            ]
+          }).select('_id').lean();
+          if (agents.length > 0) {
+            await notificationService.sendNotificationToMultiple(io, agents.map(a => a._id.toString()), {
+              type: 'upvote',
+              title: 'Complaint Confirmed',
+              message: `Complaint '${complaint.title}' received a new confirmation (total: ${complaint.confirmationCount}).`,
+              complaintId: complaint._id,
+            });
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.error('Confirm notification failed:', notifErr.message);
+    }
+
     // Recalculate priority score using intelligent system
     const priorityResult = calculatePriorityAndSLA({
       category: complaint.category,
@@ -242,7 +270,35 @@ router.post("/:id/upvote", async (req, res) => {
       upvotedAt: new Date()
     });
     complaint.upvoteCount = (complaint.upvoteCount || 0) + 1;
-    
+
+    // Notify the responsible agent(s) of the municipality
+    try {
+      const io = req.app?.get?.('io');
+      if (io) {
+        const notificationService = require('../services/notification.service');
+        const normalizedMun = normalizeMunicipality(complaint.municipalityName || '');
+        if (normalizedMun) {
+          const agents = await User.find({
+            role: 'MUNICIPAL_AGENT',
+            $or: [
+              { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') } },
+              { municipalityNormalized: normalizedMun },
+            ]
+          }).select('_id').lean();
+          if (agents.length > 0) {
+            await notificationService.sendNotificationToMultiple(io, agents.map(a => a._id.toString()), {
+              type: 'upvote',
+              title: 'Complaint Upvoted',
+              message: `Complaint '${complaint.title}' received a new upvote (total: ${complaint.upvoteCount}).`,
+              complaintId: complaint._id,
+            });
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.error('Upvote notification failed:', notifErr.message);
+    }
+
     // Recalculate priority score using intelligent system
     const priorityResult = calculatePriorityAndSLA({
       category: complaint.category,

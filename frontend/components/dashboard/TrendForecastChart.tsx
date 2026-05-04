@@ -94,30 +94,35 @@ export default function TrendForecastChart({
 
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
-      {/* Header */}
+      {/* Header - FIXED: Title + Updated same line */}
       <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-5 py-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-white/90" />
             <h3 className="text-sm font-bold text-white">AI Trend Forecasts — Next 7 Days</h3>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-white/70">
+          <div className="flex items-center gap-1 text-[11px] text-white/80">
             <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
             Updated automatically
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${trendBg}`}>
-            <TrendIcon className={`w-3.5 h-3.5 ${trendColor}`} />
-            {data.changeVsLastWeek || "Stable"} vs last week
-          </div>
-          <div className="text-white/80 text-[11px]">
-            Expected total: <span className="font-bold text-white">{data.expectedTotal}</span>
+        <div className="flex flex-col gap-2 mb-2">
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${trendBg}`}>
+              <TrendIcon className={`w-3 h-3 ${trendColor}`} />
+              {data.changeVsLastWeek || "Stable"} vs last week
+            </div>
+            <div className="text-white/90 text-xs">
+              Expected total: <span className="font-bold">{data.expectedTotal}</span>
+            </div>
           </div>
           {spikeDays.length > 0 && (
-            <div className="flex items-center gap-1 bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-              <AlertTriangle className="w-3 h-3" />
-              {spikeDays.length} spike{spikeDays.length > 1 ? "s" : ""} predicted
+            <div className="flex items-center gap-2 bg-red-500/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg shadow-lg text-sm font-bold">
+              <AlertTriangle className="w-4 h-4" />
+              <div>
+                <div>SPIKE PREDICTED</div>
+                <div>Peak of {Math.max(...spikeDays)} complaints expected on {spikeDays.length} day(s) in {municipality || "your municipality"}</div>
+              </div>
             </div>
           )}
         </div>
@@ -175,48 +180,48 @@ export default function TrendForecastChart({
           ))}
         </div>
 
-        {/* Toggle details */}
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm text-slate-600 font-medium transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-violet-500" />
-            Daily action plan
+        {/* Daily Action Plan — uses slate colors since it's on white background */}
+        <div className="border-t border-slate-100 pt-4 mt-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Calendar className="w-4 h-4 text-violet-600" />
+            <span className="text-slate-700 font-semibold text-sm">Daily action plan</span>
           </div>
-          <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${showDetails ? "rotate-90" : ""}`} />
-        </button>
-
-        {/* Daily action plan (expandable) */}
-        {showDetails && (
-          <div className="mt-3 space-y-2 animate-fadeIn">
-            {forecast.map((val, i) => {
+          <div className="space-y-2">
+            {forecast.slice(0, 3).map((val, i) => {
               const color = getDayColor(val, max, spike);
               const isSpike = val >= spike;
               const rec = getRecommendation(val, spike);
               return (
                 <div
                   key={i}
-                  className={`flex items-center gap-3 p-2.5 rounded-xl border ${
-                    isSpike ? "bg-red-50 border-red-200" : val >= max * 0.6 ? "bg-amber-50 border-amber-200" : "bg-slate-50 border-slate-100"
+                  className={`flex items-center gap-3 p-2.5 rounded-xl text-xs ${
+                    isSpike ? "bg-red-50 border border-red-200" :
+                    val >= max * 0.6 ? "bg-amber-50 border border-amber-200" :
+                    "bg-emerald-50 border border-emerald-200"
                   }`}
                 >
-                  <div className="w-5 text-center">
-                    {isSpike && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                  <div className="w-6 flex-shrink-0">
+                    <div className="text-[20px] font-bold" style={{ color }}>{val}</div>
                   </div>
-                  <div className="w-8 text-[11px] font-bold text-slate-600">{DAY_LABELS_SHORT[i % 7]}</div>
-                  <div className="text-[11px] font-mono">
-                    <span style={{ color }} className="font-bold">{val}</span>
-                    <span className="text-slate-400 ml-1">complaints</span>
+                  <div className="font-semibold text-slate-700 min-w-0 flex-1">
+                    {DAY_LABELS_FULL[i % 7]}
                   </div>
-                  <div className="ml-auto text-[10px] font-medium" style={{ color }}>
+                  <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ml-auto text-white ${
+                    isSpike ? "bg-red-500" :
+                    val >= max * 0.6 ? "bg-amber-500" : "bg-emerald-500"
+                  }`}>
                     {rec}
                   </div>
                 </div>
               );
             })}
+            {forecast.length > 3 && (
+              <div className="text-center pt-2 text-slate-400 text-xs border-t border-slate-100">
+                +{forecast.length - 3} more days →
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

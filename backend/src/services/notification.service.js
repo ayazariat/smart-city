@@ -3,7 +3,7 @@
  * Handles sending notifications to users via Socket.IO and in-app store
  */
 
-const { sendComplaintStatusEmail } = require('../utils/mailer');
+// No import needed - dynamic require in function
 const User = require('../models/User');
 
 const normalizeRecipientId = (recipientId) => {
@@ -56,40 +56,34 @@ const sendNotification = async (io, recipientId, data) => {
       io.to(`user:${normalizedRecipientId}`).emit('notification', realtimePayload);
     }
 
-    const statusMap = {
-      validated: 'VALIDATED',
-      rejected: 'REJECTED',
-      assigned: 'ASSIGNED',
-      in_progress: 'IN_PROGRESS',
-      resolved: 'RESOLVED',
-      closed: 'CLOSED',
-      resolution_approved: 'CLOSED',
-      resolution_rejected: 'IN_PROGRESS',
-    };
-    const normalizedStatus = statusMap[(type || '').toLowerCase()];
-    if (normalizedStatus) {
-      Promise.resolve()
-        .then(async () => {
-          const user = await User.findById(normalizedRecipientId).select('email fullName').lean();
-          if (!user?.email) return;
-          let complaintTitle = 'Your complaint';
-          if (targetComplaintId) {
-            const Complaint = require('../models/Complaint');
-            const complaint = await Complaint.findById(targetComplaintId).select('title').lean();
-            if (complaint?.title) complaintTitle = complaint.title;
-          }
-          await sendComplaintStatusEmail(
-            user.email,
-            user.fullName,
-            complaintTitle,
-            normalizedStatus,
-            targetComplaintId
-          );
-        })
-        .catch((emailErr) => {
-          // Email send failure should not block notification
-        });
-    }
+    // Send personalized notification email using new centralized function
+    Promise.resolve()
+      .then(async () => {
+        const user = await User.findById(normalizedRecipientId)
+          .populate('municipality', 'name')
+          .populate('department', 'name')
+          .select('email fullName firstName role municipality department')
+          .lean();
+        if (!user?.email) return;
+        
+        let complaintTitle = 'Complaint';
+        let complaint = null;
+        if (targetComplaintId) {
+          const Complaint = require('../models/Complaint');
+          complaint = await Complaint.findById(targetComplaintId).select('title').lean();
+          if (complaint?.title) complaintTitle = complaint.title;
+        }
+        await require('../utils/mailer').sendNotificationEmail(
+          type.toLowerCase(),
+          user,
+          { title: complaintTitle, _id: targetComplaintId },
+          {}
+        );
+      })
+      .catch((emailErr) => {
+        // Email failure non-blocking
+        console.error('[notification] Email failed:', emailErr.message);
+      });
     
     return notification;
   } catch (err) {
@@ -139,8 +133,13 @@ const notifyUsersByMunicipality = async (io, municipalityId, data) => {
  */
 const notifyManagersByDepartment = async (io, departmentId, data) => {
   const User = require('../models/User');
+  // Normalize: handle embedded subdocument {id, name} or plain ObjectId/string
+  let deptId = departmentId;
+  if (deptId && typeof deptId === 'object' && !(deptId instanceof require('mongoose').Types.ObjectId)) {
+    deptId = deptId.id || deptId._id || deptId;
+  }
   const users = await User.find({ 
-    department: departmentId,
+    department: deptId,
     role: 'DEPARTMENT_MANAGER'
   }).select('_id').lean();
   const userIds = users.map(u => u._id.toString());
@@ -161,41 +160,51 @@ const notifyTechnicians = async (io, complaintId, data) => {
 
 /**
  * Notify citizen about complaint status change
- * Uses status keys for i18n translation on frontend
+ * @param {*} io - Socket.IO instance
+ * @param {string} citizenId - Citizen user ID
+ * @param {string} complaintId - Complaint ID
+ * @param {string} status - New status (VALIDATED, REJECTED, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED)
+ * @param {Object} extras - Optional extras: { reason, departmentName }
  */
-const notifyCitizenStatusChange = async (io, citizenId, complaintId, status) => {
-  // Use status keys for i18n translation on frontend
-  const statusKeys = {
-    'VALIDATED': 'notification.status.validated',
-    'REJECTED': 'notification.status.rejected',
-    'ASSIGNED': 'notification.status.assigned',
-    'IN_PROGRESS': 'notification.status.inProgress',
-    'RESOLVED': 'notification.status.resolved',
-    'CLOSED': 'notification.status.closed'
-  };
-  
-  const statusMessages = {
-    'VALIDATED': 'notification.status.validated.desc',
-    'REJECTED': 'notification.status.rejected.desc',
-    'ASSIGNED': 'notification.status.assigned.desc',
-    'IN_PROGRESS': 'notification.status.inProgress.desc',
-    'RESOLVED': 'notification.status.resolved.desc',
-    'CLOSED': 'notification.status.closed.desc'
+const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, extras = {}) => {
+  // Fetch complaint title for personalized message
+  let complaintTitle = 'your complaint';
+  try {
+    const Complaint = require('../models/Complaint');
+    const complaint = await Complaint.findById(complaintId).select('title').lean();
+    if (complaint?.title) complaintTitle = complaint.title;
+  } catch (e) { /* non-blocking */ }
+
+  const deptName = extras.departmentName || 'a department';
+  const reason = extras.reason ? ` Reason: ${extras.reason}.` : '';
+
+  const titleMap = {
+    'VALIDATED': 'Complaint Validated',
+    'REJECTED': 'Complaint Rejected',
+    'ASSIGNED': 'Complaint Assigned',
+    'IN_PROGRESS': 'Work Started',
+    'RESOLVED': 'Complaint Resolved',
+    'CLOSED': 'Complaint Closed',
   };
 
-  const titleKey = statusKeys[status] || `notification.status.${status}`;
-  const messageKey = statusMessages[status] || `notification.status.${status}.desc`;
+  const messageMap = {
+    'VALIDATED': `Your complaint '${complaintTitle}' has been validated and is now visible publicly.`,
+    'REJECTED': `Your complaint '${complaintTitle}' was rejected.${reason}`,
+    'ASSIGNED': `Your complaint '${complaintTitle}' has been assigned to ${deptName}.`,
+    'IN_PROGRESS': `Work has started on your complaint '${complaintTitle}'.`,
+    'RESOLVED': `Your complaint '${complaintTitle}' has been resolved! Please confirm if the issue is fixed.`,
+    'CLOSED': `Your complaint '${complaintTitle}' has been officially closed.`,
+  };
 
-  // Send real-time notification
-  const notif = await sendNotification(io, citizenId, {
+  const title = titleMap[status] || `Status: ${status}`;
+  const message = messageMap[status] || `Your complaint '${complaintTitle}' status has been updated to ${status}.`;
+
+  return sendNotification(io, citizenId, {
     type: status.toLowerCase(),
-    title: titleKey, // Use key like 'notification.status.validated'
-    message: messageKey, // Use key like 'notification.status.validated.desc'
-    complaintId
+    title,
+    message,
+    complaintId,
   });
-
-  return notif;
-  
 };
 
 module.exports = {

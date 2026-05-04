@@ -7,6 +7,10 @@ import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/ai_service.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
+import 'package:smart_city_app/widgets/charts.dart';
+import 'package:smart_city_app/widgets/municipality_overview.dart';
+import 'package:smart_city_app/widgets/municipality_overview.dart';
+import 'package:smart_city_app/widgets/charts.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -21,6 +25,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, int> _stats = {};
+  Map<String, int> _categoryStats = {};
+  Map<String, int> _monthlyTrends = {};
   List<Complaint> _recentComplaints = [];
   List<Complaint> _resolvedComplaints = [];
   Timer? _refreshTimer;
@@ -43,6 +49,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       });
     }
     try {
+      // Load citizen stats
       final statsData = await _complaintService.getCitizenStats();
       if (mounted) {
         setState(() {
@@ -57,8 +64,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           };
         });
       }
+
+      // Load complaints
       final complaints = await _complaintService.getMyComplaints(limit: 20);
-      // Filter out archived statuses (CLOSED, REJECTED) from active dashboard
       final activeComplaints = complaints
           .where((c) => c.status != 'CLOSED' && c.status != 'REJECTED')
           .toList();
@@ -70,8 +78,128 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         setState(() {
           _recentComplaints = activeComplaints.take(6).toList();
           _resolvedComplaints = resolved;
-          _isLoading = false;
         });
+      }
+
+      // Load category stats for chart
+      try {
+        final api = ApiClient();
+        final catResponse = await api.get('/public/stats/by-category?period=month');
+        if (catResponse is Map && catResponse['data'] is Map) {
+          final catData = catResponse['data'] as Map;
+          final categories = <String, int>{};
+          catData.forEach((key, value) {
+            if (value is Map) {
+              categories[key] = value['total'] ?? 0;
+            }
+          });
+          if (mounted) {
+            setState(() {
+              _categoryStats = categories;
+            });
+          }
+        }
+
+        // Load monthly trends
+        final trendResponse = await api.get('/public/stats/monthly-trends?months=6');
+        if (trendResponse is List) {
+          final trends = <String, int>{};
+          for (var item in trendResponse) {
+            if (item is Map) {
+              final month = item['month']?.toString() ?? '';
+              final submitted = item['submitted'] ?? 0;
+              trends[month] = submitted as int;
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _monthlyTrends = trends;
+            });
+          }
+        }
+      } catch (e) {
+        // Charts data is optional - continue without it
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
+    }
+  }
+    try {
+      // Load citizen stats
+      final statsData = await _complaintService.getCitizenStats();
+      if (mounted) {
+        setState(() {
+          _stats = {
+            'total': (statsData['total'] ?? 0) as int,
+            'submitted': (statsData['submitted'] ?? 0) as int,
+            'pending': (statsData['pending'] ?? 0) as int,
+            'inProgress': (statsData['inProgress'] ?? 0) as int,
+            'resolved': (statsData['resolved'] ?? 0) as int,
+            'closed': (statsData['closed'] ?? 0) as int,
+            'overdue': (statsData['overdue'] ?? 0) as int,
+          };
+        });
+      }
+
+      // Load complaints
+      final complaints = await _complaintService.getMyComplaints(limit: 20);
+      final activeComplaints = complaints
+          .where((c) => c.status != 'CLOSED' && c.status != 'REJECTED')
+          .toList();
+      final resolved = complaints
+          .where((c) => c.status == 'RESOLVED')
+          .take(6)
+          .toList();
+      if (mounted) {
+        setState(() {
+          _recentComplaints = activeComplaints.take(6).toList();
+          _resolvedComplaints = resolved;
+        });
+      }
+
+      // Load category stats for chart
+      try {
+        final api = ApiClient();
+        final catResponse = await api.get('/public/stats/by-category?period=month');
+        if (catResponse is Map && catResponse['data'] is Map) {
+          final catData = catResponse['data'] as Map;
+          final categories = <String, int>{};
+          catData.forEach((key, value) {
+            if (value is Map) {
+              categories[key] = value['total'] ?? 0;
+            }
+          });
+          if (mounted) {
+            setState(() {
+              _categoryStats = categories;
+            });
+          }
+        }
+
+        // Load monthly trends
+        final trendResponse = await api.get('/public/stats/monthly-trends?months=6');
+        if (trendResponse is List) {
+          final trends = <String, int>{};
+          for (var item in trendResponse) {
+            if (item is Map) {
+              final month = item['month']?.toString() ?? '';
+              final submitted = item['submitted'] ?? 0;
+              trends[month] = submitted as int;
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _monthlyTrends = trends;
+            });
+          }
+        }
+      } catch (e) {
+        // Charts data is optional - continue without it
       }
     } catch (e) {
       if (mounted) {
@@ -214,30 +342,60 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ],
                   ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStatsGrid(),
-                          const SizedBox(height: 24),
-                          _buildQuickActions(),
-                          const SizedBox(height: 24),
-                          if (_resolvedComplaints.isNotEmpty) ...[
-                            _buildResolvedComplaints(),
-                            const SizedBox(height: 24),
-                          ],
-                          _buildRecentComplaints(),
-                          const SizedBox(height: 32),
-                        ],
-                      ),
-                    ),
-                  ),
+                   SliverToBoxAdapter(
+                     child: Padding(
+                       padding: const EdgeInsets.all(16),
+                       child: Column(
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: [
+                           _buildStatsGrid(),
+                           const SizedBox(height: 24),
+                           _buildQuickActions(),
+                           const SizedBox(height: 24),
+                           // Charts section
+                           if (_categoryStats.isNotEmpty) ...[
+                             CategoryBarChart(data: _categoryStats),
+                             const SizedBox(height: 16),
+                           ],
+                           if (_monthlyTrends.isNotEmpty) ...[
+                             MonthlyLineChart(data: _monthlyTrends),
+                             const SizedBox(height: 16),
+                           ],
+                           // Municipality Overview (citizen only)
+                           if (role == 'CITIZEN') ...[
+                             MunicipalityOverview(
+                               role: role,
+                               userMunicipality: user?.municipalityName,
+                               userGovernorate: user?.governorate,
+                             ),
+                             const SizedBox(height: 24),
+                           ],
+                           if (_resolvedComplaints.isNotEmpty) ...[
+                             _buildResolvedComplaints(),
+                             const SizedBox(height: 24),
+                           ],
+                           _buildRecentComplaints(),
+                           const SizedBox(height: 32),
+                         ],
+                       ),
+                     ),
+                   ),
+                             const SizedBox(height: 24),
+                           ],
+                           if (_resolvedComplaints.isNotEmpty) ...[
+                             _buildResolvedComplaints(),
+                             const SizedBox(height: 24),
+                           ],
+                           _buildRecentComplaints(),
+                           const SizedBox(height: 32),
+                         ],
+                       ),
+                     ),
+                   ),
                 ],
               ),
             ),
-    );
+    )
   }
 
   Widget _buildStatsGrid() {

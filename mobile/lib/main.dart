@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
-import 'package:smart_city_app/core/constants/strings.dart';
+import 'package:smart_city_app/core/localization/app_localizations.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
+import 'package:smart_city_app/providers/locale_provider.dart';
 import 'package:smart_city_app/screens/auth/login_screen.dart';
 import 'package:smart_city_app/screens/auth/register_screen.dart';
 import 'package:smart_city_app/screens/auth/forgot_password_screen.dart';
@@ -55,6 +56,7 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final user = authState.user;
+    final locale = ref.watch(localeProvider);
 
     // Route guard: redirect to login if not authenticated
     // and to role-based home if authenticated
@@ -66,10 +68,31 @@ class MyApp extends ConsumerWidget {
     }
 
     return MaterialApp(
-      title: AppStrings.appName,
-      theme: _buildTheme(),
+      title: 'Smart City Tunisia',
       debugShowCheckedModeBanner: false,
       initialRoute: initialRoute,
+      locale: locale.currentLocale,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('fr', 'FR'),
+        Locale('en', 'US'),
+        Locale('ar', 'SA'),
+      ],
+      localeResolutionCallback: (deviceLocale, supportedLocales) {
+        if (deviceLocale == null) return const Locale('fr');
+        for (var supported in supportedLocales) {
+          if (supported.languageCode == deviceLocale.languageCode) {
+            return supported;
+          }
+        }
+        return const Locale('fr');
+      },
+      theme: _buildTheme(),
       routes: {
         // Auth
         AppRoutes.login: (_) => const LoginScreen(),

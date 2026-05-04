@@ -1,86 +1,78 @@
+/**
+ * Socket.IO client for real-time notifications
+ * Connects to the backend Socket.IO server and handles:
+ * - notification:new events
+ * - notification events (legacy)
+ */
+
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
-let currentToken: string | null = null;
+const notificationCallbacks: Array<(notification: unknown) => void> = [];
 
-const getSocketUrl = () =>
-  process.env.NEXT_PUBLIC_SOCKET_URL || 
-  (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
-
-export const initSocket = (token?: string): Socket => {
-  // Re-create socket if token changes (e.g. after login)
-  if (socket && socket.connected && token === currentToken) {
-    return socket;
-  }
-
-  // Disconnect stale socket before creating a new one
+export const connectSocket = (userId: string, token?: string): void => {
+  // If socket exists but token changed or userId changed, disconnect and reconnect
   if (socket) {
+    const currentToken = (socket.auth as { token?: string })?.token;
+    if (socket.connected && currentToken === token) {
+      return; // already connected with same token
+    }
+    // Token changed or disconnected — tear down old socket
     socket.disconnect();
     socket = null;
   }
 
-  currentToken = token ?? null;
+  const serverUrl =
+    process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ||
+    "http://localhost:5000";
 
-  socket = io(getSocketUrl(), {
+  socket = io(serverUrl, {
+    auth: token ? { token } : {},
     transports: ["websocket", "polling"],
-    autoConnect: false,
-    withCredentials: true,
-    auth: token ? { token } : undefined,
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 2000,
+  });
+
+  socket.on("connect", () => {
+    if (socket && userId) {
+      socket.emit("join", `user:${userId}`);
+    }
+  });
+
+  // Handle both event names the backend emits
+  socket.on("notification:new", (notification: unknown) => {
+    notificationCallbacks.forEach((cb) => cb(notification));
+  });
+
+  socket.on("notification", (notification: unknown) => {
+    notificationCallbacks.forEach((cb) => cb(notification));
   });
 
   socket.on("disconnect", () => {
-    // no-op
+    // Will auto-reconnect
   });
 
-  socket.on("connect_error", (error) => {
-    // Socket connection errors handled internally
+  socket.on("connect_error", () => {
+    // Silent fail – polling will cover real-time
   });
-
-  return socket;
-};
-
-export const getSocket = (): Socket | null => socket;
-
-export const connectSocket = (userId: string, token?: string): void => {
-  if (!socket || currentToken !== (token ?? null)) {
-    socket = initSocket(token);
-  }
-
-  const joinRoom = () => {
-    socket?.emit("join", `user:${userId}`);
-  };
-
-  if (!socket.connected) {
-    socket.connect();
-    socket.once("connect", joinRoom);
-  } else {
-    joinRoom();
-  }
 };
 
 export const disconnectSocket = (): void => {
-  if (socket?.connected) {
+  if (socket) {
     socket.disconnect();
+    socket = null;
   }
-  socket = null;
-  currentToken = null;
 };
 
 export const subscribeToNotifications = (
   callback: (notification: unknown) => void
 ): (() => void) => {
-  // Reuse existing socket or create new one with stored token
-  if (!socket) {
-    socket = initSocket(currentToken ?? undefined);
-  }
-
-  if (!socket.connected) {
-    socket.connect();
-  }
-
-  socket.on("notification:new", callback);
-
+  notificationCallbacks.push(callback);
   return () => {
-    socket?.off("notification:new", callback);
+    const idx = notificationCallbacks.indexOf(callback);
+    if (idx > -1) notificationCallbacks.splice(idx, 1);
   };
 };
+
+export const getSocket = (): Socket | null => socket;

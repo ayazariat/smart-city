@@ -3,6 +3,8 @@ const User = require("../models/User");
 const RepairTeam = require("../models/RepairTeam");
 const Department = require("../models/Department");
 const notificationService = require("../services/notification.service");
+const { sendAssignmentEmails } = require("../utils/mailer");
+const emailTemplates = require("../utils/emailTemplates.js");
 
 const MANAGER_ACTIVE_STATUSES = [
   "VALIDATED",
@@ -109,7 +111,7 @@ class ManagerController {
     }
   }
 
-  async assignTechnician(req, res) {
+async assignTechnician(req, res) {
     try {
       const { technicianId } = req.body;
       
@@ -129,6 +131,16 @@ class ManagerController {
         return res.status(404).json({ success: false, message: "Technician not found" });
       }
 
+      const department = await getManagerDepartment(req.user.userId);
+      
+      // Set assignedDepartment {id, name}
+      if (department) {
+        complaint.assignedDepartment = {
+          id: department._id,
+          name: department.name
+        };
+      }
+
       complaint.assignedTo = technicianId;
       complaint.status = "ASSIGNED";
       
@@ -137,35 +149,43 @@ class ManagerController {
         status: "ASSIGNED",
         updatedBy: req.user.userId,
         updatedAt: new Date(),
-        notes: `Assigned to technician`
+        notes: `Assigned to technician ${technician.fullName}`
       });
       
       await complaint.save();
 
       const io = req.app?.get?.('io');
-      try {
-        await notificationService.sendNotification(io, technicianId, {
-          type: "assigned",
-          title: "notification.status.assigned",
-          message: "notification.status.assigned.desc",
+      
+      // Personalized notification to technician
+      await notificationService.sendNotification(io, technicianId, {
+        type: "department_assignment",
+        title: "New complaint assigned to your department",
+        message: `A new complaint "${complaint.title}" has been assigned to your department (${department?.name}). Please review it.`,
+        complaintId: complaint._id,
+      });
+
+      // Notification to citizen
+      if (complaint.createdBy) {
+        await notificationService.sendNotification(io, complaint.createdBy, {
+          type: "department_assignment",
+          title: "Your complaint has been assigned",
+          message: `Your complaint "${complaint.title}" has been assigned to the ${department?.name} team. We are on it!`,
           complaintId: complaint._id,
         });
-      } catch (notifError) {
-        console.error("Failed to notify technician:", notifError);
       }
 
-      if (complaint.createdBy) {
-        try {
-          await notificationService.sendNotification(io, complaint.createdBy, {
-            type: "assigned",
-            title: "notification.status.assigned",
-            message: "notification.status.assigned.desc",
-            complaintId: complaint._id,
-          });
-        } catch (notifError) {
-          console.error("Failed to notify citizen:", notifError);
-        }
-      }
+      // Get technician & citizen emails
+      const [technicianUser, citizenUser] = await Promise.all([
+        User.findById(technicianId).select('email').lean(),
+        complaint.createdBy ? User.findById(complaint.createdBy).select('email').lean() : null
+      ]);
+      
+      const technicianEmails = technicianUser?.email ? [technicianUser.email] : [];
+      const managerUser = { email: req.user.email, fullName: req.user.fullName };
+
+      // Trigger emails (non-blocking)
+      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser)
+        .catch(err => console.error('Assignment emails failed:', err));
 
       res.json({
         success: true,
@@ -233,8 +253,8 @@ class ManagerController {
       try {
         await notificationService.sendNotification(io, technicianId, {
           type: "assigned",
-          title: "notification.status.assigned",
-          message: "notification.status.assigned.desc",
+          title: "New Complaint Assigned",
+          message: `Complaint '${complaint.title}' has been assigned to your team.`,
           complaintId: complaint._id,
         });
       } catch (notifError) {
@@ -243,10 +263,12 @@ class ManagerController {
 
       if (complaint.createdBy) {
         try {
+          const dept = await getManagerDepartment(req.user.userId);
+          const deptName = dept?.name || 'a department';
           await notificationService.sendNotification(io, complaint.createdBy, {
-            type: "technician_reassigned",
-            title: "notification.status.assigned",
-            message: "notification.status.assigned.desc",
+            type: "assigned",
+            title: "Complaint Reassigned",
+            message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -331,8 +353,8 @@ class ManagerController {
         try {
           await notificationService.sendNotification(io, tech._id, {
             type: "assigned",
-            title: "notification.status.assigned",
-            message: "notification.status.assigned.desc",
+            title: "New Complaint Assigned",
+            message: `Complaint '${complaint.title}' has been assigned to your team.`,
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -342,10 +364,12 @@ class ManagerController {
 
       if (complaint.createdBy) {
         try {
+          const dept = await getManagerDepartment(req.user.userId);
+          const deptName = dept?.name || 'a department';
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "assigned",
-            title: "notification.status.assigned",
-            message: "notification.status.assigned.desc",
+            title: "Complaint Assigned",
+            message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
             complaintId: complaint._id,
           });
         } catch (notifError) {
@@ -416,6 +440,33 @@ class ManagerController {
       });
       
       await complaint.save();
+
+      // Notify municipal agents about the priority change
+      const io = req.app?.get?.('io');
+      if (io) {
+        try {
+          const managerUser = await User.findById(req.user.userId).select('fullName').lean();
+          const managerName = managerUser?.fullName || 'Manager';
+          const newPriority = urgency || complaint.urgency;
+          if (complaint.municipalityName) {
+            const agents = await User.find({
+              role: 'MUNICIPAL_AGENT',
+              municipalityName: { $regex: new RegExp(`^${complaint.municipalityName}$`, 'i') }
+            }).select('_id').lean();
+            if (agents.length > 0) {
+              const notifSvc = require('../services/notification.service');
+              await notifSvc.sendNotificationToMultiple(io, agents.map(a => a._id.toString()), {
+                type: 'priority_changed',
+                title: 'Priority Updated',
+                message: `Priority for complaint '${complaint.title}' was updated to ${newPriority} by the manager.`,
+                complaintId: complaint._id,
+              });
+            }
+          }
+        } catch (notifErr) {
+          console.error('Priority change notification failed:', notifErr.message);
+        }
+      }
 
       res.json({
         success: true,
@@ -794,9 +845,9 @@ class ManagerController {
 
       if (complaint.createdBy) {
         await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
-          type: "assigned",
-          title: "notification.status.assigned",
-          message: "notification.status.assigned.desc",
+          type: "validated",
+          title: "Complaint Validated",
+          message: `Your complaint '${complaint.title}' has been validated and is now visible publicly.`,
           complaintId: complaint._id,
         });
       }
@@ -841,8 +892,8 @@ class ManagerController {
       if (complaint.createdBy) {
         await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
           type: "rejected",
-          title: "notification.status.rejected",
-          message: "notification.status.rejected.desc",
+          title: "Complaint Rejected",
+          message: `Your complaint '${complaint.title}' was rejected. Reason: ${reason}.`,
           complaintId: complaint._id,
         });
       }

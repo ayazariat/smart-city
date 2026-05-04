@@ -142,8 +142,48 @@ async function recalculateSLA(complaint) {
   });
 }
 
+/**
+ * Predict department from category + other factors
+ */
+async function predictDepartment(category, description = '', municipality = '') {
+  try {
+    // Static mapping from categories to departments (based on seed data)
+    const categoryToDepartment = {
+      'waste': { id: '671f1b4a8f4a5c4b4d2b4f1a', name: 'Déchets et Propreté' },
+      'roads': { id: '671f1b4a8f4a5c4b4d2b4f1b', name: 'Routes et Circulation' },
+      'lighting': { id: '671f1b4a8f4a5c4b4d2b4f1c', name: 'Éclairage public' },
+      'water': { id: '671f1b4a8f4a5c4b4d2b4f1d', name: 'Eau et Drainage' },
+      'safety': { id: '671f1b4a8f4a5c4b4d2b4f1e', name: 'Sécurité et Bruit' },
+      'property': { id: '671f1b4a8f4a5c4b4d2b4f1f', name: 'Propriété publique' },
+      'parks': { id: '671f1b4a8f4a5c4b4d2b4f20', name: 'Parcs et Espaces verts' },
+      'other': { id: '671f1b4a8f4a5c4b4d2b4f21', name: 'Services Généraux' }
+    };
+
+    const dept = categoryToDepartment[category] || categoryToDepartment['other'];
+    
+    // Boost confidence for clear category match
+    let confidence = 0.95;
+    if (category === 'other') confidence = 0.7;
+
+    return {
+      suggestedDepartment: dept.id,
+      departmentName: dept.name,
+      confidence: Math.round(confidence * 100),
+      message: `Matched category "${category}" to ${dept.name}`
+    };
+  } catch (error) {
+    return {
+      suggestedDepartment: null,
+      departmentName: 'Services Généraux',
+      confidence: 50,
+      message: 'Default department suggested'
+    };
+  }
+}
+
 module.exports = {
   predictCategory,
+  predictDepartment,
   extractKeywords,
   calculateSLA,
   processNewComplaint,

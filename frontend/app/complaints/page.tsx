@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { ComplaintCard } from "@/components/ui/ComplaintCard";
 import { useRouter } from "next/navigation";
 import {
   MapPin,
@@ -213,11 +214,16 @@ export default function MunicipalityComplaintsPage() {
               const isOwnComplaint = Boolean(currentUserId && getOwnerId(complaint) === currentUserId);
 
               return (
-              <div
-                key={complaint._id}
-                className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer"
-                onClick={() => router.push(`/dashboard/complaints/${complaint._id}`)}
-              >
+                <div
+                  key={complaint._id}
+                  className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group cursor-pointer"
+                  onClick={() => router.push(`/dashboard/complaints/${complaint._id}`)}
+                >
+                  <ComplaintCard
+                    complaint={complaint as any}
+                    actions={null}
+                    showPriority={false}
+                  />
                 {/* Image */}
                 <div className="relative h-32 bg-gradient-to-br from-slate-100 to-slate-50">
                   {complaint.media?.[0]?.url ? (

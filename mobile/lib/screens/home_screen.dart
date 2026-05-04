@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:smart_city_app/core/constants/colors.dart';
+import 'package:smart_city_app/widgets/language_picker.dart';
 import 'package:smart_city_app/screens/complaints_screen.dart';
-import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/screens/profile_screen.dart';
-import 'package:smart_city_app/screens/transparency_screen.dart';
 import 'package:smart_city_app/screens/notifications_screen.dart';
 import 'package:smart_city_app/screens/archive_screen.dart';
 import 'package:smart_city_app/screens/dashboard_screen.dart'
@@ -85,17 +84,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         NavigationDestination(
           icon: Icon(Icons.task_outlined),
           selectedIcon: Icon(Icons.task),
-          label: 'My Tasks',
+          label: 'Tasks',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.map_outlined),
+          selectedIcon: Icon(Icons.map),
+          label: 'Map',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.notifications_outlined),
+          selectedIcon: Icon(Icons.notifications),
+          label: 'Notifications',
         ),
         NavigationDestination(
           icon: Icon(Icons.archive_outlined),
           selectedIcon: Icon(Icons.archive),
           label: 'Archive',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.public_outlined),
-          selectedIcon: Icon(Icons.public),
-          label: 'Public',
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline),
@@ -113,22 +117,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       NavigationDestination(
         icon: Icon(Icons.list_alt_outlined),
         selectedIcon: Icon(Icons.list_alt),
-        label: 'My Complaints',
+        label: 'Complaints',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.map_outlined),
+        selectedIcon: Icon(Icons.map),
+        label: 'Map',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.notifications_outlined),
+        selectedIcon: Icon(Icons.notifications),
+        label: 'Notifications',
       ),
       NavigationDestination(
         icon: Icon(Icons.archive_outlined),
         selectedIcon: Icon(Icons.archive),
         label: 'Archive',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.add_circle_outline),
-        selectedIcon: Icon(Icons.add_circle),
-        label: 'Report',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.public_outlined),
-        selectedIcon: Icon(Icons.public),
-        label: 'Public',
       ),
       NavigationDestination(
         icon: Icon(Icons.person_outline),
@@ -146,17 +150,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         case 1:
           return const TechnicianTasksScreen();
         case 2:
-          return const ArchiveScreen();
+          return const HeatmapScreen();
         case 3:
-          return const TransparencyScreen();
+          return const NotificationsScreen();
         case 4:
+          return const ArchiveScreen();
+        case 5:
           return ProfileScreen(
             onLogout: widget.onLogout,
             userName: widget.userName,
             userRole: widget.userRole,
           );
         default:
-          return const TechnicianTasksScreen();
+          return const citizen_dashboard.DashboardScreen();
       }
     }
     switch (_selectedIndex) {
@@ -165,11 +171,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case 1:
         return ComplaintsScreen(onLogout: widget.onLogout);
       case 2:
-        return const ArchiveScreen();
+        return const HeatmapScreen();
       case 3:
-        return NewComplaintScreen(onComplaintSubmitted: () {}, onBack: () {});
+        return const NotificationsScreen();
       case 4:
-        return const TransparencyScreen();
+        return const ArchiveScreen();
       case 5:
         return ProfileScreen(
           onLogout: widget.onLogout,
@@ -186,17 +192,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return [
         'Dashboard',
         'My Tasks',
+        'Map',
+        'Notifications',
         'Archive',
-        'Public',
         'Profile',
       ][_selectedIndex];
     }
     return [
       'Dashboard',
       'My Complaints',
+      'Map',
+      'Notifications',
       'Archive',
-      'New Report',
-      'Public',
       'Profile',
     ][_selectedIndex];
   }
@@ -678,6 +685,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         actions: [
+          const LanguagePicker(),
           IconButton(
             icon: Icon(
               Theme.of(context).brightness == Brightness.dark

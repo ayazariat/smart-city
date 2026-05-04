@@ -17,4 +17,9 @@ router.post("/technicians/:id/message", authenticate, authorize("DEPARTMENT_MANA
 router.post("/technicians/:id/warning", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.sendWarning(req, res));
 router.put("/complaints/:id/reassign", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => managerController.reassign(req, res));
 
+// Resolution approval/rejection — Manager and Admin only
+const agentController = require("../controllers/agentController");
+router.post("/complaints/:id/approve-resolution", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => agentController.approveResolution(req, res));
+router.post("/complaints/:id/reject-resolution", authenticate, authorize("DEPARTMENT_MANAGER", "ADMIN"), (req, res) => agentController.rejectResolution(req, res));
+
 module.exports = router;

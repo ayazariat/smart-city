@@ -28,7 +28,7 @@ import {
   Globe
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { categoryLabels, statusConfig as sharedStatusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { statusConfig as sharedStatusConfig, getComplaintIdDisplay, getCategoryLabel } from "@/lib/complaints";
 import { apiClient } from "@/services/api.client";
 import { getPhotoUrl } from "@/lib/photos";
 import ThemeToggle from "@/components/ui/ThemeToggle";
@@ -464,7 +464,7 @@ export default function PublicComplaintDetailPage() {
             <div className="bg-white rounded-2xl shadow-md p-6">
               <div className="flex flex-wrap gap-2 mb-4">
                 <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
-                  {categoryLabels[complaint.category] || complaint.category}
+                  {getCategoryLabel(complaint.category)}
                 </span>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
                   {statusInfo.label}
@@ -522,9 +522,9 @@ export default function PublicComplaintDetailPage() {
                     })()}
                   </p>
                 )}
-                {complaint.proofPhotos && complaint.proofPhotos.length > 0 && (
+{(complaint.proofPhotos || [])?.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
-                    {complaint.proofPhotos.map((photo, idx) => {
+{(complaint.proofPhotos || []).map((photo, idx) => {
                       const proofUrl = resolveMediaUrl(photo.url);
                       return proofUrl ? (
                         <img key={idx} src={proofUrl} alt="Resolution proof" className="w-full h-32 object-cover rounded-lg" />

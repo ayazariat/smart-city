@@ -181,7 +181,7 @@ class AuthController {
       try {
         await sendMagicLinkEmail(normalizedEmail, pendingUser._id.toString(), magicToken, fullName);
       } catch (emailError) {
-        console.error("Failed to send magic link email:", emailError);
+        // Silent fail: email non-critical for registration
         return res.status(500).json({ message: "Failed to send verification email" });
       }
 
@@ -189,7 +189,6 @@ class AuthController {
         message: "Registration successful! Please check your email to verify your account.",
       });
     } catch (error) {
-      console.error("Registration error:", error);
       res.status(500).json({ message: "Server error during registration" });
     }
   }
@@ -247,7 +246,6 @@ class AuthController {
 
       res.json({ message: "Account verified successfully! You can now log in." });
     } catch (error) {
-      console.error("Verification error:", error);
       res.status(500).json({ message: "Server error during verification" });
     }
   }

@@ -5,14 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FileText, Plus, Sparkles, Shield, Loader2, BarChart3, MapPin, CheckCircle, ArrowRight, TrendingUp, AlertTriangle, MessageSquare } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import RecentActivities from "@/components/dashboard/RecentActivities";
 import MunicipalityOverview from "@/components/dashboard/MunicipalityOverview";
+
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
 import { managerService } from "@/services/manager.service";
 import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
-import { categoryLabels } from "@/lib/complaints";
+import { getCategoryLabel } from "@/lib/categories";
 import { getTrendAlerts, confirmComplaint } from "@/services/complaint.service";
 import TrendForecastChart from "@/components/dashboard/TrendForecastChart";
 import DuplicateStatsCard from "@/components/dashboard/DuplicateStatsCard";
@@ -500,13 +500,8 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Recent Activities — Before statistics */}
-        <div className="mb-8">
-          <RecentActivities
-            role={user?.role || "CITIZEN"}
-            maxItems={8}
-          />
-        </div>
+        {/* Notifications now only in Topbar bell per task requirements */}
+
 
         {/* Statistics Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
@@ -761,23 +756,21 @@ function DashboardContent() {
                   
                   // Category colors
                   const categoryColors: Record<string, string> = {
-                    ROAD: "from-gray-600 to-gray-700",
-                    LIGHTING: "from-yellow-500 to-yellow-600",
-                    WASTE: "from-green-500 to-green-600",
-                    WATER: "from-blue-500 to-blue-600",
-                    SAFETY: "from-red-500 to-red-600",
-                    PUBLIC_PROPERTY: "from-purple-500 to-purple-600",
-                    GREEN_SPACE: "from-emerald-500 to-emerald-600",
-                    BUILDING: "from-amber-500 to-amber-600",
-                    NOISE: "from-indigo-500 to-indigo-600",
-                    OTHER: "from-slate-500 to-slate-600",
+                    waste: "from-green-500 to-green-600",
+                    roads: "from-gray-600 to-gray-700",
+                    lighting: "from-yellow-500 to-yellow-600",
+                    water: "from-blue-500 to-blue-600",
+                    safety: "from-red-500 to-red-600",
+                    property: "from-purple-500 to-purple-600",
+                    parks: "from-emerald-500 to-emerald-600",
+                    other: "from-slate-500 to-slate-600",
                   };
                   const colorClass = categoryColors[cat] || "from-primary to-primary-700";
                   
                   return (
                     <div key={cat} className="flex items-center gap-3">
                       <div className="w-40 text-sm font-medium text-slate-700 truncate">
-                        {categoryLabels[cat] || cat}
+                        {getCategoryLabel(cat)}
                       </div>
                       <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
                         <div 
@@ -841,14 +834,12 @@ function DashboardContent() {
 
         {/* AI Insight Widgets — 7-Day Forecast + Duplicate Stats, right after stats/trend alerts */}
         {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && (
-          <div className={`grid grid-cols-1 ${(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") ? "lg:grid-cols-2" : ""} gap-6 mt-6`}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             <TrendForecastChart
               municipality={user?.municipalityName || (typeof user?.municipality === "object" ? user?.municipality?.name : "") || ""}
               category=""
             />
-            {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
-              <DuplicateStatsCard />
-            )}
+            <DuplicateStatsCard />
           </div>
         )}
 

@@ -102,6 +102,6 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Socket.io enabled`);
+  // Server running on http://localhost:${PORT}
+  // Socket.io enabled
 });

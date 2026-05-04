@@ -395,8 +395,8 @@ class ComplaintService {
       'description': description,
       'category': category,
       'municipality': municipality,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
+      'latitude': ?latitude,
+      'longitude': ?longitude,
     });
     return response;
   }

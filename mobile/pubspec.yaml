@@ -47,6 +47,14 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.1
+  intl_utils: ^2.8.4
+
+  # Image caching (already present but ensure usage)
+  cached_network_image: ^3.4.1
+
+  # Maps (already present)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
 
   # Utils
   uuid: ^4.5.1

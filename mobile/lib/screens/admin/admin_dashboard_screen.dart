@@ -152,7 +152,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${_total} réclamations au total · ${_resolutionRate.toStringAsFixed(0)}% résolues',
+                            '$_total réclamations au total · ${_resolutionRate.toStringAsFixed(0)}% résolues',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,

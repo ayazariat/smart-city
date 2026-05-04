@@ -137,4 +137,20 @@ export const managerService = {
   async rejectComplaint(complaintId: string, reason: string) {
     return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/reject`, { reason });
   },
+
+  /**
+   * Approve technician resolution — Manager/Admin only
+   * Transitions complaint from RESOLVED → CLOSED
+   */
+  async approveResolution(complaintId: string) {
+    return apiClient.post<AssignResponse>(`/manager/complaints/${complaintId}/approve-resolution`, {});
+  },
+
+  /**
+   * Reject technician resolution — Manager/Admin only
+   * Returns complaint to IN_PROGRESS with reason
+   */
+  async rejectResolution(complaintId: string, rejectionReason: string) {
+    return apiClient.post<AssignResponse>(`/manager/complaints/${complaintId}/reject-resolution`, { rejectionReason });
+  },
 };

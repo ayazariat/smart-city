@@ -40,21 +40,21 @@ import { useTranslation } from "react-i18next";
 import type * as LeafletNS from "leaflet";
 
 type CategoryConfig = {
-  value: ComplaintCategory;
+  value: string;
   labelKey: string;
   descKey: string;
   icon: typeof MapPin;
 };
 
 const CATEGORIES: CategoryConfig[] = [
-  { value: "WASTE", labelKey: "categories.waste", descKey: "categories.wasteDesc", icon: Trash2 },
-  { value: "ROAD", labelKey: "categories.roads", descKey: "categories.roadsDesc", icon: TrafficCone },
-  { value: "LIGHTING", labelKey: "categories.lighting", descKey: "categories.lightingDesc", icon: Lightbulb },
-  { value: "WATER", labelKey: "categories.water", descKey: "categories.waterDesc", icon: Droplets },
-  { value: "SAFETY", labelKey: "categories.safety", descKey: "categories.safetyDesc", icon: ShieldAlert },
-  { value: "PUBLIC_PROPERTY", labelKey: "categories.property", descKey: "categories.propertyDesc", icon: Building2 },
-  { value: "GREEN_SPACE", labelKey: "categories.parks", descKey: "categories.parksDesc", icon: TreePine },
-  { value: "OTHER", labelKey: "categories.other", descKey: "categories.otherDesc", icon: Tag },
+  { value: "waste", labelKey: "categories.waste", descKey: "categories.wasteDesc", icon: Trash2 },
+  { value: "roads", labelKey: "categories.roads", descKey: "categories.roadsDesc", icon: TrafficCone },
+  { value: "lighting", labelKey: "categories.lighting", descKey: "categories.lightingDesc", icon: Lightbulb },
+  { value: "water", labelKey: "categories.water", descKey: "categories.waterDesc", icon: Droplets },
+  { value: "safety", labelKey: "categories.safety", descKey: "categories.safetyDesc", icon: ShieldAlert },
+  { value: "property", labelKey: "categories.property", descKey: "categories.propertyDesc", icon: Building2 },
+  { value: "parks", labelKey: "categories.parks", descKey: "categories.parksDesc", icon: TreePine },
+  { value: "other", labelKey: "categories.other", descKey: "categories.otherDesc", icon: Tag },
 ];
 
 const detectCategory = (title: string, description: string): ComplaintCategory => {
@@ -62,7 +62,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
 
   const onlyLetters = desc.replace(/[^a-zàâçéèêëîïôûùüÿñæœ]/gi, "");
   if (onlyLetters.length >= 3 && new Set(onlyLetters).size === 1) {
-    return "OTHER";
+    return "other";
   }
 
   if (
@@ -76,7 +76,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
     desc.includes("saleté") ||
     desc.includes("propreté")
   ) {
-    return "WASTE";
+    return "waste";
   }
 
   if (
@@ -92,7 +92,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
     desc.includes("trafic") ||
     desc.includes("traffic")
   ) {
-    return "ROAD";
+    return "roads";
   }
 
   if (
@@ -104,7 +104,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
     desc.includes("lumière") ||
     desc.includes("éteint")
   ) {
-    return "LIGHTING";
+    return "lighting";
   }
 
   if (
@@ -117,7 +117,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
     desc.includes("fuite") ||
     desc.includes("canalisation")
   ) {
-    return "WATER";
+    return "water";
   }
 
   if (
@@ -130,7 +130,7 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
     desc.includes("tapage") ||
     desc.includes("agression")
   ) {
-    return "SAFETY";
+    return "safety";
   }
 
   if (
@@ -144,9 +144,9 @@ const detectCategory = (title: string, description: string): ComplaintCategory =
     desc.includes("square") ||
     desc.includes("place publique")
   ) {
-    return "PUBLIC_PROPERTY";
+    return "property";
   }
-  return "OTHER";
+  return "other";
 };
 
 export default function NewComplaintPage() {
@@ -240,19 +240,59 @@ export default function NewComplaintPage() {
         // Use AI prediction
         const text = `${title} ${description}`;
         const result = await predictCategory(text);
-        
+
+        // Normalize the predicted value to match the lowercase CATEGORIES values
+        const normalizePrediction = (raw: string): ComplaintCategory | null => {
+          if (!raw) return null;
+          // Strip accents + lowercase for robust matching (handles "déchet" and "dechet" equally)
+          const v = raw
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // remove diacritics
+            .replace(/[^a-z0-9_]/g, "_")
+            .replace(/_+/g, "_")
+            .trim();
+          const map: Record<string, ComplaintCategory> = {
+            // English (as Python returns)
+            waste: "waste", garbage: "waste", trash: "waste",
+            road: "roads", roads: "roads", street: "roads", voirie: "roads", circulation: "roads",
+            lighting: "lighting", light: "lighting",
+            water: "water", flood: "water", drainage: "water",
+            safety: "safety", security: "safety",
+            property: "property", public_property: "property",
+            parks: "parks", park: "parks", green_space: "parks", green: "parks",
+            other: "other",
+            // French accent-stripped
+            dechet: "waste", dechets: "waste", ordure: "waste", ordures: "waste", proprete: "waste",
+            route: "roads", rue: "roads",
+            eclairage: "lighting", lampadaire: "lighting", lumiere: "lighting",
+            eau: "water", inondation: "water", canalisation: "water",
+            securite: "safety", bruit: "safety", danger: "safety",
+            propriete: "property", batiment: "property",
+            parc: "parks", jardin: "parks", espaces_verts: "parks", espace_vert: "parks",
+            autre: "other",
+          };
+          return map[v] ?? null;
+        };
+
         if (result && result.confidence > 0.6) {
-          setAiSuggestedCategory(result.predicted as ComplaintCategory);
-          // Auto-select if confidence > 85%
-          if (result.confidence > 0.85 && !category) {
-            setCategory(result.predicted as ComplaintCategory);
+          const normalized = normalizePrediction(result.predicted);
+          if (normalized) {
+            setAiSuggestedCategory(normalized);
+            // Auto-select if confidence > 85%
+            if (result.confidence > 0.85 && !category) {
+              setCategory(normalized);
+            }
+          } else {
+            const detected = detectCategory(title, description);
+            setAiSuggestedCategory(detected);
           }
         } else {
           // Fallback to keyword detection
           const detected = detectCategory(title, description);
           setAiSuggestedCategory(detected);
         }
-      } catch (err) {
+      } catch {
         // Fallback to keyword detection on error
         const detected = detectCategory(title, description);
         setAiSuggestedCategory(detected);
@@ -1301,49 +1341,59 @@ export default function NewComplaintPage() {
             <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <span className="font-semibold text-amber-800">{t('complaint.duplicateModal.title')}</span>
+                <span className="font-semibold text-amber-800">Plaintes similaires détectées</span>
                 <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-semibold ${
                   duplicateWarning.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'bg-orange-200 text-orange-700' : 'bg-yellow-200 text-yellow-700'
                 }`}>
-                  {duplicateWarning.duplicateLevel.replace('_', ' ')}
+                  {duplicateWarning.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'Duplicate probable' : 'Possible duplicate'}
                 </span>
               </div>
               {duplicateWarning.topMatches.length > 0 && (
                 <div className="space-y-2 mb-3">
                   {duplicateWarning.topMatches.slice(0, 3).map((match, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                    <Link 
+                      key={i}
+                      href={`/dashboard/complaints/${match.complaintId}`}
+                      className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100 hover:border-amber-300 hover:bg-amber-50 transition-colors"
+                    >
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-700 truncate">{match.title}</p>
-                        <p className="text-xs text-slate-500">{match.referenceId} &bull; {match.status}</p>
+                        <p className="text-sm font-medium text-slate-700 truncate pr-2">{match.title || `Problème similaire (${match.category})`}</p>
+                        <p className="text-xs text-slate-500">{match.referenceId} • {match.status}</p>
                       </div>
-                      <span className="text-sm font-semibold text-amber-600 ml-2">
-                        {Math.round(match.overallScore * 100)}%
-                      </span>
-                    </div>
+                      <div className="flex flex-col items-end gap-1 text-right">
+                        <span className="text-sm font-semibold text-amber-600">
+                          {Math.round(match.overallScore * 100)}%
+                        </span>
+                        <span className="text-xs text-primary font-medium hover:underline">
+                          Voir détails →
+                        </span>
+                      </div>
+                    </Link>
                   ))}
                 </div>
               )}
               {duplicateWarning.recommendation && (
                 <p className="text-sm text-amber-700 mb-3">{duplicateWarning.recommendation}</p>
               )}
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setDuplicateWarning(null); }}
-                  className="flex-1 px-4 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors"
+                  onClick={() => setDuplicateWarning(null)}
+                  className="flex-1 px-4 py-2.5 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-semibold hover:bg-amber-50 hover:border-amber-300 transition-all"
                 >
-                  {t('complaint.duplicateModal.cancel')}
+                  Annuler
                 </button>
                 <button
                   type="button"
                   onClick={() => { setDuplicateOverride(true); setDuplicateWarning(null); }}
-                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors"
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-lg text-sm font-semibold shadow-lg hover:from-amber-700 hover:to-amber-800 transition-all"
                 >
-                  {t('complaint.duplicateModal.submitAnyway')}
+                  Soumettre quand même
                 </button>
               </div>
             </div>
           )}
+
 
           {/* Duplicate Checking Spinner */}
           {duplicateChecking && (

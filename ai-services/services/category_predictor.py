@@ -39,43 +39,37 @@ if ANTHROPIC_API_KEY:
         pass
 
 VALID_CATEGORIES = [
-    "ROAD",          
-    "LIGHTING",      
-    "WASTE",         
-    "WATER",        
-    "SAFETY",       
-    "PUBLIC_PROPERTY", 
-    "GREEN_SPACE",  
-    "TRAFFIC",       
-    "URBAN_PLANNING", 
-    "EQUIPMENT",    
-    "AUTRE",         
+    "waste",         
+    "roads",         
+    "lighting",      
+    "water",         
+    "safety",        
+    "property",      
+    "parks",         
+    "other"          
 ]
 
 SYSTEM_PROMPT = """You are an expert in categorizing citizen complaints for a municipal government in Tunisia.
 
 Your task is to analyze complaint descriptions and predict the most appropriate category from this list:
-- ROAD: Road damage, potholes, sidewalks, road signs
-- LIGHTING: Street light outages, broken traffic lights
-- WASTE: Garbage collection, illegal dumping, dirty streets
-- WATER: Water supply issues, leaks, drainage
-- SAFETY: Security concerns, unsafe conditions
-- PUBLIC_PROPERTY: Damaged public buildings, playgrounds
-- GREEN_SPACE: Park maintenance, tree issues
-- TRAFFIC: Traffic signals, road markings, parking
-- URBAN_PLANNING: Construction violations, planning permits
-- EQUIPMENT: Public benches, bus stops, kiosks
-- AUTRE: Something that doesn't fit above
+- waste: Déchets et Propreté (Poubelles, bennes débordantes, décharges illégales, nettoyage des rues)
+- roads: Routes et Circulation (Routes endommagées, trottoirs, stationnement, signalisation)
+- lighting: Éclairage public (Lampadaires cassés, rues sombres, éclairage instable)
+- water: Eau et Drainage (Fuites, zones inondées, canalisations bouchées, eaux usées)
+- safety: Sécurité et Bruit (Situations dangereuses, accidents, bruit, zones à risque)
+- property: Propriété publique (Bâtiments municipaux, mobilier urbain, monuments)
+- parks: Parcs et Espaces verts (Parcs, jardins, arbres, entretien des espaces verts)
+- other: Autre (Tout ce qui ne correspond pas aux autres catégories)
 
 Respond with a JSON object containing:
 {
-  "predicted": "CATEGORY",
+  "predicted": "category_key",
   "confidence": 0.0-1.0,
-  "alternatives": ["CATEGORY1", "CATEGORY2"],
+  "alternatives": ["category1", "category2"],
   "reasoning": "Brief explanation"
 }
 
-Be strict with confidence - only give high confidence (>0.85) when the description is very clear."""
+Use lowercase category keys exactly as shown. Be strict with confidence (>0.85 only for clear matches)."""
 
 
 class PredictionRequest(BaseModel):

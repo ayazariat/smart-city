@@ -201,10 +201,23 @@ class AgentController {
         try {
           await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
             type: "validated",
-            title: "notification.status.validated",
-            message: `notification.status.validated.desc`,
+            title: "Complaint Validated",
+            message: `Your complaint '${complaint.title}' has been validated and is now visible publicly.`,
             complaintId: complaint._id,
           });
+
+          // Send email
+          const mailer = require("../utils/mailer");
+          const citizen = await User.findById(complaint.createdBy).select("fullName email").lean();
+          if (citizen && citizen.email) {
+            await mailer.sendComplaintStatusEmail(
+              citizen.email,
+              citizen.fullName,
+              complaint.title,
+              "VALIDATED",
+              complaint._id.toString()
+            );
+          }
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
         }
@@ -252,6 +265,7 @@ class AgentController {
       complaint.statusHistory.push({
         status: "REJECTED",
         updatedBy: req.user.userId,
+        updatedByName: req.user.fullName || req.user.name || req.user.email || "Staff",
         updatedAt: new Date(),
         notes: reason
       });
@@ -262,10 +276,23 @@ class AgentController {
         try {
           await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
             type: "rejected",
-            title: "notification.status.rejected",
-            message: `notification.status.rejected.desc`,
+            title: "Complaint Rejected",
+            message: `Your complaint '${complaint.title}' was rejected. Reason: ${reason}.`,
             complaintId: complaint._id,
           });
+
+          // Send email
+          const mailer = require("../utils/mailer");
+          const citizen = await User.findById(complaint.createdBy).select("fullName email").lean();
+          if (citizen && citizen.email) {
+            await mailer.sendComplaintStatusEmail(
+              citizen.email,
+              citizen.fullName,
+              complaint.title,
+              "REJECTED",
+              complaint._id.toString()
+            );
+          }
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
         }
@@ -354,7 +381,7 @@ class AgentController {
         return res.status(404).json({ success: false, message: "Department not found" });
       }
 
-      complaint.assignedDepartment = departmentId;
+      complaint.assignedDepartment = { id: department._id, name: department.name };
       
       if (!complaint.slaDeadline) {
         const slaDeadline = calculateSLADeadline(
@@ -380,16 +407,18 @@ class AgentController {
 
       await notificationService.notifyManagersByDepartment(req.app?.get?.('io'), departmentId, {
         type: "assigned",
-        title: "notification.status.assigned",
-        message: "notification.status.assigned.desc",
+        title: "Complaint Assigned to Your Department",
+        message: `Complaint '${complaint.title}' has been assigned to your team.`,
         complaintId: complaint._id,
       });
-      
+
       if (complaint.createdBy) {
+        const dept = await Department.findById(departmentId).select('name').lean();
+        const deptName = dept?.name || 'a department';
         await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
           type: "assigned",
-          title: "notification.status.assigned",
-          message: "notification.status.assigned.desc",
+          title: "Complaint Assigned",
+          message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
           complaintId: complaint._id,
         });
       }
@@ -425,11 +454,13 @@ class AgentController {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
 
-      const user = await getAgentMunicipality(req.user.userId);
-      const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-
-      if (!checkMunicipalityMatch(userMunicipality, complaint, req.user.role)) {
-        return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
+      // DEPT_MANAGER + ADMIN: skip municipality restriction
+      if (!["DEPARTMENT_MANAGER","ADMIN"].includes(req.user.role)) {
+        const u = await getAgentMunicipality(req.user.userId);
+        const mun = normalizeMunicipality(u?.municipalityName || req.user.municipalityName || "");
+        if (!checkMunicipalityMatch(mun, complaint, req.user.role)) {
+          return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
+        }
       }
 
       if (complaint.status !== "RESOLVED") {
@@ -444,6 +475,7 @@ class AgentController {
       complaint.statusHistory.push({
         status: "CLOSED",
         updatedBy: req.user.userId,
+        updatedByName: req.user.fullName || req.user.name || req.user.email || "Staff",
         updatedAt: new Date(),
         notes: "Resolution approved"
       });
@@ -455,8 +487,8 @@ class AgentController {
         if (citizenId) {
           await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
             type: "closed",
-            title: "notification.status.closed",
-            message: "notification.status.closed.desc",
+            title: "Complaint Closed",
+            message: `Your complaint '${complaint.title}' has been officially closed.`,
             complaintId: complaint._id,
           });
         }
@@ -468,7 +500,7 @@ class AgentController {
           await notificationService.sendNotification(req.app?.get?.('io'), techId, {
             type: "resolution_approved",
             title: "Resolution Approved",
-            message: `Your resolution for "${complaint.title}" has been approved by the agent.`,
+            message: `Your resolution for "${complaint.title}" has been approved by the manager.`,
             complaintId: complaint._id,
           });
         }
@@ -495,11 +527,13 @@ class AgentController {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
 
-      const user = await getAgentMunicipality(req.user.userId);
-      const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
-
-      if (!checkMunicipalityMatch(userMunicipality, complaint, req.user.role)) {
-        return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
+      // DEPT_MANAGER + ADMIN: skip municipality restriction
+      if (!["DEPARTMENT_MANAGER","ADMIN"].includes(req.user.role)) {
+        const u = await getAgentMunicipality(req.user.userId);
+        const mun = normalizeMunicipality(u?.municipalityName || req.user.municipalityName || "");
+        if (!checkMunicipalityMatch(mun, complaint, req.user.role)) {
+          return res.status(403).json({ success: false, message: "Complaint does not belong to your municipality" });
+        }
       }
 
       if (complaint.status !== "RESOLVED") {
@@ -513,6 +547,7 @@ class AgentController {
       complaint.statusHistory.push({
         status: "IN_PROGRESS",
         updatedBy: req.user.userId,
+        updatedByName: req.user.fullName || req.user.name || req.user.email || "Staff",
         updatedAt: new Date(),
         notes: `Resolution rejected: ${rejectionReason}`
       });
@@ -537,9 +572,9 @@ class AgentController {
         const citizenId = typeof complaint.createdBy === 'object' ? complaint.createdBy._id : complaint.createdBy;
         if (citizenId) {
           await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
-            type: "resolution_rejected",
-            title: "notification.status.inProgress",
-            message: "notification.status.inProgress.desc",
+            type: "in_progress",
+            title: "Work Restarted",
+            message: `Work has restarted on your complaint '${complaint.title}'. The team is addressing the issue again.`,
             complaintId: complaint._id,
           });
         }

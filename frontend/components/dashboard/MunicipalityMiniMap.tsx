@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, ZoomControl } from "react-leaflet";
 import { formatTimeAgo } from "@/lib/date-utils";
-import { categoryLabels } from "@/data/complaints";
+import { getCategoryLabel } from "@/lib/categories";
 import { statusConfig } from "@/lib/complaints";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -57,7 +57,7 @@ function getRadius(count: number, max: number): number {
 }
 
 function formatCategory(cat: string): string {
-  return categoryLabels[cat] || cat;
+  return getCategoryLabel(cat);
 }
 
 function FitBounds({ points }: { points: HeatmapPoint[] }) {

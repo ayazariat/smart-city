@@ -32,7 +32,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { Button, PageHeader } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
-import { categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { categoryOptions, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AIAnalysisCard from "@/components/dashboard/AIAnalysisCard";
 import { useTranslation } from "react-i18next";
@@ -154,11 +154,12 @@ export default function ComplaintDetailPage() {
       : complaint.createdBy?._id;
     return createdById === userId;
   })();
+  // Community actions available when complaint is active OR resolved/closed
   const canConfirmUpvote =
     user?.role === "CITIZEN" &&
     !isOwnComplaint &&
     complaint?._id &&
-    (complaint?.status === "RESOLVED" || complaint?.status === "CLOSED");
+    ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"].includes(complaint?.status || "");
 
   const handleUpvote = async () => {
     if (!complaint?._id || isUpvoting) return;
@@ -564,7 +565,7 @@ export default function ComplaintDetailPage() {
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
-                    {categoryLabels[complaint.category] || complaint.category}
+                    {categoryOptions.find(opt => opt.value === complaint.category)?.label || complaint.category}
                   </span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
@@ -992,7 +993,7 @@ export default function ComplaintDetailPage() {
                     })}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-500">{t("complaintDetail.noCommentsYet")}</p>
+                  <p className="text-sm text-slate-500">{t("complaintDetail.noCommentsYet", { defaultValue: "No comments yet. Be the first to comment!" })}</p>
                 )}
 
                 {user?.role === "CITIZEN" && (
@@ -1117,7 +1118,15 @@ export default function ComplaintDetailPage() {
                   <UserCog className="w-5 h-5 text-primary" />
                   {t("complaintDetail.assignedTo")}
                 </h2>
-                {complaint.assignedTo && (
+                {complaint.assignedDepartment && (
+                  <div className="space-y-2 mb-4">
+                    <p className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-slate-400" />
+                      {typeof complaint.assignedDepartment === 'object' ? complaint.assignedDepartment.name : complaint.assignedDepartment}
+                    </p>
+                  </div>
+                )}
+                {complaint.assignedTo && !complaint.assignedTeam && (
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-900 flex items-center gap-2">
                       <User className="w-4 h-4 text-slate-400" />
@@ -1402,7 +1411,7 @@ export default function ComplaintDetailPage() {
                 </div>
                 
                 <p className="text-xs text-slate-500 mt-3 text-center">
-                  Community actions are available only while this complaint is resolved.
+                  {["RESOLVED", "CLOSED"].includes(complaint?.status || "") ? t("complaintDetail.likeResolvedHint", { defaultValue: "You can like a resolved complaint to acknowledge the fix." }) : t("complaintDetail.communityActiveHint", { defaultValue: "Confirm this issue to help prioritize it." })}
                 </p>
               </section>
             )}
@@ -1418,7 +1427,7 @@ export default function ComplaintDetailPage() {
                   {/* SUBMITTED - Agent can Validate/Reject, Admin can Validate */}
                   {complaint.status === "SUBMITTED" && (
                     <>
-                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                      {user?.role === "MUNICIPAL_AGENT" && (
                         <>
                           <Button
                             className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
@@ -1442,7 +1451,7 @@ export default function ComplaintDetailPage() {
                   {/* VALIDATED - Agent assigns Department, Manager can set Priority, Admin can do everything */}
                   {complaint.status === "VALIDATED" && (
                     <>
-                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && !complaint.assignedDepartment && (
+                      {user?.role === "MUNICIPAL_AGENT" && !complaint.assignedDepartment && (
                         <Button
                           className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
                           icon={<Building2 className="w-4 h-4" />}
@@ -1468,17 +1477,29 @@ export default function ComplaintDetailPage() {
                     <>
                       {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
                         <>
-                          {complaint.assignedTo ? (
-                            <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-                              <p className="text-sm text-indigo-800 font-medium">{t("complaintDetail.assignedToRepairTeam")}</p>
-                              <p className="text-xs text-indigo-600 mt-1">
-                                {typeof complaint.assignedTo === 'object' ? complaint.assignedTo.fullName : t("complaintDetail.technicianAssigned")}
-                              </p>
-                            </div>
+{(complaint.assignedTo || complaint.assignedTeam) ? (
+                            <>
+                              <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
+                                <p className="text-sm font-medium text-green-800 flex items-center gap-2">
+                                  <CheckCircle2 className="w-4 h-4" />
+                                  Assigned to Repair Team
+                                </p>
+                                <p className="text-xs text-green-700 mt-1">
+                                  {complaint.assignedTo?.fullName || complaint.assignedTeam?.name || 'Team'}
+                                </p>
+                              </div>
+                              <Button
+                                className="w-full bg-indigo-500 hover:bg-indigo-600"
+                                icon=<UserCog className="w-4 h-4" />
+                                onClick={() => setActionModal("technician")}
+                              >
+                                Reassign Team
+                              </Button>
+                            </>
                           ) : (
                             <Button
                               className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-                              icon={<UserCog className="w-4 h-4" />}
+                              icon=<UserCog className="w-4 h-4" />
                               onClick={() => setActionModal("technician")}
                             >
                               {t("complaintDetail.assignToRepairTeam")}
@@ -1498,7 +1519,7 @@ export default function ComplaintDetailPage() {
                           )}
                         </>
                       )}
-                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && complaint.assignedDepartment && !complaint.assignedTo && (
+                      {user?.role === "MUNICIPAL_AGENT" && complaint.assignedDepartment && !complaint.assignedTo && (
                         <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                           <p className="text-sm text-purple-800 font-medium">{t("complaintDetail.departmentAssigned")}</p>
                           <p className="text-xs text-purple-600">{t("complaintDetail.waitingTechnicianAssignment")}</p>
@@ -1676,38 +1697,56 @@ export default function ComplaintDetailPage() {
               </div>
             )}
 
-            {actionModal === "priority" && (
+{actionModal === "priority" && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    {t("complaintDetail.priorityLevel")}
+                  <label className="block text-sm font-medium text-slate-700 mb-4">
+                    {t("complaintDetail.setPriority")} - Current: {complaint.priorityScore || 0}
                   </label>
-                  <select
-                    value={selectedUrgency}
-                    onChange={(e) => setSelectedUrgency(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  >
-                    <option value="">{t("complaintDetail.select")}</option>
-                    <option value="LOW">{t("complaintDetail.low")}</option>
-                    <option value="MEDIUM">{t("complaintDetail.medium")}</option>
-                    <option value="HIGH">{t("complaintDetail.high")}</option>
-                    <option value="URGENT">{t("complaintDetail.urgent")}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    {t("complaintDetail.priorityScore")}
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={selectedPriorityScore}
-                    onChange={(e) => setSelectedPriorityScore(e.target.value)}
-                    placeholder={complaint.priorityScore?.toString() || t("complaintDetail.enterScore")}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">{t("complaintDetail.currentScore")}: {complaint.priorityScore || 0}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {[
+                      {level: 'LOW', color: 'bg-green-500 hover:bg-green-600 text-white border-2 border-green-400', score: 3},
+                      {level: 'MEDIUM', color: 'bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-400', score: 6},
+                      {level: 'HIGH', color: 'bg-orange-500 hover:bg-orange-600 text-white border-2 border-orange-400', score: 8},
+                      {level: 'CRITICAL', color: 'bg-red-500 hover:bg-red-600 text-white border-2 border-red-400 shadow-md shadow-red-200', score: 10}
+                    ].map(({level, color, score}) => (
+                      <Button
+                        key={level}
+                        className={`p-3 rounded-xl font-semibold transition-all ${color} shadow-sm hover:shadow-lg hover:scale-[1.02] active:scale-100`}
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          setActionLoading(true);
+                          try {
+                            const response = await managerService.updatePriority(
+                              complaintId,
+                              { urgency: level as string, priorityScore: score }
+                            );
+                            if (response.success) {
+                              await refreshComplaint();
+                              // Toast success
+                              console.log('Priority updated successfully');
+                            }
+                          } catch (err) {
+                            console.error('Priority update failed', err);
+                          } finally {
+                            setActionLoading(false);
+                            setActionModal(null);
+                          }
+                        }}
+                        disabled={actionLoading}
+                      >
+                        <Flag className="w-4 h-4 mr-1" />
+                        {level}
+                        <div className="text-xs mt-1 opacity-90">
+                          Score: {score}
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-3 text-center">
+                    Click pill to update priority (matches list view colors)
+                  </p>
                 </div>
                 <div className="flex gap-3">
                   <Button
@@ -1716,13 +1755,6 @@ export default function ComplaintDetailPage() {
                     onClick={() => setActionModal(null)}
                   >
                     {t("common.cancel")}
-                  </Button>
-                  <Button
-                    className="flex-1 bg-purple-600 hover:bg-purple-700"
-                    onClick={handlePriorityUpdate}
-                    disabled={actionLoading || (!selectedUrgency && !selectedPriorityScore)}
-                  >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.update")}
                   </Button>
                 </div>
               </div>

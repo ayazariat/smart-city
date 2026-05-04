@@ -93,14 +93,15 @@ export function useNotifications(): UseNotificationsReturn {
   }, [token]);
 
   // Initial fetch and socket connection
+  const userId = user?.id;
   useEffect(() => {
-    if (hydrated && token && user?.id) {
+    if (hydrated && token && userId) {
       fetchNotifications();
-      connectSocket(user.id, token);
+      connectSocket(userId, token);
       const unsubscribe = subscribeToNotifications(handleNewNotification);
       return () => unsubscribe();
     }
-  }, [hydrated, token, user, fetchNotifications, handleNewNotification]);
+  }, [hydrated, token, userId, fetchNotifications, handleNewNotification]);
 
   // Cleanup on logout
   useEffect(() => {

@@ -84,7 +84,7 @@ class CitizenController {
       if (title.trim().length < 5) return res.status(400).json({ message: "Title must be at least 5 characters" });
       if (description.trim().length < 20) return res.status(400).json({ message: "Description must be at least 20 characters" });
 
-      const validCategories = ["WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
+      const validCategories = ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other", "WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
       if (category && !validCategories.includes(category)) return res.status(400).json({ message: "Invalid category" });
 
       const validUrgencies = ["LOW", "MEDIUM", "HIGH", "URGENT"];
@@ -211,8 +211,10 @@ class CitizenController {
           const agentIds = agents.map(a => a._id.toString());
           if (agentIds.length > 0) {
             await notificationService.sendNotificationToMultiple(io, agentIds, {
-              type: "new_complaint", title: "New Complaint",
-              message: `New complaint in ${userMunicipalityName}: ${title.trim()}`, complaintId: complaint._id,
+              type: "complaint_submitted",
+              title: "New Complaint Submitted",
+              message: `New complaint submitted: '${title.trim()}' in ${userMunicipalityName || 'your municipality'}. Awaiting validation.`,
+              complaintId: complaint._id,
             });
           }
         }

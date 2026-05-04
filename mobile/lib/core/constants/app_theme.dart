@@ -47,12 +47,10 @@ class AppTheme {
         primary: primary,
         secondary: accent,
         surface: surface,
-        background: background,
         error: danger,
         onPrimary: textInverse,
         onSecondary: textInverse,
         onSurface: textPrimary,
-        onBackground: textPrimary,
         onError: textInverse,
       ),
       appBarTheme: const AppBarTheme(

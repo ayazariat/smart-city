@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, getCategoryLabel } from "@/lib/categories";
 import { TUNISIA_GEOGRAPHY } from "@/data/tunisia-geography";
 import { 
   TrendingUp, 
@@ -322,7 +322,7 @@ export default function TransparencyPage() {
         fetch(`${apiUrl}/public/stats/by-category?period=${period}`),
         fetch(`${apiUrl}/public/stats/by-municipality?period=${period}`),
         fetch(`${apiUrl}/public/stats/monthly-trends?months=6`),
-        fetch(`${apiUrl}/public/complaints?limit=100&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`),
+        fetch(`${apiUrl}/public/complaints?limit=100&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED,CLOSED`),
         fetch(`${apiUrl}/public/stats/by-zone?period=all`),  // All-time zone data
         fetch(`${apiUrl}/public/top-recurring?limit=5`),
         fetch(`${apiUrl}/public/stats/all-municipalities?period=all`)  // All-time municipality data
@@ -466,32 +466,38 @@ export default function TransparencyPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm ml-0 md:ml-[260px]">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          {/* Top Row: Logo + Actions */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors md:hidden"
-                title={t('transparency.header.menu')}
-              >
-                <Menu className="w-5 h-5 text-slate-600" />
-              </button>
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/25">
-                  <Sparkles className="w-5 h-5 text-white" />
+{/* Header - Responsive: Collapses on mobile with hamburger menu */}
+      <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+          {/* Top Row: Logo + Actions - Stacked on mobile, inline on tablet+ */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                  title={t('transparency.header.menu')}
+                >
+                  <Menu className="w-5 h-5 text-slate-600" />
+                </button>
+                <div className="relative">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/25">
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                  </div>
+                </div>
+                <div className="hidden xs:block">
+                  <h1 className="text-base sm:text-lg font-bold text-slate-800 leading-tight">{t('transparency.header.smartCity')}</h1>
+                  <p className="text-[10px] sm:text-xs text-slate-500">{t('transparency.title')}</p>
                 </div>
               </div>
-              <div className="hidden sm:block">
-                <h1 className="text-lg font-bold text-slate-800 leading-tight">{t('transparency.header.smartCity')}</h1>
-                <p className="text-xs text-slate-500">{t('transparency.title')}</p>
+              {/* Mobile: show theme & help on right */}
+              <div className="flex items-center gap-1 sm:hidden">
+                <ThemeToggle />
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="flex-1 max-w-lg mx-2 sm:mx-4">
+            {/* Search Bar - Full width on mobile, constrained on tablet+ */}
+            <div className="flex-1 max-w-full sm:max-w-lg order-3 sm:order-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -502,25 +508,21 @@ export default function TransparencyPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all"
                 />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full transition-colors"
-                  >
-                    <X className="w-4 h-4 text-slate-400" />
-                  </button>
-                )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <ThemeToggle />
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0 order-2 sm:order-3">
+              <div className="hidden sm:flex items-center gap-1">
+                <ThemeToggle />
+              </div>
               <button
                 onClick={() => setShowHelp(true)}
-                className="p-2 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
-                title={t('transparency.header.help')}
+                className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-lg transition-colors touch-manipulation"
+                style={{ minWidth: 36, minHeight: 36 }}
+                title={t('transparency.header.about')}
               >
-                <HelpCircle className="w-4 h-4 text-slate-600" />
+                <HelpCircle className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -662,7 +664,7 @@ export default function TransparencyPage() {
                     <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                     <div className="absolute bottom-0 left-0 w-64 h-64 bg-white rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
                   </div>
-                  <div className="relative z-10 grid grid-cols-1 md:grid-cols-5 gap-8 items-center">
+                  <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 md:gap-8 items-center">
                     {/* Left column (60%) */}
                     <div className="md:col-span-3">
                       <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-3">
@@ -689,8 +691,8 @@ export default function TransparencyPage() {
                       </div>
                     </div>
                     {/* Right column (40%) — All-time stats card */}
-                    <div className="md:col-span-2">
-                      <div className="bg-white/95 backdrop-blur rounded-2xl p-5 shadow-xl space-y-3">
+                    <div className="md:col-span-2 mt-4 md:mt-0">
+                      <div className="bg-white/95 backdrop-blur rounded-2xl p-4 sm:p-5 shadow-xl space-y-2 sm:space-y-3">
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{t('transparency.hero.allTimeStats')}</p>
                         <div className="flex items-center gap-4 p-3 bg-blue-50 rounded-xl">
                           <div className="w-11 h-11 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -758,7 +760,7 @@ export default function TransparencyPage() {
                   </div>
 
                   {stats && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                       {[
                         { label: t('transparency.metrics.totalReports'), value: stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
                         { label: t('transparency.metrics.problemsFixed'), value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
@@ -833,69 +835,63 @@ export default function TransparencyPage() {
                             </div>
                           </div>
                         </div>
-                        {/* Legend with counts */}
-                        <div className="space-y-3">
-                          {[
-                            { label: t('transparency.metrics.fixed'), value: stats.resolved, color: '#22c55e', bg: 'bg-green-100' },
-                            { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' },
-                            { label: t('transparency.metrics.pending'), value: stats.pending, color: '#3b82f6', bg: 'bg-blue-100' }
-                          ].map((item) => (
-                            <div key={item.label} className="flex items-center gap-3">
-                              <div className={`w-4 h-4 rounded-full ${item.bg}`} style={{ backgroundColor: item.color }} />
-                              <span className="text-sm text-slate-600">{item.label}</span>
-                              <span className="text-sm font-bold text-slate-800">{item.value}</span>
+                        {/* Legend with counts + Category Summary */}
+                        <div className="space-y-4">
+                          <div className="space-y-3">
+                            {[
+                              { label: t('transparency.metrics.fixed'), value: stats.resolved, color: '#22c55e', bg: 'bg-green-100' },
+                              { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, color: '#f59e0b', bg: 'bg-amber-100' },
+                              { label: t('transparency.metrics.pending'), value: stats.pending, color: '#3b82f6', bg: 'bg-blue-100' }
+                            ].map((item) => (
+                              <div key={item.label} className="flex items-center gap-3">
+                                <div className={`w-4 h-4 rounded-full ${item.bg}`} style={{ backgroundColor: item.color }} />
+                                <span className="text-sm text-slate-600">{item.label}</span>
+                                <span className="text-sm font-bold text-slate-800">{item.value}</span>
+                              </div>
+                            ))}
+                            <div className="pt-3 border-t">
+                              <p className="text-sm font-bold text-green-600">
+                                {stats.resolutionRate}% {t('transparency.metrics.resolutionRate')}
+                              </p>
                             </div>
-                          ))}
-                          <div className="pt-3 border-t">
-                            <p className="text-sm font-bold text-green-600">
-                              {stats.resolutionRate}% {t('transparency.metrics.resolutionRate')}
-                            </p>
                           </div>
-                        </div>
 
-                        {/* Operational insights panel */}
-                        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
-                          <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-blue-500" />
-                            Operational insights
-                          </h4>
-                          <div className="space-y-2.5">
-                            <div className="bg-white rounded-xl p-3 border border-slate-100">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <p className="text-sm font-medium text-slate-700">Average resolution time</p>
-                                <span className="text-xs font-semibold text-blue-600">{stats.avgResolutionDays.toFixed(1)} d</span>
-                              </div>
-                              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full"
-                                  style={{ width: `${Math.min(100, Math.max(8, 100 - stats.avgResolutionDays * 8))}%` }}
-                                />
+                          {/* SLA Performance gauge — unique content not found elsewhere */}
+                          {stats.slaComplianceRate !== undefined && (
+                            <div className="pt-3 border-t border-slate-100">
+                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                                {t('transparency.metrics.slaPerformance', { defaultValue: 'SLA Performance' })}
+                              </p>
+                              <div className="space-y-3">
+                                <div>
+                                  <div className="flex items-center justify-between text-xs mb-1">
+                                    <span className="text-slate-600">{t('transparency.metrics.resolvedOnTime', { defaultValue: 'Resolved on time' })}</span>
+                                    <span className={`font-bold ${(stats.slaComplianceRate || 0) >= 80 ? 'text-green-600' : (stats.slaComplianceRate || 0) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{stats.slaComplianceRate || 0}%</span>
+                                  </div>
+                                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-700" style={{ width: `${stats.slaComplianceRate || 0}%` }} />
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex items-center justify-between text-xs mb-1">
+                                    <span className="text-slate-600">{t('transparency.metrics.avgResolutionTime', { defaultValue: 'Avg. resolution time' })}</span>
+                                    <span className="font-bold text-slate-700">{stats.avgResolutionDays || 0}d</span>
+                                  </div>
+                                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-700" style={{ width: `${Math.min((stats.avgResolutionDays || 0) / 14 * 100, 100)}%` }} />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl">
+                                  <div className={`w-2 h-2 rounded-full ${(stats.overdue || 0) > 0 ? 'bg-red-500' : 'bg-green-500'}`} />
+                                  <span className="text-xs text-slate-600">
+                                    {(stats.overdue || 0) > 0
+                                      ? `${stats.overdue} ${t('transparency.metrics.overdueWarning', { defaultValue: 'complaints past deadline' })}`
+                                      : t('transparency.metrics.noOverdue', { defaultValue: 'All complaints within deadline' })}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                            <div className="bg-white rounded-xl p-3 border border-slate-100">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <p className="text-sm font-medium text-slate-700">Citizen engagement</p>
-                                <span className="text-xs font-semibold text-violet-600">
-                                  {complaints.reduce((acc, c) => acc + (c.confirmationCount || 0) + (c.upvoteCount || 0), 0)}
-                                </span>
-                              </div>
-                              <p className="text-xs text-slate-500">Total confirmations and likes from residents.</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 pt-3 border-t border-slate-200">
-                            <h5 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-2">
-                              Verified interventions
-                            </h5>
-                            <p className="text-xs text-slate-600">
-                              {
-                                complaints.filter((c) =>
-                                  (c.status === "RESOLVED" || c.status === "CLOSED") &&
-                                  ((c.afterPhotos?.length || 0) > 0 || (c.proofPhotos?.length || 0) > 0)
-                                ).length
-                              }{" "}
-                              resolved complaints include proof photos.
-                            </p>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>

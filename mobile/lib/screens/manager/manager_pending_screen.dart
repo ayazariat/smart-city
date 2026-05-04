@@ -15,7 +15,7 @@ class ManagerPendingScreen extends ConsumerStatefulWidget {
 
 class _ManagerPendingScreenState extends ConsumerState<ManagerPendingScreen> {
   String _statusFilter = 'PENDING';
-  String _searchTerm = '';
+  final String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
 
   @override

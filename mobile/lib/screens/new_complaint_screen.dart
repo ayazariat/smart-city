@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,6 +8,7 @@ import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
+import 'package:smart_city_app/widgets/location_picker_map.dart';
 
 class NewComplaintScreen extends StatefulWidget {
   final VoidCallback onComplaintSubmitted;
@@ -182,38 +184,78 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     }
   }
 
-  Future<void> _getLocation() async {
-    setState(() => _gettingLocation = true);
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          throw Exception('Location permission denied');
-        }
-      }
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied');
-      }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      setState(() {
-        _latitude = position.latitude;
-        _longitude = position.longitude;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not get location: $e')));
-      }
-    } finally {
-      setState(() => _gettingLocation = false);
-    }
-  }
+   Future<void> _getLocation() async {
+     setState(() => _gettingLocation = true);
+     try {
+       LocationPermission permission = await Geolocator.checkPermission();
+       if (permission == LocationPermission.denied) {
+         permission = await Geolocator.requestPermission();
+         if (permission == LocationPermission.denied) {
+           throw Exception('Location permission denied');
+         }
+       }
+       if (permission == LocationPermission.deniedForever) {
+         throw Exception('Location permissions are permanently denied');
+       }
+       final position = await Geolocator.getCurrentPosition(
+         locationSettings: const LocationSettings(
+           accuracy: LocationAccuracy.high,
+         ),
+       );
+       setState(() {
+         _latitude = position.latitude;
+         _longitude = position.longitude;
+       });
+       // Also perform reverse geocoding
+       await _reverseGeocode(position.latitude, position.longitude);
+     } catch (e) {
+       if (mounted) {
+         ScaffoldMessenger.of(
+           context,
+         ).showSnackBar(SnackBar(content: Text('Could not get location: $e')));
+       }
+     } finally {
+       setState(() => _gettingLocation = false);
+     }
+   }
+
+   // Reverse geocode to get address/municipality from coordinates
+   Future<void> _reverseGeocode(double lat, double lng) async {
+     try {
+       final client = HttpClient();
+       final request = await client.getUrl(Uri.parse(
+           'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&accept-language=fr'));
+       final response = await request.close();
+       if (response.statusCode == 200) {
+         final body = await response.transform(utf8.decoder).join();
+         final data = jsonDecode(body) as Map<String, dynamic>?;
+         if (data != null) {
+           final address = data['address'] as Map<String, dynamic>?;
+           if (address != null) {
+             // Extract municipality, governorate, city etc.
+             String? city = address['city'] as String?;
+             String? town = address['town'] as String?;
+             String? municipality = city ?? town;
+             String? state = address['state'] as String?;
+             String? county = address['county'] as String?;
+             
+             setState(() {
+               if (municipality != null && municipality.isNotEmpty) {
+                 _selectedMunicipality = municipality;
+               }
+               if (state != null && state.isNotEmpty) {
+                 _selectedGovernorate = state;
+               }
+               // Could also store full address if needed
+             });
+           }
+         }
+       }
+       client.close();
+     } catch (e) {
+       // Silently fail - location still valid without address
+     }
+   }
 
   Future<void> _submitComplaint() async {
     if (!_formKey.currentState!.validate()) return;
@@ -644,59 +686,29 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 validator: (v) =>
                     v == null ? 'Please select a municipality' : null,
               ),
-              const SizedBox(height: 20),
+               const SizedBox(height: 20),
 
-              // Location
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.secondary,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _latitude != null
-                          ? Icons.check_circle
-                          : Icons.my_location,
-                      color: _latitude != null
-                          ? AppColors.primary
-                          : AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _latitude != null
-                            ? 'Location captured (${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)})'
-                            : 'Add your current location',
-                        style: TextStyle(
-                          color: _latitude != null
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
-                          fontWeight: _latitude != null
-                              ? FontWeight.w600
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                    if (_gettingLocation)
-                      const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      TextButton(
-                        onPressed: _getLocation,
-                        child: Text(
-                          _latitude != null ? 'Update' : 'Get Location',
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
+               // Location Picker with Interactive Map
+               const Text(
+                 'Location *',
+                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+               ),
+               const SizedBox(height: 8),
+               LocationPickerMap(
+                 initialLatitude: _latitude,
+                 initialLongitude: _longitude,
+                 address: _getAddressFromLocation(),
+                 onLocationSelected: (lat, lng) {
+                   setState(() {
+                     _latitude = lat;
+                     _longitude = lng;
+                     _selectedMunicipality = null;
+                     _selectedGovernorate = null;
+                   });
+                   _reverseGeocode(lat, lng);
+                 },
+               ),
+               const SizedBox(height: 20),
 
               // Photos
               const Text(

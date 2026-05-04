@@ -87,7 +87,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              value: _categoryFilter,
+              initialValue: _categoryFilter,
               items: [
                 const DropdownMenuItem(value: null, child: Text('Toutes')),
                 ..._categories.map(
@@ -111,7 +111,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              value: _governorateFilter,
+              initialValue: _governorateFilter,
               items: [
                 const DropdownMenuItem(value: null, child: Text('Tous')),
                 ...TunisiaGeography.governorates.map(

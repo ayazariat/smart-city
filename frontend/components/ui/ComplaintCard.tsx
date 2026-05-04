@@ -14,7 +14,8 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { statusConfig, categoryLabels, getComplaintIdDisplay } from "@/lib/complaints";
+import { statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { getCategoryLabel } from "@/lib/categories";
 import { getPhotoUrl } from "@/lib/photos";
 import { useAuthStore } from "@/store/useAuthStore";
 import { confirmComplaint, unconfirmComplaint } from "@/services/complaint.service";
@@ -210,18 +211,18 @@ export const ComplaintCard = ({
         <div className="flex items-start justify-between gap-4 mb-4">
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-mono font-medium">
-              {getComplaintIdDisplay(id)}
-            </span>
-            
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`} />
-              {statusCfg.label}
-            </span>
-            
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-              {categoryLabels[complaint.category] || complaint.category}
-            </span>
+              <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-mono font-medium">
+                {getComplaintIdDisplay(id)}
+              </span>
+              
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`} />
+                {statusCfg.label}
+              </span>
+              
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                {getCategoryLabel(complaint.category)} 
+              </span>
 
             {complaint.urgency && complaint.urgency !== "LOW" && urgencyColors[complaint.urgency] && (
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${urgencyColors[complaint.urgency].bg} ${urgencyColors[complaint.urgency].text}`}>
@@ -323,16 +324,49 @@ export const ComplaintCard = ({
               {complaint.citizen?.fullName || (typeof complaint.createdBy === 'object' ? complaint.createdBy?.fullName : '')}
             </span>
           )}
-          {showDepartment && (complaint.department || complaint.assignedDepartment) && (
+{showDepartment && (complaint.department || complaint.assignedDepartment) && (
             <span className="inline-flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
               {(complaint.department || complaint.assignedDepartment)?.name}
             </span>
           )}
-          {showAssignedTo && complaint.assignedTo && (
+          {/* Assigned Repair Team - Visible to ALL roles */}
+          {(complaint.assignedTo || complaint.assignedTeam) && (
             <span className="inline-flex items-center gap-1.5">
               <Wrench className="w-3.5 h-3.5 text-slate-400" />
-              {complaint.assignedTo.fullName}
+              {complaint.assignedTeam ? (
+                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                  Repair team ({complaint.assignedTeam.members?.length || 1} technicians)
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
+                  {complaint.assignedTo.fullName}
+                </span>
+              )}
+            </span>
+          )}
+          {/* REQ #2: Assigned Department - Visible to ALL roles */}
+          <span className="inline-flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+            {complaint.assignedDepartment ? (
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                {complaint.assignedDepartment.name}
+              </span>
+            ) : (
+              <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-medium">
+                Not yet assigned
+              </span>
+            )}
+          </span>
+          {/* No duplicate technician name - dept first, team/tech second if present */}
+          {showAssignedTo && (complaint.assignedTo || complaint.assignedTeam) && (
+            <span className="inline-flex items-center gap-1.5">
+              <Wrench className="w-3.5 h-3.5 text-slate-400" />
+              {complaint.assignedTeam ? (
+                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                  Repair team ({complaint.assignedTeam.members?.length || 1} technicians)
+                </span>
+              ) : complaint.assignedTo.fullName}
             </span>
           )}
           {showPriority && complaint.priorityScore !== undefined && (

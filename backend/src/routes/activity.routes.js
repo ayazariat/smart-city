@@ -16,7 +16,7 @@ router.get("/recent", authenticate, async (req, res) => {
     const mongoose = require('mongoose');
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    console.log("[Activity] User:", { userId, role, municipality, department, municipalityName });
+    // User: { userId, role, municipality, department, municipalityName }
 
     // Build query based on role scope
     let query = {};
@@ -32,7 +32,7 @@ router.get("/recent", authenticate, async (req, res) => {
           query = { municipality: new mongoose.Types.ObjectId(municipality) };
         } else {
           // No municipality set - show recent from all (agent should have municipality assigned)
-          console.log("[Activity] Agent has no municipality, showing all");
+          // Agent has no municipality, showing all
         }
         break;
       case "DEPARTMENT_MANAGER":
@@ -53,8 +53,7 @@ router.get("/recent", authenticate, async (req, res) => {
         query = {};
     }
 
-    console.log("[Activity] Query:", JSON.stringify(query));
-    console.log("[Activity] Role:", role);
+    // Query: {query}, Role: {role}
 
     // Fetch complaints with statusHistory, sorted by latest update
     const complaints = await Complaint.find(query)

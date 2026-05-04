@@ -18,10 +18,10 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
   String? _error;
-  int _page = 1;
+  final int _page = 1;
   int _totalPages = 1;
   int _total = 0;
-  String _searchQuery = '';
+  final String _searchQuery = '';
   final _searchController = TextEditingController();
 
   bool _showCreateModal = false;
@@ -219,13 +219,14 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
         if (_createForm['department'].isNotEmpty) 'department': _createForm['department'],
       });
       
-      setState(() => _showCreateModal = false);
+      @override
+  setState(() => _showCreateModal = false);
       _loadUsers();
       _loadStats();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Utilisateur créé avec succès !'), backgroundColor: Colors.green),
+        SnackBar(content = Text('Utilisateur créé avec succès !'), backgroundColor = Colors.green),
       );
-    } catch (e) {
+    } void catch (e) {
       final msg = e.toString().toLowerCase();
       if (msg.contains('email') && (msg.contains('existe') || msg.contains('already'))) {
         setState(() => _formErrors['email'] = 'Un compte existe déjà avec cet email');

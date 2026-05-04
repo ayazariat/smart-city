@@ -20,5 +20,6 @@
   "javascript.suggest.autoImports": true,
   "javascript.updateImportsOnFileMove.enabled": "always",
   "typescript.suggest.autoImports": true,
-  "typescript.updateImportsOnFileMove.enabled": "always"
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "cmake.sourceDirectory": "C:/Users/LENOVO/Desktop/pfe/smart-city/mobile/windows/flutter"
 }

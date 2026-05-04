@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
@@ -27,12 +26,12 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
   final _phoneController = TextEditingController();
 
   String _selectedCategory = 'ROAD';
-  String _selectedUrgency = 'LOW';
+  final String _selectedUrgency = 'LOW';
   String? _selectedGovernorate;
   String? _selectedMunicipality;
   String? _predictedCategory;
-  int _aiConfidence = 0;
-  bool _aiLoading = false;
+  final int _aiConfidence = 0;
+  final bool _aiLoading = false;
 
   final List<File> _photos = [];
   final ImagePicker _picker = ImagePicker();
@@ -96,7 +95,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
             children: [
               // Category dropdown
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: const InputDecoration(
                   labelText: 'Category',
                   border: OutlineInputBorder(),
@@ -115,7 +114,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
 
               // Governorate dropdown
               DropdownButtonFormField<String>(
-                value: _selectedGovernorate,
+                initialValue: _selectedGovernorate,
                 decoration: const InputDecoration(
                   labelText: 'Governorate',
                   border: OutlineInputBorder(),
@@ -133,7 +132,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
               // Municipality dropdown
               if (_selectedGovernorate != null)
                 DropdownButtonFormField<String>(
-                  value: _selectedMunicipality,
+                  initialValue: _selectedMunicipality,
                   decoration: const InputDecoration(
                     labelText: 'Municipality',
                     border: OutlineInputBorder(),

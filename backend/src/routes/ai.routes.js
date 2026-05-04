@@ -234,6 +234,21 @@ router.post(
   }
 );
 
+router.post("/predict-department", async (req, res) => {
+  try {
+    const { category, description, municipality } = req.body;
+    if (!category) {
+      return res.status(400).json({ error: "Category is required" });
+    }
+    const aiService = require('../services/ai.service');
+    const result = await aiService.predictDepartment(category, description || '', municipality || '');
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("AI predict-department error:", error.message);
+    res.status(500).json({ success: false, data: { suggestedDepartment: null, departmentName: 'Services Généraux', confidence: 50 } });
+  }
+});
+
 router.post("/extract-keywords", async (req, res) => {
   try {
     const { text } = req.body;

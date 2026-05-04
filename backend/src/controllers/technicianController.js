@@ -68,8 +68,7 @@ class TechnicianController {
           }
         }
       });
-    } catch (error) {
-      console.error("Technician get complaints error:", error);
+    } catch {
       res.status(500).json({ success: false, message: "Failed to retrieve complaints" });
     }
   }
@@ -114,8 +113,7 @@ class TechnicianController {
         message: "Complaint retrieved successfully",
         data: complaint
       });
-    } catch (error) {
-      console.error("Technician get complaint error:", error);
+    } catch {
       res.status(500).json({ success: false, message: "Failed to retrieve complaint" });
     }
   }
@@ -176,7 +174,7 @@ class TechnicianController {
             complaintId: complaint._id,
           });
         } catch (notifError) {
-          console.error("Failed to notify managers:", notifError);
+        // Silent fail: notifications non-critical
         }
       }
 
@@ -184,12 +182,12 @@ class TechnicianController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "in_progress",
-            title: "notification.status.inProgress",
-            message: "notification.status.inProgress.desc",
+            title: "Work Started",
+            message: `Work has started on your complaint '${complaint.title}'.`,
             complaintId: complaint._id,
           });
-        } catch (notifError) {
-          console.error("Failed to notify citizen:", notifError);
+        } catch {
+          // Silent fail: notifications non-critical
         }
       }
 
@@ -198,9 +196,8 @@ class TechnicianController {
         message: "Complaint started successfully",
         data: complaint
       });
-    } catch (error) {
-      console.error("Technician start error:", error.message, error.stack);
-      res.status(500).json({ success: false, message: `Failed to start: ${error.message}` });
+    } catch {
+      res.status(500).json({ success: false, message: "Failed to start complaint" });
     }
   }
 
@@ -283,8 +280,8 @@ class TechnicianController {
             message: `Technician resolved complaint "${complaint.title}".`,
             complaintId: complaint._id,
           });
-        } catch (notifError) {
-          console.error("Failed to notify managers:", notifError);
+        } catch {
+          // Silent fail: notifications non-critical
         }
       }
       
@@ -292,8 +289,8 @@ class TechnicianController {
         try {
           await notificationService.sendNotification(io, complaint.createdBy, {
             type: "resolved",
-            title: "notification.status.resolved",
-            message: "notification.status.resolved.desc",
+            title: "Complaint Resolved",
+            message: `Your complaint '${complaint.title}' has been resolved! Please confirm if the issue is fixed.`,
             complaintId: complaint._id,
           });
         } catch (notifError) {

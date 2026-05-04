@@ -606,6 +606,27 @@
     "fr": "Français",
     "ar": "العربية"
   },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "Aucune notification pour le moment",
+    "emptyHint": "Vous serez notifié lors des mises à jour de vos réclamations.",
+    "seeAll": "Voir toutes les notifications",
+    "markAllRead": "Tout marquer comme lu",
+    "types": {
+      "VALIDATION": "Validation",
+      "VALIDATED": "Validée",
+      "ASSIGNMENT": "Assignation",
+      "ASSIGNED": "Assignée",
+      "STATUS_UPDATE": "Mise à jour",
+      "IN_PROGRESS": "En cours",
+      "CLOSURE": "Clôture",
+      "CLOSED": "Fermée",
+      "RESOLVED": "Résolue",
+      "RESOLUTION_REVIEW": "Vérification résolution",
+      "RESOLUTION_REJECTED": "Résolution rejetée",
+      "REJECTED": "Rejetée"
+    }
+  },
   "register": {
     "title": "Créer un compte",
     "subtitle": "Rejoignez Smart City Tunisie pour gérer et signaler les services urbains",
