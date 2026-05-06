@@ -26,9 +26,20 @@
       "minutes": "منذ {{n}} د",
       "hours": "منذ {{n}} س",
       "days": "منذ {{n}} ي"
-    }
-  },
-  "sidebar": {
+     }
+   },
+   "errors": {
+     "loadFailed": "فشل تحميل البيانات. يرجى المحاولة مرة أخرى.",
+     "generic": "حدث خطأ. يرجى المحاولة مرة أخرى.",
+     "notFound": "المورد المطلوب غير موجود.",
+     "invalidActivation": "رابط تفعيل غير صالح. يرجى الاتصال بالمسؤول.",
+     "fillAllFields": "يرجى ملء جميع الحقول",
+     "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
+     "passwordTooShort": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
+     "passwordComplexity": "يجب أن تحتوي كلمة المرور على أحرف كبيرة وصغيرة وأرقام",
+     "failedSetPassword": "فشل تعيين كلمة المرور. يرجى المحاولة مرة أخرى."
+   },
+   "sidebar": {
     "navigation": "التنقل",
     "dashboard": "لوحة التحكم",
     "myComplaints": "شكاواي",
@@ -833,10 +844,11 @@
     "search": "بحث:",
     "status": "الحالة:"
   },
-  "publicComplaint": {
-    "loading": "جاري تحميل الشكوى...",
-    "notFound": "الشكوى غير موجودة",
-    "notPublicYet": "قد لا تكون هذه الشكوى عامة بعد.",
+   "publicComplaint": {
+     "loading": "جاري تحميل الشكوى...",
+     "notFound": "الشكوى غير موجودة",
+     "errorLoading": "تعذر تحميل تفاصيل الشكوى",
+     "notPublicYet": "قد لا تكون هذه الشكوى عامة بعد.",
     "backToDashboard": "العودة إلى لوحة المعلومات",
     "complaintDetail": "تفاصيل الشكوى",
     "menu": "القائمة",

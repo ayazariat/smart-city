@@ -127,9 +127,9 @@ export default function PublicComplaintDetailPage() {
         } else {
           throw new Error("Complaint not found");
         }
-      } catch {
-        setError("Unable to load complaint details");
-      } finally {
+       } catch {
+         setError(t('publicComplaint.errorLoading'));
+       } finally {
         setLoading(false);
       }
     };

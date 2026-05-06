@@ -40,7 +40,7 @@ import { useTranslation } from "react-i18next";
 import type * as LeafletNS from "leaflet";
 
 type CategoryConfig = {
-  value: string;
+  value: ComplaintCategory;
   labelKey: string;
   descKey: string;
   icon: typeof MapPin;
@@ -438,55 +438,55 @@ export default function NewComplaintPage() {
     leafletMarkerRef.current.setLatLng([latitude, longitude]);
   }, [location]);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+     const files = e.target.files;
+     if (!files) return;
 
-    if (media.length >= 5) {
-      setError("Maximum 5 photos/videos allowed");
-      return;
-    }
+     if (media.length >= 5) {
+       setError(t('complaint.errors.maxPhotos'));
+       return;
+     }
 
-    const fileArray = Array.from(files).slice(0, 5 - media.length);
-    const maxSize = 10 * 1024 * 1024;
+     const fileArray = Array.from(files).slice(0, 5 - media.length);
+     const maxSize = 10 * 1024 * 1024;
 
-    // Validate files first
-    const validFiles: File[] = [];
-    for (const file of fileArray) {
-      if (file.size > maxSize) {
-        setError(`File ${file.name} is too large. Max 10MB.`);
-        continue;
-      }
+     // Validate files first
+     const validFiles: File[] = [];
+     for (const file of fileArray) {
+       if (file.size > maxSize) {
+         setError(t('complaint.errors.fileTooLarge', { name: file.name }));
+         continue;
+       }
 
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
+       const isImage = file.type.startsWith("image/");
+       const isVideo = file.type.startsWith("video/");
 
-      if (!isImage && !isVideo) {
-        setError(`File ${file.name} must be an image or video.`);
-        continue;
-      }
+       if (!isImage && !isVideo) {
+         setError(t('complaint.errors.invalidFile', { name: file.name }));
+         continue;
+       }
 
-      validFiles.push(file);
-    }
+       validFiles.push(file);
+     }
 
-    if (validFiles.length === 0) return;
+     if (validFiles.length === 0) return;
 
-    setIsUploading(true);
-    setUploadProgress(0);
-    setError(null);
+     setIsUploading(true);
+     setUploadProgress(0);
+     setError(null);
 
-    try {
-      const result = await uploadMedia(validFiles);
+     try {
+       const result = await uploadMedia(validFiles);
 
-      if (result.success && result.data) {
-        setMedia([...media, ...result.data]);
-      } else {
-        throw new Error(result.message || 'Upload failed');
-      }
-    } catch (err) {
-      setError('Failed to upload files. Please try again.');
-    } finally {
-      setIsUploading(false);
+       if (result.success && result.data) {
+         setMedia([...media, ...result.data]);
+       } else {
+         throw new Error(result.message || 'Upload failed');
+       }
+     } catch (err) {
+       setError(t('complaint.errors.uploadFailed'));
+     } finally {
+       setIsUploading(false);
       setUploadProgress(100);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -590,17 +590,17 @@ export default function NewComplaintPage() {
     window.open(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`, "_blank");
   };
 
-  const validatePhone = (phoneValue: string): boolean => {
-    if (!phoneValue.trim()) return true;
-    const cleanPhone = phoneValue.replace(/[\s-]/g, "");
-    const tunisianPhoneRegex = /^[2459]\d{7}$/;
-    if (!tunisianPhoneRegex.test(cleanPhone)) {
-      setPhoneError("Format invalide. Entrez 8 chiffres (ex: 98765432)");
-      return false;
-    }
-    setPhoneError(null);
-    return true;
-  };
+   const validatePhone = (phoneValue: string): boolean => {
+     if (!phoneValue.trim()) return true;
+     const cleanPhone = phoneValue.replace(/[\s-]/g, "");
+     const tunisianPhoneRegex = /^[2459]\d{7}$/;
+     if (!tunisianPhoneRegex.test(cleanPhone)) {
+       setPhoneError(t('complaint.errors.phoneInvalid'));
+       return false;
+     }
+     setPhoneError(null);
+     return true;
+   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^\d]/g, "");
@@ -614,28 +614,28 @@ export default function NewComplaintPage() {
     }
   };
 
-  const validateForm = (): boolean => {
-    if (!title.trim() || title.trim().length < 5) {
-      setError("Title must be at least 5 characters");
-      return false;
-    }
-    if (!description.trim() || description.trim().length < 20) {
-      setError("Description must be at least 20 characters");
-      return false;
-    }
-    if (!category) {
-      setError("Please select a category");
-      return false;
-    }
-    if (media.length === 0) {
-      setError("Please add at least one photo");
-      return false;
-    }
-    if (phone && !validatePhone(phone)) {
-      return false;
-    }
-    return true;
-  };
+   const validateForm = (): boolean => {
+     if (!title.trim() || title.trim().length < 5) {
+       setError(t('complaint.errors.titleMin'));
+       return false;
+     }
+     if (!description.trim() || description.trim().length < 20) {
+       setError(t('complaint.errors.descMin'));
+       return false;
+     }
+     if (!category) {
+       setError(t('complaint.errors.selectCategory'));
+       return false;
+     }
+     if (media.length === 0) {
+       setError(t('complaint.errors.addPhoto'));
+       return false;
+     }
+     if (phone && !validatePhone(phone)) {
+       return false;
+     }
+     return true;
+   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -708,9 +708,9 @@ export default function NewComplaintPage() {
         setTimeout(() => router.push("/"), 2500);
       } else if (normalized.includes("403") || normalized.includes("access denied")) {
         setError(t('complaint.errors.noPermission'));
-      } else {
-        setError(`We couldn't submit your complaint right now. Please try again in a moment. Error: ${rawMessage}`);
-      }
+       } else {
+         setError(t('complaint.errors.submitFailed'));
+       }
     } finally {
       setIsSubmitting(false);
     }

@@ -229,26 +229,31 @@ class UserController {
       const magicToken = crypto.randomBytes(32).toString('hex');
       const magicTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
 
-      // Create user without password (will be set via magic link)
-      const user = new User({
-        fullName,
-        email: normalizedEmail,
-        phone: phone || null,
-        role: userRole,
-        department: departmentId,
-        governorate: governorate || "",
-        municipality: municipalityId || null,
-        municipalityName: municipality || "",
-        isVerified: false, // Must verify via email
-        isActive: false, // Must activate via magic link
-        status: "PENDING_VERIFICATION",
-        magicToken,
-        magicTokenExpires,
-      });
+       // Create user without password (will be set via magic link)
+       const user = new User({
+         fullName,
+         email: normalizedEmail,
+         phone: phone || null,
+         role: userRole,
+         department: departmentId,
+         governorate: governorate || "",
+         municipality: municipalityId || null,
+         municipalityName: municipality || "",
+         isVerified: false, // Must verify via email
+         isActive: false, // Must activate via magic link
+         status: "PENDING_VERIFICATION",
+         magicToken,
+         magicTokenExpires,
+       });
 
-      await user.save();
+       await user.save();
 
-      // Send invitation email with magic link
+       // If user is a DEPARTMENT_MANAGER, also set them as the department's responsable
+       if (userRole === "DEPARTMENT_MANAGER" && departmentId) {
+         await Department.findByIdAndUpdate(departmentId, { responsable: user._id });
+       }
+
+       // Send invitation email with magic link
       try {
         await sendMagicLinkEmail(user.email, user._id.toString(), magicToken, fullName);
       } catch (emailError) {
@@ -303,13 +308,25 @@ class UserController {
         user.email = normalizedEmail;
       }
 
-      if (role && VALID_ROLES.includes(role)) {
-        // only admins may change another user's role
-        if (req.user.role !== "ADMIN") {
-          return res.status(403).json({ success: false, message: "Not authorized to change role" });
-        }
-        user.role = role;
-      }
+       if (role && VALID_ROLES.includes(role)) {
+         // only admins may change another user's role
+         if (req.user.role !== "ADMIN") {
+           return res.status(403).json({ success: false, message: "Not authorized to change role" });
+         }
+         const oldRole = user.role;
+         user.role = role;
+         
+         // Handle department/responsable linkage changes when role changes
+         if (user.department) {
+           if (role === "DEPARTMENT_MANAGER" && oldRole !== "DEPARTMENT_MANAGER") {
+             // Promoted to manager — set as responsable of their department
+             await Department.findByIdAndUpdate(user.department, { responsable: user._id });
+           } else if (role !== "DEPARTMENT_MANAGER" && oldRole === "DEPARTMENT_MANAGER") {
+             // Demoted from manager — clear responsable from department
+             await Department.findByIdAndUpdate(user.department, { $unset: { responsable: 1 } });
+           }
+         }
+       }
 
       if (phone !== undefined) {
         user.phone = phone;
@@ -349,14 +366,29 @@ class UserController {
 
       // Handle department update
       if (department !== undefined) {
+        const oldDeptId = user.department;
         if (department) {
           const dept = await Department.findById(department);
           if (!dept) {
             return res.status(400).json({ success: false, message: "Invalid department" });
           }
           user.department = department;
+          
+          // If user is DEPARTMENT_MANAGER, also set responsable on the new department
+          if (user.role === "DEPARTMENT_MANAGER") {
+            // Clear old department's responsable if it pointed to this user
+            if (oldDeptId) {
+              await Department.findByIdAndUpdate(oldDeptId, { $unset: { responsable: 1 } });
+            }
+            // Set new department's responsable
+            await Department.findByIdAndUpdate(department, { responsable: user._id });
+          }
         } else {
           user.department = null;
+          // If user is DEPARTMENT_MANAGER, clear the responsable from their old department
+          if (user.role === "DEPARTMENT_MANAGER" && oldDeptId) {
+            await Department.findByIdAndUpdate(oldDeptId, { $unset: { responsable: 1 } });
+          }
         }
       }
 
@@ -396,6 +428,11 @@ class UserController {
       // Prevent deletion of admin users
       if (user.role === "ADMIN") {
         return res.status(400).json({ success: false, message: "Cannot delete admin users" });
+      }
+
+      // If user is a DEPARTMENT_MANAGER, clear the department's responsable linkage
+      if (user.role === "DEPARTMENT_MANAGER" && user.department) {
+        await Department.findByIdAndUpdate(user.department, { $unset: { responsable: 1 } });
       }
 
       await User.findByIdAndDelete(id);
@@ -473,6 +510,18 @@ class UserController {
 
       const oldRole = user.role;
       user.role = role;
+      
+      // Handle department/responsable linkage for DEPARTMENT_MANAGER role changes
+      if (user.department) {
+        if (role === "DEPARTMENT_MANAGER") {
+          // User becomes manager — set them as responsable of their department
+          await Department.findByIdAndUpdate(user.department, { responsable: user._id });
+        } else if (oldRole === "DEPARTMENT_MANAGER" && role !== "DEPARTMENT_MANAGER") {
+          // User is no longer a manager — clear responsable from their department
+          await Department.findByIdAndUpdate(user.department, { $unset: { responsable: 1 } });
+        }
+      }
+      
       await user.save();
 
       await logAction(req, "USER_ROLE_CHANGED", "User", id, { role: oldRole }, { role }).catch(() => {});

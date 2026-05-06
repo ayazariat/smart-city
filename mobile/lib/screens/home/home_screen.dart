@@ -673,25 +673,43 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Icon(Icons.location_on, color: AppTheme.primary, size: 20),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'Signalements dans ma municipalité',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
+            Row(
+              children: [
+                const Icon(Icons.location_on, color: AppTheme.primary, size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Signalements dans ma municipalité',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
-              ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: _loadMunicipalityComplaints,
             ),
           ],
         ),
+        const SizedBox(height: 4),
+        const Text(
+          'Vérifiez et soutenez les problèmes dans votre municipalité',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
         const SizedBox(height: 12),
-        ..._municipalityComplaints
-            .take(3)
-            .map((c) => _buildPublicComplaintCard(c)),
+        if (_municipalityComplaints.isEmpty)
+          _buildEmptyState(
+            'Aucun signalement',
+            'Aucun signalement dans votre municipalité pour le moment',
+          )
+        else
+          ..._municipalityComplaints
+              .take(3)
+              .map((c) => _buildPublicComplaintCard(c)),
       ],
     );
   }

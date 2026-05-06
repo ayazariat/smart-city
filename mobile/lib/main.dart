@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/localizations.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
-import 'package:smart_city_app/core/localization/app_localizations.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/providers/locale_provider.dart';
@@ -67,32 +67,31 @@ class MyApp extends ConsumerWidget {
       initialRoute = AppRoutes.home;
     }
 
-    return MaterialApp(
-      title: 'Smart City Tunisia',
-      debugShowCheckedModeBanner: false,
-      initialRoute: initialRoute,
-      locale: locale.currentLocale,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('fr', 'FR'),
-        Locale('en', 'US'),
-        Locale('ar', 'SA'),
-      ],
-      localeResolutionCallback: (deviceLocale, supportedLocales) {
-        if (deviceLocale == null) return const Locale('fr');
-        for (var supported in supportedLocales) {
-          if (supported.languageCode == deviceLocale.languageCode) {
-            return supported;
+     return MaterialApp(
+       title: 'Smart City Tunisia',
+       debugShowCheckedModeBanner: false,
+       initialRoute: initialRoute,
+        locale: locale.currentLocale,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('fr', 'FR'),
+          Locale('en', 'US'),
+          Locale('ar', 'SA'),
+        ],
+        localeResolutionCallback: (deviceLocale, supportedLocales) {
+          if (deviceLocale == null) return const Locale('fr');
+          for (var supported in supportedLocales) {
+            if (supported.languageCode == deviceLocale.languageCode) {
+              return supported;
+            }
           }
-        }
-        return const Locale('fr');
-      },
-      theme: _buildTheme(),
+          return const Locale('fr');
+        },
+        theme: buildTheme(),
       routes: {
         // Auth
         AppRoutes.login: (_) => const LoginScreen(),
@@ -135,7 +134,7 @@ class MyApp extends ConsumerWidget {
     );
   }
 
-  ThemeData _buildTheme() => ThemeData(
+  ThemeData buildTheme() => ThemeData(
     primaryColor: AppColors.primary,
     scaffoldBackgroundColor: AppColors.background,
     colorScheme: const ColorScheme.light(

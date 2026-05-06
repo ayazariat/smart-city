@@ -95,10 +95,10 @@ router.get("/archived", authenticate, async (req, res) => {
 router.get("/", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getAllComplaints);
 router.get("/stats", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getStats);
 router.get("/technicians", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getTechnicians);
-router.patch("/:id/status", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updateStatus);
-router.patch("/:id/assign", authorize("ADMIN", "DEPARTMENT_MANAGER"), complaintController.assignComplaint);
-router.patch("/:id/department", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.assignDepartment);
-router.patch("/:id/priority", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updatePriority);
+router.patch("/:id/status", authorize("MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updateStatus);
+router.patch("/:id/assign", authorize("DEPARTMENT_MANAGER"), complaintController.assignComplaint);
+router.patch("/:id/department", authorize("MUNICIPAL_AGENT"), complaintController.assignDepartment);
+router.patch("/:id/priority", authorize("DEPARTMENT_MANAGER"), complaintController.updatePriority);
 router.patch("/:id/archive", authorize("ADMIN"), complaintController.archiveComplaint);
 router.patch("/:id/unarchive", authorize("ADMIN"), complaintController.unarchiveComplaint);
 
@@ -156,7 +156,7 @@ router.post("/:id/confirm", async (req, res) => {
               type: 'upvote',
               title: 'Complaint Confirmed',
               message: `Complaint '${complaint.title}' received a new confirmation (total: ${complaint.confirmationCount}).`,
-              complaintId: complaint._id,
+              complaintId: complaint._id.toString(),
             });
           }
         }
@@ -290,7 +290,7 @@ router.post("/:id/upvote", async (req, res) => {
               type: 'upvote',
               title: 'Complaint Upvoted',
               message: `Complaint '${complaint.title}' received a new upvote (total: ${complaint.upvoteCount}).`,
-              complaintId: complaint._id,
+              complaintId: complaint._id.toString(),
             });
           }
         }
@@ -429,6 +429,7 @@ router.get("/:id/priority", async (req, res) => {
 // Analytics endpoint added\n// Common routes - both citizens and admin can access
 router.get("/:id", complaintController.getComplaintById);
 router.post("/:id/comments", complaintController.addComment);
+router.put("/:id/rating", authenticate, authorize("CITIZEN"), complaintController.submitRating);
 
 module.exports = router;
 

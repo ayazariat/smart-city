@@ -8,9 +8,7 @@ import 'package:smart_city_app/services/ai_service.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/widgets/charts.dart';
-import 'package:smart_city_app/widgets/municipality_overview.dart';
-import 'package:smart_city_app/widgets/municipality_overview.dart';
-import 'package:smart_city_app/widgets/charts.dart';
+import 'package:smart_city_app/services/api_client.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -48,87 +46,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _errorMessage = null;
       });
     }
-    try {
-      // Load citizen stats
-      final statsData = await _complaintService.getCitizenStats();
-      if (mounted) {
-        setState(() {
-          _stats = {
-            'total': (statsData['total'] ?? 0) as int,
-            'submitted': (statsData['submitted'] ?? 0) as int,
-            'pending': (statsData['pending'] ?? 0) as int,
-            'inProgress': (statsData['inProgress'] ?? 0) as int,
-            'resolved': (statsData['resolved'] ?? 0) as int,
-            'closed': (statsData['closed'] ?? 0) as int,
-            'overdue': (statsData['overdue'] ?? 0) as int,
-          };
-        });
-      }
-
-      // Load complaints
-      final complaints = await _complaintService.getMyComplaints(limit: 20);
-      final activeComplaints = complaints
-          .where((c) => c.status != 'CLOSED' && c.status != 'REJECTED')
-          .toList();
-      final resolved = complaints
-          .where((c) => c.status == 'RESOLVED')
-          .take(6)
-          .toList();
-      if (mounted) {
-        setState(() {
-          _recentComplaints = activeComplaints.take(6).toList();
-          _resolvedComplaints = resolved;
-        });
-      }
-
-      // Load category stats for chart
-      try {
-        final api = ApiClient();
-        final catResponse = await api.get('/public/stats/by-category?period=month');
-        if (catResponse is Map && catResponse['data'] is Map) {
-          final catData = catResponse['data'] as Map;
-          final categories = <String, int>{};
-          catData.forEach((key, value) {
-            if (value is Map) {
-              categories[key] = value['total'] ?? 0;
-            }
-          });
-          if (mounted) {
-            setState(() {
-              _categoryStats = categories;
-            });
-          }
-        }
-
-        // Load monthly trends
-        final trendResponse = await api.get('/public/stats/monthly-trends?months=6');
-        if (trendResponse is List) {
-          final trends = <String, int>{};
-          for (var item in trendResponse) {
-            if (item is Map) {
-              final month = item['month']?.toString() ?? '';
-              final submitted = item['submitted'] ?? 0;
-              trends[month] = submitted as int;
-            }
-          }
-          if (mounted) {
-            setState(() {
-              _monthlyTrends = trends;
-            });
-          }
-        }
-      } catch (e) {
-        // Charts data is optional - continue without it
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = e.toString();
-        });
-      }
-    }
-  }
     try {
       // Load citizen stats
       final statsData = await _complaintService.getCitizenStats();
@@ -262,86 +179,86 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ? 'Bon après-midi'
         : 'Bonsoir';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
-          : _errorMessage != null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
-                  const SizedBox(height: 12),
-                  Text('Erreur: $_errorMessage'),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: _loadData,
-                    child: const Text('Réessayer'),
-                  ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: CustomScrollView(
-                slivers: [
-                  SliverAppBar(
-                    expandedHeight: 180,
-                    floating: false,
-                    pinned: true,
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.textPrimary,
-                    flexibleSpace: FlexibleSpaceBar(
-                      background: Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [AppColors.primary, AppColors.primaryDark],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: SafeArea(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '$greeting!',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Gérez vos signalements et suivez leur évolution',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    actions: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.notifications_outlined,
-                          color: Colors.white,
-                        ),
-                        onPressed: () {},
-                      ),
-                    ],
-                  ),
+     return Scaffold(
+       backgroundColor: const Color(0xFFF5F7FA),
+       body: _isLoading
+           ? const Center(
+               child: CircularProgressIndicator(color: AppColors.primary),
+             )
+           : _errorMessage != null
+           ? Center(
+               child: Column(
+                 mainAxisAlignment: MainAxisAlignment.center,
+                 children: [
+                   Icon(Icons.error_outline, size: 48, color: Colors.red[400]),
+                   const SizedBox(height: 12),
+                   Text('Erreur: $_errorMessage'),
+                   const SizedBox(height: 12),
+                   ElevatedButton(
+                     onPressed: _loadData,
+                     child: const Text('Réessayer'),
+                   ),
+                 ],
+               ),
+           )
+           : RefreshIndicator(
+               onRefresh: _loadData,
+               child: CustomScrollView(
+                 slivers: [
+                   SliverAppBar(
+                     expandedHeight: 180,
+                     floating: false,
+                     pinned: true,
+                     backgroundColor: Colors.white,
+                     foregroundColor: AppColors.textPrimary,
+                     flexibleSpace: FlexibleSpaceBar(
+                       background: Container(
+                         decoration: const BoxDecoration(
+                           gradient: LinearGradient(
+                             colors: [AppColors.primary, AppColors.primaryDark],
+                             begin: Alignment.topLeft,
+                             end: Alignment.bottomRight,
+                           ),
+                         ),
+                         child: SafeArea(
+                           child: Padding(
+                             padding: const EdgeInsets.all(20),
+                             child: Column(
+                               crossAxisAlignment: CrossAxisAlignment.start,
+                               mainAxisAlignment: MainAxisAlignment.end,
+                               children: [
+                                 Text(
+                                   '$greeting!',
+                                   style: const TextStyle(
+                                     fontSize: 24,
+                                     fontWeight: FontWeight.bold,
+                                     color: Colors.white,
+                                   ),
+                                 ),
+                                 const SizedBox(height: 4),
+                                 const Text(
+                                   'Gérez vos signalements et suivez leur évolution',
+                                   style: TextStyle(
+                                     color: Colors.white70,
+                                     fontSize: 14,
+                                   ),
+                                 ),
+                               ],
+                             ),
+                           ),
+                         ),
+                       ),
+                     ),
+                     actions: [
+                       IconButton(
+                         icon: const Icon(
+                           Icons.notifications_outlined,
+                           color: Colors.white,
+                         ),
+                         onPressed: () {},
+                       ),
+                     ],
+                   ),
                    SliverToBoxAdapter(
                      child: Padding(
                        padding: const EdgeInsets.all(16),
@@ -361,15 +278,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                              MonthlyLineChart(data: _monthlyTrends),
                              const SizedBox(height: 16),
                            ],
-                           // Municipality Overview (citizen only)
-                           if (role == 'CITIZEN') ...[
-                             MunicipalityOverview(
-                               role: role,
-                               userMunicipality: user?.municipalityName,
-                               userGovernorate: user?.governorate,
-                             ),
-                             const SizedBox(height: 24),
-                           ],
                            if (_resolvedComplaints.isNotEmpty) ...[
                              _buildResolvedComplaints(),
                              const SizedBox(height: 24),
@@ -380,22 +288,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                        ),
                      ),
                    ),
-                             const SizedBox(height: 24),
-                           ],
-                           if (_resolvedComplaints.isNotEmpty) ...[
-                             _buildResolvedComplaints(),
-                             const SizedBox(height: 24),
-                           ],
-                           _buildRecentComplaints(),
-                           const SizedBox(height: 32),
-                         ],
-                       ),
-                     ),
-                   ),
-                ],
-              ),
-            ),
-    )
+                 ],
+               ),
+             ),
+     );
   }
 
   Widget _buildStatsGrid() {

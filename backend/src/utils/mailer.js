@@ -310,6 +310,13 @@ const sendNotificationEmail = async (type, recipientUser, complaintData = {}, ex
           template = emailTemplates.complaintRejectedCitizen(firstName, title, extras.reason || 'Not specified');
         }
         break;
+      case 'assigned':
+        if (role === 'CITIZEN') {
+          template = emailTemplates.complaintAssignedCitizen(firstName, title, departmentName);
+        } else if (role === 'TECHNICIAN') {
+          template = emailTemplates.complaintAssignedTechnician(firstName, title, departmentName, zone);
+        }
+        break;
       case 'assigned_department':
         if (role === 'CITIZEN') {
           template = emailTemplates.complaintAssignedCitizen(firstName, title, departmentName);

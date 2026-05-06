@@ -42,9 +42,22 @@ interface ManagerStatsResponse {
   success: boolean;
   data: {
     total: number;
+    submitted?: number;
+    pending?: number;
+    validated?: number;
     assigned: number;
     inProgress: number;
     resolved: number;
+    closed?: number;
+    rejected?: number;
+    totalOverdue?: number;
+    totalAtRisk?: number;
+    resolutionRate?: number;
+    averageResolutionTime?: number;
+    slaComplianceRate?: number;
+    csat?: number;
+    totalRatings?: number;
+    byCategory?: Record<string, number>;
   };
 }
 

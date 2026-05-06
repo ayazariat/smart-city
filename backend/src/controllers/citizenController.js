@@ -335,26 +335,36 @@ class CitizenController {
         status: { $in: CITIZEN_ACTIVE_STATUSES },
       };
 
-      const [historicalTotal, total, submitted, inProgress, resolved, closed, rejected] = await Promise.all([
-        Complaint.countDocuments(historicalQuery),
-        Complaint.countDocuments(activeQuery),
-        Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
-        Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
-      ]);
+       const [historicalTotal, total, submitted, inProgress, resolved, closed, rejected, resolvedWithRatingCount, csatCount] = await Promise.all([
+         Complaint.countDocuments(historicalQuery),
+         Complaint.countDocuments(activeQuery),
+         Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
+         Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
+         Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+       ]);
 
-      const resolvedCount = resolved + closed;
-      const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+       const resolvedCount = resolved + closed;
+       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
-      const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
-        { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
-      ]);
-      const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
+       const avgTimeResult = await Complaint.aggregate([
+         { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+       ]);
+       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
-      res.json({ success: true, data: { total, historicalTotal, submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime } });
+       // SLA compliance rate
+       const onTimeCountResult = await Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
+       const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
+
+       // CSAT
+        const totalRatings = resolvedWithRatingCount;
+        const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
+
+        res.json({ success: true, data: { total, historicalTotal, submitted, pending: submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime, slaComplianceRate, csat, totalRatings } });
     } catch (error) {
       console.error("Citizen stats error:", error);
       res.status(500).json({ success: false, message: "Failed to retrieve statistics" });

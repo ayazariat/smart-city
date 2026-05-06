@@ -137,7 +137,7 @@ export default function AdminComplaintsPage() {
       <tr style="border-bottom:1px solid #eee">
         <td style="padding:6px 10px;font-size:12px">${c.referenceId || c._id?.slice(-6) || "-"}</td>
         <td style="padding:6px 10px;font-size:12px">${(c.title || "").replace(/</g, "&lt;")}</td>
-        <td style="padding:6px 10px;font-size:12px">${categoryLabels[c.category] || c.category}</td>
+        <td style="padding:6px 10px;font-size:12px">${getCategoryLabel(c.category)}</td>
         <td style="padding:6px 10px;font-size:12px">${c.status}</td>
         <td style="padding:6px 10px;font-size:12px">${c.priorityScore || 0}</td>
         <td style="padding:6px 10px;font-size:12px">${c.municipalityName || "-"}</td>
@@ -157,17 +157,17 @@ export default function AdminComplaintsPage() {
     printWindow.document.close();
   };
 
-  const exportCSV = () => {
-    const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
-    const rows = filteredComplaints.map(c => [
-      c.referenceId || c._id?.slice(-6),
-      c.title?.replace(/,/g, " "),
-      categoryLabels[c.category] || c.category,
-      c.status,
-      (c.priorityScore || 0).toString(),
-      c.municipalityName || "",
-      new Date(c.createdAt).toLocaleDateString()
-    ]);
+   const exportCSV = () => {
+     const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
+     const rows = filteredComplaints.map(c => [
+       c.referenceId || c._id?.slice(-6),
+       c.title?.replace(/,/g, " "),
+       getCategoryLabel(c.category),
+       c.status,
+       (c.priorityScore || 0).toString(),
+       c.municipalityName || "",
+       new Date(c.createdAt).toLocaleDateString()
+     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -209,8 +209,8 @@ export default function AdminComplaintsPage() {
     <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
-        title="Active Complaints"
-        subtitle="System-wide complaint overview"
+        title="System Supervision — Complaints"
+        subtitle="Read-only monitoring and administrative oversight"
         backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
@@ -461,14 +461,14 @@ export default function AdminComplaintsPage() {
         {loading && <LoadingSpinner />}
 
         {!loading && (
-          filteredComplaints.length === 0 ? (
-            <EmptyState
-              message={
-                searchTerm || statusFilter || governorateFilter || municipalityFilter || categoryFilter || priorityFilter || dateFrom || dateTo
-                  ? "Try adjusting your search or filters."
-                  : "No complaints have been submitted yet."
-              }
-            />
+           filteredComplaints.length === 0 ? (
+             <EmptyState
+               message={
+                 searchTerm || statusFilter || governorateFilter || municipalityFilter || categoryFilter || priorityFilter || dateFrom || dateTo
+                   ? t("common.tryAdjustingFilters")
+                   : t("admin.noComplaintsSubmitted")
+               }
+             />
           ) : (
             <div className="grid gap-4">
               {filteredComplaints.map((complaint) => (

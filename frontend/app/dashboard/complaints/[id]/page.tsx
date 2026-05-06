@@ -22,6 +22,7 @@ import {
   FileText,
   Copy,
   Search,
+  Flag,
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
@@ -32,7 +33,8 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { Button, PageHeader } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
-import { categoryOptions, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { categoryOptions, categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { getDepartmentLabel } from "@/lib/categories";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AIAnalysisCard from "@/components/dashboard/AIAnalysisCard";
 import { useTranslation } from "react-i18next";
@@ -277,39 +279,39 @@ export default function ComplaintDetailPage() {
     }
   }, [complaintId, t]);
 
-  // Fetch departments when opening department modal
-  useEffect(() => {
-    const fetchDepartments = async () => {
-      if (actionModal === "department" && (user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT")) {
-        try {
-          if (user?.role === "ADMIN") {
-            const deptData = await adminService.getDepartments();
-            setDepartments(deptData);
-          } else {
-            const response = await agentService.getAgentDepartments();
-            if (response.data && Array.isArray(response.data)) {
-              setDepartments(response.data);
-            }
-          }
-      } catch (error) {
-          // Set empty departments on error
-          setDepartments([]);
-        }
-      }
-      
-      // Fetch technicians for manager
-      if (actionModal === "technician" && (user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN")) {
-        try {
-          const techData = await managerService.getTechnicians();
-          if (techData.data) {
-            setTechnicians(techData.data);
-          }
-      } catch (error) {
-        }
-      }
-    };
-    fetchDepartments();
-  }, [actionModal, user?.role]);
+   // Fetch departments when opening department modal (agent only)
+   useEffect(() => {
+     const fetchDepartments = async () => {
+       if (actionModal === "department" && user?.role === "MUNICIPAL_AGENT") {
+         try {
+           const response = await agentService.getAgentDepartments();
+           if (response.data && Array.isArray(response.data)) {
+             setDepartments(response.data);
+           }
+         } catch (error) {
+           setDepartments([]);
+         }
+       }
+     };
+     fetchDepartments();
+   }, [actionModal, user?.role]);
+
+   // Fetch technicians for manager
+   useEffect(() => {
+     const fetchTechnicians = async () => {
+       if (actionModal === "technician" && user?.role === "DEPARTMENT_MANAGER") {
+         try {
+           const techData = await managerService.getTechnicians();
+           if (techData.data) {
+             setTechnicians(techData.data);
+           }
+         } catch (error) {
+           setTechnicians([]);
+         }
+       }
+     };
+     fetchTechnicians();
+   }, [actionModal, user?.role]);
 
   const getUrgencyValue = (urgency: string | number): number => {
     if (typeof urgency === "number") return urgency;
@@ -447,8 +449,8 @@ export default function ComplaintDetailPage() {
 
   const isAgentOrManager =
     user?.role === "MUNICIPAL_AGENT" ||
-    user?.role === "DEPARTMENT_MANAGER" ||
-    user?.role === "ADMIN";
+    user?.role === "DEPARTMENT_MANAGER";
+  const isAdmin = user?.role === "ADMIN";
   const canSeeAiInsights =
     user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
   const canSeeUrgencyPrediction = user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
@@ -473,8 +475,8 @@ export default function ComplaintDetailPage() {
     return citizenId === user.id;
   })();
 
-  // Show contact info for agents/managers OR the owner
-  const canViewContact = isAgentOrManager || isOwner;
+  // Show contact info for agents/managers/admins OR the owner
+  const canViewContact = isAgentOrManager || isAdmin || isOwner;
   
   // Get citizen info - try createdBy first (for agent/manager view) or citizen (for some views)
   const citizenInfo = complaint?.createdBy && typeof complaint.createdBy === "object" 
@@ -536,11 +538,11 @@ export default function ComplaintDetailPage() {
         onBackClick={handleBack}
         rightContent={
           <div className="flex items-center gap-3">
-            {complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object' && (
-              <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                {complaint.assignedDepartment.name}
-              </span>
-            )}
+             {complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object' && (
+               <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                 {getDepartmentLabel(complaint.assignedDepartment.name)}
+               </span>
+             )}
             <span 
               className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
               aria-label={`${t("complaintDetail.status")}: ${status.label}`}
@@ -1017,8 +1019,8 @@ export default function ComplaintDetailPage() {
                 )}
               </section>
 
-            {/* Internal Notes - Only for staff */}
-            {isAgentOrManager && (
+            {/* Internal Notes - Staff only; Admin read-only */}
+            {(isAgentOrManager || isAdmin) && (
               <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="notes-title">
                 <h2 id="notes-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
@@ -1034,8 +1036,8 @@ export default function ComplaintDetailPage() {
                     createdAt: n.date || n.createdAt || new Date().toISOString()
                   }))}
                   userRole={user?.role || ""}
-                  canAdd={true}
-                  onAdd={handleAddNote}
+                  canAdd={isAgentOrManager}
+                  onAdd={isAgentOrManager ? handleAddNote : undefined}
                 />
               </section>
             )}
@@ -1100,16 +1102,20 @@ export default function ComplaintDetailPage() {
               )}
             </section>
 
-            {/* Department Info */}
-            {complaint.department && (
-              <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
-                <h2 id="department-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-primary" />
-                  {t("complaintDetail.department")}
-                </h2>
-                <p className="font-semibold text-slate-900">{complaint.department.name}</p>
-              </section>
-            )}
+             {/* Department Info */}
+             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
+               <h2 id="department-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                 <Building2 className="w-5 h-5 text-primary" />
+                 {t("complaintDetail.department")}
+               </h2>
+               {complaint.assignedDepartment ? (
+                 <p className="font-semibold text-slate-900">
+                   {getDepartmentLabel(typeof complaint.assignedDepartment === 'object' ? complaint.assignedDepartment.name : complaint.assignedDepartment)}
+                 </p>
+               ) : (
+                 <p className="text-slate-500 italic">{t("complaintDetail.notYetAssigned")}</p>
+               )}
+             </section>
 
             {/* Assigned To */}
             {(complaint.assignedTo || complaint.assignedTeam) && (
@@ -1120,10 +1126,10 @@ export default function ComplaintDetailPage() {
                 </h2>
                 {complaint.assignedDepartment && (
                   <div className="space-y-2 mb-4">
-                    <p className="font-semibold text-slate-900 flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-slate-400" />
-                      {typeof complaint.assignedDepartment === 'object' ? complaint.assignedDepartment.name : complaint.assignedDepartment}
-                    </p>
+                     <p className="font-semibold text-slate-900 flex items-center gap-2">
+                       <Building2 className="w-4 h-4 text-slate-400" />
+                       {getDepartmentLabel(typeof complaint.assignedDepartment === 'object' ? complaint.assignedDepartment.name : complaint.assignedDepartment)}
+                     </p>
                   </div>
                 )}
                 {complaint.assignedTo && !complaint.assignedTeam && (
@@ -1323,8 +1329,8 @@ export default function ComplaintDetailPage() {
                   </div>
                 )}
 
-                {/* Manager/Admin Actions - Approve/Reject for RESOLVED status */}
-                {complaint.status === "RESOLVED" && (user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                {/* Manager Actions - Approve/Reject for RESOLVED status */}
+                {complaint.status === "RESOLVED" && user?.role === "DEPARTMENT_MANAGER" && (
                   <div className="flex gap-3 pt-4 border-t border-amber-200">
                     <button
                       onClick={async () => {
@@ -1448,82 +1454,72 @@ export default function ComplaintDetailPage() {
                     </>
                   )}
 
-                  {/* VALIDATED - Agent assigns Department, Manager can set Priority, Admin can do everything */}
-                  {complaint.status === "VALIDATED" && (
-                    <>
-                      {user?.role === "MUNICIPAL_AGENT" && !complaint.assignedDepartment && (
-                        <Button
-                          className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                          icon={<Building2 className="w-4 h-4" />}
-                          onClick={() => setActionModal("department")}
-                        >
-                          {t("complaintDetail.assignToDepartment")}
-                        </Button>
-                      )}
-                      {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
-                        <Button
-                          className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                          icon={<AlertTriangle className="w-4 h-4" />}
-                          onClick={() => setActionModal("priority")}
-                        >
-                          {t("complaintDetail.setPriority")}
-                        </Button>
-                      )}
-                    </>
-                  )}
+                   {/* VALIDATED - Agent assigns Department, Manager can set Priority */}
+                   {complaint.status === "VALIDATED" && (
+                     <>
+                       {user?.role === "MUNICIPAL_AGENT" && !complaint.assignedDepartment && (
+                         <Button
+                           className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                           icon={<Building2 className="w-4 h-4" />}
+                           onClick={() => setActionModal("department")}
+                         >
+                           {t("complaintDetail.assignToDepartment")}
+                         </Button>
+                       )}
+                       {user?.role === "DEPARTMENT_MANAGER" && (
+                         <Button
+                           className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                           icon={<AlertTriangle className="w-4 h-4" />}
+                           onClick={() => setActionModal("priority")}
+                         >
+                           {t("complaintDetail.setPriority")}
+                         </Button>
+                       )}
+                     </>
+                   )}
 
-                  {/* ASSIGNED - Manager assigns Technician/Team */}
-                  {complaint.status === "ASSIGNED" && (
+                  {/* ASSIGNED - Manager assigns Technician/Team and sets Priority */}
+                  {complaint.status === "ASSIGNED" && user?.role === "DEPARTMENT_MANAGER" && (
                     <>
-                      {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && (
+                      {(complaint.assignedTo || complaint.assignedTeam) ? (
                         <>
-{(complaint.assignedTo || complaint.assignedTeam) ? (
-                            <>
-                              <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
-                                <p className="text-sm font-medium text-green-800 flex items-center gap-2">
-                                  <CheckCircle2 className="w-4 h-4" />
-                                  Assigned to Repair Team
-                                </p>
-                                <p className="text-xs text-green-700 mt-1">
-                                  {complaint.assignedTo?.fullName || complaint.assignedTeam?.name || 'Team'}
-                                </p>
-                              </div>
-                              <Button
-                                className="w-full bg-indigo-500 hover:bg-indigo-600"
-                                icon=<UserCog className="w-4 h-4" />
-                                onClick={() => setActionModal("technician")}
-                              >
-                                Reassign Team
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-                              icon=<UserCog className="w-4 h-4" />
-                              onClick={() => setActionModal("technician")}
-                            >
-                              {t("complaintDetail.assignToRepairTeam")}
-                            </Button>
-                          )}
-                          <Button
-                            className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                            icon={<AlertTriangle className="w-4 h-4" />}
-                            onClick={() => setActionModal("priority")}
-                          >
-                            {t("complaintDetail.setPriority")}
-                          </Button>
-                          {!complaint.assignedTo && (
-                            <p className="text-xs text-slate-500 text-center mt-2">
-                              {t("complaintDetail.selectTechnicianHint")}
+                          <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
+                            <p className="text-sm font-medium text-green-800 flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4" />
+                              Assigned to Repair Team
                             </p>
-                          )}
+                            <p className="text-xs text-green-700 mt-1">
+                              {complaint.assignedTo?.fullName || complaint.assignedTeam?.name || 'Team'}
+                            </p>
+                          </div>
+                          <Button
+                            className="w-full bg-indigo-500 hover:bg-indigo-600"
+                            icon={<UserCog className="w-4 h-4" />}
+                            onClick={() => setActionModal("technician")}
+                          >
+                            Reassign Team
+                          </Button>
                         </>
+                      ) : (
+                        <Button
+                          className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
+                          icon={<UserCog className="w-4 h-4" />}
+                          onClick={() => setActionModal("technician")}
+                        >
+                          {t("complaintDetail.assignToRepairTeam")}
+                        </Button>
                       )}
-                      {user?.role === "MUNICIPAL_AGENT" && complaint.assignedDepartment && !complaint.assignedTo && (
-                        <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                          <p className="text-sm text-purple-800 font-medium">{t("complaintDetail.departmentAssigned")}</p>
-                          <p className="text-xs text-purple-600">{t("complaintDetail.waitingTechnicianAssignment")}</p>
-                        </div>
+                      <Button
+                        className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                        icon={<AlertTriangle className="w-4 h-4" />}
+                        onClick={() => setActionModal("priority")}
+                      >
+                        {t("complaintDetail.setPriority")}
+                      </Button>
+                      {!complaint.assignedTo && (
+                        <p className="text-xs text-slate-500 text-center mt-2">
+                          {t("complaintDetail.selectTechnicianHint")}
+                        </p>
                       )}
                     </>
                   )}
@@ -1770,9 +1766,9 @@ export default function ComplaintDetailPage() {
                   );
                   return matchingDepts.length > 0 ? (
                     <div className="space-y-2">
-                      <p className="text-sm text-blue-800 font-medium">
-                        Suggested department based on category &quot;{categoryLabels[complaint.category] || complaint.category}&quot;:
-                      </p>
+                       <p className="text-sm text-blue-800 font-medium">
+                         Suggested department based on category &quot;{getCategoryLabel(complaint.category)}&quot;:
+                       </p>
                       <div className="flex flex-wrap gap-2">
                         {matchingDepts.map(dept => (
                           <button

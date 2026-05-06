@@ -26,6 +26,7 @@ import { Complaint } from "@/types";
 import { showToast } from "@/components/ui/Toast";
 import { Button, Modal, PageHeader, ConfirmationModal } from "@/components/ui";
 import { categoryLabels } from "@/lib/complaints";
+import { getCategoryLabel } from "@/lib/categories";
 import { getPhotoCount } from "@/lib/photos";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useTranslation } from "react-i18next";
@@ -360,19 +361,19 @@ export default function TechnicianTasksPage() {
                             {t(status.labelKey)}
                           </span>
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                            {categoryLabels[task.category] || task.category}
+                            {getCategoryLabel(task.category)}
                           </span>
                           {urgency && (
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${urgency.bgClass} ${urgency.textClass}`}>
                               {t(urgency.labelKey)}
                             </span>
                           )}
-                          {task.priorityScore != null && task.priorityScore >= 15 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                              <AlertTriangle className="w-3 h-3" />
-                              High Priority
-                            </span>
-                          )}
+                           {task.priorityScore != null && task.priorityScore >= 15 && (
+                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700`}>
+                               <AlertTriangle className="w-3 h-3" />
+                               {t('tasks.highPriority')}
+                             </span>
+                           )}
                           {task.slaDeadline && !["RESOLVED", "CLOSED"].includes(task.status) && (() => {
                             const diff = new Date(task.slaDeadline).getTime() - Date.now();
                             const hours = Math.abs(diff) / (1000 * 60 * 60);

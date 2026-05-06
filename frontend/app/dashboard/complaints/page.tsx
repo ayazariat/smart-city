@@ -11,7 +11,7 @@ import { agentService } from "@/services/agent.service";
 import { managerService } from "@/services/manager.service";
 import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, getCategoryLabel } from "@/lib/categories";
 import { getTrendAlerts, confirmComplaint } from "@/services/complaint.service";
 import TrendForecastChart from "@/components/dashboard/TrendForecastChart";
 import DuplicateStatsCard from "@/components/dashboard/DuplicateStatsCard";
@@ -770,11 +770,11 @@ function DashboardContent() {
                   };
                   const colorClass = categoryColors[cat] || "from-primary to-primary-700";
                   
-                  return (
-                    <div key={cat} className="flex items-center gap-3">
-                      <div className="w-40 text-sm font-medium text-slate-700 truncate">
-                        {categoryLabels[cat] || cat}
-                      </div>
+                    return (
+                      <div key={cat} className="flex items-center gap-3">
+                        <div className="w-40 text-sm font-medium text-slate-700 truncate">
+                          {getCategoryLabel(cat)}
+                        </div>
                       <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
@@ -908,11 +908,11 @@ function DashboardContent() {
                           <FileText className="w-8 h-8 text-slate-300" />
                         </div>
                       )}
-                      <div className="absolute top-2 left-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/90 text-slate-700 shadow-sm">
-                          {categoryLabels[complaint.category] || complaint.category}
-                        </span>
-                      </div>
+                        <div className="absolute top-2 left-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/90 text-slate-700 shadow-sm">
+                            {getCategoryLabel(complaint.category)}
+                          </span>
+                        </div>
                       <div className="absolute top-2 right-2">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shadow-sm ${
                           complaint.status === "RESOLVED" ? "bg-green-100 text-green-700" :

@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useAuthStore } from "@/store/useAuthStore";
 import { PageHeader, LoadingSpinner } from "@/components/ui";
 import { heatmapService, HeatmapPoint } from "@/services/heatmap.service";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, getCategoryLabel as getTranslatedCategory } from "@/lib/categories";
 import { MapPin, Activity, RefreshCw, TrendingUp, Clock, CheckCircle2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
@@ -107,7 +107,7 @@ export default function HeatmapPage() {
   }, [selectedCategory]);
 
   const getCategoryLabel = (cat: string) => {
-    return categoryLabels[cat] || cat;
+    return getTranslatedCategory(cat);
   };
 
   const canAccess = user && ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(user.role);

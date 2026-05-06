@@ -37,11 +37,15 @@ export default function DuplicateStatsCard() {
       <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <Copy className="w-5 h-5 text-amber-600" />
-          {t('duplicate.title')}
+          Duplicate Detection
         </h3>
-        <div className="flex items-center justify-center py-6 text-slate-400">
-          <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          {t('duplicate.loading')}
+        <div className="animate-pulse">
+          <div className="h-16 bg-slate-100 rounded-xl mb-3"></div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="h-20 bg-slate-100 rounded-xl"></div>
+            <div className="h-20 bg-slate-100 rounded-xl"></div>
+            <div className="h-20 bg-slate-100 rounded-xl"></div>
+          </div>
         </div>
       </div>
     );
@@ -51,28 +55,31 @@ export default function DuplicateStatsCard() {
 
   return (
     <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
-      <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-        <Copy className="w-5 h-5 text-amber-600" />
-        {t('duplicate.title')}
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+          <Copy className="w-5 h-5 text-amber-600" />
+          Duplicate Detection
+        </h3>
+        <span className="text-[10px] text-slate-400 font-medium">Today's summary</span>
+      </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="text-center p-3 bg-slate-50 rounded-xl">
           <div className="text-2xl font-bold text-slate-800">{stats.total_checked}</div>
-          <div className="text-xs text-slate-500 mt-1">{t('duplicate.checked')}</div>
+          <div className="text-xs text-slate-500 mt-1">Checked</div>
         </div>
         <div className="text-center p-3 bg-amber-50 rounded-xl">
           <div className="flex items-center justify-center gap-1">
             <AlertTriangle className="w-4 h-4 text-amber-500" />
             <span className="text-2xl font-bold text-amber-700">{stats.duplicates_found_today}</span>
           </div>
-          <div className="text-xs text-amber-600 mt-1">{t('duplicate.duplicatesToday')}</div>
+          <div className="text-xs text-amber-600 mt-1">Duplicates Today</div>
         </div>
         <div className="text-center p-3 bg-green-50 rounded-xl">
           <div className="flex items-center justify-center gap-1">
             <CheckCircle className="w-4 h-4 text-green-500" />
-            <span className="text-2xl font-bold text-green-700">{Math.round(stats.merge_rate * 100)}%</span>
+            <span className="text-2xl font-bold text-green-700">{stats.mergeRate}%</span>
           </div>
-          <div className="text-xs text-green-600 mt-1">{t('duplicate.mergeRate')}</div>
+          <div className="text-xs text-green-600 mt-1">Merge Rate</div>
         </div>
       </div>
     </div>

@@ -371,24 +371,14 @@ export async function clientApiFetch<T = unknown>(
     ...rest 
   } = options;
 
-  // Early return for notifications when not authenticated
-  if (requiresAuth) {
-    const token = getCookie(ACCESS_TOKEN_COOKIE);
-    const isNotificationEndpoint = 
-      endpoint.includes('/notifications') ||
-      endpoint.includes('/notifications/count');
-    
-    if (!token && isNotificationEndpoint) {
-      // Return empty data for notification endpoints when not authenticated
-      return {} as T;
-    }
-  }
-
+  // Build request headers
   const requestHeaders: HeadersInit = {
     "Content-Type": "application/json",
     ...headers,
   };
 
+  // Try to get token from cookie for Authorization header (if accessible)
+  // Note: httpOnly cookies cannot be read by JS, but browser will send them automatically with credentials: 'include'
   if (requiresAuth) {
     const token = getCookie(ACCESS_TOKEN_COOKIE);
     if (token) {
@@ -399,6 +389,7 @@ export async function clientApiFetch<T = unknown>(
   const fetchOptions: RequestInit = {
     method,
     headers: requestHeaders,
+    credentials: 'include', // Include cookies (including httpOnly) with cross-origin requests
     ...rest,
   };
 
@@ -409,16 +400,17 @@ export async function clientApiFetch<T = unknown>(
   let response = await fetch(`${API_BASE_URL}${endpoint}`, fetchOptions);
 
   // Handle 401 - try to refresh token
-  if (response.status === 401 && requiresAuth) {
-    const refreshToken = getCookie(REFRESH_TOKEN_COOKIE);
-    
-    if (refreshToken) {
-      try {
-        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+   if (response.status === 401 && requiresAuth) {
+     const refreshToken = getCookie(REFRESH_TOKEN_COOKIE);
+     
+     if (refreshToken) {
+       try {
+         const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+           method: "POST",
+           headers: { "Content-Type": "application/json" },
+           body: JSON.stringify({ refreshToken }),
+           credentials: 'include',
+         });
 
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
@@ -436,6 +428,7 @@ export async function clientApiFetch<T = unknown>(
             const retryFetchOptions: RequestInit = {
               method,
               headers: requestHeaders,
+              credentials: 'include',
               ...rest,
             };
 

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+
 export interface CategoryOption {
   value: string;
   label: string;
@@ -49,15 +51,56 @@ export const CATEGORIES: readonly CategoryOption[] = [
 
 export type CategoryValue = typeof CATEGORIES[number]["value"];
 
-export const getCategoryLabel = (value: string): string => {
-  const cat = CATEGORIES.find(c => c.value === value);
-  return cat ? cat.label : value;
+// Mapping from French department names to translation keys
+const DEPT_NAME_TO_KEY: Record<string, string> = {
+  "Déchets et Propreté": "waste",
+  "Routes et Circulation": "roads",
+  "Éclairage public": "lighting",
+  "Eau et Drainage": "water",
+  "Sécurité et Bruit": "safety",
+  "Propriété publique": "property",
+  "Parcs et Espaces verts": "parks",
+  "Services Généraux": "other",
+  // English fallbacks (in case DB language changes)
+  "Waste & Cleanliness": "waste",
+  "Roads & Traffic": "roads",
+  "Street Lighting": "lighting",
+  "Water & Drainage": "water",
+  "Public Safety & Noise": "safety",
+  "Public Property": "property",
+  "Parks & Green Spaces": "parks",
+  "General Services": "other",
 };
 
-export const getCategoryDescription = (value: string): string => {
+/**
+ * Get translated department name from stored French/English name.
+ * Falls back to original name if not found or translation unavailable.
+ */
+export function getDepartmentLabel(deptName: string | undefined | null): string {
+  if (!deptName) return "";
+  const key = DEPT_NAME_TO_KEY[deptName];
+  if (!key) return deptName;
+  try {
+    const translated = i18n.t(`departments.${key}`, { defaultValue: deptName });
+    return translated;
+  } catch {
+    return deptName;
+  }
+}
+
+/**
+ * Get translated category label using i18n.
+ */
+export function getCategoryLabel(value: string): string {
   const cat = CATEGORIES.find(c => c.value === value);
-  return cat ? cat.description : "";
-};
+  if (!cat) return value;
+  try {
+    const translated = i18n.t(`categories.${value}`, { defaultValue: cat.label });
+    return translated;
+  } catch {
+    return cat.label;
+  }
+}
 
 export const categoryOptions = CATEGORIES.map(cat => ({
   value: cat.value,

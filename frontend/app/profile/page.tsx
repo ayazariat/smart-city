@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { getDepartmentLabel } from "@/lib/categories";
 
 interface ProfileFormData {
   fullName: string;
@@ -564,9 +565,9 @@ function ProfilePage() {
                     <span className="text-sm font-medium text-slate-700">Department</span>
                   </div>
                   <div className="flex-1">
-                    <p className="text-slate-900 font-medium">
-                      {typeof user.department === 'object' ? user.department.name : user.department}
-                    </p>
+                     <p className="text-slate-900 font-medium">
+                       {getDepartmentLabel(typeof user.department === 'object' ? user.department.name : user.department)}
+                     </p>
                   </div>
                 </div>
               )}

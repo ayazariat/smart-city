@@ -22,7 +22,6 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
   final _searchController = TextEditingController();
   List<dynamic> _departments = [];
   final bool _showFilters = false;
-  final Set<String> _processingDuplicateIds = <String>{};
 
   @override
   void initState() {
@@ -107,250 +106,6 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
       default:
         return status;
     }
-  }
-
-  String? _extractMatchId(dynamic match) {
-    if (match is! Map) return null;
-    final candidate =
-        match['_id'] ??
-        match['id'] ??
-        match['complaintId'] ??
-        (match['complaint'] is Map
-            ? (match['complaint']['_id'] ?? match['complaint']['id'])
-            : null);
-    return candidate?.toString();
-  }
-
-  Future<void> _resolveDuplicate(
-    Complaint complaint, {
-    String? existingComplaintId,
-    required String action,
-  }) async {
-    if (_processingDuplicateIds.contains(complaint.id)) return;
-    setState(() => _processingDuplicateIds.add(complaint.id));
-    try {
-      await ComplaintService().confirmDuplicateDecision(
-        newComplaintId: complaint.id,
-        existingComplaintId: existingComplaintId ?? complaint.id,
-        action: action,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            action == 'merge'
-                ? 'Fusion effectuée avec conservation des confirmations.'
-                : 'Signalements conservés séparément.',
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      await _loadComplaints();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Action impossible: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _processingDuplicateIds.remove(complaint.id));
-      }
-    }
-  }
-
-  Future<void> _mergeMultipleDuplicates(
-    Complaint complaint,
-    List<String> sourceIds,
-  ) async {
-    if (sourceIds.isEmpty || _processingDuplicateIds.contains(complaint.id)) {
-      return;
-    }
-    setState(() => _processingDuplicateIds.add(complaint.id));
-    try {
-      for (final sourceId in sourceIds) {
-        await ComplaintService().confirmDuplicateDecision(
-          newComplaintId: complaint.id,
-          existingComplaintId: sourceId,
-          action: 'merge',
-        );
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${sourceIds.length} signalement(s) fusionné(s) avec conservation des confirmations.',
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      await _loadComplaints();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Fusion multiple impossible: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _processingDuplicateIds.remove(complaint.id));
-      }
-    }
-  }
-
-  Future<void> _showDuplicateActions(Complaint complaint) async {
-    final rawMatches = (complaint.aiDuplicateCheck?['topMatches'] as List?) ?? [];
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final selectedIds = <String>{};
-        return SafeArea(
-          child: StatefulBuilder(
-            builder: (context, setLocalState) => Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Revue des doublons',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Sélectionnez un ou plusieurs cas similaires à fusionner, ou conservez séparé.',
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 16),
-                  if (rawMatches.isEmpty)
-                    const Text(
-                      'Aucun match suggéré. Vous pouvez garder le signalement séparé.',
-                    )
-                  else
-                    ...rawMatches.take(8).map((m) {
-                      final id = _extractMatchId(m);
-                      final title =
-                          (m is Map ? (m['title'] ?? m['complaintTitle']) : null)
-                              ?.toString();
-                      final similarity = (m is Map ? m['similarityScore'] : null);
-                      final selected = id != null && selectedIds.contains(id);
-                      return GestureDetector(
-                        onTap: id == null
-                            ? null
-                            : () {
-                                setLocalState(() {
-                                  if (selected) {
-                                    selectedIds.remove(id);
-                                  } else {
-                                    selectedIds.add(id);
-                                  }
-                                });
-                              },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? AppColors.primary.withValues(alpha: 0.08)
-                                : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: selected
-                                  ? AppColors.primary
-                                  : const Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Checkbox(
-                                value: selected,
-                                onChanged: id == null
-                                    ? null
-                                    : (_) {
-                                        setLocalState(() {
-                                          if (selected) {
-                                            selectedIds.remove(id);
-                                          } else {
-                                            selectedIds.add(id);
-                                          }
-                                        });
-                                      },
-                              ),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      title?.isNotEmpty == true
-                                          ? title!
-                                          : 'Signalement similaire',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    if (similarity != null)
-                                      Text(
-                                        'Similarité: ${(similarity as num).toDouble().toStringAsFixed(2)}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.black54,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: selectedIds.isEmpty
-                          ? null
-                          : () async {
-                              final ids = selectedIds.toList(growable: false);
-                              Navigator.pop(ctx);
-                              await _mergeMultipleDuplicates(complaint, ids);
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: Text('Fusionner la sélection (${selectedIds.length})'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        Navigator.pop(ctx);
-                        await _resolveDuplicate(complaint, action: 'keep_separate');
-                      },
-                      child: const Text('Conserver séparé'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -808,126 +563,34 @@ class _AgentComplaintsScreenState extends ConsumerState<AgentComplaintsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _statusLabel(complaint.status),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
-                    if (complaint.duplicateStatus != null &&
-                        complaint.duplicateStatus!.isNotEmpty &&
-                        complaint.duplicateStatus != 'NOT_DUPLICATE') ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFAE8FF),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.copy_all,
-                              size: 12,
-                              color: Colors.purple[700],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              complaint.duplicateStatus == 'CONFIRMED_DUPLICATE'
-                                  ? 'Fusionné'
-                                  : 'Doublon',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.purple[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (complaint.duplicateStatus != null &&
-                        complaint.duplicateStatus == 'POTENTIAL_DUPLICATE') ...[
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: _processingDuplicateIds.contains(complaint.id)
-                            ? null
-                            : () => _showDuplicateActions(complaint),
-                        icon: _processingDuplicateIds.contains(complaint.id)
-                            ? const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.rule, size: 14),
-                        label: const Text('Traiter'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
-                    if (isOverdue) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.warning,
-                              size: 12,
-                              color: Colors.red[600],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'En retard',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.red[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    Text(
-                      '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
+Row(
+                   children: [
+                     Container(
+                       padding: const EdgeInsets.symmetric(
+                         horizontal: 8,
+                         vertical: 4,
+                       ),
+                       decoration: BoxDecoration(
+                         color: statusColor.withValues(alpha: 0.1),
+                         borderRadius: BorderRadius.circular(8),
+                       ),
+                       child: Text(
+                         _statusLabel(complaint.status),
+                         style: TextStyle(
+                           fontSize: 11,
+                           fontWeight: FontWeight.w600,
+                           color: statusColor,
+                         ),
+                       ),
+                     ),
+                     const Spacer(),
+                     Text(
+                       '${complaint.createdAt.day}/${complaint.createdAt.month}/${complaint.createdAt.year}',
+                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                     ),
+                   ],
+                 ),
+                 ),
                 const SizedBox(height: 12),
                 Text(
                   complaint.title,

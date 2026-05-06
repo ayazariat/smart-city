@@ -15,29 +15,59 @@ const MANAGER_ACTIVE_STATUSES = [
 
 async function getManagerDepartment(userId) {
   const user = await User.findById(userId)
-    .select("department")
+    .select("department role")
     .populate("department", "name");
   
   if (user?.department) {
+    // Ensure department's responsable points to this user without unnecessary writes
+    await Department.updateOne(
+      { _id: user.department._id, $or: [{ responsable: { $exists: false } }, { responsable: { $ne: userId } }] },
+      { $set: { responsable: userId } }
+    ).catch(() => {});
     return user.department;
   }
   
+  // Try to find department where this user is responsable
   const dept = await Department.findOne({ responsable: userId }).populate("name");
-  return dept;
+  if (dept) {
+    return dept;
+  }
+  
+   // Auto-fix: If user is DEPARTMENT_MANAGER with no department, assign first available department
+   if (user?.role === "DEPARTMENT_MANAGER") {
+     const availableDept = await Department.findOne({ responsable: { $exists: false } }).limit(1);
+     if (availableDept) {
+       // Link both sides
+       await Department.findByIdAndUpdate(availableDept._id, { responsable: userId });
+       await User.findByIdAndUpdate(userId, { department: availableDept._id });
+       return availableDept;
+     }
+   }
+  
+  throw new Error("NO_DEPARTMENT_ASSIGNED");
 }
 
 class ManagerController {
   async getComplaints(req, res) {
     try {
-      const department = await getManagerDepartment(req.user.userId);
-      const departmentId = department?._id;
-      
+      let department;
+      let departmentId;
+      try {
+        department = await getManagerDepartment(req.user.userId);
+        departmentId = department?._id;
+      } catch (err) {
+        // If no department assigned, we'll fall back to municipality filtering
+        if (err.message !== "NO_DEPARTMENT_ASSIGNED") {
+          throw err;
+        }
+      }
+
       const { status, category, page = 1, limit = 50 } = req.query;
       
       const query = {};
       
       if (departmentId) {
-        query.assignedDepartment = departmentId;
+        query["assignedDepartment.id"] = departmentId;
       } else {
         const user = await User.findById(req.user.userId).select('municipality municipalityName').lean();
         if (user?.municipality) {
@@ -105,10 +135,15 @@ class ManagerController {
           departmentName: department?.name || ""
         }
       });
-    } catch (error) {
-      console.error("Manager get complaints error:", error);
-      res.status(500).json({ success: false, message: "Failed to retrieve complaints" });
-    }
+     } catch (error) {
+       console.error("Manager get complaints error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         // For getComplaints, fall back to municipality; but if that also fails?
+         // Actually we already attempted to get department earlier and caught; this catch shouldn't occur.
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to retrieve complaints" });
+     }
   }
 
 async assignTechnician(req, res) {
@@ -158,19 +193,21 @@ async assignTechnician(req, res) {
       
       // Personalized notification to technician
       await notificationService.sendNotification(io, technicianId, {
-        type: "department_assignment",
-        title: "New complaint assigned to your department",
+        type: "assigned",
+        title: "New Complaint Assigned",
         message: `A new complaint "${complaint.title}" has been assigned to your department (${department?.name}). Please review it.`,
-        complaintId: complaint._id,
+        complaintId: complaint._id.toString(),
+        metadata: { assignedBy: req.user.userId, departmentId: department?._id?.toString() },
       });
 
       // Notification to citizen
       if (complaint.createdBy) {
-        await notificationService.sendNotification(io, complaint.createdBy, {
-          type: "department_assignment",
+        await notificationService.sendNotification(io, complaint.createdBy.toString(), {
+          type: "assigned",
           title: "Your complaint has been assigned",
           message: `Your complaint "${complaint.title}" has been assigned to the ${department?.name} team. We are on it!`,
-          complaintId: complaint._id,
+          complaintId: complaint._id.toString(),
+          metadata: { departmentId: department?._id?.toString(), departmentName: department?.name },
         });
       }
 
@@ -192,10 +229,13 @@ async assignTechnician(req, res) {
         message: "Complaint assigned to technician successfully",
         data: complaint
       });
-    } catch (error) {
-      console.error("Manager assign technician error:", error);
-      res.status(500).json({ success: false, message: "Failed to assign technician" });
-    }
+     } catch (error) {
+       console.error("Manager assign technician error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to assign technician" });
+     }
   }
 
   async reassignTechnician(req, res) {
@@ -239,11 +279,12 @@ async assignTechnician(req, res) {
       
       if (oldTechnicianId) {
         try {
-          await notificationService.sendNotification(io, oldTechnicianId, {
+          await notificationService.sendNotification(io, oldTechnicianId.toString(), {
             type: "unassigned",
             title: "Task Unassigned",
             message: `You have been unassigned from "${complaint.title || 'a complaint'}".`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { newTechnicianId: technicianId, reassignedBy: req.user.userId },
           });
         } catch (notifError) {
           console.error("Failed to notify old technician:", notifError);
@@ -255,7 +296,8 @@ async assignTechnician(req, res) {
           type: "assigned",
           title: "New Complaint Assigned",
           message: `Complaint '${complaint.title}' has been assigned to your team.`,
-          complaintId: complaint._id,
+          complaintId: complaint._id.toString(),
+          metadata: { assignedBy: req.user.userId, reassignment: true },
         });
       } catch (notifError) {
         console.error("Failed to notify new technician:", notifError);
@@ -265,11 +307,12 @@ async assignTechnician(req, res) {
         try {
           const dept = await getManagerDepartment(req.user.userId);
           const deptName = dept?.name || 'a department';
-          await notificationService.sendNotification(io, complaint.createdBy, {
+          await notificationService.sendNotification(io, complaint.createdBy.toString(), {
             type: "assigned",
             title: "Complaint Reassigned",
             message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { departmentName: deptName, assignedBy: req.user.userId },
           });
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
@@ -281,10 +324,13 @@ async assignTechnician(req, res) {
         message: "Technician reassigned successfully",
         data: complaint
       });
-    } catch (error) {
-      console.error("Manager reassign technician error:", error);
-      res.status(500).json({ success: false, message: "Failed to reassign technician" });
-    }
+     } catch (error) {
+       console.error("Manager reassign technician error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to reassign technician" });
+     }
   }
 
   async assignTeam(req, res) {
@@ -331,6 +377,9 @@ async assignTechnician(req, res) {
         return res.status(404).json({ success: false, message: "Some technicians not found or not available" });
       }
 
+      // Fetch department for email notifications
+      const department = departmentId ? await Department.findById(departmentId) : null;
+
       const teamName = `RC-${complaint._id.toString().slice(-6)} ${complaint.category || 'Maintenance'} - Equipe`;
       const repairTeam = new RepairTeam({
         name: teamName,
@@ -340,42 +389,59 @@ async assignTechnician(req, res) {
       });
       await repairTeam.save();
 
-      complaint.assignedTeam = repairTeam._id;
-      complaint.assignedTo = technicianIds[0];
-      complaint.status = "ASSIGNED";
-      await complaint.save();
-
+       complaint.assignedTeam = repairTeam._id;
+       complaint.assignedTo = technicianIds[0];
+       complaint.status = "ASSIGNED";
+       
+       // Set assignedDepartment if department is known
+       if (departmentId) {
+         complaint.assignedDepartment = {
+           id: department._id,
+           name: department.name
+         };
+       }
+       
       const populatedTeam = await RepairTeam.findById(repairTeam._id)
         .populate("members", "fullName email");
 
       const io = req.app?.get?.('io');
+      // Notify technicians
       for (const tech of technicians) {
         try {
-          await notificationService.sendNotification(io, tech._id, {
+          await notificationService.sendNotification(io, tech._id.toString(), {
             type: "assigned",
             title: "New Complaint Assigned",
-            message: `Complaint '${complaint.title}' has been assigned to your team.`,
-            complaintId: complaint._id,
+            message: `Complaint '${complaint.title}' has been assigned to your team (${department?.name}).`,
+            complaintId: complaint._id.toString(),
+            metadata: { teamId: repairTeam._id.toString(), departmentId: department?._id?.toString(), assignedBy: req.user.userId },
           });
         } catch (notifError) {
           console.error("Failed to notify team member:", notifError);
         }
       }
 
+      // Notify citizen
       if (complaint.createdBy) {
         try {
           const dept = await getManagerDepartment(req.user.userId);
           const deptName = dept?.name || 'a department';
-          await notificationService.sendNotification(io, complaint.createdBy, {
+          await notificationService.sendNotification(io, complaint.createdBy.toString(), {
             type: "assigned",
             title: "Complaint Assigned",
             message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { departmentName: deptName, departmentId: department?._id?.toString() },
           });
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
         }
       }
+
+      // Send confirmation email to manager
+      const technicianEmails = technicians.map(t => t.email).filter(Boolean);
+      const managerUser = { email: req.user.email, fullName: req.user.fullName };
+      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser)
+        .catch(err => console.error('Assignment emails failed:', err));
 
       res.json({
         success: true,
@@ -385,10 +451,13 @@ async assignTechnician(req, res) {
           team: populatedTeam
         }
       });
-    } catch (error) {
-      console.error("Manager assign team error:", error);
-      res.status(500).json({ success: false, message: "Failed to assign team" });
-    }
+     } catch (error) {
+       console.error("Manager assign team error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to assign team" });
+     }
   }
 
   async updatePriority(req, res) {
@@ -443,25 +512,23 @@ async assignTechnician(req, res) {
 
       // Notify municipal agents about the priority change
       const io = req.app?.get?.('io');
-      if (io) {
+      if (io && complaint.municipalityName) {
         try {
           const managerUser = await User.findById(req.user.userId).select('fullName').lean();
           const managerName = managerUser?.fullName || 'Manager';
           const newPriority = urgency || complaint.urgency;
-          if (complaint.municipalityName) {
-            const agents = await User.find({
-              role: 'MUNICIPAL_AGENT',
-              municipalityName: { $regex: new RegExp(`^${complaint.municipalityName}$`, 'i') }
-            }).select('_id').lean();
-            if (agents.length > 0) {
-              const notifSvc = require('../services/notification.service');
-              await notifSvc.sendNotificationToMultiple(io, agents.map(a => a._id.toString()), {
-                type: 'priority_changed',
-                title: 'Priority Updated',
-                message: `Priority for complaint '${complaint.title}' was updated to ${newPriority} by the manager.`,
-                complaintId: complaint._id,
-              });
-            }
+          const agents = await User.find({
+            role: 'MUNICIPAL_AGENT',
+            municipalityName: { $regex: new RegExp(`^${complaint.municipalityName}$`, 'i') }
+          }).select('_id').lean();
+          if (agents.length > 0) {
+            await notificationService.sendNotificationToMultiple(io, agents.map(a => a._id.toString()), {
+              type: 'priority_changed',
+              title: 'Priority Updated',
+              message: `Priority for complaint '${complaint.title}' was updated to ${newPriority} by ${managerName}.`,
+              complaintId: complaint._id.toString(),
+              metadata: { newPriority, oldPriority: complaint.urgency, updatedBy: req.user.userId },
+            });
           }
         } catch (notifErr) {
           console.error('Priority change notification failed:', notifErr.message);
@@ -473,10 +540,13 @@ async assignTechnician(req, res) {
         message: "Complaint priority updated successfully",
         data: complaint
       });
-    } catch (error) {
-      console.error("Manager update priority error:", error);
-      res.status(500).json({ success: false, message: "Failed to update priority" });
-    }
+     } catch (error) {
+       console.error("Manager update priority error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to update priority" });
+     }
   }
 
   async getTechnicians(req, res) {
@@ -495,38 +565,38 @@ async assignTechnician(req, res) {
         technicians = await User.find(query)
           .select("fullName email phone department")
           .sort({ fullName: 1 });
-      } else {
-        const department = await getManagerDepartment(req.user.userId);
-        const departmentId = department?._id;
-        
-        if (!departmentId) {
-          return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-        }
+       } else {
+         const department = await getManagerDepartment(req.user.userId);
+         const departmentId = department?._id;
+         
+         if (!departmentId) {
+           // This should not happen if auto-fix works, but safeguard
+           return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+         }
 
-        query.department = departmentId;
-        technicians = await User.find(query)
-          .select("fullName email phone")
-          .sort({ fullName: 1 });
-      }
+         query.department = departmentId;
+         technicians = await User.find(query)
+           .select("fullName email phone")
+           .sort({ fullName: 1 });
+       }
 
       res.json({
         success: true,
         data: technicians
       });
-    } catch (error) {
-      console.error("Manager get technicians error:", error);
-      res.status(500).json({ success: false, message: "Failed to retrieve technicians" });
-    }
+     } catch (error) {
+       console.error("Manager get technicians error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to retrieve technicians" });
+     }
   }
 
   async getStats(req, res) {
     try {
       const department = await getManagerDepartment(req.user.userId);
       const departmentId = department?._id;
-      
-      if (!departmentId) {
-        return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-      }
 
       const historicalBaseQuery = { assignedDepartment: departmentId };
       const activeBaseQuery = {
@@ -535,59 +605,76 @@ async assignTechnician(req, res) {
         status: { $in: MANAGER_ACTIVE_STATUSES },
       };
       
-      const [historicalTotal, total, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory] = await Promise.all([
-        Complaint.countDocuments(historicalBaseQuery),
-        Complaint.countDocuments(activeBaseQuery),
-        Complaint.countDocuments({ ...historicalBaseQuery, status: "SUBMITTED", isArchived: false }),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "VALIDATED" }),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
-        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
-        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
-        Complaint.aggregate([
-          { $match: activeBaseQuery },
-          { $group: { _id: "$category", count: { $sum: 1 } } }
-        ])
-      ]);
+       const [historicalTotal, total, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory, resolvedWithRatingCount, csatCount] = await Promise.all([
+         Complaint.countDocuments(historicalBaseQuery),
+         Complaint.countDocuments(activeBaseQuery),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "SUBMITTED", isArchived: false }),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "VALIDATED" }),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
+         Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.aggregate([
+           { $match: activeBaseQuery },
+           { $group: { _id: "$category", count: { $sum: 1 } } }
+         ]),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+        ]);
 
-      const resolvedCount = resolved + closed;
-      const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+        const resolutionRate = total > 0 ? Math.round((resolved + closed) / total * 100) : 0;
 
-      const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
-        { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
-      ]);
-      const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
+        const avgTimeResult = await Complaint.aggregate([
+          { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+          { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+        ]);
+        const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
-      res.json({
-        success: true,
-        data: {
-          total,
-          historicalTotal,
-          submitted,
-          validated,
-          assigned,
-          inProgress,
-          resolved,
-          closed,
-          rejected,
-          totalOverdue: overdue,
-          totalAtRisk: atRisk,
-          resolutionRate,
-          averageResolutionTime,
-          byCategory: byCategory.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-          }, {})
-        }
-      });
-    } catch (error) {
-      console.error("Manager get stats error:", error);
-      res.status(500).json({ success: false, message: "Failed to retrieve statistics" });
-    }
+        const resolvedCount = resolved + closed;
+        // SLA compliance rate
+        const onTimeCountResult = await Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
+        const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
+
+       // CSAT
+       const totalRatings = resolvedWithRatingCount;
+       const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
+
+       res.json({
+         success: true,
+         data: {
+           total,
+           historicalTotal,
+           submitted,
+           pending: submitted,
+           validated,
+           assigned,
+           inProgress,
+           resolved,
+           closed,
+           rejected,
+           totalOverdue: overdue,
+           totalAtRisk: atRisk,
+           resolutionRate,
+           averageResolutionTime,
+           slaComplianceRate,
+           csat,
+           totalRatings,
+           byCategory: byCategory.reduce((acc, item) => {
+             acc[item._id] = item.count;
+             return acc;
+           }, {})
+         }
+       });
+     } catch (error) {
+       console.error("Manager get stats error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to retrieve statistics" });
+     }
   }
 
   async getTechnicianPerformance(req, res) {
@@ -607,19 +694,19 @@ async assignTechnician(req, res) {
         technicians = await User.find(query)
           .select("fullName email phone department")
           .sort({ fullName: 1 });
-      } else {
-        const department = await getManagerDepartment(req.user.userId);
-        departmentId = department?._id;
-        
-        if (!departmentId) {
-          return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-        }
+        } else {
+          const department = await getManagerDepartment(req.user.userId);
+          const departmentId = department?._id;
+          
+          if (!departmentId) {
+            return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+          }
 
-        query.department = departmentId;
-        technicians = await User.find(query)
-          .select("fullName email phone")
-          .sort({ fullName: 1 });
-      }
+          query.department = departmentId;
+          technicians = await User.find(query)
+            .select("fullName email phone")
+            .sort({ fullName: 1 });
+        }
 
       const performanceData = await Promise.all(technicians.map(async (tech) => {
         const techId = tech._id;
@@ -670,10 +757,13 @@ async assignTechnician(req, res) {
         success: true,
         data: performanceData
       });
-    } catch (error) {
-      console.error("Manager technician performance error:", error);
-      res.status(500).json({ success: false, message: "Failed to retrieve technician performance" });
-    }
+     } catch (error) {
+       console.error("Manager technician performance error:", error);
+       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+       }
+       res.status(500).json({ success: false, message: "Failed to retrieve technician performance" });
+     }
   }
 
   async sendMessage(req, res) {
@@ -693,10 +783,11 @@ async assignTechnician(req, res) {
       const manager = await User.findById(req.user.userId).select("fullName");
 
       const io = req.app?.get?.('io');
-      await notificationService.sendNotification(io, technician._id, {
+      await notificationService.sendNotification(io, technician._id.toString(), {
         type: "technician_message",
         title: "Message from Manager",
         message: `Message from ${manager?.fullName || "Manager"}: ${message.trim().slice(0, 100)}`,
+        metadata: { fromManagerId: req.user.userId, managerName: manager?.fullName },
       });
 
       res.json({
@@ -726,10 +817,11 @@ async assignTechnician(req, res) {
       const manager = await User.findById(req.user.userId).select("fullName");
 
       const io = req.app?.get?.('io');
-      await notificationService.sendNotification(io, technician._id, {
+      await notificationService.sendNotification(io, technician._id.toString(), {
         type: "manager_warning",
         title: "Warning from Manager",
         message: `Warning from ${manager?.fullName || "Manager"}: ${warning.trim()}`,
+        metadata: { fromManagerId: req.user.userId, managerName: manager?.fullName },
       });
 
       res.json({
@@ -786,19 +878,21 @@ async assignTechnician(req, res) {
       const io = req.app?.get?.('io');
 
       if (oldTechnicianId) {
-        await notificationService.sendNotification(io, oldTechnicianId, {
+        await notificationService.sendNotification(io, oldTechnicianId.toString(), {
           type: "info",
           title: "Task Unassigned",
           message: `You have been unassigned from complaint "${complaint.title || complaint.referenceId}"`,
-          complaintId: complaint._id,
+          complaintId: complaint._id.toString(),
+          metadata: { newTechnicianId: technicianId, reassignedBy: req.user.userId },
         });
       }
 
-      await notificationService.sendNotification(io, technicianId, {
+      await notificationService.sendNotification(io, technicianId.toString(), {
         type: "assigned",
-        title: "notification.status.assigned",
-        message: "notification.status.assigned.desc",
-        complaintId: complaint._id,
+        title: "New Complaint Assigned",
+        message: `Complaint '${complaint.title}' has been assigned to your team.`,
+        complaintId: complaint._id.toString(),
+        metadata: { assignedBy: req.user.userId, reassignment: true },
       });
 
       res.json({
@@ -823,8 +917,16 @@ async assignTechnician(req, res) {
         return res.status(400).json({ success: false, message: "Only SUBMITTED complaints can be validated" });
       }
 
-      const department = await getManagerDepartment(req.user.userId);
-      const departmentId = department?._id;
+      let departmentId;
+      try {
+        const department = await getManagerDepartment(req.user.userId);
+        departmentId = department?._id;
+      } catch (err) {
+        if (err.message !== "NO_DEPARTMENT_ASSIGNED") {
+          throw err;
+        }
+        // else continue without department assignment
+      }
 
       if (departmentId) {
         complaint.assignedDepartment = departmentId;
@@ -844,11 +946,12 @@ async assignTechnician(req, res) {
       await complaint.save();
 
       if (complaint.createdBy) {
-        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy.toString(), {
           type: "validated",
           title: "Complaint Validated",
           message: `Your complaint '${complaint.title}' has been validated and is now visible publicly.`,
-          complaintId: complaint._id,
+          complaintId: complaint._id.toString(),
+          metadata: { validatedBy: req.user.userId },
         });
       }
 
@@ -890,11 +993,12 @@ async assignTechnician(req, res) {
       await complaint.save();
 
       if (complaint.createdBy) {
-        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy.toString(), {
           type: "rejected",
           title: "Complaint Rejected",
           message: `Your complaint '${complaint.title}' was rejected. Reason: ${reason}.`,
-          complaintId: complaint._id,
+          complaintId: complaint._id.toString(),
+          metadata: { rejectionReason: reason, rejectedBy: req.user.userId },
         });
       }
 

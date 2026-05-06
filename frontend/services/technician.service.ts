@@ -267,7 +267,15 @@ export async function getTechnicianStats(): Promise<{
     assigned: number;
     inProgress: number;
     resolved: number;
-    blocked: number;
+    closed?: number;
+    rejected?: number;
+    totalOverdue?: number;
+    totalAtRisk?: number;
+    resolutionRate?: number;
+    averageResolutionTime?: number;
+    slaComplianceRate?: number;
+    csat?: number;
+    totalRatings?: number;
   };
 }> {
   return apiClient.get<{

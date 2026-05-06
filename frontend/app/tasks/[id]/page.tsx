@@ -36,6 +36,7 @@ import { showToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui";
 import Timeline from "@/components/complaints/Timeline";
 import { categoryLabels } from "@/lib/complaints";
+import { getCategoryLabel, getDepartmentLabel } from "@/lib/categories";
 import { getPhotoUrl } from "@/lib/photos";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
@@ -581,9 +582,9 @@ export default function TechnicianTaskDetailPage() {
                   <Building2 className="w-5 h-5 text-primary" />
                   Department
                 </h2>
-                <p className="font-semibold text-slate-900">
-                  {typeof task.assignedDepartment === 'object' ? task.assignedDepartment.name : task.assignedDepartment}
-                </p>
+                 <p className="font-semibold text-slate-900">
+                   {getCategoryLabel(task.category)}
+                 </p>
               </section>
             )}
 

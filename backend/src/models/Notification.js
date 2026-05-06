@@ -1,58 +1,114 @@
 const mongoose = require("mongoose");
 
-// All notification types - using String with validation against this list
-// Using String type (not enum) to allow flexibility while still documenting expected types
+// All notification types - comprehensive enum for validation
 const NOTIFICATION_TYPES = [
-  // Status changes (lowercase - used by notification service)
+  // Complaint lifecycle (lowercase)
   "submitted", "validated", "rejected", "assigned", "in_progress",
-  "resolved", "closed", "report_accepted", "report_rejected",
+  "resolved", "closed",
   
-  // Status changes (uppercase - alternative)
-  "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED",
+  // Complaint lifecycle (uppercase variants - for backward compatibility)
+  "SUBMITTED", "VALIDATED", "REJECTED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED",
   
-  // Complaint lifecycle (snake_case for new types)
+  // Complaint-specific with prefix
   "complaint_submitted", "complaint_validated", "complaint_rejected",
   "complaint_assigned", "complaint_in_progress", "complaint_resolved", "complaint_closed",
   
   // Resolution workflow
-  "resolution_approved", "resolution_rejected", "report_submitted",
+  "resolution_approved", "resolution_rejected", "report_submitted", "complaint_rated",
   
-  // System notifications
-  "welcome", "SYSTEM", "SLA_ALERT", "priority_changed",
+  // Priority
+  "priority_changed",
   
   // User interactions
-  "COMMENT", "CONFIRMATION", "CONFIRMATION_RECEIVED",
-  "public_note", "blocage", "note",
-  "upvote", "upvoted", "confirm",
+  "public_note", "comment", "upvote", "upvoted", "confirm", "confirmed",
   
-  // Assignment related
-  "ASSIGNMENT", "new_complaint_municipality", "department_assigned",
+  // Assignment variations
+  "assignment", "assigned_department", "unassigned", "new_complaint_municipality", "department_assigned",
   
-  // Technician related
+  // Duplicate detection
+  "duplicate_detected", "duplicate_resolved", "duplicate_merged",
+  
+  // Technician/Manager communication
   "technician_message", "manager_warning",
   
-  // General
-  "info", "warning", "error", "success"
+  // System/General
+  "system", "info", "warning", "error", "success",
+  "welcome", "SYSTEM", "SLA_ALERT", "BLOCKAGE", "note", "blocage",
+  "COMMENT", "CONFIRMATION", "CONFIRMATION_RECEIVED",
 ];
 
 const notificationSchema = new mongoose.Schema(
   {
-    recipient: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true, // index for querying by user
+    },
     type: {
       type: String,
-      default: "info"
+      enum: NOTIFICATION_TYPES,
+      default: "system",
+      required: true,
+      index: true, // index for filtering by type
     },
-    title: { type: String, default: "Notification" },
-    message: { type: String, required: true },
-    complaint: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint" },
-    relatedId: { type: mongoose.Schema.Types.ObjectId },
-    isRead: { type: Boolean, default: false },
+    message: {
+      type: String,
+      required: true,
+      text: true, // text index for search if needed
+    },
+    title: {
+      type: String,
+      default: "Notification",
+      index: true,
+    },
+    complaintId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Complaint",
+      index: true,
+    },
+    relatedId: {
+      type: mongoose.Schema.Types.ObjectId,
+      index: true,
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    read: {
+      type: Boolean,
+      default: false,
+      index: true, // compound index with userId already covers, but add for clarity
+    },
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      expires: 0, // TTL: MongoDB auto-deletes when this date passes
+      index: true,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: {
+      transform(doc, ret) {
+        ret.isRead = ret.read; // alias for frontend
+        // Convert ObjectIds to strings
+        if (ret.userId) ret.userId = ret.userId.toString();
+        if (ret.complaintId) ret.complaintId = ret.complaintId.toString();
+        if (ret.relatedId) ret.relatedId = ret.relatedId.toString();
+      },
+    },
+    toObject: {
+      transform(doc, ret) {
+        ret.isRead = ret.read;
+      },
+    },
+  }
 );
 
-// Index for efficient querying
-notificationSchema.index({ recipient: 1, createdAt: -1 });
-notificationSchema.index({ recipient: 1, isRead: 1 });
+// Composite indexes for common queries
+notificationSchema.index({ userId: 1, createdAt: -1 });
+notificationSchema.index({ userId: 1, read: 1, createdAt: -1 });
+// TTL index is created automatically by Mongoose due to expires: 0
 
 module.exports = mongoose.model("Notification", notificationSchema);

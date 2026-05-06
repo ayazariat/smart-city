@@ -205,11 +205,18 @@ export interface Complaint {
     recommendation?: string;
     humanReviewRequired: boolean;
   } | null;
-  duplicateStatus?: string | null;
-  duplicateOf?: string | null;
-  // Final human decision (for training)
-  finalUrgencyHuman?: string | null;
-}
+   duplicateStatus?: string | null;
+   duplicateOf?: string | null;
+   // Final human decision (for training)
+   finalUrgencyHuman?: string | null;
+   // Citizen satisfaction rating
+   rating?: {
+     score: number;
+     comment?: string;
+     createdAt: string;
+     resolvedCorrectly?: boolean;
+   };
+ }
 
 export interface CreateComplaintData {
   title: string;
@@ -241,13 +248,17 @@ export interface Comment {
 
 export interface Notification {
   _id: string;
-  recipient?: string;
-  user?: string | { _id: string; fullName: string };
+  userId?: string;           // User who receives this notification
+  recipient?: string;       // legacy field, kept for compatibility
+  user?: string | { _id: string; fullName: string }; // optional populated user
   type?: string;
-  title: string;
+  title?: string;           // Optional title, defaults to "Notification"
   message: string;
-  complaint?: { _id: string; title: string };
-  relatedId?: string;
-  isRead: boolean;
+  complaint?: { _id: string; title: string }; // Populated complaint reference
+  complaintId?: string;     // Direct complaint ID (may not be populated)
+  relatedId?: string;       // Generic related ID (for backward compatibility)
+  isRead: boolean;          // Alias for 'read' field (frontend uses isRead)
+  read?: boolean;           // Actual DB field (optional for compatibility)
+  metadata?: Record<string, any>; // Additional context
   createdAt: string;
 }  

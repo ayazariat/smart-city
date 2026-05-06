@@ -192,24 +192,27 @@ export const adminService = {
   /**
    * Get complaint statistics (system-wide for admin)
    */
-  async getStats(): Promise<{
-    success: boolean;
-    data: {
-      total: number;
-      submitted: number;
-      validated: number;
-      assigned: number;
-      inProgress: number;
-      resolved: number;
-      closed: number;
-      rejected: number;
-      totalOverdue: number;
-      totalAtRisk: number;
-      resolutionRate: number;
-      averageResolutionTime: number;
-      byCategory: Record<string, number>;
-    };
-  }> {
+   async getStats(): Promise<{
+     success: boolean;
+     data: {
+       total: number;
+       submitted: number;
+       validated: number;
+       assigned: number;
+       inProgress: number;
+       resolved: number;
+       closed: number;
+       rejected: number;
+       totalOverdue: number;
+       totalAtRisk: number;
+       resolutionRate: number;
+       averageResolutionTime: number;
+       slaComplianceRate?: number;
+       csat?: number;
+       totalRatings?: number;
+       byCategory: Record<string, number>;
+     };
+   }> {
     return apiClient.get<{
       success: boolean;
       data: {

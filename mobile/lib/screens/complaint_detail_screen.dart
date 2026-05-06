@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
@@ -1242,10 +1243,20 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                 color: const Color(0xFFE2E8F0),
                 child: const Icon(Icons.image_not_supported),
               )
-            : Image.network(
-                _getMediaUrl(url),
+            : CachedNetworkImage(
+                imageUrl: _getMediaUrl(url),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                placeholder: (_, __) => Container(
+                  color: const Color(0xFFE2E8F0),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                ),
+                errorWidget: (_, __, ___) => Container(
                   color: const Color(0xFFE2E8F0),
                   child: const Icon(Icons.broken_image),
                 ),

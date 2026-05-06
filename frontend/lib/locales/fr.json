@@ -26,9 +26,20 @@
       "minutes": "il y a {{n}} min",
       "hours": "il y a {{n}} h",
       "days": "il y a {{n}} j"
-    }
-  },
-  "sidebar": {
+     }
+   },
+   "errors": {
+     "loadFailed": "Échec du chargement des données. Veuillez réessayer.",
+     "generic": "Une erreur s'est produite. Veuillez réessayer.",
+     "notFound": "La ressource demandée est introuvable.",
+     "invalidActivation": "Lien d'activation invalide. Veuillez contacter votre administrateur.",
+     "fillAllFields": "Veuillez remplir tous les champs",
+     "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+     "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+     "passwordComplexity": "Le mot de passe doit contenir des lettres majuscules, minuscules et des chiffres",
+     "failedSetPassword": "Échec de la définition du mot de passe. Veuillez réessayer."
+   },
+   "sidebar": {
     "navigation": "Navigation",
     "dashboard": "Tableau de bord",
     "myComplaints": "Mes réclamations",
@@ -852,10 +863,11 @@
     "search": "Recherche :",
     "status": "Statut :"
   },
-  "publicComplaint": {
-    "loading": "Chargement de la réclamation...",
-    "notFound": "Réclamation introuvable",
-    "notPublicYet": "Cette réclamation n'est peut-être pas encore publique.",
+   "publicComplaint": {
+     "loading": "Chargement de la réclamation...",
+     "notFound": "Réclamation introuvable",
+     "errorLoading": "Impossible de charger les détails de la réclamation",
+     "notPublicYet": "Cette réclamation n'est peut-être pas encore publique.",
     "backToDashboard": "Retour au tableau de bord",
     "complaintDetail": "Détail de la réclamation",
     "menu": "Menu",

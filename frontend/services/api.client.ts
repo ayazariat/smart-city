@@ -134,11 +134,16 @@ export const apiClient = {
       if (authToken) {
         (finalHeaders as Record<string, string>)["Authorization"] = `Bearer ${authToken}`;
       }
-      return fetch(`${API_BASE_URL}${endpoint}`, {
-        ...rest,
-        credentials: "include",
-        headers: finalHeaders,
-      });
+      try {
+        return await fetch(`${API_BASE_URL}${endpoint}`, {
+          ...rest,
+          credentials: "include",
+          headers: finalHeaders,
+        });
+      } catch (networkError) {
+        const errorMessage = networkError instanceof Error ? networkError.message : "Network error";
+        throw new Error(`Failed to connect to server: ${errorMessage}. Please check if the backend is running.`);
+      }
     };
 
     let response = await makeRequest(token || undefined);

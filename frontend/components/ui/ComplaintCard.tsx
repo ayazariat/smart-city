@@ -15,7 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
-import { getCategoryLabel } from "@/lib/categories";
+import { getCategoryLabel, getDepartmentLabel } from "@/lib/categories";
 import { getPhotoUrl } from "@/lib/photos";
 import { useAuthStore } from "@/store/useAuthStore";
 import { confirmComplaint, unconfirmComplaint } from "@/services/complaint.service";
@@ -324,12 +324,12 @@ export const ComplaintCard = ({
               {complaint.citizen?.fullName || (typeof complaint.createdBy === 'object' ? complaint.createdBy?.fullName : '')}
             </span>
           )}
-{showDepartment && (complaint.department || complaint.assignedDepartment) && (
-            <span className="inline-flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              {(complaint.department || complaint.assignedDepartment)?.name}
-            </span>
-          )}
+           {showDepartment && (complaint.department || complaint.assignedDepartment) && (
+             <span className="inline-flex items-center gap-1.5">
+               <Building2 className="w-3.5 h-3.5 text-slate-400" />
+               {getDepartmentLabel((complaint.department || complaint.assignedDepartment)?.name)}
+             </span>
+           )}
           {/* Assigned Repair Team - Visible to ALL roles */}
           {(complaint.assignedTo || complaint.assignedTeam) && (
             <span className="inline-flex items-center gap-1.5">
@@ -345,20 +345,15 @@ export const ComplaintCard = ({
               )}
             </span>
           )}
-          {/* REQ #2: Assigned Department - Visible to ALL roles */}
-          <span className="inline-flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-slate-400" />
-            {complaint.assignedDepartment ? (
+          {/* Department (visible to all roles) */}
+          {(complaint.department || complaint.assignedDepartment) && (
+            <span className="inline-flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-slate-400" />
               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                {complaint.assignedDepartment.name}
+                {getDepartmentLabel((complaint.department || complaint.assignedDepartment)?.name)}
               </span>
-            ) : (
-              <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-full text-xs font-medium">
-                Not yet assigned
-              </span>
-            )}
-          </span>
-          {/* No duplicate technician name - dept first, team/tech second if present */}
+            </span>
+          )}
           {showAssignedTo && (complaint.assignedTo || complaint.assignedTeam) && (
             <span className="inline-flex items-center gap-1.5">
               <Wrench className="w-3.5 h-3.5 text-slate-400" />

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, getCategoryLabel } from "@/lib/categories";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -104,14 +104,14 @@ export default function ComplaintHeatmap({ data = [], category, height = "500px"
                   </p>
                   {point.categories.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {point.categories.map((cat) => (
-                        <span
-                          key={cat}
-                          className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium"
-                        >
-                          {categoryLabels[cat] || cat}
-                        </span>
-                      ))}
+                        {point.categories.map((cat) => (
+                          <span
+                            key={cat}
+                            className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium"
+                          >
+                            {getCategoryLabel(cat)}
+                          </span>
+                        ))}
                     </div>
                   )}
                   <p className="text-[10px] text-slate-400 mt-1.5">

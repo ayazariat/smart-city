@@ -3,7 +3,7 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { FileText, Plus, Sparkles, Shield, Loader2, BarChart3, MapPin, CheckCircle, ArrowRight, TrendingUp, AlertTriangle, MessageSquare } from "lucide-react";
+import { FileText, Plus, Sparkles, Shield, Loader2, BarChart3, MapPin, CheckCircle, ArrowRight, TrendingUp, AlertTriangle, MessageSquare, Clock, Star } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import MunicipalityOverview from "@/components/dashboard/MunicipalityOverview";
 
@@ -13,9 +13,9 @@ import { managerService } from "@/services/manager.service";
 import { technicianService } from "@/services/technician.service";
 import { adminService } from "@/services/admin.service";
 import { getCategoryLabel } from "@/lib/categories";
+import { categoryLabels } from "@/lib/complaints";
 import { getTrendAlerts, confirmComplaint } from "@/services/complaint.service";
 import TrendForecastChart from "@/components/dashboard/TrendForecastChart";
-import DuplicateStatsCard from "@/components/dashboard/DuplicateStatsCard";
 import { useTranslation } from "react-i18next";
 
 interface DashboardStats {
@@ -29,6 +29,10 @@ interface DashboardStats {
   totalOverdue?: number;
   overdue?: number;
   resolutionRate?: number;
+  averageResolutionTime?: number; // in hours
+  slaComplianceRate?: number; // percentage
+  csat?: number; // percentage
+  totalRatings?: number;
   byCategory?: Record<string, number>;
   [key: string]: unknown;
 }
@@ -500,10 +504,9 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Notifications now only in Topbar bell per task requirements */}
+{/* Notifications now only in Topbar bell per task requirements */}
 
-
-        {/* Statistics Section */}
+          {/* Statistics Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-slate-900">
@@ -522,84 +525,94 @@ function DashboardContent() {
           </div>
           
           {/* Citizen Stats */}
-          {user?.role === 'CITIZEN' && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-                <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                <div className="text-sm text-blue-600 font-medium">{t('stats.myComplaints')}</div>
-                <div className="text-xs text-blue-500 mt-1">{t('stats.totalSubmitted')}</div>
-              </div>
-              <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
-                <div className="text-2xl font-bold text-amber-700 mb-1">{(stats.submitted || 0) + (stats.pending || 0)}</div>
-                <div className="text-sm text-amber-600 font-medium">{t('stats.pending')}</div>
-                <div className="text-xs text-amber-500 mt-1">{t('stats.awaitingReview')}</div>
-              </div>
-              <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
-                <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
-                <div className="text-xs text-orange-500 mt-1">{t('stats.beingWorked')}</div>
-              </div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-                <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
-                <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
-                <div className="text-xs text-green-500 mt-1">{t('stats.completed')}</div>
-              </div>
-            </div>
-          )}
+           {user?.role === 'CITIZEN' && (
+             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                 <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                 <div className="text-sm text-blue-600 font-medium">{t('stats.myComplaints')}</div>
+                 <div className="text-xs text-blue-500 mt-1">{t('stats.totalSubmitted')}</div>
+               </div>
+               <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
+                 <div className="text-2xl font-bold text-amber-700 mb-1">{(stats.submitted || 0) + (stats.pending || 0)}</div>
+                 <div className="text-sm text-amber-600 font-medium">{t('stats.pending')}</div>
+                 <div className="text-xs text-amber-500 mt-1">{t('stats.awaitingReview')}</div>
+               </div>
+               <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                 <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                 <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                 <div className="text-xs text-orange-500 mt-1">{t('stats.beingWorked')}</div>
+               </div>
+               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                 <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
+                 <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                 <div className="text-xs text-green-500 mt-1">{t('stats.completed')}</div>
+               </div>
+               <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+                 <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
+                 <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                 <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
+               </div>
+             </div>
+           )}
 
           {/* Agent Stats */}
-          {user?.role === 'MUNICIPAL_AGENT' && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-                  <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                  <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
-                  <div className="text-xs text-blue-500 mt-1">{t('stats.allComplaints')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
-                  <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || stats.pending || 0}</div>
-                  <div className="text-sm text-amber-600 font-medium">{t('stats.toValidate')}</div>
-                  <div className="text-xs text-amber-500 mt-1">{t('stats.needsReview')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
-                  <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                  <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
-                  <div className="text-xs text-orange-500 mt-1">{t('stats.beingFixed')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-                  <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
-                  <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
-                  <div className="text-xs text-green-500 mt-1">{t('stats.awaitingClosure')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
-                  <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
-                  <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
-                  <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
-                </div>
-                <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
-                  <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
-                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastDeadline')}</div>
-                </div>
-              </div>
-              {stats.resolutionRate !== undefined && (
-                <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-emerald-800">{t('stats.resolutionRate')}</span>
-                    <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
-                  </div>
-                  <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+           {user?.role === 'MUNICIPAL_AGENT' && (
+             <>
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                   <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
+                   <div className="text-xs text-blue-500 mt-1">{t('stats.allComplaints')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
+                   <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || stats.pending || 0}</div>
+                   <div className="text-sm text-amber-600 font-medium">{t('stats.toValidate')}</div>
+                   <div className="text-xs text-amber-500 mt-1">{t('stats.needsReview')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                   <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                   <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                   <div className="text-xs text-orange-500 mt-1">{t('stats.beingFixed')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
+                   <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                   <div className="text-xs text-green-500 mt-1">{t('stats.awaitingClosure')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
+                   <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
+                   <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
+                   <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+                   <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
+                   <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                   <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
+                 </div>
+                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                   <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
+                   <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                   <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastDeadline')}</div>
+                 </div>
+               </div>
+               {stats.resolutionRate !== undefined && (
+                 <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                   <div className="flex items-center justify-between mb-2">
+                     <span className="text-sm font-semibold text-emerald-800">{t('stats.resolutionRate')}</span>
+                     <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
+                   </div>
+                   <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                     <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
+                   </div>
+                 </div>
+               )}
+             </>
+           )}
 
           {/* Manager Stats */}
           {user?.role === 'DEPARTMENT_MANAGER' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
                   <div className="text-sm text-blue-600 font-medium">{t('stats.department')}</div>
@@ -624,6 +637,11 @@ function DashboardContent() {
                   <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
                   <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
                   <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
+                </div>
+                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+                  <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
+                  <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                  <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
                   <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
@@ -664,83 +682,124 @@ function DashboardContent() {
                   <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
                   <div className="text-xs text-orange-500 mt-1">{t('stats.workingOn')}</div>
                 </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-                  <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
-                  <div className="text-sm text-green-600 font-medium">{t('stats.completed')}</div>
-                  <div className="text-xs text-green-500 mt-1">{t('stats.resolvedTasks')}</div>
-                </div>
-                <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
-                  <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
-                  <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.urgent')}</div>
-                </div>
+                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                   <div className="text-2xl font-bold text-green-700 mb-1">{stats.resolved || 0}</div>
+                   <div className="text-sm text-green-600 font-medium">{t('stats.completed')}</div>
+                   <div className="text-xs text-green-500 mt-1">{t('stats.resolvedTasks')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+                   <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
+                   <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                   <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
+                 </div>
+                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                   <div className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || stats.overdue || 0}</div>
+                   <div className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                   <div className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.urgent')}</div>
+                 </div>
               </div>
             </>
           )}
 
-          {/* Admin Stats */}
-          {user?.role === 'ADMIN' && (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-                  <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
-                  <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
-                  <div className="text-xs text-blue-500 mt-1">{t('stats.allComplaints')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
-                  <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || 0}</div>
-                  <div className="text-sm text-amber-600 font-medium">{t('stats.submitted')}</div>
-                  <div className="text-xs text-amber-500 mt-1">{t('stats.newPending')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
-                  <div className="text-2xl font-bold text-purple-700 mb-1">{stats.assigned || 0}</div>
-                  <div className="text-sm text-purple-600 font-medium">{t('stats.assigned')}</div>
-                  <div className="text-xs text-purple-500 mt-1">{t('stats.toDepartments')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
-                  <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
-                  <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
-                  <div className="text-xs text-orange-500 mt-1">{t('stats.beingFixed')}</div>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-                  <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
-                  <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
-                  <div className="text-xs text-green-500 mt-1">{t('stats.closedCases')}</div>
-                </div>
-                <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
-                  <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || 0}</div>
-                  <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
-                  <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastSLA')}</div>
-                </div>
-              </div>
-              {stats.resolutionRate !== undefined && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-semibold text-emerald-800">{t('stats.resolutionRate')}</span>
-                      <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
+           {/* Admin Stats */}
+           {user?.role === 'ADMIN' && (
+             <>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                   <div className="text-2xl font-bold text-blue-700 mb-1">{stats.total || 0}</div>
+                   <div className="text-sm text-blue-600 font-medium">{t('stats.total')}</div>
+                   <div className="text-xs text-blue-500 mt-1">{t('stats.allComplaints')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
+                   <div className="text-2xl font-bold text-amber-700 mb-1">{stats.submitted || 0}</div>
+                   <div className="text-sm text-amber-600 font-medium">{t('stats.submitted')}</div>
+                   <div className="text-xs text-amber-500 mt-1">{t('stats.newPending')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                   <div className="text-2xl font-bold text-purple-700 mb-1">{stats.assigned || 0}</div>
+                   <div className="text-sm text-purple-600 font-medium">{t('stats.assigned')}</div>
+                   <div className="text-xs text-purple-500 mt-1">{t('stats.toDepartments')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                   <div className="text-2xl font-bold text-orange-700 mb-1">{stats.inProgress || 0}</div>
+                   <div className="text-sm text-orange-600 font-medium">{t('stats.inProgress')}</div>
+                   <div className="text-xs text-orange-500 mt-1">{t('stats.beingFixed')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                   <div className="text-2xl font-bold text-green-700 mb-1">{(stats.resolved || 0) + (stats.closed || 0)}</div>
+                   <div className="text-sm text-green-600 font-medium">{t('common.resolved')}</div>
+                   <div className="text-xs text-green-500 mt-1">{t('stats.closedCases')}</div>
+                 </div>
+                 <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
+                   <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
+                   <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                   <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
+                 </div>
+                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
+                   <div className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}>{stats.totalOverdue || 0}</div>
+                   <div className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}>{t('stats.overdue')}</div>
+                   <div className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}>{t('stats.pastSLA')}</div>
+                 </div>
+               </div>
+               {stats.resolutionRate !== undefined && (
+                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
+                     <div className="flex items-center justify-between mb-2">
+                       <span className="text-sm font-semibold text-emerald-800">{t('stats.resolutionRate')}</span>
+                       <span className="text-lg font-bold text-emerald-700">{stats.resolutionRate}%</span>
+                     </div>
+                     <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
+                       <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
+                     </div>
+                   </div>
+                   {(stats.totalOverdue || 0) > 0 && (
+                     <div className="p-4 bg-gradient-to-r from-red-50 to-red-100 rounded-xl border border-red-200">
+                       <div className="flex items-center gap-2">
+                         <AlertTriangle className="w-4 h-4 text-red-600" />
+                         <span className="text-sm font-semibold text-red-700">
+                           {stats.totalOverdue} {t('stats.pastSLADeadline')}
+                         </span>
+                       </div>
+                       <p className="text-xs text-red-500 mt-1">{t('priorities.requiresAttention')}</p>
+                     </div>
+                   )}
+                 </div>
+               )}
+             </>
+           )}
+
+{/* Additional Performance Metrics Row */}
+            {!(user?.role === "CITIZEN") && (stats.slaComplianceRate !== undefined || stats.csat !== undefined) && (
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Resolved On Time % (SLA Compliance) */}
+                {(stats.slaComplianceRate !== undefined) && (
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-emerald-800">{t('stats.resolvedOnTime')}</span>
                     </div>
-                    <div className="h-2 bg-emerald-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.resolutionRate, 100)}%` }} />
+                    <div className="text-2xl font-bold text-emerald-700">{stats.slaComplianceRate}%</div>
+                    <div className="h-2 bg-emerald-200 rounded-full overflow-hidden mt-2">
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.slaComplianceRate, 100)}%` }} />
                     </div>
                   </div>
-                  {(stats.totalOverdue || 0) > 0 && (
-                    <div className="p-4 bg-gradient-to-r from-red-50 to-red-100 rounded-xl border border-red-200">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-red-600" />
-                        <span className="text-sm font-semibold text-red-700">
-                          {stats.totalOverdue} {t('stats.pastSLADeadline')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-red-500 mt-1">{t('priorities.requiresAttention')}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+                )}
 
-          {/* Category Chart - For roles that have category data */}
+                {/* Citizen Satisfaction */}
+                {(stats.csat !== undefined) && (
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Star className="w-4 h-4 text-purple-600" />
+                      <span className="text-sm font-semibold text-purple-800">{t('stats.citizenSatisfaction')}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-purple-700">{stats.csat}%</div>
+                    <div className="text-xs text-purple-600 mt-1">{t('stats.basedOnResponses', { count: stats.totalRatings || 0 })}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+           {/* Category Chart - For roles that have category data */}
           {Object.keys(byCategory).length > 0 && (
             <div className="mt-6 pt-6 border-t border-slate-100">
               <h4 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
@@ -832,16 +891,15 @@ function DashboardContent() {
           )}
         </div>
 
-        {/* AI Insight Widgets — 7-Day Forecast + Duplicate Stats, right after stats/trend alerts */}
-        {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <TrendForecastChart
-              municipality={user?.municipalityName || (typeof user?.municipality === "object" ? user?.municipality?.name : "") || ""}
-              category=""
-            />
-            <DuplicateStatsCard />
-          </div>
-        )}
+{/* AI Insight Widgets — 7-Day Forecast, right after stats/trend alerts */}
+         {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT") && (
+           <div className="grid grid-cols-1 gap-6 mt-6">
+             <TrendForecastChart
+               municipality={user?.municipalityName || (typeof user?.municipality === "object" ? user?.municipality?.name : "") || ""}
+               category=""
+             />
+           </div>
+         )}
 
         {/* Municipality Overview — Full width */}
         <div className="mt-6">
@@ -907,19 +965,19 @@ function DashboardContent() {
                       )}
                       <div className="absolute top-2 left-2">
                         <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/90 text-slate-700 shadow-sm">
-                          {categoryLabels[complaint.category] || complaint.category}
+                          {getCategoryLabel(complaint.category)}
                         </span>
                       </div>
-                      <div className="absolute top-2 right-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shadow-sm ${
-                          complaint.status === "RESOLVED" ? "bg-green-100 text-green-700" :
-                          complaint.status === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" :
-                          complaint.status === "ASSIGNED" ? "bg-purple-100 text-purple-700" :
-                          "bg-blue-100 text-blue-700"
-                        }`}>
-                          {complaint.status.replace('_', ' ')}
-                        </span>
-                      </div>
+                       <div className="absolute top-2 right-2">
+                         <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shadow-sm ${
+                           complaint.status === "RESOLVED" ? "bg-green-100 text-green-700" :
+                           complaint.status === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" :
+                           complaint.status === "ASSIGNED" ? "bg-purple-100 text-purple-700" :
+                           "bg-blue-100 text-blue-700"
+                         }`}>
+                           {t(`status.${complaint.status}`)}
+                         </span>
+                       </div>
                     </div>
 
                     {/* Content */}

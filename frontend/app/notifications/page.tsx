@@ -139,12 +139,12 @@ export default function NotificationsPage() {
           )}
         </div>
 
-        {notifications.length === 0 ? (
-          <div className="text-center py-16">
-            <Bell className="w-14 h-14 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-slate-900 mb-1">No notifications yet</h3>
-            <p className="text-slate-500 text-sm">You'll see updates here as they arrive.</p>
-          </div>
+         {notifications.length === 0 ? (
+           <div className="text-center py-16">
+             <Bell className="w-14 h-14 text-slate-300 mx-auto mb-4" />
+             <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('notifications.empty')}</h3>
+             <p className="text-slate-500 text-sm">{t('notifications.emptyHint')}</p>
+           </div>
         ) : (
           <div className="space-y-6">
             {groupToday.length > 0 && (

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Loader2, BarChart3, AlertTriangle, Calendar, Minus, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart3, AlertTriangle, Calendar, Minus } from "lucide-react";
 import { getTrendForecast } from "@/services/complaint.service";
-import { useTranslation } from "react-i18next";
 
 interface ForecastData {
   expectedTotal: number;
@@ -42,7 +41,6 @@ export default function TrendForecastChart({
   municipality = "",
   category = "",
 }: TrendForecastChartProps) {
-  const { t } = useTranslation();
   const [data, setData] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
@@ -180,50 +178,60 @@ export default function TrendForecastChart({
           ))}
         </div>
 
-        {/* Daily Action Plan — uses slate colors since it's on white background */}
-        <div className="border-t border-slate-100 pt-4 mt-2">
-          <div className="flex items-center gap-2 mb-3">
-            <Calendar className="w-4 h-4 text-violet-600" />
-            <span className="text-slate-700 font-semibold text-sm">Daily action plan</span>
-          </div>
-          <div className="space-y-2">
-            {forecast.slice(0, 3).map((val, i) => {
-              const color = getDayColor(val, max, spike);
-              const isSpike = val >= spike;
-              const rec = getRecommendation(val, spike);
-              return (
-                <div
-                  key={i}
-                  className={`flex items-center gap-3 p-2.5 rounded-xl text-xs ${
-                    isSpike ? "bg-red-50 border border-red-200" :
-                    val >= max * 0.6 ? "bg-amber-50 border border-amber-200" :
-                    "bg-emerald-50 border border-emerald-200"
-                  }`}
-                >
-                  <div className="w-6 flex-shrink-0">
-                    <div className="text-[20px] font-bold" style={{ color }}>{val}</div>
-                  </div>
-                  <div className="font-semibold text-slate-700 min-w-0 flex-1">
-                    {DAY_LABELS_FULL[i % 7]}
-                  </div>
-                  <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ml-auto text-white ${
-                    isSpike ? "bg-red-500" :
-                    val >= max * 0.6 ? "bg-amber-500" : "bg-emerald-500"
-                  }`}>
-                    {rec}
-                  </div>
-                </div>
-              );
-            })}
-            {forecast.length > 3 && (
-              <div className="text-center pt-2 text-slate-400 text-xs border-t border-slate-100">
-                +{forecast.length - 3} more days →
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+{/* Daily Action Plan — uses slate colors since it's on white background */}
+         <div className="border-t border-slate-100 pt-4 mt-2">
+           <div className="flex items-center justify-between mb-3">
+             <div className="flex items-center gap-2">
+               <Calendar className="w-4 h-4 text-violet-600" />
+               <span className="text-slate-700 font-semibold text-sm">Daily action plan</span>
+             </div>
+             {forecast.length > 3 && (
+               <button
+                 onClick={() => setShowDetails(!showDetails)}
+                 className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+               >
+                 {showDetails ? "Show less" : `+${forecast.length - 3} more days →`}
+               </button>
+             )}
+           </div>
+           <div className="space-y-2">
+             {forecast.slice(0, showDetails ? 7 : 3).map((val, i) => {
+               const color = getDayColor(val, max, spike);
+               const isSpike = val >= spike;
+               const rec = getRecommendation(val, spike);
+               return (
+                 <div
+                   key={i}
+                   className={`flex items-center gap-3 p-2.5 rounded-xl text-xs ${
+                     isSpike ? "bg-red-50 border border-red-200" :
+                     val >= max * 0.6 ? "bg-amber-50 border border-amber-200" :
+                     "bg-emerald-50 border border-emerald-200"
+                   }`}
+                 >
+                   <div className="w-6 flex-shrink-0">
+                     <div className="text-[20px] font-bold" style={{ color }}>{val}</div>
+                   </div>
+                   <div className="font-semibold text-slate-700 min-w-0 flex-1">
+                     {DAY_LABELS_FULL[i % 7]}
+                   </div>
+                   <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ml-auto text-white ${
+                     isSpike ? "bg-red-500" :
+                     val >= max * 0.6 ? "bg-amber-500" : "bg-emerald-500"
+                   }`}>
+                     {rec}
+                   </div>
+                 </div>
+               );
+             })}
+             {!showDetails && forecast.length > 3 && (
+               <div className="text-center pt-2 text-slate-400 text-xs border-t border-slate-100">
+                 +{forecast.length - 3} more days →
+               </div>
+             )}
+           </div>
+         </div>
+       </div>
+     </div>
+   );
 }
 

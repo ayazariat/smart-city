@@ -14,6 +14,7 @@ const ACTIVE_STATUSES = [
   "RESOLVED",
 ];
 const ARCHIVE_STATUSES = ["REJECTED", "CLOSED"];
+const ALL_STATUSES = [...ACTIVE_STATUSES, ...ARCHIVE_STATUSES];
 
 class ComplaintController {
   // Create new complaint (citizen)
@@ -61,42 +62,27 @@ class ComplaintController {
 
       // Notify municipal agents in the same municipality
       try {
-        const normalizedMun = normalizeMunicipality(municipality || "");
-        
-        // Find municipal agents in the same municipality
+        const normalizedMun = normalizeMunicipality(municipality || '');
         const agents = await User.find({
-          role: "MUNICIPAL_AGENT",
+          role: 'MUNICIPAL_AGENT',
           $or: [
             { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') } },
             { 'municipality.name': { $regex: new RegExp(`^${normalizedMun}$`, 'i') } }
           ]
         }).select('_id');
-        
-        // Send real-time notifications via Socket.IO
+
+        const agentIds = agents.map(a => a._id.toString());
         const io = req.app?.get?.("io");
-        if (io) {
-          const notificationService = require("../services/notification.service");
-          const agentIds = agents.map(a => a._id.toString());
-          await notificationService.sendNotificationToMultiple(io, agentIds, {
-            type: "complaint_submitted",
-            title: "New Complaint",
-            message: `New complaint in ${municipality || 'your municipality'}: ${title}`,
-            complaintId: complaint._id,
-          });
-        } else {
-          // Fallback: save to DB only
-          const notificationPromises = agents.map(agent => 
-            Notification.create({
-              recipient: agent._id,
-              title: "New Complaint",
-              message: `New complaint in ${municipality || 'your municipality'}: ${title}`,
-              type: "COMPLAINT",
-              relatedId: complaint._id,
-            })
-          );
-          await Promise.all(notificationPromises);
-        }
-        console.log(`Created ${agents.length} notifications for municipal agents`);
+
+        await notificationService.sendNotificationToMultiple(io, agentIds, {
+          type: 'complaint_submitted',
+          title: 'New Complaint',
+          message: `New complaint in ${municipality || 'your municipality'}: ${title}`,
+          complaintId: complaint._id,
+          metadata: { category, municipality: normalizedMun },
+        });
+
+        console.log(`Created ${agentIds.length} notifications for municipal agents`);
       } catch (notifError) {
         console.error("Failed to create notifications for agents:", notifError);
       }
@@ -400,9 +386,7 @@ class ComplaintController {
               .map((value) => value.trim().toUpperCase())
               .filter((value) => value && value !== "ALL")
           : [];
-      const allowedStatuses = includeArchived
-        ? [...ACTIVE_STATUSES, ...ARCHIVE_STATUSES]
-        : ACTIVE_STATUSES;
+       const allowedStatuses = ALL_STATUSES;
 
       const query = {};
 
@@ -676,26 +660,13 @@ class ComplaintController {
       // Notify citizen via Socket.IO
       try {
         const io = req.app?.get?.("io");
-        if (io) {
-          const notificationService = require("../services/notification.service");
-          const extras = {};
-          if (status === 'REJECTED' && rejectionReason) extras.reason = rejectionReason;
-          await notificationService.notifyCitizenStatusChange(
-            io,
-            complaint.createdBy.toString(),
-            complaint._id,
-            status,
-            extras
-          );
-        } else {
-          await Notification.create({
-            recipient: complaint.createdBy,
-            title: "Complaint Status Updated",
-            message: `Your complaint "${complaint.title}" has been ${status.toLowerCase()}`,
-            type: "COMPLAINT",
-            relatedId: complaint._id,
-          });
-        }
+        await notificationService.notifyCitizenStatusChange(
+          io,
+          complaint.createdBy.toString(),
+          complaint._id,
+          status,
+          { reason: rejectionReason }
+        );
       } catch (notifError) {
         console.error("Failed to create notification:", notifError);
       }
@@ -765,23 +736,13 @@ class ComplaintController {
       // Notify technician via Socket.IO
       try {
         const io = req.app?.get?.("io");
-        if (io) {
-          const notificationService = require("../services/notification.service");
-          await notificationService.sendNotification(io, assignedToId.toString(), {
-            type: "assignment",
-            title: "New Assignment",
-            message: `You have been assigned to complaint: ${complaint.title}`,
-            complaintId: complaint._id,
-          });
-        } else {
-          await Notification.create({
-            recipient: assignedToId,
-            title: "New Assignment",
-            message: `You have been assigned to complaint: ${complaint.title}`,
-            type: "ASSIGNMENT",
-            relatedId: complaint._id,
-          });
-        }
+        await notificationService.sendNotification(io, assignedToId.toString(), {
+          type: 'assigned',
+          title: 'New Assignment',
+          message: `You have been assigned to complaint: ${complaint.title}`,
+          complaintId: complaint._id,
+          metadata: { assignedBy: userId, role: userRole },
+        });
       } catch (notifError) {
         console.error("Failed to create notification:", notifError);
       }
@@ -841,7 +802,10 @@ class ComplaintController {
         return res.status(400).json({ success: false, message: "Invalid department" });
       }
 
-      complaint.assignedDepartment = departmentId;
+       complaint.assignedDepartment = {
+         id: department._id,
+         name: department.name
+       };
       // Auto-validate and assign if not already validated
       if (complaint.status === "SUBMITTED") {
         complaint.status = "VALIDATED";
@@ -1095,25 +1059,23 @@ class ComplaintController {
 
       const newComment = updatedComplaint.comments[updatedComplaint.comments.length - 1];
 
-      // If PUBLIC note → notify citizen
-      if (finalType === "PUBLIC" && complaint.createdBy) {
-        const io = req.app?.get?.("io");
-        const notificationService = require("../services/notification.service");
-        
-        if (io) {
-          try {
-            const notificationData = {
-              type: "public_note",
-              message: `New update on your complaint ${complaint.referenceId || complaint._id}: "${text.trim().slice(0, 50)}${text.length > 50 ? '...' : ''}"`,
-              complaintId: complaint._id
-            };
-            
-            await notificationService.sendNotification(io, complaint.createdBy.toString(), notificationData);
-          } catch (notifError) {
-            console.error("Failed to send notification:", notifError);
-          }
-        }
-      }
+       // If PUBLIC note → notify citizen
+       if (finalType === "PUBLIC" && complaint.createdBy) {
+         const io = req.app?.get?.("io");
+         if (io) {
+           try {
+             await notificationService.sendNotification(io, complaint.createdBy.toString(), {
+               type: "public_note",
+               title: "New Update on Your Complaint",
+               message: `New update on your complaint ${complaint.referenceId || complaint._id}: "${text.trim().slice(0, 50)}${text.length > 50 ? '...' : ''}"`,
+               complaintId: complaint._id,
+               metadata: { commentId: newComment._id, commentAuthor: authorName },
+             });
+           } catch (notifError) {
+             console.error("Failed to send notification:", notifError);
+           }
+         }
+       }
 
       res.json({
         success: true,
@@ -1126,8 +1088,82 @@ class ComplaintController {
     }
   }
 
-  // Get complaint statistics
-  async getStats(req, res) {
+   // Submit rating for a resolved complaint
+   async submitRating(req, res) {
+     try {
+       const { id } = req.params;
+       const { score, resolvedCorrectly, comment } = req.body;
+       const userId = req.user.userId;
+
+       const complaint = await Complaint.findById(id);
+       if (!complaint) {
+         return res.status(404).json({ success: false, message: "Complaint not found" });
+       }
+
+       // Only the citizen who created the complaint can rate it
+       const createdById = complaint.createdBy?.toString();
+       if (createdById !== userId) {
+         return res.status(403).json({ success: false, message: "Only the complaint owner can submit a rating" });
+       }
+
+       // Complaint must be resolved or closed
+       if (!["RESOLVED", "CLOSED"].includes(complaint.status)) {
+         return res.status(400).json({ success: false, message: "Cannot rate a complaint that is not resolved" });
+       }
+
+       // Validate score (1-5)
+       const scoreNum = parseInt(score);
+       if (isNaN(scoreNum) || scoreNum < 1 || scoreNum > 5) {
+         return res.status(400).json({ success: false, message: "Rating score must be between 1 and 5" });
+       }
+
+       // Update rating
+       complaint.rating = {
+         score: scoreNum,
+         comment: comment || "",
+         createdAt: new Date(),
+       };
+
+       // Optional: store resolvedCorrectly as a separate field or in comment metadata
+       if (resolvedCorrectly !== undefined) {
+         complaint.rating.resolvedCorrectly = resolvedCorrectly;
+       }
+
+       await complaint.save();
+
+        // Send notification to assigned agent/technician
+        try {
+          const io = req.app?.get?.("io");
+          if (io) {
+            // Notify the agent who closed the complaint (closedBy) or assigned agent
+            let notifieeId = complaint.closedBy || complaint.assignedBy;
+            if (notifieeId) {
+              await notificationService.sendNotification(io, notifieeId.toString(), {
+                type: "complaint_rated",
+                title: "New Feedback Received",
+                message: `Citizen rated complaint "${complaint.title}" with ${scoreNum}/5 stars`,
+                complaintId: complaint._id,
+                metadata: { score: scoreNum, comment: comment || '' },
+              });
+            }
+          }
+        } catch (notifErr) {
+          console.error("Failed to send rating notification:", notifErr.message);
+        }
+
+       res.json({
+         success: true,
+         message: "Rating submitted successfully",
+         data: complaint.rating,
+       });
+     } catch (error) {
+       console.error("Error submitting rating:", error);
+       res.status(500).json({ success: false, message: "Failed to submit rating" });
+     }
+   }
+
+   // Get complaint statistics
+   async getStats(req, res) {
     try {
       const query = {};
 
@@ -1177,66 +1213,84 @@ class ComplaintController {
       };
       const historicalQuery = { ...query };
 
-      const [historicalTotal, total, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk] = await Promise.all([
-        Complaint.countDocuments(historicalQuery),
-        Complaint.countDocuments(activeQuery),
-        Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
-        Complaint.countDocuments({ ...activeQuery, status: "VALIDATED" }),
-        Complaint.countDocuments({ ...activeQuery, status: "ASSIGNED" }),
-        Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
-        Complaint.aggregate([
-          { $match: activeQuery },
-          { $group: { _id: "$category", count: { $sum: 1 } } }
-        ]),
-        Complaint.aggregate([
-          { $match: { ...activeQuery, createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
-          { $group: { _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] }, count: { $sum: 1 } } },
-          { $sort: { _id: 1 } },
-          { $limit: 6 }
-        ]),
-        // Only count overdue for unresolved complaints (exclude COMPLETED status)
-        Complaint.countDocuments({ ...activeQuery, slaStatus: "OVERDUE", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
-        Complaint.countDocuments({ ...activeQuery, slaStatus: "AT_RISK", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
-      ]);
+       const [historicalTotal, activeTotal, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk, resolvedWithRatingCount, csatCount] = await Promise.all([
+         Complaint.countDocuments(historicalQuery),
+         Complaint.countDocuments(activeQuery),
+         Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
+         Complaint.countDocuments({ ...activeQuery, status: "VALIDATED" }),
+         Complaint.countDocuments({ ...activeQuery, status: "ASSIGNED" }),
+         Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
+         Complaint.aggregate([
+           { $match: activeQuery },
+           { $group: { _id: "$category", count: { $sum: 1 } } }
+         ]),
+         Complaint.aggregate([
+           { $match: { ...activeQuery, createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
+           { $group: { _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] }, count: { $sum: 1 } } },
+           { $sort: { _id: 1 } },
+           { $limit: 6 }
+         ]),
+         // Only count overdue for unresolved complaints (exclude COMPLETED status)
+         Complaint.countDocuments({ ...activeQuery, slaStatus: "OVERDUE", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.countDocuments({ ...activeQuery, slaStatus: "AT_RISK", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+         // Count resolved/closed complaints that have a rating
+         Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
+         // Count complaints with rating score >= 4 (CSAT)
+         Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+       ]);
 
-      const resolvedCount = resolved + closed;
-      const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+       const total = historicalTotal; // all statuses
+       const resolutionRate = activeTotal > 0 ? Math.round((resolved + closed) / activeTotal * 100) : 0;
+       const pending = submitted; // Pending = submitted (no action taken yet)
 
-      const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
-        { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
-      ]);
-      const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
+       const avgTimeResult = await Complaint.aggregate([
+         { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+       ]);
+       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
-      res.json({
-        success: true,
-        data: {
-          total,
-          historicalTotal,
-          submitted,
-          validated,
-          assigned,
-          inProgress,
-          resolved,
-          closed,
-          rejected,
-          totalOverdue: overdue,
-          totalAtRisk: atRisk,
-          resolutionRate,
-          averageResolutionTime,
-          byCategory: byCategory.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-          }, {}),
-          byMonth: byMonth.reduce((acc, item) => {
-            acc[item._id] = item.count;
-            return acc;
-          }, {}),
-        },
-      });
+       // Calculate SLA compliance rate: (resolved/closed with slaStatus COMPLETED) / (resolved+closed)
+       const resolvedCount = resolved + closed;
+       const onTimeCountResult = await Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
+       const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
+
+       // Calculate CSAT: (ratings >= 4) / total ratings * 100
+       const totalRatings = resolvedWithRatingCount;
+       const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
+
+       res.json({
+         success: true,
+         data: {
+           total,
+           historicalTotal,
+           submitted,
+           pending: submitted,
+           validated,
+           assigned,
+           inProgress,
+           resolved,
+           closed,
+           rejected,
+           totalOverdue: overdue,
+           totalAtRisk: atRisk,
+           resolutionRate,
+           averageResolutionTime,
+           slaComplianceRate,
+           csat,
+           totalRatings,
+           byCategory: byCategory.reduce((acc, item) => {
+             acc[item._id] = item.count;
+             return acc;
+           }, {}),
+           byMonth: byMonth.reduce((acc, item) => {
+             acc[item._id] = item.count;
+             return acc;
+           }, {}),
+         },
+       });
     } catch (error) {
       console.error("Error fetching stats:", error);
       res.status(500).json({ success: false, message: "Failed to fetch statistics" });

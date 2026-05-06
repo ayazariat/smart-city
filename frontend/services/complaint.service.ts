@@ -585,6 +585,19 @@ export const addPublicComment = async (
   );
 };
 
+/**
+ * Submit rating for a resolved complaint (citizen)
+ */
+export const submitRating = async (
+  id: string,
+  data: { score: number; resolvedCorrectly?: boolean; comment?: string }
+): Promise<{ success: boolean; message: string; data: { score: number; comment?: string; createdAt: string } }> => {
+  return apiClient.put<{ success: boolean; message: string; data: { score: number; comment?: string; createdAt: string } }>(
+    `/complaints/${id}/rating`,
+    data
+  );
+};
+
 export const complaintService = {
   submitComplaint,
   getMyComplaints,
@@ -613,6 +626,7 @@ export const complaintService = {
   removeUpvote,
   getPublicComments,
   addPublicComment,
+  submitRating,
 };
 
 /**
@@ -718,7 +732,7 @@ export const checkDuplicate = async (
 };
 
 /**
- * Get duplicate detection stats from AI service
+ * Get duplicate detection stats from database (today's stats)
  */
 export const getDuplicateStats = async (): Promise<{
   total_checked: number;
@@ -726,11 +740,22 @@ export const getDuplicateStats = async (): Promise<{
   merge_rate: number;
 } | null> => {
   try {
-    const response = await fetchAi(`/ai/duplicate/stats`, { method: "GET" }, 3000);
-    if (!response || !response.ok) return null;
-    const result = await response.json();
-    return result.data || result;
-  } catch {
-    return null;
+    const { clientGet } = await import("@/lib/api");
+    const data = await clientGet<{
+      total_checked: number;
+      duplicates_found_today: number;
+      merge_rate: number;
+    }>("/api/stats/duplicates/today", { requiresAuth: true });
+    return data;
+  } catch (error) {
+    // Fallback to AI service if endpoint fails
+    try {
+      const response = await fetchAi(`/ai/duplicate/stats`, { method: "GET" }, 3000);
+      if (!response || !response.ok) return null;
+      const result = await response.json();
+      return result.data || result;
+    } catch {
+      return null;
+    }
   }
 };

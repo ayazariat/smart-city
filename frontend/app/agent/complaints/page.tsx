@@ -529,8 +529,8 @@ export default function AgentComplaintsPage() {
           </div>
         </div>
 
-        {/* Team Performance */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
+{/* Team Performance */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-100 mb-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Performance Metrics</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-blue-50 rounded-xl">
@@ -568,7 +568,7 @@ export default function AgentComplaintsPage() {
           </div>
         </div>
 
-        {/* Filters Section */}
+{/* Filters Section */}
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200">
           <div className="flex flex-col md:flex-row gap-3 items-center">
             {/* Show Filters Button */}
@@ -665,15 +665,15 @@ export default function AgentComplaintsPage() {
 
         {/* Complaints List */}
         {!loading && (
-          filteredComplaints.length === 0 ? (
-            <EmptyState
-              icon="file"
-              message={
-                searchTerm || statusFilter || categoryFilter || priorityFilter
-                  ? "Try adjusting your search or filters."
-                  : "No complaints assigned to you yet."
-              }
-            />
+           filteredComplaints.length === 0 ? (
+             <EmptyState
+               icon="file"
+               message={
+                 searchTerm || statusFilter || categoryFilter || priorityFilter
+                   ? t("common.tryAdjustingFilters")
+                   : t("agent.noAssignedComplaints")
+               }
+             />
           ) : (
             <div className="grid gap-5">
               {filteredComplaints.map((complaint, index) => {
@@ -1008,8 +1008,8 @@ export default function AgentComplaintsPage() {
                             c.status === "RESOLVED" || c.status === "CLOSED" ? "bg-green-100 text-green-700" :
                             c.status === "IN_PROGRESS" ? "bg-blue-100 text-blue-700" :
                             "bg-slate-100 text-slate-600"
-                          }`}>{c.status}</span>
-                          <span>{categoryLabels[c.category] || c.category}</span>
+                          }`}>{t(`status.${c.status}`)}</span>
+                          <span>{getCategoryLabel(c.category)}</span>
                           {location && (
                             <span className="flex items-center gap-0.5 truncate max-w-[140px]">
                               <X className="w-2.5 h-2.5 text-slate-300" />

@@ -35,6 +35,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
   String? _selectedCategory;
   String? _selectedGovernorate;
   String? _selectedMunicipality;
+  String? _address;
   List<String> _municipalities = [];
   final List<XFile> _photos = [];
   bool _isLoading = false;
@@ -255,9 +256,51 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
      } catch (e) {
        // Silently fail - location still valid without address
      }
+    }
+ 
+   // Helper method to get address from current location
+   Future<String?> _getAddressFromLocation() async {
+     if (_latitude == null || _longitude == null) return null;
+     
+     try {
+       final client = HttpClient();
+       final request = await client.getUrl(Uri.parse(
+           'https://nominatim.openstreetmap.org/reverse?lat=$_latitude&lon=$_longitude&format=json&accept-language=fr'));
+       final response = await request.close();
+       if (response.statusCode == 200) {
+         final body = await response.transform(utf8.decoder).join();
+         final data = jsonDecode(body) as Map<String, dynamic>?;
+         if (data != null) {
+           final addressData = data['address'] as Map<String, dynamic>?;
+           if (addressData != null) {
+             // Build address string from components
+             String? road = addressData['road'] as String?;
+             String? houseNumber = addressData['house_number'] as String?;
+             String? city = addressData['city'] as String?;
+             String? town = addressData['town'] as String?;
+             String? village = addressData['village'] as String?;
+             
+             List<String> addressParts = [];
+             if (houseNumber != null && houseNumber.isNotEmpty) addressParts.add(houseNumber);
+             if (road != null && road.isNotEmpty) addressParts.add(road);
+             if (city != null && city.isNotEmpty) addressParts.add(city);
+             else if (town != null && town.isNotEmpty) addressParts.add(town);
+             else if (village != null && village.isNotEmpty) addressParts.add(village);
+             
+             if (addressParts.isNotEmpty) {
+               return addressParts.join(', ');
+             }
+           }
+         }
+       }
+       client.close();
+     } catch (e) {
+       debugPrint('Error getting address: $e');
+     }
+     return null;
    }
-
-  Future<void> _submitComplaint() async {
+ 
+   Future<void> _submitComplaint() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCategory == null ||
         _selectedGovernorate == null ||
@@ -577,32 +620,83 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 runSpacing: 8,
                 children: _categoryMap.entries.map((entry) {
                   final selected = _selectedCategory == entry.key;
-                  return ChoiceChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _categoryIcons[entry.key] ?? Icons.help_outline,
-                          size: 16,
-                          color: selected ? Colors.white : AppColors.primary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          entry.value,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: selected
-                                ? Colors.white
-                                : AppColors.textPrimary,
+                  return SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: ChoiceChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _categoryIcons[entry.key] ?? Icons.help_outline,
+                            size: 16,
+                            color: selected ? Colors.white : AppColors.primary,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 4),
+                          Text(
+                            entry.value,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: selected
+                                  ? Colors.white
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      selected: selected,
+                      selectedColor: AppColors.primary,
+                      backgroundColor: AppColors.secondary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      onSelected: (selected) {
+                        setState(() => _selectedCategory = selected ? entry.key : null);
+                      },
                     ),
-                    selected: selected,
-                    selectedColor: AppColors.primary,
-                    backgroundColor: AppColors.secondary,
-                    onSelected: (_) =>
-                        setState(() => _selectedCategory = entry.key),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _categoryMap.entries.map((entry) {
+                  final selected = _selectedCategory == entry.key;
+                  return SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: ChoiceChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _categoryIcons[entry.key] ?? Icons.help_outline,
+                            size: 16,
+                            color: selected ? Colors.white : AppColors.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            entry.value,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: selected
+                                  ? Colors.white
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      selected: selected,
+                      selectedColor: AppColors.primary,
+                      backgroundColor: AppColors.secondary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      onSelected: (selected) {
+                        setState(() => _selectedCategory = selected ? entry.key : null);
+                      },
+                    ),
                   );
                 }).toList(),
               ),
@@ -694,20 +788,25 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                ),
                const SizedBox(height: 8),
-               LocationPickerMap(
-                 initialLatitude: _latitude,
-                 initialLongitude: _longitude,
-                 address: _getAddressFromLocation(),
-                 onLocationSelected: (lat, lng) {
-                   setState(() {
-                     _latitude = lat;
-                     _longitude = lng;
-                     _selectedMunicipality = null;
-                     _selectedGovernorate = null;
-                   });
-                   _reverseGeocode(lat, lng);
-                 },
-               ),
+                LocationPickerMap(
+                  initialLatitude: _latitude,
+                  initialLongitude: _longitude,
+                  address: _address,
+                  onLocationSelected: (lat, lng) {
+                    setState(() {
+                      _latitude = lat;
+                      _longitude = lng;
+                      _selectedMunicipality = null;
+                      _selectedGovernorate = null;
+                    });
+                    _getAddressFromLocation().then((address) {
+                      setState(() {
+                        _address = address;
+                      });
+                    });
+                    _reverseGeocode(lat, lng);
+                  },
+                ),
                const SizedBox(height: 20),
 
               // Photos
@@ -721,54 +820,56 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
-              if (_photos.isNotEmpty) ...[
-                SizedBox(
-                  height: 100,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _photos.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                File(_photos[index].path),
-                                width: 100,
-                                height: 100,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: GestureDetector(
-                                onTap: () =>
-                                    setState(() => _photos.removeAt(index)),
-                                child: Container(
-                                  padding: const EdgeInsets.all(2),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    size: 14,
-                                    color: Colors.white,
+if (_photos.isNotEmpty) ...[
+                 SizedBox(
+                   height: 100,
+                   child: ListView.builder(
+                     scrollDirection: Axis.horizontal,
+                     itemCount: _photos.length,
+                     itemBuilder: (context, index) {
+                       return Padding(
+                         padding: const EdgeInsets.only(right: 8),
+                         child: Stack(
+                           children: [
+                             ClipRRect(
+                               borderRadius: BorderRadius.circular(12),
+                               child: Image.file(
+                                 File(_photos[index].path),
+                                 width: 100,
+                                 height: 100,
+                                 fit: BoxFit.cover,
+                               ),
+                             ),
+                             Positioned(
+                               top: 0,
+                               right: 0,
+                               child: GestureDetector(
+                                 onTap: () =>
+                                     setState(() => _photos.removeAt(index)),
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+                             ),
+                           ],
+                         ),
+                       );
+                     },
+                   ),
+                 ),
+                 const SizedBox(height: 8),
+               ],
               Row(
                 children: [
                   Expanded(
@@ -835,6 +936,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
           ),
         ),
       ),
-    );
+    )
   }
 }

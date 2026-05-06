@@ -171,7 +171,8 @@ class TechnicianController {
             type: "in_progress",
             title: "Work Started",
             message: `Technician started work on "${complaint.title}".`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { startedBy: req.user.userId, technicianId: req.user.userId },
           });
         } catch (notifError) {
         // Silent fail: notifications non-critical
@@ -180,14 +181,15 @@ class TechnicianController {
 
       if (io && complaint.createdBy) {
         try {
-          await notificationService.sendNotification(io, complaint.createdBy, {
+          await notificationService.sendNotification(io, complaint.createdBy.toString(), {
             type: "in_progress",
             title: "Work Started",
             message: `Work has started on your complaint '${complaint.title}'.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { startedBy: req.user.userId, technicianId: req.user.userId },
           });
         } catch {
-          // Silent fail: notifications non-critical
+        // Silent fail: notifications non-critical
         }
       }
 
@@ -278,20 +280,22 @@ class TechnicianController {
             type: "resolved",
             title: "Task Resolved",
             message: `Technician resolved complaint "${complaint.title}".`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { resolvedBy: req.user.userId, resolutionNotes: notes || '' },
           });
         } catch {
-          // Silent fail: notifications non-critical
+        // Silent fail: notifications non-critical
         }
       }
-      
+
       if (io && complaint.createdBy) {
         try {
-          await notificationService.sendNotification(io, complaint.createdBy, {
+          await notificationService.sendNotification(io, complaint.createdBy.toString(), {
             type: "resolved",
             title: "Complaint Resolved",
             message: `Your complaint '${complaint.title}' has been resolved! Please confirm if the issue is fixed.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { resolvedBy: req.user.userId, resolutionNotes: notes || '' },
           });
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
@@ -300,11 +304,12 @@ class TechnicianController {
 
       if (io && complaint.validatedBy) {
         try {
-          await notificationService.sendNotification(io, complaint.validatedBy, {
+          await notificationService.sendNotification(io, complaint.validatedBy.toString(), {
             type: "report_submitted",
             title: "Resolution Pending Review",
             message: `Technician submitted a resolution report for "${complaint.title}". Please review.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { resolvedBy: req.user.userId, resolutionNotes: notes || '' },
           });
         } catch (notifError) {
           console.error("Failed to notify agent:", notifError);
@@ -373,7 +378,8 @@ class TechnicianController {
               type: "in_progress",
               title: "Work Started",
               message: `Technician started work on "${complaint.title}".`,
-              complaintId: complaint._id,
+              complaintId: complaint._id.toString(),
+              metadata: { startedBy: req.user.userId },
             });
           } catch (notifError) {
             console.error("Failed to notify managers:", notifError);
@@ -381,11 +387,12 @@ class TechnicianController {
         }
         if (io && complaint.createdBy) {
           try {
-            await notificationService.sendNotification(io, complaint.createdBy, {
+            await notificationService.sendNotification(io, complaint.createdBy.toString(), {
               type: "in_progress",
-              title: "notification.status.inProgress",
-              message: "notification.status.inProgress.desc",
-              complaintId: complaint._id,
+              title: "Work Started",
+              message: `Work has started on your complaint '${complaint.title}'.`,
+              complaintId: complaint._id.toString(),
+              metadata: { startedBy: req.user.userId },
             });
           } catch (notifError) {
             console.error("Failed to notify citizen:", notifError);
@@ -553,43 +560,56 @@ class TechnicianController {
         status: { $in: TECHNICIAN_ACTIVE_STATUSES },
       };
 
-      const [historicalTotal, total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk] = await Promise.all([
-        Complaint.countDocuments(historicalBaseQuery),
-        Complaint.countDocuments(activeBaseQuery),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
-        Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
-        Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
-        Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
-        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
-        Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } })
-      ]);
+       const [historicalTotal, total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, resolvedWithRatingCount, csatCount] = await Promise.all([
+         Complaint.countDocuments(historicalBaseQuery),
+         Complaint.countDocuments(activeBaseQuery),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
+         Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+       ]);
 
-      const resolvedCount = resolved + closed;
-      const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+       const resolvedCount = resolved + closed;
+       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
-      const avgTimeResult = await Complaint.aggregate([
-        { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
-        { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
-      ]);
-      const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
+       const avgTimeResult = await Complaint.aggregate([
+         { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+       ]);
+       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
-      res.json({
-        success: true,
-        data: {
-          total,
-          historicalTotal,
-          assigned,
-          inProgress,
-          resolved,
-          closed,
-          rejected,
-          totalOverdue: overdue,
-          totalAtRisk: atRisk,
-          resolutionRate,
-          averageResolutionTime
-        }
-      });
+       // SLA compliance rate
+       const onTimeCountResult = await Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
+       const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
+
+       // CSAT
+       const totalRatings = resolvedWithRatingCount;
+       const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
+
+       res.json({
+         success: true,
+         data: {
+           total,
+           historicalTotal,
+           assigned,
+           inProgress,
+           resolved,
+           closed,
+           rejected,
+           totalOverdue: overdue,
+           totalAtRisk: atRisk,
+           resolutionRate,
+           averageResolutionTime,
+           slaComplianceRate,
+           csat,
+           totalRatings,
+         }
+       });
     } catch (error) {
       console.error("Technician get stats error:", error);
       res.status(500).json({ success: false, message: "Failed to retrieve statistics" });

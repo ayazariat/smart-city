@@ -13,6 +13,7 @@ import { showToast } from "@/components/ui/Toast";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { getDepartmentLabel } from "@/lib/categories";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -244,7 +245,7 @@ export default function AdminSettingsPage() {
                         <div key={dept._id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-semibold text-slate-900">{dept.name}</h4>
+                              <h4 className="font-semibold text-slate-900">{getDepartmentLabel(dept.name)}</h4>
                               {dept.description && <p className="text-sm text-slate-500 mt-1">{dept.description}</p>}
                               <div className="flex flex-wrap gap-1.5 mt-3">
                                 {(dept.categories || []).map((cat) => (

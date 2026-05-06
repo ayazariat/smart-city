@@ -14,6 +14,8 @@
     "next": "Next",
     "search": "Search...",
     "noData": "No data available",
+    "noDataYet": "No data yet",
+    "tryAdjustingFilters": "Try adjusting your search or filters.",
     "refresh": "Refresh",
     "processing": "Processing...",
     "all": "All",
@@ -26,9 +28,20 @@
       "minutes": "{{n}}m ago",
       "hours": "{{n}}h ago",
       "days": "{{n}}d ago"
-    }
-  },
-  "sidebar": {
+     }
+   },
+   "errors": {
+     "loadFailed": "Failed to load data. Please try again.",
+     "generic": "Something went wrong. Please try again.",
+     "notFound": "The requested resource was not found.",
+     "invalidActivation": "Invalid activation link. Please contact your administrator.",
+     "fillAllFields": "Please fill in all fields",
+     "passwordsDoNotMatch": "Passwords do not match",
+     "passwordTooShort": "Password must be at least 8 characters",
+     "passwordComplexity": "Password must contain uppercase, lowercase letters and numbers",
+     "failedSetPassword": "Failed to set password. Please try again."
+   },
+   "sidebar": {
     "navigation": "Navigation",
     "dashboard": "Dashboard",
     "myComplaints": "My Complaints",
@@ -53,8 +66,18 @@
     "DEPARTMENT_MANAGER": "Dept. Manager",
     "TECHNICIAN": "Technician",
     "ADMIN": "Administrator"
-  },
-  "topbar": {
+   },
+   "agent": {
+     "noAssignedComplaints": "No complaints assigned to you yet.",
+     "noAssignedComplaintsFiltered": "No complaints match your current filters."
+   },
+   "admin": {
+     "noComplaintsSubmitted": "No complaints have been submitted yet."
+   },
+   "manager": {
+     "noPendingComplaints": "No complaints pending for your department."
+   },
+   "topbar": {
     "back": "Back"
   },
   "theme": {
@@ -610,13 +633,15 @@
     "fr": "Français",
     "ar": "العربية"
   },
-  "notifications": {
-    "title": "Notifications",
-    "empty": "No notifications yet",
-    "emptyHint": "You'll be notified when your complaints are updated.",
-    "seeAll": "See all notifications",
-    "markAllRead": "Mark all as read",
-    "types": {
+   "notifications": {
+     "title": "Notifications",
+     "empty": "No notifications yet",
+     "emptyHint": "You'll be notified when your complaints are updated.",
+     "seeAll": "See all notifications",
+     "markAllRead": "Mark all as read",
+     "today": "Today",
+     "earlier": "Earlier",
+     "types": {
       "VALIDATION": "Validation",
       "VALIDATED": "Validated",
       "ASSIGNMENT": "Assignment",
@@ -856,10 +881,11 @@
     "search": "Search:",
     "status": "Status:"
   },
-  "publicComplaint": {
-    "loading": "Loading complaint...",
-    "notFound": "Complaint Not Found",
-    "notPublicYet": "This complaint may not be public yet.",
+   "publicComplaint": {
+     "loading": "Loading complaint...",
+     "notFound": "Complaint Not Found",
+     "errorLoading": "Unable to load complaint details",
+     "notPublicYet": "This complaint may not be public yet.",
     "backToDashboard": "Back to Dashboard",
     "complaintDetail": "Complaint Detail",
     "menu": "Menu",
@@ -920,11 +946,12 @@
     "overdue": "Overdue",
     "total": "Total",
     "searchPlaceholder": "Search tasks...",
-    "low": "Low",
-    "medium": "Medium",
-    "high": "High",
-    "urgent": "Urgent",
-    "photos": "{{n}} photos",
+     "low": "Low",
+     "medium": "Medium",
+     "high": "High",
+     "urgent": "Urgent",
+     "highPriority": "High Priority",
+     "photos": "{{n}} photos",
     "dueDate": "Due: {{date}}",
     "startWork": "Start Work",
     "markResolved": "Mark Resolved",

@@ -238,10 +238,7 @@ class _ManagerDashboardScreenState
                       ),
                     ],
                     const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
+const Text(
                           'Signalements récents',
                           style: TextStyle(
                             fontSize: 18,
@@ -249,12 +246,6 @@ class _ManagerDashboardScreenState
                             color: AppColors.textPrimary,
                           ),
                         ),
-                        TextButton(
-                          onPressed: () {},
-                          child: const Text('Voir tout'),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 8),
                   ],
                 ),

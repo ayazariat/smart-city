@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { managerService } from "@/services/manager.service";
-import { STATUS_OPTIONS } from "@/lib/complaints";
+import { STATUS_OPTIONS, categoryLabels } from "@/lib/complaints";
 import { getCategoryLabel } from "@/lib/categories";
 import { showToast } from "@/components/ui/Toast";
 import {
@@ -232,17 +232,17 @@ export default function ManagerPendingPage() {
   });
 
   // Export functions
-  const exportCSV = () => {
-    const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
-    const rows = filteredComplaints.map(c => [
-      c._id || c.id || "",
-      c.title?.replace(/,/g, " "),
-      categoryLabels[c.category] || c.category,
-      c.status,
-      (c.priorityScore || 0).toString(),
-      c.municipalityName || "",
-      new Date(c.createdAt).toLocaleDateString()
-    ]);
+   const exportCSV = () => {
+     const headers = ["Reference", "Title", "Category", "Status", "Priority", "Municipality", "Created"];
+     const rows = filteredComplaints.map(c => [
+       c._id || c.id || "",
+       c.title?.replace(/,/g, " "),
+       getCategoryLabel(c.category),
+       c.status,
+       (c.priorityScore || 0).toString(),
+       c.municipalityName || "",
+       new Date(c.createdAt).toLocaleDateString()
+     ]);
     const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -252,11 +252,11 @@ export default function ManagerPendingPage() {
     a.click();
   };
 
-  const exportPDF = () => {
-    // Create printable content
-    const content = filteredComplaints.map(c => 
-      `${c._id?.slice(-6)} | ${c.description?.slice(0, 50)} | ${c.status} | ${categoryLabels[c.category] || c.category} | ${c.municipalityName || ""}`
-    ).join("\n");
+   const exportPDF = () => {
+     // Create printable content
+     const content = filteredComplaints.map(c => 
+       `${c._id?.slice(-6)} | ${c.description?.slice(0, 50)} | ${c.status} | ${getCategoryLabel(c.category)} | ${c.municipalityName || ""}`
+     ).join("\n");
     
     const printWindow = window.open("", "_blank");
     if (printWindow) {
@@ -280,15 +280,15 @@ export default function ManagerPendingPage() {
             <p>Total: ${filteredComplaints.length} complaints</p>
             <table>
               <tr><th>Reference</th><th>Description</th><th>Status</th><th>Category</th><th>Municipality</th></tr>
-              ${filteredComplaints.map(c => `
-                <tr>
-                  <td>${c._id?.slice(-6)}</td>
-                  <td>${(c.description || "").slice(0, 50)}</td>
-                  <td>${c.status}</td>
-                  <td>${categoryLabels[c.category] || c.category}</td>
-                  <td>${c.municipalityName || ""}</td>
-                </tr>
-              `).join("")}
+               ${filteredComplaints.map(c => `
+                 <tr>
+                   <td>${c._id?.slice(-6)}</td>
+                   <td>${(c.description || "").slice(0, 50)}</td>
+                   <td>${c.status}</td>
+                   <td>${getCategoryLabel(c.category)}</td>
+                   <td>${c.municipalityName || ""}</td>
+                 </tr>
+               `).join("")}
             </table>
           </body>
         </html>
@@ -486,15 +486,15 @@ export default function ManagerPendingPage() {
 
         {/* Complaints List */}
         {!loading && (
-          filteredComplaints.length === 0 ? (
-            <EmptyState
-              icon="file"
-              message={
-                searchTerm || statusFilter || priorityFilter
-                  ? "Try adjusting your search or filters."
-                  : "No complaints pending for your department."
-              }
-            />
+           filteredComplaints.length === 0 ? (
+             <EmptyState
+               icon="file"
+               message={
+                 searchTerm || statusFilter || priorityFilter
+                   ? t("common.tryAdjustingFilters")
+                   : t("manager.noPendingComplaints")
+               }
+             />
           ) : (
             <div className="grid gap-5">
               {filteredComplaints.map((complaint, index) => {

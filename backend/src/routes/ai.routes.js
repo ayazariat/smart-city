@@ -96,11 +96,41 @@ router.get("/duplicate/stats", async (req, res) => {
   }
 });
 
+router.get("/stats/duplicates/today", authenticate, async (req, res) => {
+  try {
+    const Complaint = require('../models/Complaint');
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    const duplicatesToday = await Complaint.countDocuments({
+      isDuplicate: true,
+      createdAt: { $gte: startOfDay, $lt: endOfDay }
+    });
+
+    const checkedToday = await Complaint.countDocuments({
+      duplicateStatus: { $in: ["CONFIRMED_DUPLICATE", "NOT_DUPLICATE", "POSSIBLE_DUPLICATE", "PROBABLE_DUPLICATE"] },
+      createdAt: { $gte: startOfDay, $lt: endOfDay }
+    });
+
+    const mergeRate = checkedToday > 0 ? (duplicatesToday / checkedToday) * 100 : 0;
+
+    res.json({
+      checked: checkedToday,
+      duplicatesToday,
+      mergeRate: parseFloat(mergeRate.toFixed(1))
+    });
+  } catch (error) {
+    console.error("Error fetching duplicate stats:", error);
+    res.status(500).json({ error: "Failed to fetch duplicate stats" });
+  }
+});
+
 // Confirm duplicate decision (merge / keep separate)
 router.post(
   "/duplicate/confirm",
   authenticate,
-  authorize("MUNICIPAL_AGENT", "ADMIN"),
+  authorize("MUNICIPAL_AGENT"),
   async (req, res) => {
     try {
       const { newComplaintId, existingComplaintId, action } = req.body;
@@ -122,22 +152,34 @@ router.post(
         target.duplicateOf = null;
         await target.save();
 
+      const notificationService = require('../services/notification.service');
+      const targetUser = await User.findById(target.createdBy).select('_id').lean();
+
+      if (action === "keep_separate") {
+        target.duplicateStatus = "NOT_DUPLICATE";
+        target.duplicateOf = null;
+        await target.save();
+
         // Inform complaint owner that duplicate review is complete
         if (target.createdBy) {
-          await Notification.create({
-            recipient: target.createdBy,
-            type: "info",
-            title: "Duplicate review completed",
-            message:
-              "Your complaint was reviewed and kept as a separate case.",
-            relatedId: target._id,
-          });
+          try {
+            await notificationService.sendNotification(null, target.createdBy.toString(), {
+              type: "duplicate_resolved",
+              title: "Duplicate review completed",
+              message: "Your complaint was reviewed and kept as a separate case.",
+              complaintId: target._id.toString(),
+              metadata: { action: "keep_separate", targetComplaintId: target._id.toString() },
+            });
+          } catch (err) {
+            console.error('Notification failed:', err.message);
+          }
         }
         return res.json({
           success: true,
           message: "Complaints kept separate",
           complaintId: target._id,
         });
+      }
       }
 
       if (!existingComplaintId || action !== "merge") {
@@ -188,29 +230,29 @@ router.post(
       source.archivedAt = new Date();
       await source.save();
 
+      const notificationService = require('../services/notification.service');
+
       // Notify source and target complaint owners for traceability/transparency
       const notificationJobs = [];
       if (source.createdBy) {
         notificationJobs.push(
-          Notification.create({
-            recipient: source.createdBy,
-            type: "confirm",
+          notificationService.sendNotification(null, source.createdBy.toString(), {
+            type: "duplicate_merged",
             title: "Complaint merged",
-            message:
-              "Your complaint has been merged with a similar case to centralize resolution.",
-            relatedId: target._id,
+            message: "Your complaint has been merged with a similar case to centralize resolution.",
+            complaintId: target._id.toString(),
+            metadata: { action: "merge", sourceComplaintId: source._id.toString(), targetComplaintId: target._id.toString() },
           })
         );
       }
       if (target.createdBy) {
         notificationJobs.push(
-          Notification.create({
-            recipient: target.createdBy,
-            type: "confirm",
+          notificationService.sendNotification(null, target.createdBy.toString(), {
+            type: "duplicate_merged",
             title: "Community support updated",
-            message:
-              "A similar complaint was merged into your case. Support confirmations were updated.",
-            relatedId: target._id,
+            message: "A similar complaint was merged into your case. Support confirmations were updated.",
+            complaintId: target._id.toString(),
+            metadata: { action: "merge", sourceComplaintId: source._id.toString(), targetComplaintId: target._id.toString() },
           })
         );
       }

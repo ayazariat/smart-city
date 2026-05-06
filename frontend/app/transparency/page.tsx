@@ -221,7 +221,24 @@ const getComplaintId = (complaint: ComplaintItem): string =>
 const getComplaintKey = (complaint: ComplaintItem): string =>
   getComplaintId(complaint) || complaint.referenceId || `${complaint.title}-${complaint.createdAt}`;
 
-type ApiMunicipalityStat = Omit<MunicipalityStats, "rank" | "tma" | "overdue">;
+type ApiMunicipalityStat = {
+  municipality?: string;
+  name?: string;
+  governorate?: string;
+  total?: number;
+  resolved?: number;
+  rate?: number;
+};
+
+type ApiAllMunicipalityStat = {
+  municipality?: string;
+  name?: string;
+  governorate?: string;
+  count?: number;
+  total?: number;
+  resolved?: number;
+  rate?: number;
+};
 
 type ApiComplaint = ComplaintItem & {
   confirmations?: Array<unknown>;
@@ -363,7 +380,11 @@ export default function TransparencyPage() {
       
       if (munData.success) {
         const rankedMun = (munData.data as ApiMunicipalityStat[]).map((m, idx) => ({
-          ...m,
+          name: m.municipality || m.name || 'Unknown',
+          governorate: m.governorate || '',
+          total: m.total || 0,
+          resolved: m.resolved || 0,
+          rate: m.rate || 0,
           rank: idx + 1,
           tma: (m as unknown as Record<string, unknown>).tma as number || 0,
           overdue: 0
@@ -385,7 +406,15 @@ export default function TransparencyPage() {
       }
 
       if (allMunData.success && allMunData.data) {
-        setAllMunicipalityStats(allMunData.data);
+        setAllMunicipalityStats(
+          allMunData.data.map((m) => ({
+            name: m.municipality || m.name || 'Unknown',
+            governorate: m.governorate || '',
+            total: m.count || m.total || 0,
+            resolved: 0,
+            rate: 0,
+          }))
+        );
       }
       
       if (complaintsData.success && complaintsData.data?.complaints) {
@@ -431,7 +460,7 @@ export default function TransparencyPage() {
         c.location?.municipality?.toLowerCase().includes(query) ||
         c.governorate?.toLowerCase().includes(query) ||
         c.location?.governorate?.toLowerCase().includes(query) ||
-        categoryLabels[c.category]?.toLowerCase().includes(query)
+        getCategoryLabel(c.category).toLowerCase().includes(query)
       );
       // Auto-switch to complaints view when searching
       if (activeView !== "complaints") {
@@ -765,8 +794,8 @@ export default function TransparencyPage() {
                         { label: t('transparency.metrics.totalReports'), value: stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
                         { label: t('transparency.metrics.problemsFixed'), value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
                         { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
-                        { label: t('transparency.metrics.avgFixTime'), value: `${stats.avgResolutionDays}d`, icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
-                        { label: t('transparency.metrics.resolvedOnTime'), value: `${stats.slaComplianceRate || 0}%`, icon: Shield, color: "bg-teal-100 text-teal-600", trend: stats.slaComplianceTrend }
+{ label: t('transparency.metrics.avgFixTime'), value: stats.avgResolutionDays != null ? `${stats.avgResolutionDays}d` : '—', icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
+                         { label: t('transparency.metrics.resolvedOnTime'), value: stats.slaComplianceRate != null ? `${stats.slaComplianceRate}%` : '—', icon: Shield, color: "bg-teal-100 text-teal-600", trend: stats.slaComplianceTrend }
                       ].map((stat, idx) => (
                         <div 
                           key={stat.label}
@@ -962,7 +991,7 @@ export default function TransparencyPage() {
                         </div>
                         <div className="p-4">
                           <h4 className="font-semibold text-slate-800 text-sm mb-2 line-clamp-2">
-                            {categoryLabels[complaint.category] || complaint.category} {t('transparency.resolutions.resolvedIn', { municipality: complaint.municipalityName || complaint.location?.municipality || t('transparency.resolutions.unknown') })}
+                            {getCategoryLabel(complaint.category)} {t('transparency.resolutions.resolvedIn', { municipality: complaint.municipalityName || complaint.location?.municipality || t('transparency.resolutions.unknown') })}
                           </h4>
                           <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                             <MapPin className="w-3 h-3 text-green-500" />
@@ -1014,9 +1043,9 @@ export default function TransparencyPage() {
                           <th className="text-right py-3 px-3 text-green-700 font-medium">{t('transparency.leaderboardSection.onTime')}</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {municipalityStats.map((mun) => (
-                          <tr key={mun.name} className="border-b border-slate-50 hover:bg-green-50/50 transition-colors">
+<tbody>
+{municipalityStats.map((mun, idx) => (
+                            <tr key={`${mun.name}-${mun.governorate}-${idx}`} className="border-b border-slate-50 hover:bg-green-50/50 transition-colors">
                             <td className="py-3 px-3">
                               <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
                                 mun.rank === 1 ? 'bg-amber-100 text-amber-700 border border-amber-200' :
@@ -1107,7 +1136,7 @@ export default function TransparencyPage() {
                             <div className="flex justify-between items-center">
                               <span className="font-medium text-slate-700 flex items-center gap-2">
                                 <span className={`w-3 h-3 rounded-full bg-gradient-to-r ${colorClass}`} />
-                                {categoryLabels[cat] || cat}
+                                {getCategoryLabel(cat)}
                               </span>
                               <div className="flex items-center gap-3">
                                 <span className="text-sm font-bold text-slate-800">{data.total}</span>
@@ -1154,19 +1183,20 @@ export default function TransparencyPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={monthlyTrends}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#F0F4F0" />
-                          <XAxis 
-                            dataKey="month" 
-                            tick={{fontSize: 12}} 
-                            stroke="#64748b"
-                            tickFormatter={(val) => {
-                              const parts = val.split('-');
-                              if (parts.length === 2) {
-                                const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                                return `${monthNames[parseInt(parts[1], 10) - 1]} '${parts[0].slice(2)}`;
-                              }
-                              return val;
-                            }}
-                          />
+<XAxis 
+                             dataKey="month" 
+                             tick={{fontSize: 12}} 
+                             stroke="#64748b"
+                             tickFormatter={(val) => {
+                               const strVal = String(val || '');
+                               const parts = strVal.split('-');
+                               if (parts.length === 2) {
+                                 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                 return `${monthNames[parseInt(parts[1], 10) - 1]} '${parts[0].slice(2)}`;
+                               }
+                               return strVal;
+                             }}
+                           />
                           <YAxis tick={{fontSize: 12}} stroke="#64748b" allowDecimals={false} />
                           <Tooltip 
                             contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
@@ -1227,11 +1257,11 @@ export default function TransparencyPage() {
                           <div 
                             key={idx} 
                             className="bg-white rounded-xl p-5 border border-slate-200 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
-                            onClick={() => { setCategoryFilter(issue.category); setSearchQuery(issue.title.split(' ').slice(0, 4).join(' ')); setActiveView("complaints"); }}
+                            onClick={() => { setCategoryFilter(issue.category || ''); setSearchQuery((issue.title || '').split(' ').slice(0, 4).join(' ')); setActiveView("complaints"); }}
                           >
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-xs px-2 py-1 bg-slate-100 rounded-lg text-slate-600 font-medium">
-                                {categoryLabels[issue.category] || issue.category}
+                                {getCategoryLabel(issue.category)}
                               </span>
                               <span className={`text-xs px-2 py-1 rounded-lg font-medium ${statusBadge.cls}`}>
                                 {statusBadge.label}
@@ -1324,7 +1354,7 @@ export default function TransparencyPage() {
                           {total > 0 ? (
                             <>
                               <p className="text-xs text-slate-500 mb-2">
-                                {total} {categoryFilter ? categoryLabels[categoryFilter]?.split(" ")[0] : t('transparency.governorates.reports')}
+                                {total} {categoryFilter ? getCategoryLabel(categoryFilter)?.split(" ")[0] : t('transparency.governorates.reports')}
                               </p>
                               {!categoryFilter && (
                                 <>
@@ -1457,11 +1487,11 @@ export default function TransparencyPage() {
                             <span className="mx-1">·</span>
                             <span>{formattedDate}</span>
                           </div>
-                          <div className="text-xs">
-                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
-                              {categoryLabels[complaint.category] || complaint.category}
-                            </span>
-                          </div>
+                           <div className="text-xs">
+                             <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                               {getCategoryLabel(complaint.category)}
+                             </span>
+                           </div>
                         </div>
                         
                         {/* Image - Full width 200px */}
@@ -1575,7 +1605,7 @@ export default function TransparencyPage() {
                                 {formattedDate}
                               </span>
                               <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
-                                {categoryLabels[complaint.category] || complaint.category}
+                              {getCategoryLabel(complaint.category)}
                               </span>
                             </div>
                             <h4 className="font-semibold text-slate-800 mb-1">{complaint.title}</h4>
@@ -1760,7 +1790,7 @@ export default function TransparencyPage() {
                                       <div
                                         key={cat}
                                         style={{ width: `${(count / govZoneTotal) * 100}%`, backgroundColor: categoryColorsHex[idx] }}
-                                        title={`${categoryLabels[cat] || cat}: ${count}`}
+                                        title={`${getCategoryLabel(cat)}: ${count}`}
                                         className="transition-all"
                                       />
                                     );
@@ -1773,7 +1803,7 @@ export default function TransparencyPage() {
                                     return (
                                       <div key={cat} className="flex items-center gap-2 text-sm">
                                         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: categoryColorsHex[idx] }} />
-                                        <span className="text-slate-600 truncate">{categoryLabels[cat] || cat}</span>
+                                        <span className="text-slate-600 truncate">{getCategoryLabel(cat)}</span>
                                         <span className="font-semibold text-slate-800 ml-auto">{count}</span>
                                       </div>
                                     );
@@ -1850,7 +1880,7 @@ export default function TransparencyPage() {
                                             complaint.status === 'IN_PROGRESS' ? 'bg-orange-100 text-orange-700' :
                                             'bg-blue-100 text-blue-700'
                                           }`}>
-                                            {complaint.status === 'IN_PROGRESS' ? t('transparency.govDetail.inProgress') : complaint.status === 'RESOLVED' ? t('transparency.complaintsView.resolved') : complaint.status === 'CLOSED' ? t('transparency.complaintsView.closed') : complaint.status}
+                                             {complaint.status === 'IN_PROGRESS' ? t('transparency.govDetail.inProgress') : complaint.status === 'RESOLVED' ? t('transparency.complaintsView.resolved') : complaint.status === 'CLOSED' ? t('transparency.complaintsView.closed') : t(`status.${complaint.status}`)}
                                           </span>
                                         </div>
                                       </div>
@@ -1960,7 +1990,7 @@ export default function TransparencyPage() {
                                       <div
                                         key={cat}
                                         style={{ width: `${(count / govZoneTotal) * 100}%`, backgroundColor: categoryColorsHex[idx] }}
-                                        title={`${categoryLabels[cat] || cat}: ${count}`}
+                                        title={`${getCategoryLabel(cat)}: ${count}`}
                                       />
                                     );
                                   })}
@@ -2130,7 +2160,7 @@ export default function TransparencyPage() {
               {/* Content */}
               <div className="p-6">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">{categoryLabels[c.category] || c.category}</span>
+                  <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">{getCategoryLabel(c.category)}</span>
                   {c.referenceId && <span className="text-xs text-slate-400">#{c.referenceId}</span>}
                 </div>
                 <h3 className="text-lg font-bold text-slate-800 mb-2">{c.title}</h3>

@@ -16,7 +16,8 @@ import {
   Trash2,
   X,
   Save,
-  Phone
+  Phone,
+  Star
 } from "lucide-react";
 import { Complaint, ComplaintCategory, ComplaintUrgency } from "@/types";
 import { complaintService } from "@/services/complaint.service";
@@ -25,36 +26,34 @@ import { Button } from "@/components/ui";
 import { useLastVisitedPage } from "@/hooks/useLastVisitedPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { getDepartmentLabel, categoryOptions } from "@/lib/categories";
 import { useTranslation } from "react-i18next";
 
 export default function MyComplaintDetailPage() {
-  const params = useParams();
-  const router = useRouter();
   const { user, token, hydrated } = useAuthStore();
+  const { isHydrated, saveLastPage, getLastPage, clearLastPage } = useLastVisitedPage();
   const { t, i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage || i18n.language || "en";
-  const complaintId = params.id as string;
-  const { isHydrated, saveLastPage, getLastPage } = useLastVisitedPage();
+  const router = useRouter();
+  const { id: complaintId } = useParams();
+  const locale = i18n.language === "ar" ? "ar-TN" : i18n.language === "fr" ? "fr-FR" : "en-US";
 
+  // State
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({
-    title: "",
-    description: "",
-    category: "",
-    urgency: "",
-    phone: ""
-  });
+  const [editForm, setEditForm] = useState<Partial<Complaint>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [confirmLoading, setConfirmLoading] = useState(false);
-
-  // Photo modal state
-  const [photoModal, setPhotoModal] = useState<{url: string; index: number} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [photoModal, setPhotoModal] = useState<{ url: string; index: number } | null>(null);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+  
+  // Rating state
+  const [selectedRating, setSelectedRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [resolvedCorrectly, setResolvedCorrectly] = useState(true);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   // Save current page when component mounts
   useEffect(() => {
@@ -118,22 +117,25 @@ export default function MyComplaintDetailPage() {
     }
   }, [complaintId, token, t]);
 
-  // Update edit data when complaint loads
-  useEffect(() => {
-    if (complaint) {
-      setEditData({
-        title: complaint.title,
-        description: complaint.description,
-        category: complaint.category,
-        urgency: complaint.urgency,
-        phone: complaint.phone || ""
-      });
-    }
-  }, [complaint]);
+   // Update edit data when complaint loads
+   useEffect(() => {
+     if (complaint) {
+       setEditData({
+         title: complaint.title,
+         description: complaint.description,
+         category: complaint.category,
+         urgency: complaint.urgency,
+         phone: complaint.phone || ""
+       });
+     }
+   }, [complaint]);
 
-  const handleEdit = () => {
-    setIsEditing(true);
-  };
+   // Get createdBy ID for ownership check
+   const createdById = complaint?.createdBy?._id || complaint?.createdBy?.toString() || complaint?.createdBy;
+
+   const handleEdit = () => {
+     setIsEditing(true);
+   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
@@ -187,23 +189,52 @@ export default function MyComplaintDetailPage() {
     }
   };
 
-  const handleConfirmResolution = async () => {
-    if (!complaintId || !token) return;
-    
-    setConfirmLoading(true);
-    try {
-      const response = await complaintService.confirmResolution(complaintId);
-      if (response.success) {
-        setComplaint(response.data);
-      }
-    } catch {
-      setError(t("complaintDetail.errorConfirm"));
-    } finally {
-      setConfirmLoading(false);
-    }
-  };
+   const handleConfirmResolution = async () => {
+     if (!complaintId || !token) return;
+     
+     setConfirmLoading(true);
+     try {
+       const response = await complaintService.confirmResolution(complaintId);
+       if (response.success) {
+         setComplaint(response.data);
+       }
+     } catch {
+       setError(t("complaintDetail.errorConfirm"));
+     } finally {
+       setConfirmLoading(false);
+     }
+   };
 
-  const hasLocation = complaint && (
+   const handleSubmitRating = async () => {
+     if (!complaintId || !token || selectedRating === 0) return;
+
+     setIsSubmittingRating(true);
+     try {
+       const response = await complaintService.submitRating(complaintId, {
+         score: selectedRating,
+         resolvedCorrectly,
+         comment: ratingComment.trim() || undefined,
+       });
+       if (response.success) {
+         // Refresh complaint to show new rating
+         const { complaintService } = await import("@/services/complaint.service");
+         const updated = await complaintService.getComplaintById(complaintId);
+         if (updated?.complaint) {
+           setComplaint(updated.complaint);
+         }
+         // Reset form
+         setSelectedRating(0);
+         setRatingComment("");
+         setResolvedCorrectly(true);
+       }
+     } catch {
+       setError(t("complaintDetail.errorUpdate", "Failed to submit rating"));
+     } finally {
+       setIsSubmittingRating(false);
+     }
+   };
+
+   const hasLocation = complaint && (
     (complaint.location?.latitude && complaint.location?.longitude) || 
     (complaint.location?.coordinates && complaint.location.coordinates[0] !== 0 && complaint.location.coordinates[1] !== 0)
   );
@@ -343,17 +374,17 @@ export default function MyComplaintDetailPage() {
                 <h1 className="text-xl font-bold text-slate-800">
                   {complaint.title || `${t("complaintDetail.complaint")} ${getComplaintIdDisplay(complaint._id || complaint.id || "")}`}
                 </h1>
-                {complaint.department && (
-                  <p className="text-xs text-slate-500">{t("complaintDetail.assignedTo")}: {complaint.department.name}</p>
-                )}
+                 {complaint.department && (
+                   <p className="text-xs text-slate-500">{t("complaintDetail.assignedTo")}: {getDepartmentLabel(complaint.department.name)}</p>
+                 )}
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object' && (
-                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                  {complaint.assignedDepartment.name}
-                </span>
-              )}
+               {complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object' && (
+                 <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
+                   {getDepartmentLabel(complaint.assignedDepartment.name)}
+                 </span>
+               )}
               <span 
                 className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass} flex items-center gap-2`}
                 aria-label={`Statut: ${status.label}`}
@@ -441,13 +472,9 @@ export default function MyComplaintDetailPage() {
                       onChange={(e) => setEditData({ ...editData, category: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                     >
-                      <option value="ROAD">{categoryLabels.ROAD}</option>
-                      <option value="LIGHTING">{categoryLabels.LIGHTING}</option>
-                      <option value="WASTE">{categoryLabels.WASTE}</option>
-                      <option value="WATER">{categoryLabels.WATER}</option>
-                      <option value="SAFETY">{categoryLabels.SAFETY}</option>
-                      <option value="PUBLIC_PROPERTY">{categoryLabels.PUBLIC_PROPERTY}</option>
-                      <option value="OTHER">{categoryLabels.OTHER}</option>
+                      {categoryOptions.map(cat => (
+                        <option key={cat.value} value={cat.value}>{getCategoryLabel(cat.value)}</option>
+                      ))}
                     </select>
                   ) : (
                     <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
@@ -775,43 +802,143 @@ export default function MyComplaintDetailPage() {
                   <Building2 className="w-5 h-5 text-primary" />
                   {t("complaintDetail.department")}
                 </h2>
-                <p className="font-semibold text-slate-900">{complaint.department.name}</p>
+                 <p className="font-semibold text-slate-900">{getDepartmentLabel(complaint.department.name)}</p>
               </section>
             )}
 
-            {/* Timestamps */}
-            <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="dates-title">
-              <h2 id="dates-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                {t("complaintDetail.dates")}
-              </h2>
-              <dl className="space-y-3 text-sm">
-                <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                  <dt className="text-slate-500">{t("complaintDetail.created")}:</dt>
-                  <dd className="text-slate-900 font-medium">
-                    {new Date(complaint.createdAt).toLocaleDateString(locale, {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </dd>
-                </div>
-                {complaint.updatedAt && complaint.updatedAt !== complaint.createdAt && (
-                  <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                    <dt className="text-slate-500">{t("complaintDetail.updated")}:</dt>
-                    <dd className="text-slate-900 font-medium">
-                      {new Date(complaint.updatedAt).toLocaleDateString(locale, {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </section>
+             {/* Timestamps */}
+             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="dates-title">
+               <h2 id="dates-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                 <Calendar className="w-5 h-5 text-primary" />
+                 {t("complaintDetail.dates")}
+               </h2>
+               <dl className="space-y-3 text-sm">
+                 <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
+                   <dt className="text-slate-500">{t("complaintDetail.created")}:</dt>
+                   <dd className="text-slate-900 font-medium">
+                     {new Date(complaint.createdAt).toLocaleDateString(locale, {
+                       day: "numeric",
+                       month: "long",
+                       year: "numeric",
+                     })}
+                   </dd>
+                 </div>
+                 {complaint.updatedAt && complaint.updatedAt !== complaint.createdAt && (
+                   <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
+                     <dt className="text-slate-500">{t("complaintDetail.updated")}:</dt>
+                     <dd className="text-slate-900 font-medium">
+                       {new Date(complaint.updatedAt).toLocaleDateString(locale, {
+                         day: "numeric",
+                         month: "long",
+                         year: "numeric",
+                       })}
+                     </dd>
+                   </div>
+                 )}
+                 {complaint.resolvedAt && (
+                   <div className="flex justify-between items-center p-2 bg-green-50 rounded-lg">
+                     <dt className="text-green-600 font-medium">{t("complaintDetail.resolvedOn", "Resolved On")}:</dt>
+                     <dd className="text-green-700 font-medium">
+                       {new Date(complaint.resolvedAt).toLocaleDateString(locale, {
+                         day: "numeric",
+                         month: "long",
+                         year: "numeric",
+                       })}
+                     </dd>
+                   </div>
+                 )}
+               </dl>
+             </section>
 
-            {/* Rejection Reason */}
+             {/* Rating Section - Only for resolved/closed complaints owned by citizen */}
+             {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && user?.role === "CITIZEN" && createdById === user.id && (
+               <section className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl shadow-lg p-6 border border-purple-200" aria-labelledby="rating-title">
+                 <h2 id="rating-title" className="text-lg font-semibold text-purple-900 mb-4 flex items-center gap-2">
+                   <Star className="w-5 h-5" />
+                   {t("complaintDetail.rateExperience", "Rate Your Experience")}
+                 </h2>
+                 
+                 {complaint.rating ? (
+                   <div className="text-center p-4 bg-white rounded-xl border border-purple-100">
+                     <div className="flex justify-center gap-1 mb-2">
+                       {[1, 2, 3, 4, 5].map((star) => (
+                         <Star
+                           key={star}
+                           className={`w-6 h-6 ${
+                             star <= (complaint.rating?.score || 0)
+                               ? "text-yellow-400 fill-yellow-400"
+                               : "text-gray-300"
+                           }`}
+                         />
+                       ))}
+                     </div>
+                     <p className="text-sm font-semibold text-purple-700">
+                       {complaint.rating.score}/5 {t("complaintDetail.yourRating", "Your Rating")}
+                     </p>
+                     {complaint.rating.comment && (
+                       <p className="text-xs text-purple-600 mt-2 italic">"{complaint.rating.comment}"</p>
+                     )}
+                     <p className="text-[10px] text-purple-500 mt-2">
+                       {new Date(complaint.rating.createdAt).toLocaleDateString()}
+                     </p>
+                   </div>
+                 ) : (
+                   <div className="space-y-4">
+                     <p className="text-sm text-purple-700 text-center">
+                       {t("complaintDetail.selectRating", "Please select a star rating")}
+                     </p>
+                     <div className="flex justify-center gap-2">
+                       {[1, 2, 3, 4, 5].map((star) => (
+                         <button
+                           key={star}
+                           onClick={() => setSelectedRating(star)}
+                           className="p-2 rounded-full hover:bg-purple-200 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                         >
+                           <Star
+                             className={`w-8 h-8 ${
+                               star <= selectedRating
+                                 ? "text-yellow-400 fill-yellow-400"
+                                 : "text-gray-300"
+                             }`}
+                           />
+                         </button>
+                       ))}
+                     </div>
+                     <div className="space-y-2">
+                       <label className="flex items-center gap-2 text-sm text-purple-800">
+                         <input
+                           type="checkbox"
+                           checked={resolvedCorrectly}
+                           onChange={(e) => setResolvedCorrectly(e.target.checked)}
+                           className="w-4 h-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                         />
+                         {t("complaintDetail.wasIssueResolved", "Was the issue resolved correctly?")}
+                       </label>
+                       <textarea
+                         value={ratingComment}
+                         onChange={(e) => setRatingComment(e.target.value)}
+                         placeholder={t("complaintDetail.commentOptional", "Comment (optional)")}
+                         rows={3}
+                         className="w-full px-3 py-2 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
+                       />
+                       <button
+                         onClick={handleSubmitRating}
+                         disabled={selectedRating === 0 || isSubmittingRating}
+                         className="w-full py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                       >
+                         {isSubmittingRating ? (
+                           <Loader2 className="w-4 h-4 animate-spin" />
+                         ) : null}
+                         {t("common.submit")}
+                       </button>
+                     </div>
+                   </div>
+                 )}
+               </section>
+             )}
+
+             {/* Rejection Reason */}
             {complaint.rejectionReason && (
               <section className="bg-red-50 rounded-2xl shadow-lg p-6 border border-red-200" aria-labelledby="rejection-title">
                 <h2 id="rejection-title" className="text-lg font-semibold text-red-900 mb-2 flex items-center gap-2">

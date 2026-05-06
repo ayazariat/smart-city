@@ -199,25 +199,14 @@ class AgentController {
 
       if (complaint.createdBy) {
         try {
-          await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+          await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy.toString(), {
             type: "validated",
             title: "Complaint Validated",
             message: `Your complaint '${complaint.title}' has been validated and is now visible publicly.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { validatedBy: req.user.userId, municipality: userMunicipality },
           });
-
-          // Send email
-          const mailer = require("../utils/mailer");
-          const citizen = await User.findById(complaint.createdBy).select("fullName email").lean();
-          if (citizen && citizen.email) {
-            await mailer.sendComplaintStatusEmail(
-              citizen.email,
-              citizen.fullName,
-              complaint.title,
-              "VALIDATED",
-              complaint._id.toString()
-            );
-          }
+          // Email is sent automatically by notificationService
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
         }
@@ -274,11 +263,12 @@ class AgentController {
 
       if (complaint.createdBy) {
         try {
-          await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+          await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy.toString(), {
             type: "rejected",
             title: "Complaint Rejected",
             message: `Your complaint '${complaint.title}' was rejected. Reason: ${reason}.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { rejectionReason: reason, rejectedBy: req.user.userId },
           });
 
           // Send email
@@ -409,17 +399,19 @@ class AgentController {
         type: "assigned",
         title: "Complaint Assigned to Your Department",
         message: `Complaint '${complaint.title}' has been assigned to your team.`,
-        complaintId: complaint._id,
+        complaintId: complaint._id.toString(),
+        metadata: { assignedBy: req.user.userId, departmentId },
       });
 
       if (complaint.createdBy) {
         const dept = await Department.findById(departmentId).select('name').lean();
         const deptName = dept?.name || 'a department';
-        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy, {
+        await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy.toString(), {
           type: "assigned",
           title: "Complaint Assigned",
           message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
-          complaintId: complaint._id,
+          complaintId: complaint._id.toString(),
+          metadata: { departmentName: deptName, departmentId },
         });
       }
 
@@ -561,7 +553,8 @@ class AgentController {
             type: "resolution_rejected",
             title: "Resolution Rejected - Action Required",
             message: `Your resolution for "${complaint.title}" was rejected. Reason: ${rejectionReason}. Please complete the work properly.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { rejectionReason, rejectedBy: req.user.userId },
           });
         }
       } catch (notifErr) {
@@ -575,7 +568,8 @@ class AgentController {
             type: "in_progress",
             title: "Work Restarted",
             message: `Work has restarted on your complaint '${complaint.title}'. The team is addressing the issue again.`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { reason: rejectionReason },
           });
         }
       } catch (notifErr) {
@@ -589,7 +583,8 @@ class AgentController {
             type: "resolution_rejected",
             title: "Resolution Rejected",
             message: `Resolution for "${complaint.title}" was rejected by agent. Reason: ${rejectionReason}`,
-            complaintId: complaint._id,
+            complaintId: complaint._id.toString(),
+            metadata: { rejectionReason, rejectedBy: req.user.userId },
           });
         }
       } catch (notifErr) {

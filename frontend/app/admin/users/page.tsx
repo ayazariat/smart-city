@@ -23,6 +23,7 @@ import { adminService, AdminUser, UserRole, UserStats } from "@/services/admin.s
 import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
 import { showToast } from "@/components/ui/Toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { getDepartmentLabel } from "@/lib/categories";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   CITIZEN: "Citizen",
@@ -882,18 +883,18 @@ export default function AdminUsersPage() {
                     <Shield className="w-4 h-4 inline mr-1" />
                     Département *
                   </label>
-                  <select
-                    value={createForm.department}
-                    onChange={(e) => handleCreateFormChange("department", e.target.value)}
-                    className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.department ? "border-red-500" : "border-slate-200"}`}
-                  >
-                    <option value="">Select a department</option>
-                    {departmentOptions.map((dept) => (
-                      <option key={dept._id} value={dept._id}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
+                   <select
+                     value={createForm.department}
+                     onChange={(e) => handleCreateFormChange("department", e.target.value)}
+                     className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${createErrors.department ? "border-red-500" : "border-slate-200"}`}
+                   >
+                     <option value="">Select a department</option>
+                     {departmentOptions.map((dept) => (
+                       <option key={dept._id} value={dept._id}>
+                         {getDepartmentLabel(dept.name)}
+                       </option>
+                     ))}
+                   </select>
                   {createErrors.department && <p className="text-red-500 text-xs mt-1">{createErrors.department}</p>}
                 </div>
               )}
@@ -1042,7 +1043,7 @@ export default function AdminUsersPage() {
                     <option value="">Select a department</option>
                     {departmentOptions.map((dept) => (
                       <option key={dept._id} value={dept._id}>
-                        {dept.name}
+                        {getDepartmentLabel(dept.name)}
                       </option>
                     ))}
                   </select>
