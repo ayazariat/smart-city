@@ -60,8 +60,12 @@ function LoginForm() {
     if (!hydrated) return;
 
     if (user) {
-      const redirectTo = searchParams.get('redirect') || '/dashboard';
-      router.replace(redirectTo);
+      const redirectTo = searchParams.get('redirect');
+      if (redirectTo) {
+        router.replace(redirectTo);
+      } else {
+        router.replace('/dashboard');
+      }
       return;
     }
   }, [user, router, hydrated, searchParams]);

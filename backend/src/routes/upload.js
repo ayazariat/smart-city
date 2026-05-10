@@ -67,7 +67,16 @@ router.post("/", authenticate, upload.array("media", 5), async (req, res) => {
     });
   } catch (error) {
     console.error("Upload error:", error);
-    res.status(500).json({ success: false, message: "Failed to upload files" });
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, message: "File size exceeds 10MB limit" });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({ success: false, message: "Too many files. Maximum 5 files allowed" });
+    }
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ success: false, message: "Unexpected file field" });
+    }
+    res.status(500).json({ success: false, message: "Failed to upload files: " + error.message });
   }
 });
 

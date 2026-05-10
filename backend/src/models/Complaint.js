@@ -220,6 +220,10 @@ const complaintSchema = new mongoose.Schema(
     duplicateStatus: { type: String, enum: ['NOT_DUPLICATE', 'POSSIBLE_DUPLICATE', 'PROBABLE_DUPLICATE', 'CONFIRMED_DUPLICATE', null], default: null },
     duplicateOf: { type: mongoose.Schema.Types.ObjectId, ref: 'Complaint', default: null },
     finalUrgencyHuman: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', null], default: null },
+    // AI Category Prediction
+    aiPredictedCategory: { type: String, enum: ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other", null], default: null },
+    aiCategoryConfidence: { type: Number, default: null },
+    categorySource: { type: String, enum: ['USER', 'AI', 'MANUAL'], default: 'USER' },
   },
   { timestamps: true }
 );
@@ -265,15 +269,15 @@ complaintSchema.methods.updateStatus = function(newStatus, userId, notes = '') {
   // Update status
   this.status = newStatus;
   
-  // Set resolvedAt for RESOLVED status
-  if (newStatus === 'RESOLVED') {
+  // Set resolvedAt for RESOLVED or CLOSED status
+  if (newStatus === 'RESOLVED' || newStatus === 'CLOSED') {
     this.resolvedAt = new Date();
   }
   
   return this.save();
 };
 
-// Pre-save hook to initialize status history
+// Pre-save hook to initialize status history and set resolvedAt
 complaintSchema.pre('save', async function() {
   if (this.isNew && this.status === 'SUBMITTED') {
     this.statusHistory = [{
@@ -281,6 +285,17 @@ complaintSchema.pre('save', async function() {
       updatedBy: this.createdBy,
       updatedAt: new Date()
     }];
+  }
+  
+  // Auto-set resolvedAt when status transitions to RESOLVED or CLOSED
+  if (!this.isModified('status')) return;
+  
+  const oldStatus = this._doc.status;
+  const newStatus = this.status;
+  
+  if ((newStatus === 'RESOLVED' || newStatus === 'CLOSED') && 
+      oldStatus !== 'RESOLVED' && oldStatus !== 'CLOSED') {
+    this.resolvedAt = new Date();
   }
 });
 

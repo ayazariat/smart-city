@@ -81,28 +81,38 @@ class ApiClient {
         if (response.statusCode >= 500 && response.statusCode < 600) {
           attempt++;
           if (attempt >= maxAttempts) {
-            throw ApiException('Server error. Please try again later.');
+            throw ApiException('Erreur serveur. Veuillez réessayer plus tard.');
           }
           await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
+          continue;
+        }
+        // Retry on rate limiting (429) with exponential backoff
+        if (response.statusCode == 429) {
+          attempt++;
+          if (attempt >= maxAttempts) {
+            throw ApiException('Trop de requêtes. Veuillez réessayer plus tard.');
+          }
+          // Exponential backoff: 1s, 2s, 4s
+          await Future.delayed(Duration(seconds: 1 << attempt));
           continue;
         }
         return response;
       } on TimeoutException {
         attempt++;
         if (attempt >= maxAttempts) {
-          throw ApiException('Request timed out. Check your connection.');
+          throw ApiException('Délai de requête dépassé. Vérifiez votre connexion.');
         }
         await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
       } on SocketException {
         attempt++;
         if (attempt >= maxAttempts) {
-          throw ApiException('Network error. Please check your connection.');
+          throw ApiException('Erreur réseau. Veuillez réessayer plus tard.');
         }
         await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
       } on http.ClientException {
         attempt++;
         if (attempt >= maxAttempts) {
-          throw ApiException('Network error. Please try again later.');
+          throw ApiException('Erreur réseau. Veuillez réessayer plus tard.');
         }
         await Future.delayed(Duration(milliseconds: 200 * (1 << attempt)));
       } catch (e) {
@@ -113,12 +123,24 @@ class ApiClient {
 
   // Generic GET request
   Future<dynamic> get(String endpoint) async {
+    // Ensure tokens are loaded (safety net for first-time calls)
+    if (_token == null) {
+      await loadTokens();
+    }
     try {
+      final url = '$baseUrl$endpoint';
+      if (kDebugMode) {
+        debugPrint('[ApiClient] GET $url');
+      }
       var response = await _executeWithRetry(() async {
         return await http
-            .get(Uri.parse('$baseUrl$endpoint'), headers: _headers)
+            .get(Uri.parse(url), headers: _headers)
             .timeout(MobileEnv.requestTimeout);
       });
+      if (kDebugMode) {
+        debugPrint('[ApiClient] Response status: ${response.statusCode}');
+        debugPrint('[ApiClient] Response body: ${response.body}');
+      }
       if (response.statusCode == 401) {
         await _refreshTokens();
         response = await _executeWithRetry(() async {
@@ -130,16 +152,17 @@ class ApiClient {
       return _handleResponse(response);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. Check that the app can reach $socketBaseUrl.',
+        'Délai de requête dépassé. Vérifiez que l\'application peut atteindre $socketBaseUrl.',
       );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error while reaching $socketBaseUrl: $e');
+      throw ApiException('Erreur réseau lors de la connexion à $socketBaseUrl: $e');
     }
   }
 
   // Generic POST request
   Future<dynamic> post(String endpoint, Map<String, dynamic> body) async {
+    if (_token == null) await loadTokens();
     try {
       var response = await _executeWithRetry(() async {
         return await http
@@ -152,24 +175,22 @@ class ApiClient {
       });
       if (response.statusCode == 401) {
         await _refreshTokens();
-        response = await _executeWithRetry(() async {
-          return await http
-              .post(
-                Uri.parse('$baseUrl$endpoint'),
-                headers: _headers,
-                body: jsonEncode(body),
-              )
-              .timeout(MobileEnv.requestTimeout);
-        });
+        response = await http
+            .post(
+              Uri.parse('$baseUrl$endpoint'),
+              headers: _headers,
+              body: jsonEncode(body),
+            )
+            .timeout(MobileEnv.requestTimeout);
       }
       return _handleResponse(response);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. Check that the app can reach $socketBaseUrl.',
+        'Délai de requête dépassé. Vérifiez que l\'application peut atteindre $socketBaseUrl.',
       );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error while reaching $socketBaseUrl: $e');
+      throw ApiException('Erreur réseau lors de la connexion à $socketBaseUrl: $e');
     }
   }
 
@@ -200,11 +221,11 @@ class ApiClient {
       return _handleResponse(response);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. Check that the app can reach $socketBaseUrl.',
+        'Délai de requête dépassé. Vérifiez que l\'application peut atteindre $socketBaseUrl.',
       );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error while reaching $socketBaseUrl: $e');
+      throw ApiException('Erreur réseau lors de la connexion à $socketBaseUrl: $e');
     }
   }
 
@@ -227,11 +248,11 @@ class ApiClient {
       return _handleResponse(response);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. Check that the app can reach $socketBaseUrl.',
+        'Délai de requête dépassé. Vérifiez que l\'application peut atteindre $socketBaseUrl.',
       );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error while reaching $socketBaseUrl: $e');
+      throw ApiException('Erreur réseau lors de la connexion à $socketBaseUrl: $e');
     }
   }
 
@@ -257,7 +278,7 @@ class ApiClient {
       return _handleResponse(response);
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Upload failed: $e');
+      throw ApiException('Échec du téléchargement: $e');
     }
   }
 
@@ -288,11 +309,11 @@ class ApiClient {
       return _handleResponse(response);
     } on TimeoutException {
       throw ApiException(
-        'Request timed out. Check that the app can reach $socketBaseUrl.',
+        'Délai de requête dépassé. Vérifiez que l\'application peut atteindre $socketBaseUrl.',
       );
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error while reaching $socketBaseUrl: $e');
+      throw ApiException('Erreur réseau lors de la connexion à $socketBaseUrl: $e');
     }
   }
 
@@ -305,17 +326,19 @@ class ApiClient {
       case 201:
         return body;
       case 400:
-        throw ApiException(body?['message'] ?? 'Bad request');
+        throw ApiException(body?['message'] ?? 'Mauvaise requête');
       case 401:
-        throw ApiException('Unauthorized');
+        throw ApiException('Non autorisé');
       case 403:
-        throw ApiException(body?['message'] ?? 'Access denied');
+        throw ApiException(body?['message'] ?? 'Accès refusé');
       case 404:
-        throw ApiException(body?['message'] ?? 'Not found');
+        throw ApiException(body?['message'] ?? 'Non trouvé');
+      case 429:
+        throw ApiException('Trop de requêtes. Veuillez réessayer plus tard.');
       case 500:
-        throw ApiException('Server error. Please try again later.');
+        throw ApiException('Erreur serveur. Veuillez réessayer plus tard.');
       default:
-        throw ApiException(body?['message'] ?? 'Unknown error occurred');
+        throw ApiException(body?['message'] ?? 'Une erreur inconnue s\'est produite');
     }
   }
 
@@ -335,7 +358,7 @@ class ApiClient {
 
       return {
         'message':
-            'Invalid API response from $baseUrl. The app is reaching a web page instead of the backend API. Check the configured server URL.',
+            'Réponse API invalide de $baseUrl. L\'application atteint une page web au lieu de l\'API backend. Vérifiez l\'URL du serveur configurée.',
       };
     }
 
@@ -354,7 +377,7 @@ class ApiClient {
   Future<void> _refreshTokens() async {
     if (_refreshToken == null) {
       await clearTokens();
-      throw ApiException('Session expired. Please login again.');
+      throw ApiException('Session expirée. Veuillez vous reconnecter.');
     }
 
     try {
@@ -371,12 +394,12 @@ class ApiClient {
         return;
       } else {
         await clearTokens();
-        throw ApiException('Session expired. Please login again.');
+        throw ApiException('Session expirée. Veuillez vous reconnecter.');
       }
     } catch (e) {
       if (e is ApiException) rethrow;
       await clearTokens();
-      throw ApiException('Session expired. Please login again.');
+      throw ApiException('Session expirée. Veuillez vous reconnecter.');
     }
   }
 }

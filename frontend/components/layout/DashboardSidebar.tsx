@@ -35,6 +35,8 @@ interface DashboardSidebarProps {
   };
   unreadNotifications?: number;
   onNotificationsClick?: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 function getSidebarItems(role: string, stats: DashboardSidebarProps["stats"] | undefined, t: (key: string) => string): SidebarItem[] {
@@ -124,7 +126,7 @@ export default function DashboardSidebar({
         <button
           onClick={() => setSidebarOpen(true)}
           className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-          title="Menu"
+          title={t('sidebar.menu')}
         >
           <Menu className="w-5 h-5 text-slate-600" />
         </button>
@@ -142,7 +144,7 @@ export default function DashboardSidebar({
             <button
               onClick={onNotificationsClick}
               className="relative p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
-              title="Notifications"
+              title={t('sidebar.notifications')}
             >
               <Bell className="w-5 h-5 text-slate-600" />
               {(unreadNotifications || 0) > 0 && (

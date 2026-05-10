@@ -5,6 +5,7 @@ const agentController = require("../controllers/agentController");
 
 router.get("/complaints", authenticate, authorize("MUNICIPAL_AGENT"), (req, res) => agentController.getComplaints(req, res));
 router.get("/queue", authenticate, authorize("MUNICIPAL_AGENT"), (req, res) => agentController.getQueue(req, res));
+router.get("/stats", authenticate, authorize("MUNICIPAL_AGENT"), (req, res) => agentController.getStats(req, res));
 router.put("/complaints/:id/validate", authenticate, authorize("MUNICIPAL_AGENT"), (req, res) => agentController.validate(req, res));
 router.put("/complaints/:id/reject", authenticate, authorize("MUNICIPAL_AGENT"), (req, res) => agentController.reject(req, res));
 router.put("/complaints/:id/close", authenticate, authorize("MUNICIPAL_AGENT"), (req, res) => agentController.close(req, res));

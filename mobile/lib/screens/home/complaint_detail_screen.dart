@@ -3,6 +3,10 @@ import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
+import 'package:smart_city_app/widgets/status_badge.dart';
+import 'package:smart_city_app/widgets/priority_badge.dart';
+import 'package:smart_city_app/widgets/toast.dart';
+import 'package:smart_city_app/widgets/confirmation_dialog.dart';
 
 class ComplaintDetailScreen extends StatefulWidget {
   final String complaintId;
@@ -18,6 +22,12 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   List<dynamic> _comments = [];
   bool _isLoading = true;
   final TextEditingController _commentController = TextEditingController();
+
+  // Rating state
+  int _selectedRating = 0;
+  String _ratingComment = '';
+  bool _resolvedCorrectly = true;
+  bool _isSubmittingRating = false;
 
   @override
   void initState() {
@@ -46,14 +56,37 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   Future<void> _confirmResolution() async {
     try {
       await _complaintService.confirmResolution(widget.complaintId);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Résolution confirmée !')));
+      Toast.success(context, 'Résolution confirmée !');
       _loadData();
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      Toast.error(context, 'Erreur: $e');
+    }
+  }
+
+  Future<void> _submitRating() async {
+    if (_selectedRating == 0) {
+      Toast.error(context, 'Veuillez sélectionner une note');
+      return;
+    }
+
+    setState(() => _isSubmittingRating = true);
+    try {
+      await _complaintService.submitRating(
+        widget.complaintId,
+        _selectedRating,
+        _ratingComment,
+        _resolvedCorrectly,
+      );
+      Toast.success(context, 'Merci pour votre évaluation !');
+      setState(() {
+        _selectedRating = 0;
+        _ratingComment = '';
+      });
+      _loadData();
+    } catch (e) {
+      Toast.error(context, 'Erreur: $e');
+    } finally {
+      setState(() => _isSubmittingRating = false);
     }
   }
 
@@ -63,11 +96,10 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     try {
       await _complaintService.addPublicComment(widget.complaintId, text);
       _commentController.clear();
+      Toast.success(context, 'Commentaire ajouté');
       _loadData();
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      Toast.error(context, 'Erreur: $e');
     }
   }
 
@@ -94,6 +126,12 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
         backgroundColor: AppTheme.surface,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadData,
@@ -124,33 +162,24 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                           ),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          c.statusLabel,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
+                      StatusBadge(status: c.status),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '#${c.id.substring(c.id.length - 6)}',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        '#${c.id.substring(c.id.length - 6)}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      PriorityBadge(
+                        priority: _getPriorityLabel(c.priorityScore.toInt()),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -176,22 +205,24 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                   _buildInfoRow(Icons.category, 'Catégorie', c.categoryLabel),
                   const SizedBox(height: 12),
                   _buildInfoRow(
-                    Icons.priority_high,
-                    'Priorité',
-                    '${c.priorityScore.toInt()}/100',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoRow(
                     Icons.location_on,
                     'Adresse',
-                    c.location?['address'] ?? '-',
+                    c.location?['address'] ?? c.municipalityName ?? '-',
                   ),
                   const SizedBox(height: 12),
                   _buildInfoRow(
                     Icons.calendar_today,
-                    'Date',
+                    'Date de création',
                     '${c.createdAt.day}/${c.createdAt.month}/${c.createdAt.year}',
                   ),
+                  if (c.resolvedAt != null) ...[
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      Icons.check_circle,
+                      'Date de résolution',
+                      '${c.resolvedAt!.day}/${c.resolvedAt!.month}/${c.resolvedAt!.year}',
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -271,16 +302,19 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                               borderRadius: BorderRadius.circular(
                                 AppTheme.radiusLg,
                               ),
-                              child: Image.network(
-                                url,
-                                width: 120,
-                                height: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+                              child: GestureDetector(
+                                onTap: () => _showFullscreenPhoto(url),
+                                child: Image.network(
+                                  url,
                                   width: 120,
                                   height: 120,
-                                  color: Colors.grey[200],
-                                  child: const Icon(Icons.broken_image),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 120,
+                                    height: 120,
+                                    color: Colors.grey[200],
+                                    child: const Icon(Icons.broken_image),
+                                  ),
                                 ),
                               ),
                             ),
@@ -320,6 +354,85 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Rating Section (for resolved complaints)
+            if (c.status == 'RESOLVED')
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Évaluez la résolution',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: List.generate(5, (index) {
+                        return IconButton(
+                          icon: Icon(
+                            index < _selectedRating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                          ),
+                          onPressed: () => setState(() => _selectedRating = index + 1),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('Résolu correctement'),
+                      value: _resolvedCorrectly,
+                      onChanged: (value) => setState(() => _resolvedCorrectly = value),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Commentaire (optionnel)',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      maxLines: 3,
+                      onChanged: (value) => _ratingComment = value,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isSubmittingRating ? null : _submitRating,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: _isSubmittingRating
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Soumettre l\'évaluation'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (c.status == 'RESOLVED') const SizedBox(height: 16),
+
             // Confirm Resolution Button
             if (c.status == 'RESOLVED')
               SizedBox(
@@ -338,7 +451,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                   ),
                 ),
               ),
-            if (c.status == 'RESOLVED') const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
             // Comments
             Container(
@@ -399,6 +512,22 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
         ),
       ),
     );
+  }
+
+  void _showFullscreenPhoto(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FullscreenPhotoView(url: url),
+      ),
+    );
+  }
+
+  String _getPriorityLabel(int score) {
+    if (score >= 20) return 'CRITICAL';
+    if (score >= 15) return 'HIGH';
+    if (score >= 10) return 'MEDIUM';
+    return 'LOW';
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
@@ -541,5 +670,34 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   void dispose() {
     _commentController.dispose();
     super.dispose();
+  }
+}
+
+class FullscreenPhotoView extends StatelessWidget {
+  final String url;
+
+  const FullscreenPhotoView({super.key, required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          child: Image.network(
+            url,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.broken_image,
+              color: Colors.white,
+              size: 64,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

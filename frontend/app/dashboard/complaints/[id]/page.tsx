@@ -5,8 +5,10 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { 
   Clock, 
   User, 
+  Users,
   AlertTriangle,
   CheckCircle2,
+  XCircle,
   Building2,
   UserCog,
   MessageSquare,
@@ -105,6 +107,7 @@ export default function ComplaintDetailPage() {
   const [selectedUrgency, setSelectedUrgency] = useState<string>("");
   const [selectedPriorityScore, setSelectedPriorityScore] = useState<string>("");
   const [rejectionReason, setRejectionReason] = useState<string>("");
+  const [resolutionRejectionReason, setResolutionRejectionReason] = useState<string>("");
 
   // Notes state
   const [internalNotes, setInternalNotes] = useState<InternalNoteItem[]>([]);
@@ -113,6 +116,9 @@ export default function ComplaintDetailPage() {
   const [isUpvoting, setIsUpvoting] = useState(false);
   const [duplicateResults, setDuplicateResults] = useState<any[]>([]);
   const [showDuplicateResults, setShowDuplicateResults] = useState(false);
+  const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [duplicateDismissed, setDuplicateDismissed] = useState(false);
+  const [mergingWith, setMergingWith] = useState<string | null>(null);
   const [publicCommentText, setPublicCommentText] = useState("");
   const [postingPublicComment, setPostingPublicComment] = useState(false);
 
@@ -216,6 +222,116 @@ export default function ComplaintDetailPage() {
     }
   };
 
+  const handleMergeDuplicate = async (existingComplaintId: string) => {
+    if (!complaint) return;
+    if (!confirm(t('complaintDetail.mergeConfirm', { rc: existingComplaintId }))) return;
+    
+    setMergingWith(existingComplaintId);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const response = await fetch(`${apiUrl}/ai/duplicate/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          newComplaintId: complaint._id || complaint.id || "",
+          existingComplaintId: existingComplaintId,
+          action: "merge"
+        }),
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(t('complaintDetail.mergedSuccess'));
+        // Refresh page to show updated status
+        window.location.reload();
+      } else {
+        alert(result.message || t('complaintDetail.mergeFailed'));
+      }
+    } catch {
+      alert(t('complaintDetail.mergeFailed'));
+    } finally {
+      setMergingWith(null);
+    }
+  };
+
+  const handleCheckDuplicate = async () => {
+    if (!complaint) return;
+    setDuplicateLoading(true);
+    setDuplicateResults([]);
+    setShowDuplicateResults(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      const lat = complaint.location?.coordinates?.[1] ?? complaint.location?.latitude;
+      const lng = complaint.location?.coordinates?.[0] ?? complaint.location?.longitude;
+      const imageUrls = (complaint.media || []).map(m => m.url).filter(Boolean).slice(0, 3);
+
+      console.log("Checking duplicates with data:", {
+        complaintId: complaint._id || complaint.id || "new",
+        title: complaint.title,
+        description: complaint.description,
+        category: complaint.category,
+        municipality: complaint.municipalityName,
+        latitude: lat,
+        longitude: lng,
+        imageUrls,
+        submittedAt: complaint.createdAt,
+      });
+
+      const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          complaintId: complaint._id || complaint.id || "new",
+          title: complaint.title,
+          description: complaint.description,
+          category: complaint.category,
+          municipality: complaint.municipalityName,
+          latitude: lat,
+          longitude: lng,
+          imageUrls,
+          submittedAt: complaint.createdAt,
+        }),
+      });
+      
+      console.log("Duplicate check response status:", response.status);
+      const result = await response.json();
+      console.log("Duplicate check result:", result);
+      
+      // Handle different response formats
+      const data = result.data || result;
+      let matches = [];
+      
+      // Try to get matches from different possible response structures
+      if (data && data.topMatches && Array.isArray(data.topMatches)) {
+        matches = data.topMatches;
+        console.log("Setting duplicate results from topMatches:", matches);
+      } else if (data && data.matches && Array.isArray(data.matches)) {
+        matches = data.matches;
+        console.log("Setting duplicate results from matches:", matches);
+      } else if (data && Array.isArray(data)) {
+        matches = data;
+        console.log("Setting duplicate results from data array:", matches);
+      } else if (result && result.topMatches && Array.isArray(result.topMatches)) {
+        matches = result.topMatches;
+        console.log("Setting duplicate results from result.topMatches:", matches);
+      } else if (result && result.matches && Array.isArray(result.matches)) {
+        matches = result.matches;
+        console.log("Setting duplicate results from result.matches:", matches);
+      } else {
+        console.log("No duplicate matches found in response structure");
+      }
+      
+      setDuplicateResults(matches);
+    } catch (error) {
+      console.error("Error checking duplicates:", error);
+      setDuplicateResults([]);
+    } finally {
+      setDuplicateLoading(false);
+    }
+  };
+
   // BL-25: Handle duplicate check
   useEffect(() => {
     const fetchComplaintDetail = async () => {
@@ -229,9 +345,51 @@ export default function ComplaintDetailPage() {
           // Process media URLs to ensure they are full URLs
           const processedComplaint = processComplaintMedia(response.data);
           setComplaint(processedComplaint);
-          if (Array.isArray(processedComplaint?.aiDuplicateCheck?.topMatches) && processedComplaint.aiDuplicateCheck.topMatches.length > 0) {
-            setDuplicateResults(processedComplaint.aiDuplicateCheck.topMatches);
+          // Only auto-check duplicates for agents when complaint is submitted
+          if (user?.role === "MUNICIPAL_AGENT" && processedComplaint?.status === "SUBMITTED") {
+            setDuplicateLoading(true);
+            setDuplicateResults([]);
             setShowDuplicateResults(true);
+            try {
+              const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+              const lat = processedComplaint.location?.coordinates?.[1] ?? processedComplaint.location?.latitude;
+              const lng = processedComplaint.location?.coordinates?.[0] ?? processedComplaint.location?.longitude;
+              const imageUrls = (processedComplaint.media || []).map(m => m.url).filter(Boolean).slice(0, 3);
+
+              const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                  complaintId: processedComplaint._id || processedComplaint.id || "new",
+                  title: processedComplaint.title,
+                  description: processedComplaint.description,
+                  category: processedComplaint.category,
+                  municipality: processedComplaint.municipalityName,
+                  latitude: lat,
+                  longitude: lng,
+                  imageUrls,
+                  submittedAt: processedComplaint.createdAt,
+                }),
+              });
+              const result = await response.json();
+              
+              const data = result.data || result;
+              if (data && data.topMatches && data.topMatches.length > 0) {
+                // Filter by similarity >= 0.70
+                const highSimilarity = data.topMatches.filter((d: any) => (d.overallScore || 0) >= 0.70);
+                setDuplicateResults(highSimilarity);
+                setShowDuplicateResults(highSimilarity.length > 0);
+              } else {
+                setDuplicateResults([]);
+                setShowDuplicateResults(false);
+              }
+            } catch {
+              setDuplicateResults([]);
+              setShowDuplicateResults(false);
+            } finally {
+              setDuplicateLoading(false);
+            }
           } else {
             setDuplicateResults([]);
             setShowDuplicateResults(false);
@@ -442,6 +600,12 @@ export default function ComplaintDetailPage() {
         setActionModal(null);
         setSelectedTechnician("");
         setSelectedTechnicians([]);
+        // Show success message
+        if (techToUse.length > 1) {
+          alert("Team assigned successfully!");
+        } else {
+          alert("Technician assigned successfully!");
+        }
       }
       } catch (err) {
       }
@@ -452,13 +616,13 @@ export default function ComplaintDetailPage() {
     user?.role === "DEPARTMENT_MANAGER";
   const isAdmin = user?.role === "ADMIN";
   const canSeeAiInsights =
-    user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
+    user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT";
   const canSeeUrgencyPrediction = user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
   const showUrgencyAi =
     canSeeUrgencyPrediction &&
-    complaint?.status === "ASSIGNED" &&
-    !!complaint?.aiUrgencyPrediction;
+    ["SUBMITTED", "VALIDATED", "ASSIGNED"].includes(complaint?.status || "");
   const showDuplicateAi =
+    (user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") &&
     complaint?.status === "VALIDATED" &&
     !!complaint?.aiDuplicateCheck &&
     Array.isArray(complaint?.aiDuplicateCheck?.topMatches) &&
@@ -484,8 +648,16 @@ export default function ComplaintDetailPage() {
     : (complaint?.citizen as { _id?: string; fullName?: string; email?: string; phone?: string } | null);
 
   const hasLocation = complaint?.location?.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2;
-  const afterPhotos = complaint?.afterPhotos || [];
-  const beforePhotos = complaint?.beforePhotos || [];
+  const afterPhotos = complaint?.afterPhotos || complaint?.resolutionPhotos || complaint?.media?.filter((m: any) => m.type === 'after' || m.category === 'after') || [];
+  const beforePhotos = complaint?.beforePhotos || complaint?.media?.filter((m: any) => m.type === 'before' || m.category === 'before') || [];
+  
+  console.log("Complaint photo fields:", {
+    afterPhotos: complaint?.afterPhotos,
+    resolutionPhotos: complaint?.resolutionPhotos,
+    media: complaint?.media,
+    afterPhotosFiltered: complaint?.media?.filter((m: any) => m.type === 'after' || m.category === 'after'),
+    finalAfterPhotos: afterPhotos
+  });
 
   if (loading) {
     return (
@@ -524,11 +696,11 @@ export default function ComplaintDetailPage() {
     return null;
   }
 
-  const status = statusConfig[complaint.status] || {
-    label: complaint.status,
-    bgClass: "bg-slate-100",
-    textClass: "text-slate-800",
-  };
+   const status = statusConfig[complaint.status] || {
+     labelKey: `status.${complaint.status}`,
+     bgClass: "bg-slate-100",
+     textClass: "text-slate-800",
+   };
 
   return (
     <DashboardLayout>
@@ -543,12 +715,12 @@ export default function ComplaintDetailPage() {
                  {getDepartmentLabel(complaint.assignedDepartment.name)}
                </span>
              )}
-            <span 
-              className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
-              aria-label={`${t("complaintDetail.status")}: ${status.label}`}
-            >
-              {status.label}
-            </span>
+              <span 
+                className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass}`}
+                aria-label={`${t("complaintDetail.status")}: ${t(status.labelKey, { defaultValue: complaint.status })}`}
+              >
+                {t(status.labelKey, { defaultValue: complaint.status })}
+              </span>
           </div>
         }
       />
@@ -567,7 +739,7 @@ export default function ComplaintDetailPage() {
                 <div className="bg-slate-50 rounded-xl p-4">
                   <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
-                    {categoryOptions.find(opt => opt.value === complaint.category)?.label || complaint.category}
+                    {categoryLabels[complaint.category] || complaint.category}
                   </span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
@@ -957,7 +1129,12 @@ export default function ComplaintDetailPage() {
                 <h2 id="timeline-title" className="text-lg font-semibold text-slate-900 mb-4">
                   {t("complaintDetail.history")}
                 </h2>
-                <Timeline history={complaint.history} />
+                <Timeline 
+                  history={complaint.history} 
+                  userRole={user?.role}
+                  userId={user?.id || (user as any)?._id}
+                  complaintOwnerId={typeof complaint.createdBy === 'string' ? complaint.createdBy : complaint.createdBy?._id}
+                />
               </section>
             )}
 
@@ -1061,46 +1238,48 @@ export default function ComplaintDetailPage() {
               />
             )}
 
-            {/* Citizen Info */}
-            <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="citizen-title">
-              <h2 id="citizen-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <User className="w-5 h-5 text-primary" />
-                  {t("complaintDetail.citizen")}
-              </h2>
-              {complaint.isAnonymous ? (
-                <p className="text-slate-500 italic flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  {t("complaintDetail.anonymousCitizen")}
-                </p>
-              ) : citizenInfo ? (
-                <div className="space-y-3">
-                  <p className="font-semibold text-slate-900 flex items-center gap-2">
-                    <User className="w-4 h-4 text-slate-400" />
-                    {citizenInfo.fullName || t("complaintDetail.citizen")}
+            {/* Citizen Info - Only show for agents/managers/admins/technicians if not anonymous */}
+            {(isAgentOrManager || isAdmin || user?.role === "TECHNICIAN") && (
+              <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="citizen-title">
+                <h2 id="citizen-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />
+                    {t("complaintDetail.citizen")}
+                </h2>
+                {complaint.isAnonymous ? (
+                  <p className="text-slate-500 italic flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    {t("complaintDetail.anonymousCitizen")}
                   </p>
-                  {citizenInfo.email && canViewContact && (
-                    <p className="text-sm text-slate-500 flex items-center gap-2">
-                      <Mail className="w-4 h-4" />
-                      {citizenInfo.email}
+                ) : citizenInfo ? (
+                  <div className="space-y-3">
+                    <p className="font-semibold text-slate-900 flex items-center gap-2">
+                      <User className="w-4 h-4 text-slate-400" />
+                      {citizenInfo.fullName || t("complaintDetail.citizen")}
                     </p>
-                  )}
-                  {citizenInfo.phone && canViewContact && (
-                    <p className="text-sm text-slate-500 flex items-center gap-2">
-                      <Phone className="w-4 h-4" />
-                      {citizenInfo.phone}
-                    </p>
-                  )}
-                  {!canViewContact && (citizenInfo.email || citizenInfo.phone) && (
-                    <p className="text-sm text-slate-400 flex items-center gap-2">
-                      <Shield className="w-4 h-4" />
-                      {t("complaintDetail.contactHidden")}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-slate-500">{t("complaintDetail.infoNotAvailable")}</p>
-              )}
-            </section>
+                    {citizenInfo.email && canViewContact && (
+                      <p className="text-sm text-slate-500 flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        {citizenInfo.email}
+                      </p>
+                    )}
+                    {citizenInfo.phone && canViewContact && (
+                      <p className="text-sm text-slate-500 flex items-center gap-2">
+                        <Phone className="w-4 h-4" />
+                        {citizenInfo.phone}
+                      </p>
+                    )}
+                    {!canViewContact && (citizenInfo.email || citizenInfo.phone) && (
+                      <p className="text-sm text-slate-400 flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        {t("complaintDetail.contactHidden")}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-slate-500">{t("complaintDetail.infoNotAvailable")}</p>
+                )}
+              </section>
+            )}
 
              {/* Department Info */}
              <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
@@ -1108,13 +1287,26 @@ export default function ComplaintDetailPage() {
                  <Building2 className="w-5 h-5 text-primary" />
                  {t("complaintDetail.department")}
                </h2>
-               {complaint.assignedDepartment ? (
-                 <p className="font-semibold text-slate-900">
-                   {getDepartmentLabel(typeof complaint.assignedDepartment === 'object' ? complaint.assignedDepartment.name : complaint.assignedDepartment)}
-                 </p>
-               ) : (
-                 <p className="text-slate-500 italic">{t("complaintDetail.notYetAssigned")}</p>
-               )}
+               {(() => {
+                  const deptName = (() => {
+                    if (complaint.assignedDepartment) {
+                      return typeof complaint.assignedDepartment === 'object' 
+                        ? complaint.assignedDepartment.name 
+                        : complaint.assignedDepartment;
+                    }
+                    if (complaint.assignedTeam && typeof complaint.assignedTeam === 'object' && complaint.assignedTeam.department) {
+                      return typeof complaint.assignedTeam.department === 'object'
+                        ? complaint.assignedTeam.department.name
+                        : complaint.assignedTeam.department;
+                    }
+                    return null;
+                  })();
+                  return deptName ? (
+                    <p className="font-semibold text-slate-900">{getDepartmentLabel(deptName)}</p>
+                  ) : (
+                    <p className="text-slate-500 italic">{t("complaintDetail.notYetAssigned")}</p>
+                  );
+                })()}
              </section>
 
             {/* Assigned To */}
@@ -1309,6 +1501,43 @@ export default function ComplaintDetailPage() {
                   </div>
                 )}
 
+                {/* Approve/Reject Buttons for Manager - Only in Pending Review */}
+                {complaint.status === "RESOLVED" && user?.role === "DEPARTMENT_MANAGER" && (
+                  <div className="flex gap-3 pt-4 border-t border-amber-200">
+                    <button
+                      onClick={async () => {
+                        try {
+                          setActionLoading(true);
+                          const result = await managerService.approveResolution(complaintId);
+                          if (result.success) {
+                            alert("Resolution approved! Complaint has been closed.");
+                            window.location.reload();
+                          } else {
+                            alert(result.message || t("complaintDetail.failedApproveResolution"));
+                          }
+                        } catch (err) {
+                          alert(t("complaintDetail.failedApproveResolution"));
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      disabled={actionLoading}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all text-sm font-semibold disabled:opacity-50"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      {actionLoading ? "..." : t("complaintDetail.approve")}
+                    </button>
+                    <button
+                      onClick={() => setActionModal("reject-resolution")}
+                      disabled={actionLoading}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-semibold disabled:opacity-50"
+                    >
+                      <X className="w-4 h-4" />
+                      {t("complaintDetail.reject")}
+                    </button>
+                  </div>
+                )}
+
                 {/* Before Work Photos - Only for Agent/Admin */}
                 {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && beforePhotos.length > 0 && (
                   <div className="bg-white rounded-xl p-4 border border-blue-200 mb-4">
@@ -1326,41 +1555,6 @@ export default function ComplaintDetailPage() {
                         );
                       })}
                     </div>
-                  </div>
-                )}
-
-                {/* Manager Actions - Approve/Reject for RESOLVED status */}
-                {complaint.status === "RESOLVED" && user?.role === "DEPARTMENT_MANAGER" && (
-                  <div className="flex gap-3 pt-4 border-t border-amber-200">
-                    <button
-                      onClick={async () => {
-                        try {
-                          setActionLoading(true);
-                          const result = await agentService.approveResolution(complaintId);
-                          if (result.success) {
-                            alert("Resolution approved! Complaint has been closed.");
-                            // Refresh page to show updated status
-                            window.location.reload();
-                          } else {
-                            alert(result.message || t("complaintDetail.failedApproveResolution"));
-                          }
-                           } catch (err) {
-                           }
-                      }}
-                      disabled={actionLoading}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all text-sm font-semibold disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      {actionLoading ? "..." : t("complaintDetail.approve")}
-                    </button>
-                    <button
-                      onClick={() => setActionModal("reject-resolution")}
-                      disabled={actionLoading}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-semibold disabled:opacity-50"
-                    >
-                      <X className="w-4 h-4" />
-                      {t("complaintDetail.reject")}
-                    </button>
                   </div>
                 )}
               </section>
@@ -1430,15 +1624,26 @@ export default function ComplaintDetailPage() {
                   {t("complaintDetail.actions")}
                 </h2>
                 <div className="space-y-3">
-                  {/* SUBMITTED - Agent can Validate/Reject, Admin can Validate */}
-                  {complaint.status === "SUBMITTED" && (
+                  {/* SUBMITTED, VALIDATED, ASSIGNED - Agent can check for duplicates */}
+                  {["SUBMITTED", "VALIDATED", "ASSIGNED"].includes(complaint.status) && (
                     <>
+                      {user?.role === "MUNICIPAL_AGENT" && (
+                        <Button
+                          className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700"
+                          icon={<Search className="w-4 h-4" />}
+                          onClick={handleCheckDuplicate}
+                          disabled={duplicateLoading}
+                        >
+                          {duplicateLoading ? "Checking..." : "Check for Similar Complaints"}
+                        </Button>
+                      )}
                       {user?.role === "MUNICIPAL_AGENT" && (
                         <>
                           <Button
                             className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                             icon={<CheckCircle2 className="w-4 h-4" />}
                             onClick={() => setActionModal("validate")}
+                            disabled={!duplicateDismissed && showDuplicateResults && duplicateResults.length > 0}
                           >
                             {t("complaintDetail.validateComplaint")}
                           </Button>
@@ -1466,15 +1671,6 @@ export default function ComplaintDetailPage() {
                            {t("complaintDetail.assignToDepartment")}
                          </Button>
                        )}
-                       {user?.role === "DEPARTMENT_MANAGER" && (
-                         <Button
-                           className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                           icon={<AlertTriangle className="w-4 h-4" />}
-                           onClick={() => setActionModal("priority")}
-                         >
-                           {t("complaintDetail.setPriority")}
-                         </Button>
-                       )}
                      </>
                    )}
 
@@ -1486,40 +1682,27 @@ export default function ComplaintDetailPage() {
                           <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
                             <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                               <CheckCircle2 className="w-4 h-4" />
-                              Assigned to Repair Team
-                            </p>
-                            <p className="text-xs text-green-700 mt-1">
-                              {complaint.assignedTo?.fullName || complaint.assignedTeam?.name || 'Team'}
+                              {t("complaintDetail.assignedToTeam")}
                             </p>
                           </div>
-                          <Button
-                            className="w-full bg-indigo-500 hover:bg-indigo-600"
-                            icon={<UserCog className="w-4 h-4" />}
-                            onClick={() => setActionModal("technician")}
-                          >
-                            Reassign Team
-                          </Button>
                         </>
                       ) : (
-                        <Button
-                          className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700"
-                          icon={<UserCog className="w-4 h-4" />}
-                          onClick={() => setActionModal("technician")}
-                        >
-                          {t("complaintDetail.assignToRepairTeam")}
-                        </Button>
-                      )}
-                      <Button
-                        className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                        icon={<AlertTriangle className="w-4 h-4" />}
-                        onClick={() => setActionModal("priority")}
-                      >
-                        {t("complaintDetail.setPriority")}
-                      </Button>
-                      {!complaint.assignedTo && (
-                        <p className="text-xs text-slate-500 text-center mt-2">
-                          {t("complaintDetail.selectTechnicianHint")}
-                        </p>
+                        <>
+                          <Button
+                            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                            icon={<Users className="w-4 h-4" />}
+                            onClick={() => setActionModal("technician")}
+                          >
+                            {t("complaintDetail.assignToRepairTeam")}
+                          </Button>
+                          <Button
+                            className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                            icon={<AlertTriangle className="w-4 h-4" />}
+                            onClick={() => setActionModal("priority")}
+                          >
+                            {t("complaintDetail.setPriority")}
+                          </Button>
+                        </>
                       )}
                     </>
                   )}
@@ -1536,10 +1719,10 @@ export default function ComplaintDetailPage() {
                     </>
                   )}
 
-                  {/* RESOLVED - Agent reviews resolution report (no direct close allowed) */}
+                  {/* RESOLVED - Manager reviews resolution report */}
                   {complaint.status === "RESOLVED" && (
                     <>
-                      {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && (
+                      {user?.role === "DEPARTMENT_MANAGER" && (
                         <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                           <p className="text-sm text-green-800 font-medium">{t("complaintDetail.resolutionReportSubmitted")}</p>
                           <p className="text-xs text-green-600">{t("complaintDetail.reviewResolutionReport")}</p>
@@ -1699,18 +1882,16 @@ export default function ComplaintDetailPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-4">
                     {t("complaintDetail.setPriority")} - Current: {complaint.priorityScore || 0}
                   </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       {level: 'LOW', color: 'bg-green-500 hover:bg-green-600 text-white border-2 border-green-400', score: 3},
                       {level: 'MEDIUM', color: 'bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-400', score: 6},
                       {level: 'HIGH', color: 'bg-orange-500 hover:bg-orange-600 text-white border-2 border-orange-400', score: 8},
                       {level: 'CRITICAL', color: 'bg-red-500 hover:bg-red-600 text-white border-2 border-red-400 shadow-md shadow-red-200', score: 10}
                     ].map(({level, color, score}) => (
-                      <Button
+                      <button
                         key={level}
-                        className={`p-3 rounded-xl font-semibold transition-all ${color} shadow-sm hover:shadow-lg hover:scale-[1.02] active:scale-100`}
-                        variant="ghost"
-                        size="sm"
+                        className={`p-4 rounded-xl font-bold transition-all ${color} shadow-sm hover:shadow-lg hover:scale-[1.02] active:scale-100 flex flex-col items-center justify-center gap-1`}
                         onClick={async () => {
                           setActionLoading(true);
                           try {
@@ -1720,7 +1901,6 @@ export default function ComplaintDetailPage() {
                             );
                             if (response.success) {
                               await refreshComplaint();
-                              // Toast success
                               console.log('Priority updated successfully');
                             }
                           } catch (err) {
@@ -1732,16 +1912,14 @@ export default function ComplaintDetailPage() {
                         }}
                         disabled={actionLoading}
                       >
-                        <Flag className="w-4 h-4 mr-1" />
-                        {level}
-                        <div className="text-xs mt-1 opacity-90">
-                          Score: {score}
-                        </div>
-                      </Button>
+                        <Flag className="w-5 h-5" />
+                        <span className="text-base">{level}</span>
+                        <span className="text-xs opacity-90">Score: {score}</span>
+                      </button>
                     ))}
                   </div>
                   <p className="text-xs text-slate-500 mt-3 text-center">
-                    Click pill to update priority (matches list view colors)
+                    Click to update priority
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -1767,7 +1945,7 @@ export default function ComplaintDetailPage() {
                   return matchingDepts.length > 0 ? (
                     <div className="space-y-2">
                        <p className="text-sm text-blue-800 font-medium">
-                         Suggested department based on category &quot;{getCategoryLabel(complaint.category)}&quot;:
+                         Suggested department based on category &quot;{categoryLabels[complaint.category] || complaint.category}&quot;:
                        </p>
                       <div className="flex flex-wrap gap-2">
                         {matchingDepts.map(dept => (
@@ -1935,20 +2113,24 @@ export default function ComplaintDetailPage() {
                     onClick={async () => {
                       try {
                         setActionLoading(true);
-                        const result = await agentService.approveResolution(complaintId);
+                        const result = await managerService.approveResolution(complaintId);
                         if (result.success) {
                           const updatedResponse = await complaintService.getComplaintDetail(complaintId);
                           if (updatedResponse.success) setComplaint(processComplaintMedia(updatedResponse.data));
                           setActionModal(null);
+                          alert(t("complaintDetail.resolutionApproved") || "Resolution approved successfully");
                         } else {
-                          alert(result.message || "Failed to approve resolution");
+                          alert(result.message || t("complaintDetail.failedApproveResolution"));
                         }
-                         } catch (err) {
-                         }
+                      } catch (err) {
+                        alert(t("complaintDetail.failedApproveResolution") || "Failed to approve resolution");
+                      } finally {
+                        setActionLoading(false);
+                      }
                     }}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.confirmApproval")}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.approve")}
                   </Button>
                 </div>
               </div>
@@ -1956,16 +2138,26 @@ export default function ComplaintDetailPage() {
 
             {actionModal === "reject-resolution" && (
               <div className="space-y-4">
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <p className="text-sm font-medium text-red-800">{t("complaintDetail.aboutToReject")}</p>
+                  <p className="text-sm text-red-700 mt-1 font-semibold">{getComplaintIdDisplay(complaint._id || complaint.id || "")}</p>
+                  {complaint.resolutionNotes && (
+                    <p className="text-sm text-slate-600 mt-2 italic">&quot;{complaint.resolutionNotes.slice(0, 200)}{complaint.resolutionNotes.length > 200 ? '...' : ''}&quot;</p>
+                  )}
+                </div>
+                <p className="text-sm text-slate-600">
+                  {t("complaintDetail.rejectWillReturnToProgress")}
+                </p>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    {t("complaintDetail.rejectionReason")} <span className="text-red-500">*</span>
+                    {t("complaintDetail.rejectionReason")} *
                   </label>
                   <textarea
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    rows={4}
-                    placeholder={t("complaintDetail.rejectResolutionPlaceholder")}
+                    value={resolutionRejectionReason}
+                    onChange={(e) => setResolutionRejectionReason(e.target.value)}
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    rows={3}
+                    placeholder={t("complaintDetail.rejectionReasonPlaceholder")}
                   />
                 </div>
                 <div className="flex gap-3">
@@ -1974,32 +2166,35 @@ export default function ComplaintDetailPage() {
                     className="flex-1"
                     onClick={() => {
                       setActionModal(null);
-                      setRejectionReason("");
+                      setResolutionRejectionReason("");
                     }}
                   >
                     {t("common.cancel")}
                   </Button>
                   <Button
-                    variant="danger"
-                    className="flex-1"
+                    className="flex-1 bg-red-600 hover:bg-red-700"
                     onClick={async () => {
-                      if (!rejectionReason.trim()) return;
                       try {
                         setActionLoading(true);
-                        const result = await agentService.rejectResolution(complaintId, rejectionReason);
+                        const result = await agentService.rejectResolution(complaintId, resolutionRejectionReason);
                         if (result.success) {
+                          const updatedResponse = await complaintService.getComplaintDetail(complaintId);
+                          if (updatedResponse.success) setComplaint(processComplaintMedia(updatedResponse.data));
                           setActionModal(null);
-                          setRejectionReason("");
-                          window.location.reload();
+                          setResolutionRejectionReason("");
+                          alert(t("complaintDetail.resolutionRejected") || "Resolution rejected successfully");
                         } else {
                           alert(result.message || t("complaintDetail.failedRejectResolution"));
                         }
-                         } catch (err) {
-                         }
+                      } catch (err) {
+                        alert(t("complaintDetail.failedRejectResolution") || "Failed to reject resolution");
+                      } finally {
+                        setActionLoading(false);
+                      }
                     }}
-                    disabled={actionLoading || !rejectionReason.trim()}
+                    disabled={actionLoading}
                   >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.rejectResolutionReport")}
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("complaintDetail.reject")}
                   </Button>
                 </div>
               </div>
@@ -2044,61 +2239,6 @@ export default function ComplaintDetailPage() {
         </div>
 )}
       </div>
-
-      {/* Duplicate Check Results Modal */}
-      {showDuplicateResults && duplicateResults.length > 0 && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                <Search className="w-5 h-5 text-amber-600" />
-                Similar Complaints
-              </h3>
-              <button onClick={() => setShowDuplicateResults(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-                <p className="text-amber-700 font-medium">
-                  Found {duplicateResults.length} potential duplicate(s):
-                </p>
-                {duplicateResults.slice(0, 5).map((dup: any, idx: number) => (
-                  <div key={idx} className="p-3 bg-amber-50 rounded-lg border border-amber-200">
-                    <p className="font-medium text-slate-800">{dup.title || `Complaint #${idx + 1}`}</p>
-                    <p className="text-sm text-slate-600 line-clamp-2">{dup.description}</p>
-                    <div className="flex items-center justify-between gap-2 mt-2 text-xs text-slate-500">
-                      <div className="flex items-center gap-2">
-                      <span className="px-2 py-1 bg-amber-100 rounded">{dup.status}</span>
-                        {typeof dup.overallScore === "number" && (
-                          <span className="px-2 py-1 bg-white rounded border border-amber-200">
-                            {(dup.overallScore * 100).toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-                      {(dup.complaintId || dup._id) && (
-                        <button
-                          className="text-primary font-medium hover:underline"
-                          onClick={() =>
-                            router.push(`/dashboard/complaints/${dup.complaintId || dup._id}`)
-                          }
-                        >
-                          Open
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-            <div className="flex justify-end mt-4">
-              <Button onClick={() => setShowDuplicateResults(false)}>
-                {t("common.close")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </DashboardLayout>
   );
 }

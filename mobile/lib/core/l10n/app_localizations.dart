@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'localization/app_localizations.dart';
 
 class AppLocalizations {
   static const LocalizationsDelegate<AppLocalizations> delegate =
       _AppLocalizationsDelegate();
 
   static Future<AppLocalizations> load(Locale locale) async {
-    final name = Intl.canonicalizedLocale(locale.toString());
-    await initializeMessages(name);
-    Intl.defaultLocale = name;
+    Intl.defaultLocale = locale.toString();
     return AppLocalizations();
   }
 

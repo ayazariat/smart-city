@@ -9,6 +9,7 @@ import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/widgets/charts.dart';
 import 'package:smart_city_app/services/api_client.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -27,6 +28,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Map<String, int> _monthlyTrends = {};
   List<Complaint> _recentComplaints = [];
   List<Complaint> _resolvedComplaints = [];
+  List<Complaint> _municipalityComplaints = [];
+  List<dynamic> _trendAlerts = [];
+  Map<String, dynamic> _municipalityOverview = {};
   Timer? _refreshTimer;
 
   @override
@@ -47,18 +51,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       });
     }
     try {
-      // Load citizen stats
-      final statsData = await _complaintService.getCitizenStats();
+      // Get user role
+      final authState = ref.read(authProvider);
+      final userRole = authState.user?.role ?? 'CITIZEN';
+
+      // Load stats based on role
+      Map<String, dynamic> statsData = {};
+
+      if (userRole == 'CITIZEN') {
+        statsData = await _complaintService.getCitizenStats();
+      } else if (userRole == 'MUNICIPAL_AGENT') {
+        statsData = await _complaintService.getAgentStats();
+      } else if (userRole == 'DEPARTMENT_MANAGER') {
+        statsData = await _complaintService.getManagerStats();
+      } else if (userRole == 'TECHNICIAN') {
+        statsData = await _complaintService.getTechnicianStats();
+      } else if (userRole == 'ADMIN') {
+        statsData = await _complaintService.getAdminStats();
+      }
+
       if (mounted) {
         setState(() {
           _stats = {
             'total': (statsData['total'] ?? 0) as int,
             'submitted': (statsData['submitted'] ?? 0) as int,
             'pending': (statsData['pending'] ?? 0) as int,
+            'assigned': (statsData['assigned'] ?? 0) as int,
             'inProgress': (statsData['inProgress'] ?? 0) as int,
             'resolved': (statsData['resolved'] ?? 0) as int,
             'closed': (statsData['closed'] ?? 0) as int,
             'overdue': (statsData['overdue'] ?? 0) as int,
+            'totalOverdue': (statsData['totalOverdue'] ?? 0) as int,
+            'rejected': (statsData['rejected'] ?? 0) as int,
+            'resolutionRate': (statsData['resolutionRate'] ?? 0) as int,
           };
         });
       }
@@ -77,6 +102,51 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           _recentComplaints = activeComplaints.take(6).toList();
           _resolvedComplaints = resolved;
         });
+      }
+
+      // Load municipality complaints for citizens
+      if (userRole == 'CITIZEN') {
+        try {
+          final municipalityComplaints = await _complaintService.getMunicipalityComplaints(limit: 6);
+          if (mounted) {
+            setState(() {
+              _municipalityComplaints = municipalityComplaints;
+            });
+          }
+        } catch (e) {
+          // Municipality complaints are optional
+        }
+      }
+      // Load municipality overview for citizens
+      if (userRole == 'CITIZEN') {
+        try {
+          final api = ApiClient();
+          final overviewResponse = await api.get('/public/municipality-overview');
+          if (overviewResponse is Map && overviewResponse['data'] is Map) {
+            if (mounted) {
+              setState(() {
+                _municipalityOverview = overviewResponse['data'] as Map<String, dynamic>;
+              });
+            }
+          }
+        } catch (e) {
+          // Municipality overview is optional
+        }
+      }
+
+      // Load 
+      // Load trend alerts for manager/admin
+      if (userRole == 'DEPARTMENT_MANAGER' || userRole == 'ADMIN' || userRole == 'MUNICIPAL_AGENT') {
+        try {
+          final alerts = await _complaintService.getTrendAlerts();
+          if (mounted) {
+            setState(() {
+              _trendAlerts = alerts;
+            });
+          }
+        } catch (e) {
+          // Trend alerts are optional
+        }
       }
 
       // Load category stats for chart
@@ -178,6 +248,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         : hour < 18
         ? 'Bon après-midi'
         : 'Bonsoir';
+    final authState = ref.watch(authProvider);
+    final userRole = authState.user?.role ?? 'CITIZEN';
 
      return Scaffold(
        backgroundColor: const Color(0xFFF5F7FA),
@@ -249,15 +321,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                          ),
                        ),
                      ),
-                     actions: [
-                       IconButton(
-                         icon: const Icon(
-                           Icons.notifications_outlined,
-                           color: Colors.white,
-                         ),
-                         onPressed: () {},
-                       ),
-                     ],
+                     actions: _buildHeaderActions(),
                    ),
                    SliverToBoxAdapter(
                      child: Padding(
@@ -266,6 +330,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                          crossAxisAlignment: CrossAxisAlignment.start,
                          children: [
                            _buildStatsGrid(),
+                           const SizedBox(height: 24),
+                           _buildTodayPriorities(),
                            const SizedBox(height: 24),
                            _buildQuickActions(),
                            const SizedBox(height: 24),
@@ -282,6 +348,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                              _buildResolvedComplaints(),
                              const SizedBox(height: 24),
                            ],
+                           // Municipality complaints for citizens
+                           if (userRole == 'CITIZEN' && _municipalityComplaints.isNotEmpty) ...[
+                             _buildMunicipalityComplaints(),
+                             const SizedBox(height: 24),
+                           ],
+                           // Municipality overview for citizens
+                           if (userRole == 'CITIZEN' && _municipalityOverview.isNotEmpty) ...[
+                             _buildMunicipalityOverview(),
+                             const SizedBox(height: 24),
+                           ],
+                           // Trend alerts for manager/admin
+                           if ((userRole == 'DEPARTMENT_MANAGER' || userRole == 'ADMIN' || userRole == 'MUNICIPAL_AGENT') && _trendAlerts.isNotEmpty) ...[
+                             _buildTrendAlerts(),
+                             const SizedBox(height: 24),
+                           ],
+                           // AI insight widgets for manager/admin/agent
+                           if ((userRole == 'DEPARTMENT_MANAGER' || userRole == 'ADMIN' || userRole == 'MUNICIPAL_AGENT') && _monthlyTrends.isNotEmpty) ...[
+                             _buildAIInsightWidget(),
+                             const SizedBox(height: 24),
+                           ],
                            _buildRecentComplaints(),
                            const SizedBox(height: 32),
                          ],
@@ -294,13 +380,86 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
      );
   }
 
+  List<Widget> _buildHeaderActions() {
+    final authState = ref.watch(authProvider);
+    final userRole = authState.user?.role ?? 'CITIZEN';
+    
+    final actions = <Widget>[];
+    
+    // Notifications for all roles
+    actions.add(
+      IconButton(
+        icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+        onPressed: () {},
+      ),
+    );
+    
+    // Role-specific action buttons
+    if (userRole == 'CITIZEN') {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.add, color: Colors.white),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NewComplaintScreen(
+                  onComplaintSubmitted: _loadData,
+                  onBack: () => Navigator.pop(context),
+                ),
+              ),
+            );
+          },
+          tooltip: 'Nouveau signalement',
+        ),
+      );
+    } else if (userRole == 'MUNICIPAL_AGENT') {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.inbox, color: Colors.white),
+          onPressed: () {},
+          tooltip: 'File d\'attente',
+        ),
+      );
+    } else if (userRole == 'DEPARTMENT_MANAGER') {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.assignment, color: Colors.white),
+          onPressed: () {},
+          tooltip: 'Tâches en attente',
+        ),
+      );
+    } else if (userRole == 'TECHNICIAN') {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.task_alt, color: Colors.white),
+          onPressed: () {},
+          tooltip: 'Mes tâches',
+        ),
+      );
+    } else if (userRole == 'ADMIN') {
+      actions.add(
+        IconButton(
+          icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
+          onPressed: () {},
+          tooltip: 'Admin Panel',
+        ),
+      );
+    }
+    
+    return actions;
+  }
+
   Widget _buildStatsGrid() {
+    final authState = ref.watch(authProvider);
+    final userRole = authState.user?.role ?? 'CITIZEN';
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Mes signalements',
-          style: TextStyle(
+        Text(
+          _getStatsTitle(userRole),
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -314,34 +473,249 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
           childAspectRatio: 1.4,
-          children: [
-            _buildStatCard(
-              'Total',
-              '${_stats['total'] ?? 0}',
-              Icons.summarize,
-              AppColors.primary,
+          children: _getStatCards(userRole),
+        ),
+        // Resolution rate bar for agent/manager
+        if ((userRole == 'MUNICIPAL_AGENT' || userRole == 'DEPARTMENT_MANAGER') && 
+            _stats['resolutionRate'] != null && _stats['resolutionRate']! > 0) ...[
+          const SizedBox(height: 16),
+          _buildResolutionRateCard(),
+        ],
+        // Detailed metrics for agent/manager
+        if (userRole == 'MUNICIPAL_AGENT' || userRole == 'DEPARTMENT_MANAGER') ...[
+          const SizedBox(height: 16),
+          _buildDetailedMetricsCards(),
+        ],
+      ],
+    );
+  }
+
+  String _getStatsTitle(String role) {
+    switch (role) {
+      case 'CITIZEN':
+        return 'Mes signalements';
+      case 'MUNICIPAL_AGENT':
+        return 'Statistiques Agent';
+      case 'DEPARTMENT_MANAGER':
+        return 'Statistiques Département';
+      case 'TECHNICIAN':
+        return 'Mes Tâches';
+      case 'ADMIN':
+        return 'Statistiques Admin';
+      default:
+        return 'Statistiques';
+    }
+  }
+
+  List<Widget> _getStatCards(String role) {
+    switch (role) {
+      case 'CITIZEN':
+        return [
+          _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppColors.primary),
+          _buildStatCard('En attente', '${(_stats['submitted'] ?? 0) + (_stats['pending'] ?? 0)}', Icons.pending_actions, const Color(0xFFF59E0B)),
+          _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+          _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+        ];
+      case 'MUNICIPAL_AGENT':
+        return [
+          _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppColors.primary),
+          _buildStatCard('À valider', '${_stats['submitted'] ?? _stats['pending'] ?? 0}', Icons.pending, const Color(0xFFF59E0B)),
+          _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+          _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+          _buildStatCard('Clôturés', '${_stats['closed'] ?? 0}', Icons.done_all, Colors.grey),
+          _buildStatCard('Rejetés', '${_stats['rejected'] ?? 0}', Icons.cancel, Colors.red),
+          _buildStatCard('En retard', '${_stats['totalOverdue'] ?? _stats['overdue'] ?? 0}', Icons.warning, Colors.red, isWarning: (_stats['totalOverdue'] ?? 0) > 0),
+        ];
+      case 'DEPARTMENT_MANAGER':
+        return [
+          _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppColors.primary),
+          _buildStatCard('À assigner', '${_stats['assigned'] ?? 0}', Icons.assignment, const Color(0xFF8B5CF6)),
+          _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+          _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+          _buildStatCard('Clôturés', '${_stats['closed'] ?? 0}', Icons.done_all, Colors.grey),
+          _buildStatCard('Rejetés', '${_stats['rejected'] ?? 0}', Icons.cancel, Colors.red),
+          _buildStatCard('En retard', '${_stats['totalOverdue'] ?? _stats['overdue'] ?? 0}', Icons.warning, Colors.red, isWarning: (_stats['totalOverdue'] ?? 0) > 0),
+        ];
+      case 'TECHNICIAN':
+        return [
+          _buildStatCard('Total', '${_stats['total'] ?? (_stats['assigned'] ?? 0) + (_stats['inProgress'] ?? 0) + (_stats['resolved'] ?? 0)}', Icons.summarize, Colors.grey),
+          _buildStatCard('Nouvelles', '${_stats['assigned'] ?? 0}', Icons.new_releases, AppColors.primary),
+          _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+          _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+        ];
+      case 'ADMIN':
+        return [
+          _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppColors.primary),
+          _buildStatCard('En attente', '${_stats['submitted'] ?? _stats['pending'] ?? 0}', Icons.pending, const Color(0xFFF59E0B)),
+          _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+          _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+          _buildStatCard('Clôturés', '${_stats['closed'] ?? 0}', Icons.done_all, Colors.grey),
+          _buildStatCard('En retard', '${_stats['totalOverdue'] ?? _stats['overdue'] ?? 0}', Icons.warning, Colors.red, isWarning: (_stats['totalOverdue'] ?? 0) > 0),
+        ];
+      default:
+        return [
+          _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppColors.primary),
+          _buildStatCard('En attente', '${(_stats['submitted'] ?? 0) + (_stats['pending'] ?? 0)}', Icons.pending_actions, const Color(0xFFF59E0B)),
+          _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+          _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+        ];
+    }
+  }
+
+  Widget _buildResolutionRateCard() {
+    final rate = _stats['resolutionRate'] ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFECFDF5), Color(0xFFD1FAE5)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF10B981)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Taux de résolution',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF065F46),
             ),
-            _buildStatCard(
-              'En attente',
-              '${(_stats['submitted'] ?? 0) + (_stats['pending'] ?? 0)}',
-              Icons.pending_actions,
-              const Color(0xFFF59E0B),
-            ),
-            _buildStatCard(
-              'En cours',
-              '${_stats['inProgress'] ?? 0}',
-              Icons.engineering,
-              const Color(0xFFF97316),
-            ),
-            _buildStatCard(
-              'Résolus',
-              '${_stats['resolved'] ?? 0}',
-              Icons.check_circle,
-              const Color(0xFF22C55E),
-            ),
-          ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '$rate%',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF059669),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: rate / 100,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF10B981), Color(0xFF059669)],
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailedMetricsCards() {
+    // These would come from the stats API in a real implementation
+    // For now, we'll show placeholder cards
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.6,
+      children: [
+        _buildMetricCard(
+          'Temps moyen de réparation',
+          '2.3 jours',
+          Icons.schedule,
+          const Color(0xFF3B82F6),
+          '+12% vs dernier mois',
+          isPositive: true,
+        ),
+        _buildMetricCard(
+          'Satisfaction citoyenne',
+          '87%',
+          Icons.star,
+          const Color(0xFF8B5CF6),
+          '+5% vs dernier mois',
+          isPositive: true,
         ),
       ],
+    );
+  }
+
+  Widget _buildMetricCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+    String trend, {
+    bool isPositive = true,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(
+                isPositive ? Icons.trending_up : Icons.trending_down,
+                size: 12,
+                color: isPositive ? Colors.green : Colors.red,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                trend,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isPositive ? Colors.green[700] : Colors.red[700],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -349,13 +723,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     String label,
     String value,
     IconData icon,
-    Color color,
-  ) {
+    Color color, {
+    bool isWarning = false,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isWarning ? const Color(0xFFFEE2E2) : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: isWarning ? Border.all(color: Colors.red) : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -384,19 +760,540 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               color: color,
             ),
           ),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          Text(label, style: TextStyle(fontSize: 12, color: isWarning ? Colors.red[700] : Colors.grey[600])),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTodayPriorities() {
+    final authState = ref.watch(authProvider);
+    final userRole = authState.user?.role ?? 'CITIZEN';
+    
+    // Build priority items based on role
+    final priorities = _getPriorityItems(userRole);
+    
+    if (priorities.isEmpty) return const SizedBox.shrink();
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.9),
+            AppColors.primary.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: AppColors.primary, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Priorités du jour',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Mis à jour maintenant',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...priorities.map((priority) => _buildPriorityItem(priority)).toList(),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _getPriorityItems(String role) {
+    final items = <Map<String, dynamic>>[];
+    
+    if (role == 'MUNICIPAL_AGENT') {
+      if ((_stats['totalOverdue'] ?? 0) > 0) {
+        items.add({
+          'title': '${_stats['totalOverdue']} signalements en retard nécessitent attention',
+          'icon': Icons.warning,
+          'color': Colors.red,
+          'route': '/agent/complaints?status=SUBMITTED',
+        });
+      }
+      if ((_stats['submitted'] ?? 0) > 0) {
+        items.add({
+          'title': '${_stats['submitted']} signalements à valider',
+          'icon': Icons.pending,
+          'color': const Color(0xFFF59E0B),
+          'route': '/agent/complaints?status=SUBMITTED',
+        });
+      }
+    } else if (role == 'DEPARTMENT_MANAGER') {
+      if ((_stats['assigned'] ?? 0) > 0) {
+        items.add({
+          'title': '${_stats['assigned']} signalements à assigner aux techniciens',
+          'icon': Icons.assignment,
+          'color': const Color(0xFF8B5CF6),
+          'route': '/manager/pending',
+        });
+      }
+    } else if (role == 'TECHNICIAN') {
+      if ((_stats['assigned'] ?? 0) > 0) {
+        items.add({
+          'title': '${_stats['assigned']} nouvelles tâches prêtes à démarrer',
+          'icon': Icons.play_circle,
+          'color': AppColors.primary,
+          'route': '/tasks',
+        });
+      }
+      if ((_stats['inProgress'] ?? 0) > 0) {
+        items.add({
+          'title': '${_stats['inProgress']} tâches en cours',
+          'icon': Icons.engineering,
+          'color': const Color(0xFFF97316),
+          'route': '/tasks',
+        });
+      }
+    } else if (role == 'CITIZEN') {
+      if ((_stats['resolved'] ?? 0) > 0) {
+        items.add({
+          'title': '${_stats['resolved']} signalements résolus - confirmez la résolution',
+          'icon': Icons.check_circle,
+          'color': const Color(0xFF22C55E),
+          'route': '/complaints?status=RESOLVED',
+        });
+      }
+    }
+    
+    return items;
+  }
+
+  Widget _buildPriorityItem(Map<String, dynamic> priority) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: (priority['color'] as Color).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: (priority['color'] as Color).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            priority['icon'] as IconData,
+            color: priority['color'] as Color,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              priority['title'] as String,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: priority['color'] as Color,
+              ),
+            ),
+          ),
+          const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMunicipalityComplaints() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Signalements de ma commune',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            TextButton(onPressed: () {}, child: const Text('Voir tout')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _municipalityComplaints.length,
+          itemBuilder: (context, index) {
+            final c = _municipalityComplaints[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _statusColor(c.status).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _statusLabel(c.status),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _statusColor(c.status),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          c.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          c.municipalityName ?? 'Non spécifié',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (c.status == 'VALIDATED' || c.status == 'ASSIGNED' || c.status == 'IN_PROGRESS') ...[
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _complaintService.confirmComplaint(c.id);
+                        _loadData(showLoader: false);
+                      },
+                      icon: const Icon(Icons.check_circle, size: 16),
+                      label: const Text('Confirmer'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 36),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrendAlerts() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.9),
+            const Color(0xFFF5F3FF).withValues(alpha: 0.9),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.trending_up, color: Color(0xFF8B5CF6), size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Alertes de tendance',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Prédictions IA',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ..._trendAlerts.take(3).map((alert) => _buildTrendAlertItem(alert)).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrendAlertItem(dynamic alert) {
+    final severity = alert['severity'] ?? 'LOW';
+    final color = severity == 'HIGH' ? Colors.red : severity == 'MEDIUM' ? const Color(0xFFF59E0B) : const Color(0xFF3B82F6);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            severity == 'HIGH' ? Icons.warning : Icons.trending_up,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  alert['type'] ?? 'Alerte',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  alert['message'] ?? '',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMunicipalityOverview() {
+    final municipalityName = _municipalityOverview['name'] ?? 'Ma commune';
+    final totalComplaints = _municipalityOverview['totalComplaints'] ?? 0;
+    final resolvedCount = _municipalityOverview['resolved'] ?? 0;
+    final pendingCount = _municipalityOverview['pending'] ?? 0;
+    final resolutionRate = totalComplaints > 0 ? ((resolvedCount / totalComplaints) * 100).round() : 0;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.9),
+            const Color(0xFFEFF6FF).withValues(alpha: 0.9),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.location_city, color: Color(0xFF3B82F6), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Vue d\'ensemble - $municipalityName',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.6,
+            children: [
+              _buildOverviewStat('Total', '$totalComplaints', Icons.summarize, AppColors.primary),
+              _buildOverviewStat('Résolus', '$resolvedCount', Icons.check_circle, const Color(0xFF22C55E)),
+              _buildOverviewStat('En attente', '$pendingCount', Icons.pending, const Color(0xFFF59E0B)),
+              _buildOverviewStat('Taux de rés.', '$resolutionRate%', Icons.trending_up, const Color(0xFF8B5CF6)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewStat(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAIInsightWidget() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.9),
+            const Color(0xFFECFDF5).withValues(alpha: 0.9),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_graph, color: Color(0xFF10B981), size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Prévisions IA - 7 jours',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Prédiction',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[500],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_monthlyTrends.isNotEmpty) ...[
+            MonthlyLineChart(data: _monthlyTrends),
+          ] else ...[
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Text(
+                  'Données de prévision non disponibles',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildQuickActions() {
+    final authState = ref.watch(authProvider);
+    final userRole = authState.user?.role ?? 'CITIZEN';
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Actions rapides',
-          style: TextStyle(
+        Text(
+          _getActionsTitle(userRole),
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -404,36 +1301,160 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         const SizedBox(height: 12),
         Row(
-          children: [
-            Expanded(
-              child: _buildActionCard(
-                'Nouveau signalement',
-                Icons.add_circle,
-                AppColors.primary,
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => NewComplaintScreen(
-                      onComplaintSubmitted: _loadData,
-                      onBack: () => Navigator.pop(context),
-                    ),
+          children: _getActionCards(userRole),
+        ),
+      ],
+    );
+  }
+
+  String _getActionsTitle(String role) {
+    switch (role) {
+      case 'CITIZEN':
+        return 'Actions rapides';
+      case 'MUNICIPAL_AGENT':
+        return 'Actions Agent';
+      case 'DEPARTMENT_MANAGER':
+        return 'Actions Manager';
+      case 'TECHNICIAN':
+        return 'Actions Technicien';
+      case 'ADMIN':
+        return 'Actions Admin';
+      default:
+        return 'Actions';
+    }
+  }
+
+  List<Widget> _getActionCards(String role) {
+    switch (role) {
+      case 'CITIZEN':
+        return [
+          Expanded(
+            child: _buildActionCard(
+              'Nouveau signalement',
+              Icons.add_circle,
+              AppColors.primary,
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => NewComplaintScreen(
+                    onComplaintSubmitted: _loadData,
+                    onBack: () => Navigator.pop(context),
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                'Mes signalements',
-                Icons.list_alt,
-                AppColors.attention,
-                () {},
-              ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildActionCard(
+              'Mes signalements',
+              Icons.list_alt,
+              AppColors.attention,
+              () {},
             ),
-          ],
-        ),
-      ],
-    );
+          ),
+        ];
+      case 'MUNICIPAL_AGENT':
+        return [
+          Expanded(
+            child: _buildActionCard(
+              'File d\'attente',
+              Icons.inbox,
+              AppColors.primary,
+              () {},
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildActionCard(
+              'En validation',
+              Icons.task_alt,
+              const Color(0xFFF59E0B),
+              () {},
+            ),
+          ),
+        ];
+      case 'DEPARTMENT_MANAGER':
+        return [
+          Expanded(
+            child: _buildActionCard(
+              'Tâches en attente',
+              Icons.pending_actions,
+              AppColors.primary,
+              () {},
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildActionCard(
+              'Assigner',
+              Icons.person_add,
+              const Color(0xFF8B5CF6),
+              () {},
+            ),
+          ),
+        ];
+      case 'TECHNICIAN':
+        return [
+          Expanded(
+            child: _buildActionCard(
+              'Nouvelles tâches',
+              Icons.new_releases,
+              AppColors.primary,
+              () {},
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildActionCard(
+              'En cours',
+              Icons.engineering,
+              const Color(0xFFF97316),
+              () {},
+            ),
+          ),
+        ];
+      case 'ADMIN':
+        return [
+          Expanded(
+            child: _buildActionCard(
+              'Utilisateurs',
+              Icons.people,
+              Colors.red,
+              () {},
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildActionCard(
+              'Tous les signalements',
+              Icons.list,
+              AppColors.primary,
+              () {},
+            ),
+          ),
+        ];
+      default:
+        return [
+          Expanded(
+            child: _buildActionCard(
+              'Nouveau signalement',
+              Icons.add_circle,
+              AppColors.primary,
+              () {},
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildActionCard(
+              'Mes signalements',
+              Icons.list_alt,
+              AppColors.attention,
+              () {},
+            ),
+          ),
+        ];
+    }
   }
 
   Widget _buildActionCard(

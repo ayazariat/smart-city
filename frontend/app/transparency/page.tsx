@@ -1,53 +1,70 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
-import { categoryLabels, getCategoryLabel } from "@/lib/categories";
-import { TUNISIA_GEOGRAPHY } from "@/data/tunisia-geography";
 import { 
   TrendingUp, 
-  CheckCircle2, 
-  Clock, 
+  TrendingDown, 
   AlertTriangle, 
   MapPin, 
-  BarChart3,
-  Users,
-  ArrowRight,
-  Loader2,
-  Sparkles,
-  ShieldCheck,
-  Trophy,
-  Target,
-  Eye,
-  Radio,
-  MapPinned,
-  Timer,
-  Globe,
-  Search,
-  X,
-  Grid3X3,
-  List,
-  Image as ImageIcon,
-  TrendingDown,
-  FileText,
-  Shield,
-  HelpCircle,
-  Filter as FilterIcon,
-  Home,
-  Map as MapIcon,
-  BarChart,
-  Building,
-  Building2,
-  Calendar,
-  Menu,
-  LayoutDashboard,
-  Activity
+  Calendar, 
+  BarChart3, 
+  Trophy, 
+  CheckCircle2, 
+  ChevronDown, 
+  ChevronUp, 
+  Search, 
+  ArrowRight, 
+  Filter, 
+  X, 
+  Loader2, 
+  Building2, 
+  Users, 
+  Clock, 
+  CheckCircle, 
+  ArrowLeft, 
+  Sparkles, 
+  ShieldCheck, 
+  Target, 
+  Eye, 
+  Radio, 
+  MapPinned, 
+  Timer, 
+  Globe, 
+  Grid3X3, 
+  List, 
+  Image as ImageIcon, 
+  FileText, 
+  Shield, 
+  HelpCircle, 
+  Home, 
+  Map as MapIcon, 
+  BarChart, 
+  Building, 
+  Menu, 
+  LayoutDashboard, 
+  Activity 
 } from "lucide-react";
+import { getCategoryLabel, categoryLabels } from "@/lib/categories";
+import { TUNISIA_GEOGRAPHY, getAllMunicipalities } from "@/data/tunisia-geography";
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, ComposedChart, Line, CartesianGrid, XAxis, YAxis, Bar, Legend } from "recharts";
-import { useTranslation } from "react-i18next";
+import { 
+  PieChart, 
+  Pie, 
+  Cell, 
+  ResponsiveContainer, 
+  Tooltip, 
+  ComposedChart, 
+  Line, 
+  CartesianGrid, 
+  XAxis, 
+  YAxis, 
+  Bar, 
+  Legend 
+} from "recharts";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const getPhotoUrl = (complaint: ComplaintItem, explicitUrl?: string): string | null => {
@@ -133,22 +150,28 @@ const governorateGradients: Record<string, string> = {
 interface Stats {
   total: number;
   resolved: number;
-  inProgress: number;
-  pending: number;
-  overdue: number;
-  atRisk: number;
-  resolutionRate: number;
-  avgResolutionDays: number;
-  slaComplianceRate: number;
-  // Trends vs previous period
-  totalTrend: number;
+  avgFixTime?: { value: number; unit: string; vsLast?: number | null };
+  resolvedOnTime?: { value: number; unit: string; vsLast?: number | null };
+  citizenSatisfaction?: {
+    value: number;
+    vsLast: number | null;
+    totalRated: number;
+    notConfirmed: number;
+  };
+  inProgress?: number;
+  pending?: number;
+  overdue?: number;
+  resolutionRate?: number;
   resolvedTrend: number;
   resolutionRateTrend: number;
-  avgResolutionTrend: number;
-  slaComplianceTrend: number;
+  avgFixTimeTrend: number | null;
+  resolvedOnTimeTrend: number | null;
+  satisfactionTrend: number | null;
 }
 
 interface CategoryStats {
+  category: string;
+  label: string;
   total: number;
   resolved: number;
   rate: number;
@@ -171,7 +194,29 @@ interface MonthlyTrend {
   month: string;
   submitted: number;
   resolved: number;
-  avgResolutionDays: number;
+}
+
+interface MostReportedIssue {
+  category: string;
+  municipality: string;
+  count: number;
+  resolvedCount: number;
+  status: string;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  waste: "Waste & Cleanliness",
+  roads: "Roads & Traffic",
+  lighting: "Street Lighting",
+  water: "Water & Drainage",
+  safety: "Public Safety & Noise",
+  property: "Public Property",
+  parks: "Parks & Green Spaces",
+  other: "Other"
+};
+
+function getLocalCategoryLabel(category: string): string {
+  return CATEGORY_LABELS[category] || category;
 }
 
 interface ActivityItem {
@@ -245,9 +290,8 @@ type ApiComplaint = ComplaintItem & {
   votes?: Array<unknown>;
 };
 
-const ALL_MUNICIPALITIES = TUNISIA_GEOGRAPHY.flatMap(gov => 
-  gov.municipalities.map(mun => ({ name: mun, governorate: gov.governorate }))
-);
+// Create ALL_MUNICIPALITIES from the imported function
+const ALL_MUNICIPALITIES = getAllMunicipalities().map(mun => ({ name: mun, governorate: TUNISIA_GEOGRAPHY.find(g => g.municipalities.includes(mun))?.governorate || '' }));
 
 const calculateSocialScore = (confirms: number, upvotes: number): number => {
   const confirmScore = Math.log(confirms + 1);
@@ -261,10 +305,11 @@ const normalizeStr = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/
 export default function TransparencyPage() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { hydrated, token } = useAuthStore();
+  const { token } = useAuthStore();
+  const [hydrated, setHydrated] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [allTimeStats, setAllTimeStats] = useState<Stats | null>(null);
-  const [categoryStats, setCategoryStats] = useState<Record<string, CategoryStats>>({});
+  const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
   const [municipalityStats, setMunicipalityStats] = useState<MunicipalityStats[]>([]);
   const [monthlyTrends, setMonthlyTrends] = useState<MonthlyTrend[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
@@ -276,9 +321,9 @@ export default function TransparencyPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeView, setActiveView] = useState<"overview" | "complaints" | "municipalities">("overview");
   const [zoneStats, setZoneStats] = useState<Record<string, Record<string, number>>>({});
-  const [recurringIssues, setRecurringIssues] = useState<Array<{title: string; category: string; count: number; resolvedCount: number}>>([]);
+  const [mostReportedIssues, setMostReportedIssues] = useState<MostReportedIssue[]>([]);
   const [allMunicipalityStats, setAllMunicipalityStats] = useState<Array<{name: string; governorate: string; total: number; resolved: number; rate: number}>>([]);
-  const [governorateStatsData, setGovernorateStatsData] = useState<Array<{governorate: string; total: number; resolved: number; resolutionRate: number}>>([]);
+  const [governorateStatsData, setGovernorateStatsData] = useState<Array<{governorate: string; total: number; resolved: number; resolutionRate: number | null}>>([]);
   const [selectedGovernorate, setSelectedGovernorate] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
@@ -286,13 +331,13 @@ export default function TransparencyPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const overviewSectionIds = ["metrics", "resolutions", "leaderboard", "categories", "trends", "governorates"];
+  const overviewSectionIds = ["report", "metrics", "categories", "leaderboard", "resolutions", "trends", "governorates"];
 
   const sidebarItems = [
     { id: "metrics", label: t('transparency.overview'), icon: Home, view: "overview" as const },
-    { id: "resolutions", label: t('transparency.recentResolutions'), icon: CheckCircle2, view: "overview" as const },
-    { id: "leaderboard", label: t('transparency.leaderboard'), icon: Trophy, view: "overview" as const },
     { id: "categories", label: t('transparency.categoryPerformance'), icon: BarChart, view: "overview" as const },
+    { id: "leaderboard", label: t('transparency.leaderboard'), icon: Trophy, view: "overview" as const },
+    { id: "resolutions", label: t('transparency.recentResolutions'), icon: CheckCircle2, view: "overview" as const },
     { id: "trends", label: t('transparency.monthlyTrends'), icon: Calendar, view: "overview" as const },
     { id: "governorates", label: t('transparency.governorateOverview'), icon: Globe, view: "overview" as const },
     { id: "complaints", label: t('transparency.allComplaints'), icon: List, view: "complaints" as const },
@@ -301,6 +346,11 @@ export default function TransparencyPage() {
 
   const [activeSection, setActiveSection] = useState("metrics");
   const isRTL = typeof document !== "undefined" && document.documentElement.dir === "rtl";
+
+  // Set hydrated state on mount
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   // IntersectionObserver: highlight active sidebar item based on scroll (overview sections only)
   useEffect(() => {
@@ -333,91 +383,106 @@ export default function TransparencyPage() {
      try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       
-      const [statsRes, totalStatsRes, catRes, munRes, trendsRes, complaintsRes, zoneRes, recurringRes, allMunRes] = await Promise.all([
+      // Use consolidated endpoint for period data
+      const [statsRes, totalStatsRes, complaintsRes] = await Promise.all([
         fetch(`${apiUrl}/public/stats?period=${period}`),
-        fetch(`${apiUrl}/public/stats?period=all`), // All-time total
-        fetch(`${apiUrl}/public/stats/by-category?period=${period}`),
-        fetch(`${apiUrl}/public/stats/by-municipality?period=${period}`),
-        fetch(`${apiUrl}/public/stats/monthly-trends?months=6`),
+        fetch(`${apiUrl}/public/stats?period=all`),
         fetch(`${apiUrl}/public/complaints?limit=100&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED,CLOSED`),
-        fetch(`${apiUrl}/public/stats/by-zone?period=all`),  // All-time zone data
-        fetch(`${apiUrl}/public/top-recurring?limit=5`),
-        fetch(`${apiUrl}/public/stats/all-municipalities?period=all`)  // All-time municipality data
       ]);
 
       const statsData = await statsRes.json();
       const totalStatsData = await totalStatsRes.json();
-      const catData = await catRes.json();
-      const munData = await munRes.json();
-      const trendsData = await trendsRes.json();
       const complaintsData = await complaintsRes.json();
-      const zoneData = await zoneRes.json();
-      const recurringData = await recurringRes.json();
-      const allMunData = await allMunRes.json();
 
-      if (statsData.success) {
-        setStats({
-          ...statsData.data,
-          atRisk: statsData.data.inProgress > 0 ? Math.floor(statsData.data.inProgress * 0.3) : 0
+       if (statsData.success) {
+         const d = statsData.data;
+         setStats({
+           total: d.total,
+           resolved: d.resolved,
+           inProgress: d.inProgress,
+           pending: d.pending,
+           overdue: d.overdue || 0,
+           resolutionRate: d.resolutionRate,
+           avgFixTime: d.avgFixTime || null,
+           resolvedOnTime: d.resolvedOnTime || null,
+           citizenSatisfaction: d.citizenSatisfaction || { value: null, totalRated: 0, notConfirmed: 0, vsLast: null },
+           // Legacy fields for backward compatibility
+           avgResolutionDays: d.avgFixTime?.value || null,
+           slaComplianceRate: d.resolvedOnTime?.value || null,
+           totalTrend: d.totalTrend || 0,
+           resolvedTrend: d.resolvedTrend || 0,
+           resolutionRateTrend: d.resolutionRateTrend || 0,
+           avgFixTimeTrend: d.avgFixTimeTrend ?? null,
+           resolvedOnTimeTrend: d.resolvedOnTimeTrend ?? null,
+           satisfactionTrend: d.satisfactionTrend ?? null,
+         });
+         
+         // Set consolidated data from single endpoint
+         if (d.byCategory) {
+           const formattedCategoryStats = d.byCategory.map((cat: any) => ({
+             category: cat.category,
+             label: cat.label,
+             total: cat.total,
+             resolved: cat.resolved,
+             rate: cat.rate
+           }));
+           setCategoryStats(formattedCategoryStats);
+         }
+         if (d.byMunicipality) {
+          const formattedMunicipalityStats = d.byMunicipality.map((mun: any) => ({
+            ...mun,
+            slaCompliance: mun.slaCompliance !== undefined ? mun.slaCompliance : null,
+          }));
+          setMunicipalityStats(formattedMunicipalityStats);
+        }
+         if (d.monthlyTrends) setMonthlyTrends(d.monthlyTrends);
+         if (d.zoneStats) setZoneStats(d.zoneStats);
+         if (d.topRecurring) {
+           const formattedIssues = d.topRecurring.map((issue: any) => ({
+             category: issue.category,
+             municipality: issue.municipality,
+             count: issue.count,
+             resolvedCount: issue.resolvedCount,
+             status: issue.status
+           }));
+           setMostReportedIssues(formattedIssues);
+         }
+         if (d.allMunicipalities) setAllMunicipalityStats(d.allMunicipalities);
+         if (d.byGovernorate) {
+           // Convert object to array format for frontend
+           const governorateArray = Object.entries(d.byGovernorate).map(([governorate, data]: [string, any]) => ({
+             governorate,
+             total: data.total,
+             resolved: data.resolved,
+             resolutionRate: data.resolutionRate
+           }));
+           setGovernorateStatsData(governorateArray);
+         }
+         if (d.recentComplaints) {
+           setComplaints(d.recentComplaints);
+           setFilteredComplaints(d.recentComplaints);
+         }
+       }
+       if (totalStatsData.success) {
+         const d = totalStatsData.data;
+         setAllTimeStats({
+          total: d.total,
+          resolved: d.resolved,
+          resolutionRate: d.resolutionRate,
+          avgFixTime: d.avgFixTime || null,
+          resolvedOnTime: d.resolvedOnTime || null,
+          citizenSatisfaction: d.citizenSatisfaction || { value: null, totalRated: 0, notConfirmed: 0, vsLast: null },
+          inProgress: d.inProgress || 0,
+          pending: d.pending || 0,
+          overdue: d.overdue || 0,
+          resolvedTrend: d.resolvedTrend || 0,
+          resolutionRateTrend: d.resolutionRateTrend || 0,
+          avgFixTimeTrend: d.avgFixTimeTrend || null,
+          resolvedOnTimeTrend: d.resolvedOnTimeTrend || null,
+          satisfactionTrend: d.satisfactionTrend || null,
         });
-      }
-      if (totalStatsData.success) {
-        setAllTimeStats(totalStatsData.data);
-        if (totalStatsData.data.governorates) {
-          setGovernorateStatsData(totalStatsData.data.governorates);
-        }
-      } else if (statsData.success && statsData.data.governorates) {
-        setGovernorateStatsData(statsData.data.governorates);
-      }
-      
-      if (catData.success) {
-        setCategoryStats(catData.data);
-      }
-
-      if (trendsData.success) {
-        setMonthlyTrends(trendsData.data);
-      }
-      
-      if (munData.success) {
-        const rankedMun = (munData.data as ApiMunicipalityStat[]).map((m, idx) => ({
-          name: m.municipality || m.name || 'Unknown',
-          governorate: m.governorate || '',
-          total: m.total || 0,
-          resolved: m.resolved || 0,
-          rate: m.rate || 0,
-          rank: idx + 1,
-          tma: (m as unknown as Record<string, unknown>).tma as number || 0,
-          overdue: 0
-        }));
-        setMunicipalityStats(rankedMun.slice(0, 12));
-      }
-
-      if (zoneData.success && zoneData.data) {
-        const zoneObj: Record<string, Record<string, number>> = {};
-        for (const z of zoneData.data) {
-          const { governorate, ...rest } = z;
-          zoneObj[governorate] = rest;
-        }
-        setZoneStats(zoneObj);
-      }
-
-      if (recurringData.success && recurringData.data) {
-        setRecurringIssues(recurringData.data);
-      }
-
-      if (allMunData.success && allMunData.data) {
-        setAllMunicipalityStats(
-          allMunData.data.map((m) => ({
-            name: m.municipality || m.name || 'Unknown',
-            governorate: m.governorate || '',
-            total: m.count || m.total || 0,
-            resolved: 0,
-            rate: 0,
-          }))
-        );
-      }
-      
-      if (complaintsData.success && complaintsData.data?.complaints) {
+       }
+       if (complaintsData.success && complaintsData.data?.complaints) {
         const scoredComplaints = (complaintsData.data.complaints as ApiComplaint[]).map((c) => {
           const confirms = c.confirmationCount ?? c.confirmations?.length ?? 0;
           const upvotes = c.upvoteCount ?? c.votes?.length ?? 0;
@@ -481,6 +546,26 @@ export default function TransparencyPage() {
         m.governorate.toLowerCase().includes(searchQuery.toLowerCase())
       ).slice(0, 20)
     : [];
+
+  const recentResolutionComplaints = complaints
+    .filter(c => c.status === "RESOLVED" || c.status === "CLOSED")
+    .sort((a, b) => {
+      const bDate = new Date(b.resolvedAt || b.updatedAt || b.createdAt || 0).getTime();
+      const aDate = new Date(a.resolvedAt || a.updatedAt || a.createdAt || 0).getTime();
+      return bDate - aDate;
+    })
+    .slice(0, 6);
+
+  const formatResolutionDate = (value?: string) => {
+    if (!value) return t('transparency.resolutions.dateUnavailable', 'Resolution date unavailable');
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return t('transparency.resolutions.dateUnavailable', 'Resolution date unavailable');
+    return `Resolved on ${date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })}`;
+  };
 
   if (!hydrated) {
     return (
@@ -596,6 +681,11 @@ export default function TransparencyPage() {
                 <button
                   key={item.id}
                   onClick={() => {
+                    if (item.view === "dashboard") {
+                      router.push('/dashboard');
+                      setSidebarOpen(false);
+                      return;
+                    }
                     setActiveView(item.view);
                     setSearchQuery("");
                     setCategoryFilter("");
@@ -610,10 +700,10 @@ export default function TransparencyPage() {
                     }
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
                     isActive
-                      ? 'bg-green-50 text-green-700 font-semibold border-l-[3px] border-green-600 pl-[9px]'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[9px]'
+                      ? 'bg-green-50 text-green-700 font-semibold border-l-[3px] border-green-600 pl-[10px]'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[10px]'
                   }`}
                 >
                   <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-green-600' : 'text-slate-400'}`} />
@@ -746,7 +836,7 @@ export default function TransparencyPage() {
                             <Shield className="w-5 h-5 text-teal-600" />
                           </div>
                           <div>
-                            <p className="text-2xl font-extrabold text-slate-800">{allTimeStats?.slaComplianceRate ?? 0}%</p>
+                             <p className="text-2xl font-extrabold text-slate-800">{allTimeStats?.resolvedOnTime?.value != null ? `${allTimeStats.resolvedOnTime.value}%` : '---'}</p>
                             <p className="text-xs text-slate-500">{t('transparency.hero.resolvedOnTime')}</p>
                           </div>
                         </div>
@@ -790,13 +880,26 @@ export default function TransparencyPage() {
 
                   {stats && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-                      {[
-                        { label: t('transparency.metrics.totalReports'), value: stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
-                        { label: t('transparency.metrics.problemsFixed'), value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
-                        { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
-{ label: t('transparency.metrics.avgFixTime'), value: stats.avgResolutionDays != null ? `${stats.avgResolutionDays}d` : '—', icon: Timer, color: "bg-purple-100 text-purple-600", isText: true, trend: stats.avgResolutionTrend },
-                         { label: t('transparency.metrics.resolvedOnTime'), value: stats.slaComplianceRate != null ? `${stats.slaComplianceRate}%` : '—', icon: Shield, color: "bg-teal-100 text-teal-600", trend: stats.slaComplianceTrend }
-                      ].map((stat, idx) => (
+                       {[
+                         { label: t('transparency.metrics.totalReports'), value: stats.total, icon: FileText, color: "bg-blue-100 text-blue-600" },
+                         { label: t('transparency.metrics.problemsFixed'), value: stats.resolved, icon: CheckCircle2, color: "bg-green-100 text-green-600", suffix: `${stats.resolutionRate}%`, trend: stats.resolvedTrend },
+                         { label: t('transparency.metrics.beingFixed'), value: stats.inProgress, icon: Clock, color: "bg-orange-100 text-orange-600" },
+  { 
+    label: t('transparency.metrics.avgFixTime'), 
+    value: stats.avgFixTime?.value != null ? `${stats.avgFixTime.value.toFixed(1)} ${stats.avgFixTime.unit}` : 'N/A', 
+    icon: Timer, 
+    color: "bg-purple-100 text-purple-600", 
+    isText: true, 
+    trend: stats.avgFixTime?.vsLast !== null ? stats.avgFixTime.vsLast : undefined 
+  },
+  { 
+    label: t('transparency.metrics.resolvedOnTime'), 
+    value: stats.resolvedOnTime?.value != null ? `${stats.resolvedOnTime.value}%` : 'N/A', 
+    icon: Shield, 
+    color: "bg-teal-100 text-teal-600", 
+    trend: stats.resolvedOnTime?.vsLast !== null ? stats.resolvedOnTime?.vsLast : undefined 
+  }
+].map((stat, idx) => (
                         <div 
                           key={stat.label}
                           className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 shadow-sm"
@@ -885,42 +988,66 @@ export default function TransparencyPage() {
                             </div>
                           </div>
 
-                          {/* SLA Performance gauge — unique content not found elsewhere */}
-                          {stats.slaComplianceRate !== undefined && (
-                            <div className="pt-3 border-t border-slate-100">
-                              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-                                {t('transparency.metrics.slaPerformance', { defaultValue: 'SLA Performance' })}
-                              </p>
-                              <div className="space-y-3">
-                                <div>
-                                  <div className="flex items-center justify-between text-xs mb-1">
-                                    <span className="text-slate-600">{t('transparency.metrics.resolvedOnTime', { defaultValue: 'Resolved on time' })}</span>
-                                    <span className={`font-bold ${(stats.slaComplianceRate || 0) >= 80 ? 'text-green-600' : (stats.slaComplianceRate || 0) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{stats.slaComplianceRate || 0}%</span>
-                                  </div>
-                                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-700" style={{ width: `${stats.slaComplianceRate || 0}%` }} />
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="flex items-center justify-between text-xs mb-1">
-                                    <span className="text-slate-600">{t('transparency.metrics.avgResolutionTime', { defaultValue: 'Avg. resolution time' })}</span>
-                                    <span className="font-bold text-slate-700">{stats.avgResolutionDays || 0}d</span>
-                                  </div>
-                                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-700" style={{ width: `${Math.min((stats.avgResolutionDays || 0) / 14 * 100, 100)}%` }} />
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl">
-                                  <div className={`w-2 h-2 rounded-full ${(stats.overdue || 0) > 0 ? 'bg-red-500' : 'bg-green-500'}`} />
-                                  <span className="text-xs text-slate-600">
-                                    {(stats.overdue || 0) > 0
-                                      ? `${stats.overdue} ${t('transparency.metrics.overdueWarning', { defaultValue: 'complaints past deadline' })}`
-                                      : t('transparency.metrics.noOverdue', { defaultValue: 'All complaints within deadline' })}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+                           {/* Citizen Satisfaction Widget — replaces SLA Performance */}
+                           {stats.citizenSatisfaction && (
+                             <div className="pt-3 border-t border-slate-100">
+                               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                                 {t('stats.citizenSatisfaction', 'Citizen Satisfaction')}
+                               </p>
+                               <div className="space-y-4">
+                                 {/* Circular progress-style horizontal bar */}
+                                 <div>
+                                    <div className="flex items-center justify-between text-xs mb-2">
+                                      <span className="text-slate-600">
+                                        {t('stats.satisfactionRate', 'Satisfaction Rate')}
+                                      </span>
+                                       <span className={`font-bold ${
+                                           (stats.citizenSatisfaction.value || 0) >= 70 ? 'text-green-600' :
+                                           (stats.citizenSatisfaction.value || 0) >= 50 ? 'text-amber-600' :
+                                           'text-red-600'
+                                         }`}>
+                                         {stats.citizenSatisfaction.value != null ? `${stats.citizenSatisfaction.value}%` : 'N/A'}
+                                       </span>
+                                    </div>
+                                    {/* Trend indicator below rate */}
+                                    {stats.citizenSatisfaction.vsLast !== null && stats.citizenSatisfaction.value != null && (
+                                      <div className={`flex items-center gap-1 mt-1 text-xs ${stats.citizenSatisfaction.vsLast >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {stats.citizenSatisfaction.vsLast >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                        <span className="font-medium">{stats.citizenSatisfaction.vsLast >= 0 ? '+' : ''}{stats.citizenSatisfaction.vsLast}%</span>
+                                        <span className="text-slate-400">{t('stats.vsLast', 'vs last')}</span>
+                                      </div>
+                                    )}
+                                   <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                     <div
+                                       className={`h-full rounded-full transition-all duration-700 ${
+                                         (stats.citizenSatisfaction.value || 0) >= 70 ? 'bg-gradient-to-r from-green-400 to-green-600' :
+                                         (stats.citizenSatisfaction.value || 0) >= 50 ? 'bg-gradient-to-r from-amber-400 to-amber-600' :
+                                         'bg-gradient-to-r from-red-400 to-red-600'
+                                       }`}
+                                       style={{ width: `${Math.min(stats.citizenSatisfaction.value || 0, 100)}%` }}
+                                     />
+                                   </div>
+                                 </div>
+
+                                 {/* Stats row */}
+                                 <div className="grid grid-cols-2 gap-3">
+                                   <div className="p-2 bg-slate-50 rounded-lg">
+                                     <div className="text-lg font-bold text-slate-700">{stats.citizenSatisfaction.totalRated || 0}</div>
+                                      <div className="text-xs text-slate-500">{t('stats.totalRated', 'Total Rated')}</div>
+                                   </div>
+                                   <div className="p-2 bg-slate-50 rounded-lg">
+                                     <div className="text-lg font-bold text-slate-700">{stats.citizenSatisfaction.notConfirmed || 0}</div>
+                                      <div className="text-xs text-slate-500">{t('stats.notConfirmed', 'Not Confirmed')}</div>
+                                   </div>
+                                 </div>
+
+                                 {/* Description */}
+                                 <div className="text-xs text-slate-500 leading-relaxed">
+                                   {t('stats.citizenSatisfactionDesc', 'Based on citizen reviews of resolved complaints.')}
+                                 </div>
+                               </div>
+                             </div>
+                           )}
                         </div>
                       </div>
                     </div>
@@ -945,7 +1072,13 @@ export default function TransparencyPage() {
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {complaints.filter(c => c.status === 'CLOSED').slice(0, 6).map((complaint) => {
+                    {recentResolutionComplaints.length === 0 && (
+                      <div className="md:col-span-2 lg:col-span-3 text-center py-10 bg-slate-50 rounded-2xl border border-slate-100">
+                        <CheckCircle2 className="w-9 h-9 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm text-slate-500">No resolved complaints yet. Resolutions will appear here.</p>
+                      </div>
+                    )}
+                    {recentResolutionComplaints.map((complaint) => {
                       const photoUrl = getPhotoUrl(complaint, complaint.afterPhotos?.[0]?.url || complaint.proofPhotos?.[0]?.url) || getPhotoUrl(complaint);
                       const resolvedDate = complaint.resolvedAt || complaint.updatedAt || complaint.createdAt;
                       const resolvedMs = new Date(resolvedDate).getTime();
@@ -985,7 +1118,7 @@ export default function TransparencyPage() {
                           </div>
                           <div className="absolute top-2 right-2">
                             <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-white/90 text-slate-700">
-                              {categoryLabels[complaint.category] || complaint.category}
+                              {getCategoryLabel(complaint.category)}
                             </span>
                           </div>
                         </div>
@@ -1060,7 +1193,9 @@ export default function TransparencyPage() {
                             <td className="py-3 px-3 text-right text-slate-600">{mun.total}</td>
                             <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <span className="text-sm font-medium text-slate-700">{mun.resolved}</span>
+                                <span className="text-xs text-slate-500">/ {mun.total}</span>
+                                <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
                                   <div 
                                     className={`h-full rounded-full ${
                                       mun.rate >= 70 ? 'bg-green-500' : mun.rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
@@ -1068,36 +1203,20 @@ export default function TransparencyPage() {
                                     style={{ width: `${mun.rate}%` }}
                                   />
                                 </div>
-                                <span className={`font-semibold w-10 text-right ${
-                                  mun.rate >= 70 ? 'text-green-600' : mun.rate >= 50 ? 'text-amber-600' : 'text-red-600'
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                  mun.rate >= 70 ? 'bg-green-100 text-green-700' : 
+                                  mun.rate >= 50 ? 'bg-amber-100 text-amber-700' : 
+                                  'bg-red-100 text-red-700'
                                 }`}>
-                                  {mun.rate}%
+                                  {mun.rate.toFixed(1)}%
                                 </span>
                               </div>
                             </td>
                             <td className="py-3 px-3 text-right text-slate-600">
-                              <span className={`${
-                                mun.tma <= 3 ? 'text-green-600' : mun.tma <= 7 ? 'text-amber-600' : 'text-red-600'
-                              }`}>
-                                {mun.tma}d
-                              </span>
+                              {mun.tma !== null && mun.tma !== undefined ? `${mun.tma.toFixed(1)} days` : '-'}
                             </td>
-                            <td className="py-3 px-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                  <div 
-                                    className={`h-full rounded-full ${
-                                      (mun.slaCompliance || 0) >= 70 ? 'bg-green-500' : (mun.slaCompliance || 0) >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                                    }`}
-                                    style={{ width: `${mun.slaCompliance || mun.rate}%` }}
-                                  />
-                                </div>
-                                <span className={`font-semibold w-10 text-right ${
-                                  (mun.slaCompliance || mun.rate) >= 70 ? 'text-green-600' : (mun.slaCompliance || mun.rate) >= 50 ? 'text-amber-600' : 'text-red-600'
-                                }`}>
-                                  {mun.slaCompliance || mun.rate}%
-                                </span>
-                              </div>
+                            <td className="py-3 px-3 text-right text-slate-600">
+                              {mun.slaCompliance !== null && mun.slaCompliance !== undefined ? `${mun.slaCompliance.toFixed(0)}%` : '-'}
                             </td>
                           </tr>
                         ))}
@@ -1113,49 +1232,51 @@ export default function TransparencyPage() {
                     {t('transparency.categorySection.title')}
                   </h3>
                   <div className="space-y-4">
-                    {Object.entries(categoryStats)
-                      .sort((a, b) => b[1].total - a[1].total)
-                      .map(([cat, data]) => {
-                        const maxTotal = Math.max(...Object.values(categoryStats).map(d => d.total));
-                        const percentage = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
-                        
-                        const categoryColors: Record<string, string> = {
-                          WASTE: "from-green-500 to-green-600",
-                          ROAD: "from-gray-600 to-gray-700",
-                          LIGHTING: "from-yellow-500 to-yellow-600",
-                          WATER: "from-blue-500 to-blue-600",
-                          SAFETY: "from-red-500 to-red-600",
-                          PUBLIC_PROPERTY: "from-purple-500 to-purple-600",
-                          GREEN_SPACE: "from-emerald-500 to-emerald-600",
-                          OTHER: "from-slate-500 to-slate-600",
-                        };
-                        const colorClass = categoryColors[cat] || "from-primary to-primary-700";
-                        
-                        return (
-                          <div key={cat} className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium text-slate-700 flex items-center gap-2">
-                                <span className={`w-3 h-3 rounded-full bg-gradient-to-r ${colorClass}`} />
-                                {getCategoryLabel(cat)}
-                              </span>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm font-bold text-slate-800">{data.total}</span>
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                  data.rate >= 70 ? 'bg-green-100 text-green-700' : data.rate >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                }`}>
-                                  {data.rate || 0}% {t('transparency.categorySection.resolved')}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
-                              <div 
-                                className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
-                                style={{ width: `${percentage}%` }}
-                              />
+                    {categoryStats.map((cat) => {
+                      // Get progress bar color based on resolution rate
+                      const getBarColor = (rate: number, total: number) => {
+                        if (total === 0) return "bg-gray-300";
+                        if (rate >= 70) return "bg-green-500";
+                        if (rate >= 40) return "bg-amber-500";
+                        return "bg-red-500";
+                      };
+                      
+                      const barColor = getBarColor(cat.rate, cat.total);
+                      
+                      return (
+                        <div key={cat.category} className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-slate-700 flex items-center gap-2">
+                              {cat.label}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              {cat.total > 0 ? (
+                                <>
+                                  <span className="text-sm font-semibold text-slate-800">
+                                    {cat.total} {cat.total === 1 ? 'complaint' : 'complaints'}
+                                  </span>
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                    cat.rate !== undefined && cat.rate >= 70 ? 'bg-green-100 text-green-700' : 
+                                    cat.rate !== undefined && cat.rate >= 40 ? 'bg-amber-100 text-amber-700' : 
+                                    'bg-red-100 text-red-700'
+                                  }`}>
+                                    {cat.rate !== undefined ? cat.rate.toFixed(1) : '0'}% resolved
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-sm italic text-gray-400">No reports yet</span>
+                              )}
                             </div>
                           </div>
-                        );
-                      })}
+                          <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
+                            <div 
+                              className={`h-full ${barColor} rounded-full transition-all duration-500`}
+                              style={{ width: `${cat.total > 0 ? cat.rate : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1170,10 +1291,13 @@ export default function TransparencyPage() {
                       const curr = monthlyTrends[monthlyTrends.length - 1];
                       const prev = monthlyTrends[monthlyTrends.length - 2];
                       const change = prev.submitted > 0 ? Math.round(((curr.submitted - prev.submitted) / prev.submitted) * 100) : 0;
+                      if (prev.submitted === 0) {
+                        return null;
+                      }
                       return (
                         <span className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ${change >= 0 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
                           {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {change >= 0 ? '+' : ''}{change}% {t('transparency.trendsSection.vsLastMonth')}
+                          {change >= 0 ? '+' : ''}{change}% vs last month
                         </span>
                       );
                     })()}
@@ -1183,44 +1307,25 @@ export default function TransparencyPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={monthlyTrends}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#F0F4F0" />
-<XAxis 
-                             dataKey="month" 
-                             tick={{fontSize: 12}} 
-                             stroke="#64748b"
-                             tickFormatter={(val) => {
-                               const strVal = String(val || '');
-                               const parts = strVal.split('-');
-                               if (parts.length === 2) {
-                                 const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                                 return `${monthNames[parseInt(parts[1], 10) - 1]} '${parts[0].slice(2)}`;
-                               }
-                               return strVal;
-                             }}
-                           />
+                          <XAxis 
+                            dataKey="month" 
+                            tick={{fontSize: 12}} 
+                            stroke="#64748b"
+                          />
                           <YAxis tick={{fontSize: 12}} stroke="#64748b" allowDecimals={false} />
                           <Tooltip 
                             contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                            labelFormatter={(label) => {
-                              const parts = String(label).split('-');
-                              if (parts.length === 2) {
-                                const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-                                return `${monthNames[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
-                              }
-                              return label;
-                            }}
-                            formatter={(value, name, props) => {
+                            formatter={(value, name) => {
                               const v = Number(value) || 0;
-                              if (name === 'Problems Fixed' && props?.payload) {
-                                const sub = (props.payload as Record<string, number>).submitted || 0;
-                                const rate = sub > 0 ? Math.round((v / sub) * 100) : 0;
-                                return [`${v} (${rate}% rate)`, name];
+                              if (name === 'Problems Fixed') {
+                                return [v, name];
                               }
-                              return [v, String(name)];
+                              return [v, name];
                             }}
                           />
                           <Legend />
-                          <Bar dataKey="submitted" name={t('transparency.trendsSection.reportsSubmitted')} fill="#A5D6A7" opacity={0.7} radius={[4, 4, 0, 0]} />
-                          <Line type="monotone" dataKey="resolved" name={t('transparency.trendsSection.problemsFixed')} stroke="#2E7D32" strokeWidth={3} dot={{fill: '#2E7D32', r: 4}} />
+                          <Bar dataKey="submitted" name="Reports Submitted" fill="#3B82F6" opacity={0.7} radius={[4, 4, 0, 0]} />
+                          <Line type="monotone" dataKey="resolved" name="Problems Fixed" stroke="#10B981" strokeWidth={3} dot={{fill: '#10B981', r: 4}} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1238,44 +1343,62 @@ export default function TransparencyPage() {
                     <AlertTriangle className="w-5 h-5 text-amber-500" />
                     {t('transparency.recurring.title')}
                   </h3>
-                  <p className="text-sm text-slate-500 mb-4">{t('transparency.recurring.subtitle')}</p>
-                  {recurringIssues.length > 0 ? (
+                  <p className="text-sm text-slate-500 mb-4">Recurring problems reported multiple times</p>
+                  {mostReportedIssues.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {recurringIssues.map((issue, idx) => {
-                        const allResolved = issue.resolvedCount >= issue.count;
-                        const someResolved = issue.resolvedCount > 0 && issue.resolvedCount < issue.count;
-                        const noneResolved = issue.resolvedCount === 0;
-                        const statusBadge = allResolved
-                          ? { label: t('transparency.recurring.allFixed'), cls: "bg-green-100 text-green-700" }
-                          : someResolved
-                          ? { label: t('transparency.recurring.partiallyFixed', { resolved: issue.resolvedCount, total: issue.count }), cls: "bg-amber-100 text-amber-700" }
-                          : noneResolved && issue.count > 0
-                          ? { label: t('transparency.recurring.needsAttention'), cls: "bg-red-100 text-red-700" }
-                          : { label: t('transparency.recurring.beingAddressed'), cls: "bg-blue-100 text-blue-700" };
+                      {mostReportedIssues.map((issue, idx) => {
+                        const getStatusBadge = (status: string) => {
+                          switch (status) {
+                            case "All Resolved":
+                              return { label: "All Resolved", cls: "bg-green-100 text-green-700" };
+                            case "Being Addressed":
+                              return { label: "Being Addressed", cls: "bg-blue-100 text-blue-700" };
+                            case "Pending":
+                              return { label: "Pending", cls: "bg-amber-100 text-amber-700" };
+                            default:
+                              return { label: status, cls: "bg-slate-100 text-slate-700" };
+                          }
+                        };
+                        
+                        const statusBadge = getStatusBadge(issue.status);
+                        const resolutionPercentage = issue.count > 0 ? Math.round((issue.resolvedCount / issue.count) * 100) : 0;
 
                         return (
-                          <div 
-                            key={idx} 
-                            className="bg-white rounded-xl p-5 border border-slate-200 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
-                            onClick={() => { setCategoryFilter(issue.category || ''); setSearchQuery((issue.title || '').split(' ').slice(0, 4).join(' ')); setActiveView("complaints"); }}
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setCategoryFilter(issue.category);
+                              setSearchQuery(issue.municipality);
+                              setActiveView("complaints");
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className="block w-full text-left"
                           >
-                            <div className="flex items-center gap-2 mb-3">
-                              <span className="text-xs px-2 py-1 bg-slate-100 rounded-lg text-slate-600 font-medium">
-                                {getCategoryLabel(issue.category)}
-                              </span>
-                              <span className={`text-xs px-2 py-1 rounded-lg font-medium ${statusBadge.cls}`}>
-                                {statusBadge.label}
-                              </span>
+                            <div className="bg-white rounded-xl p-5 border border-slate-200 hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
+                              <div className="flex items-center gap-2 mb-3">
+                                <span className="text-xs px-2 py-1 bg-slate-100 rounded-lg text-slate-600 font-medium">
+                                  {getCategoryLabel(issue.category)}
+                                </span>
+                                <span className={`text-xs px-2 py-1 rounded-lg font-medium ${statusBadge.cls}`}>
+                                  {statusBadge.label}
+                                </span>
+                              </div>
+                              <h4 className="font-semibold text-slate-800 text-sm mb-3">{getCategoryLabel(issue.category)} - {issue.municipality}</h4>
+                              <p className="text-xs text-slate-500 mb-2">
+                                {issue.count} {issue.count === 1 ? 'report' : 'reports'} • {issue.resolvedCount} resolved
+                              </p>
+                              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    resolutionPercentage === 100 ? 'bg-green-500' : 
+                                    resolutionPercentage >= 50 ? 'bg-amber-500' : 
+                                    'bg-red-400'
+                                  }`}
+                                  style={{ width: `${resolutionPercentage}%` }}
+                                />
+                              </div>
                             </div>
-                            <h4 className="font-semibold text-slate-800 text-sm mb-3 line-clamp-2">{issue.title}</h4>
-                            <p className="text-xs text-slate-500 mb-2">{t('transparency.recurring.reportsResolved', { count: issue.count, resolved: issue.resolvedCount })}</p>
-                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${allResolved ? 'bg-green-500' : someResolved ? 'bg-amber-500' : 'bg-red-400'}`}
-                                style={{ width: `${issue.count > 0 ? (issue.resolvedCount / issue.count) * 100 : 0}%` }}
-                              />
-                            </div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -1307,28 +1430,26 @@ export default function TransparencyPage() {
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {[...TUNISIA_GEOGRAPHY].sort((a, b) => {
-                      const aData = governorateStatsData.find(g => g.governorate === a.governorate);
-                      const bData = governorateStatsData.find(g => g.governorate === b.governorate);
+                      const aData = governorateStatsData.find(g => g.governorate.toLowerCase() === a.governorate.toLowerCase());
+                      const bData = governorateStatsData.find(g => g.governorate.toLowerCase() === b.governorate.toLowerCase());
                       return (bData?.total || 0) - (aData?.total || 0);
                     }).map((gov) => {
-                      const govData = governorateStatsData.find(g => g.governorate === gov.governorate);
-                      const govStats = municipalityStats.filter(m => 
-                        ALL_MUNICIPALITIES.find(am => am.name === m.name && am.governorate === gov.governorate)
-                      );
-                      const zoneData = zoneStats[gov.governorate] || {};
+                      const govData = governorateStatsData.find(g => g.governorate.toLowerCase() === gov.governorate.toLowerCase());
                       
                       let total = 0;
-                      let filteredCount = 0;
-                      if (categoryFilter && zoneData[categoryFilter] !== undefined) {
-                        filteredCount = zoneData[categoryFilter];
-                        total = filteredCount;
-                      } else {
-                        total = govData?.total || govStats.reduce((sum, m) => sum + m.total, 0) || Object.values(zoneData).reduce((a: number, b: number) => a + b, 0);
-                      }
+                      let resolved = 0;
+                      let rate = 0;
                       
-                      const rate = govData ? govData.resolutionRate : (govStats.length > 0 
-                        ? Math.round(govStats.reduce((sum, m) => sum + m.rate, 0) / govStats.length)
-                        : 0);
+                      if (categoryFilter) {
+                        const zoneData = zoneStats[gov.governorate] || {};
+                        total = zoneData[categoryFilter] || 0;
+                        const zoneResolved = zoneData[`${categoryFilter}_resolved`] || 0;
+                        rate = total > 0 ? Math.round((zoneResolved / total) * 100) : 0;
+                      } else {
+                        total = govData?.total || 0;
+                        resolved = govData?.resolved || 0;
+                        rate = govData?.resolutionRate || 0;
+                      }
                       
                       const badgeClass = rate >= 70 ? 'bg-green-100 text-green-700' : rate >= 50 ? 'bg-amber-100 text-amber-700' : total > 0 ? 'bg-red-100 text-red-700' : '';
                       const badgeLabel = rate >= 70 ? t('transparency.governorates.good') : rate >= 50 ? t('transparency.governorates.moderate') : total > 0 ? t('transparency.governorates.needsAttention') : '';
@@ -1342,42 +1463,47 @@ export default function TransparencyPage() {
                       return (
                         <div 
                           key={gov.governorate}
-                          className={`p-3 rounded-xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${borderClass}`}
+                          className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg hover:-translate-y-1 ${borderClass}`}
                           onClick={() => { setSelectedGovernorate(gov.governorate); setActiveView("municipalities"); }}
                         >
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="font-semibold text-slate-800 text-sm truncate">{gov.governorate}</p>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-slate-500" />
+                              <p className="font-semibold text-slate-800">{gov.governorate}</p>
+                            </div>
                             {total > 0 && badgeLabel && !categoryFilter && (
-                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${badgeClass}`}>{badgeLabel}</span>
+                              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${badgeClass}`}>{badgeLabel}</span>
                             )}
                           </div>
                           {total > 0 ? (
-                            <>
-                              <p className="text-xs text-slate-500 mb-2">
-                                {total} {categoryFilter ? getCategoryLabel(categoryFilter)?.split(" ")[0] : t('transparency.governorates.reports')}
-                              </p>
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-slate-600">
+                                  {total} {categoryFilter ? getCategoryLabel(categoryFilter)?.split(" ")[0] : t('transparency.governorates.reports')}
+                                </span>
+                                {!categoryFilter && (
+                                  <span className={`text-sm font-bold ${rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                    {rate}%
+                                  </span>
+                                )}
+                              </div>
                               {!categoryFilter && (
-                                <>
-                                  <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all duration-500 ${
-                                        rate >= 70 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                                      }`}
-                                      style={{ width: `${rate}%` }}
-                                    />
-                                  </div>
-                                  <p
-                                    className={`text-xs font-bold mt-1 ${
-                                      rate >= 70 ? 'text-green-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'
+                                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      rate >= 70 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
                                     }`}
-                                  >
-                                    {rate}% {t('transparency.governorates.resolved')}
-                                  </p>
-                                </>
+                                    style={{ width: `${rate}%` }}
+                                  />
+                                </div>
                               )}
-                            </>
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <MapPin className="w-3 h-3" />
+                                <span>{gov.municipalities?.length || 0} {t('transparency.governorates.municipalities')}</span>
+                              </div>
+                            </div>
                           ) : (
-                            <p className="text-xs text-slate-400">{t('transparency.governorates.noReports')}</p>
+                            <p className="text-sm text-slate-400">{t('transparency.governorates.noReports')}</p>
                           )}
                         </div>
                       );
@@ -1411,7 +1537,7 @@ export default function TransparencyPage() {
                 <div className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm">
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="flex items-center gap-2">
-                      <FilterIcon className="w-4 h-4 text-slate-400" />
+                      <Filter className="w-4 h-4 text-slate-400" />
                       <span className="text-sm text-slate-500">{t('transparency.governorates.filters')}</span>
                     </div>
                     <select
@@ -1455,7 +1581,9 @@ export default function TransparencyPage() {
                         ASSIGNED: t('transparency.complaintsView.assigned'),
                         IN_PROGRESS: t('transparency.complaintsView.inProgress'),
                         RESOLVED: t('transparency.complaintsView.resolved'),
-                        CLOSED: t('transparency.complaintsView.closed')
+                        CLOSED: t('transparency.complaintsView.closed'),
+                        SUBMITTED: t('status.SUBMITTED'),
+                        REJECTED: t('status.REJECTED')
                       };
                       
                       const formattedDate = new Date(complaint.createdAt).toLocaleDateString(undefined, {
@@ -1571,7 +1699,9 @@ export default function TransparencyPage() {
                         ASSIGNED: t('transparency.complaintsView.assigned'),
                         IN_PROGRESS: t('transparency.complaintsView.inProgress'),
                         RESOLVED: t('transparency.complaintsView.resolved'),
-                        CLOSED: t('transparency.complaintsView.closed')
+                        CLOSED: t('transparency.complaintsView.closed'),
+                        SUBMITTED: t('status.SUBMITTED'),
+                        REJECTED: t('status.REJECTED')
                       };
                       
                       const formattedDate = new Date(complaint.createdAt).toLocaleDateString(undefined, {
@@ -1743,12 +1873,13 @@ export default function TransparencyPage() {
                               </div>
                               <div className="absolute bottom-4 left-6 flex items-center gap-4">
                                 <span className="flex items-center gap-1 text-white/90 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-full">
-                                  <FileText className="w-4 h-4" />
+                                  <Filter className="w-4 h-4" />
                                   {t('transparency.govDetail.complaints', { n: total })}
                                 </span>
                                 <span className={`px-3 py-1 rounded-full text-sm font-bold ${
                                   rate >= 70 ? 'bg-green-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
                                 }`}>
+                                  {rate}%
                                   {t('transparency.govDetail.resolved', { n: rate })}
                                 </span>
                               </div>
@@ -2053,7 +2184,7 @@ export default function TransparencyPage() {
               {t('transparency.cta.subtitle')}
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              {token ? (
+              {hydrated && token ? (
                 <>
                   <Link
                     href="/dashboard"
@@ -2121,7 +2252,7 @@ export default function TransparencyPage() {
           RESOLVED: { label: t('transparency.modal.fixed'), color: "bg-green-100 text-green-700" },
           CLOSED: { label: t('transparency.modal.closed'), color: "bg-slate-100 text-slate-700" }
         };
-        const statusInfo = statusLabels[c.status] || { label: c.status, color: "bg-slate-100 text-slate-600" };
+        const statusInfo = statusLabels[c.status] || { label: t(`status.${c.status}`), color: "bg-slate-100 text-slate-600" };
         const municipality = c.municipalityName || c.location?.municipality || t('transparency.complaintsView.unknown');
         const createdDate = new Date(c.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
         const resolvedDate = c.resolvedAt

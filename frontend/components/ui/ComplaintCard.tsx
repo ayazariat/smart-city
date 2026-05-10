@@ -13,12 +13,14 @@ import {
   ChevronRight,
   CheckCircle,
   AlertCircle,
+  TrendingUp,
 } from "lucide-react";
 import { statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
-import { getCategoryLabel, getDepartmentLabel } from "@/lib/categories";
+import { getCategoryLabel } from "@/lib/categories";
 import { getPhotoUrl } from "@/lib/photos";
 import { useAuthStore } from "@/store/useAuthStore";
 import { confirmComplaint, unconfirmComplaint } from "@/services/complaint.service";
+import { useTranslation } from "react-i18next";
 
 export interface BaseComplaint {
   _id?: string;
@@ -35,6 +37,7 @@ export interface BaseComplaint {
   department?: { _id?: string; name: string } | null;
   assignedDepartment?: { _id?: string; name: string } | null;
   assignedTo?: { _id?: string; fullName: string };
+  assignedTeam?: { name?: string; members?: Array<{ fullName: string }> } | null;
   municipality?: { _id?: string; name: string; governorate?: string } | string;
   municipalityName?: string;
   confirmationCount?: number;
@@ -57,6 +60,7 @@ interface ComplaintCardProps {
   showPriority?: boolean;
   showMunicipality?: boolean;
   hideSla?: boolean;
+  isPublic?: boolean;
   actions?: ReactNode;
   onUpdate?: (updatedComplaint: BaseComplaint) => void;
   index?: number;
@@ -71,9 +75,9 @@ const urgencyColors: Record<string, { bg: string; text: string }> = {
 export const ComplaintCard = ({
   complaint,
   href,
-  showCitizen = false,
   showDepartment = false,
   showAssignedTo = false,
+  isPublic = false,
   showPriority = false,
   showMunicipality = false,
   hideSla = false,
@@ -82,6 +86,7 @@ export const ComplaintCard = ({
   index = 0,
 }: ComplaintCardProps) => {
   const id = complaint._id || complaint.id || "";
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const userSub = typeof user === "object" && user !== null && "sub" in user && typeof (user as { sub?: unknown }).sub === "string"
     ? (user as { sub: string }).sub
@@ -96,12 +101,12 @@ export const ComplaintCard = ({
   // Use special status for rejected resolution
   const displayStatus = isResolutionRejected ? "RESOLUTION_REJECTED" : complaint.status;
   
-  const statusCfg = statusConfig[displayStatus] ?? {
-    label: complaint.status,
-    bgClass: "bg-slate-100",
-    textClass: "text-slate-600",
-    dotClass: "bg-slate-500",
-  };
+   const statusCfg = statusConfig[displayStatus] ?? {
+     labelKey: `status.${complaint.status}`,
+     bgClass: "bg-slate-100",
+     textClass: "text-slate-600",
+     dotClass: "bg-slate-500",
+   };
 
   const hasConfirmed = complaint.confirmations?.some(c => c.citizenId === userId);
 
@@ -164,29 +169,27 @@ export const ComplaintCard = ({
   const isHighPriority = (complaint.confirmationCount ?? 0) >= 5 || (complaint.priorityScore ?? 0) >= 30;
 
   // SLA time remaining/overdue calculation
-  const getSlaTimeInfo = (): { text: string; color: string } | null => {
-    if (!complaint.slaDeadline || ["RESOLVED", "CLOSED"].includes(complaint.status)) return null;
-    const now = new Date();
-    const deadline = new Date(complaint.slaDeadline);
-    const diffMs = deadline.getTime() - now.getTime();
-    const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
-    if (diffMs < 0) {
-      const days = Math.floor(diffHours / 24);
-      const hours = Math.floor(diffHours % 24);
-      return { text: days > 0 ? `${days}d ${hours}h overdue` : `${hours}h overdue`, color: "text-red-600" };
-    }
-    const days = Math.floor(diffHours / 24);
-    const hours = Math.floor(diffHours % 24);
-    return { text: days > 0 ? `${days}d ${hours}h left` : `${hours}h left`, color: complaint.slaStatus === "AT_RISK" ? "text-orange-600" : "text-green-600" };
-  };
-  const slaTimeInfo = hideSla ? null : getSlaTimeInfo();
-
-  // SLA left border color
-  const slaBorderColor = hideSla ? "" 
-    : complaint.slaStatus === "OVERDUE" ? "border-l-red-500" 
-    : complaint.slaStatus === "AT_RISK" ? "border-l-orange-500" 
-    : complaint.slaDeadline && !["RESOLVED", "CLOSED"].includes(complaint.status) ? "border-l-green-500" 
-    : "";
+   const getSlaTimeInfo = (): { text: string; color: string } | null => {
+     if (!complaint.slaDeadline || ["RESOLVED", "CLOSED"].includes(complaint.status)) return null;
+     const now = new Date();
+     const deadline = new Date(complaint.slaDeadline);
+     const diffMs = deadline.getTime() - now.getTime();
+     const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
+     if (diffMs < 0) {
+       const days = Math.floor(diffHours / 24);
+       const hours = Math.floor(diffHours % 24);
+       return { text: `${days > 0 ? `${days}d ${hours}h` : `${hours}h`} ${t("badges.overdue")}`, color: "text-red-600" };
+     }
+     const days = Math.floor(diffHours / 24);
+     const hours = Math.floor(diffHours % 24);
+     return { text: `${days > 0 ? `${days}d ${hours}h` : `${hours}h`} ${t("badges.atRisk")}`, color: complaint.slaStatus === "AT_RISK" ? "text-orange-600" : "text-green-600" };
+   };
+   const slaTimeInfo = hideSla ? null : getSlaTimeInfo();
+   const slaBorderColor = hideSla ? "" 
+     : complaint.slaStatus === "OVERDUE" ? "border-l-red-500" 
+     : complaint.slaStatus === "AT_RISK" ? "border-l-orange-500" 
+     : complaint.slaDeadline && !["RESOLVED", "CLOSED"].includes(complaint.status) ? "border-l-green-500" 
+     : "";
 
   const cardContent = (
     <div 
@@ -215,10 +218,10 @@ export const ComplaintCard = ({
                 {getComplaintIdDisplay(id)}
               </span>
               
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`} />
-                {statusCfg.label}
-              </span>
+               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}>
+                 <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`} />
+                 {t(statusCfg.labelKey, { defaultValue: complaint.status })}
+               </span>
               
               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                 {getCategoryLabel(complaint.category)} 
@@ -227,7 +230,22 @@ export const ComplaintCard = ({
             {complaint.urgency && complaint.urgency !== "LOW" && urgencyColors[complaint.urgency] && (
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${urgencyColors[complaint.urgency].bg} ${urgencyColors[complaint.urgency].text}`}>
                 <AlertCircle className="w-3 h-3" />
-                {complaint.urgency}
+                {t(`urgency.${complaint.urgency}`)}
+              </span>
+            )}
+            {(complaint as any).aiPredictedUrgency && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                (complaint as any).aiUrgencyPrediction?.confidence > 0.8 ? 'bg-green-100 text-green-700 border border-green-300' :
+                (complaint as any).aiUrgencyPrediction?.confidence > 0.6 ? 'bg-amber-100 text-amber-700 border border-amber-300' :
+                'bg-purple-100 text-purple-700 border border-purple-300'
+              }`}>
+                <TrendingUp className="w-3 h-3" />
+                AI: {(complaint as any).aiPredictedUrgency}
+                {(complaint as any).aiUrgencyPrediction?.confidence && (
+                  <span className="text-[10px] opacity-75">
+                    ({Math.round((complaint as any).aiUrgencyPrediction.confidence * 100)}%)
+                  </span>
+                )}
               </span>
             )}
 
@@ -235,21 +253,21 @@ export const ComplaintCard = ({
             {!hideSla && complaint.slaStatus === "OVERDUE" && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 animate-pulse">
                 <AlertCircle className="w-3 h-3" />
-                OVERDUE
+                {t("badges.overdue")}
               </span>
             )}
             {!hideSla && complaint.slaStatus === "AT_RISK" && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
                 <AlertCircle className="w-3 h-3" />
-                AT RISK
+                {t("badges.atRisk")}
               </span>
             )}
 
-            {/* Resolution Report Badge - Show when RESOLVED status (needs agent review) */}
-            {complaint.status === "RESOLVED" && (
+            {/* Resolution Report Badge - Show when RESOLVED status (needs agent review) - Hide on public cards */}
+            {!isPublic && complaint.status === "RESOLVED" && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm">
                 <AlertCircle className="w-3 h-3" />
-                Report Pending
+                {t("badges.reportPending")}
               </span>
             )}
 
@@ -257,7 +275,7 @@ export const ComplaintCard = ({
             {complaint.status === "CLOSED" && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm">
                 <CheckCircle className="w-3 h-3" />
-                Approved
+                {t("badges.approved")}
               </span>
             )}
 
@@ -291,7 +309,7 @@ export const ComplaintCard = ({
           {complaint.description}
         </p>
 
-        {complaint.description.length > 120 && (
+        {complaint.description && complaint.description.length > 120 && (
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -318,19 +336,13 @@ export const ComplaintCard = ({
               {municipalityName}
             </span>
           )}
-          {showCitizen && (complaint.citizen || (typeof complaint.createdBy === 'object' && complaint.createdBy?.fullName)) && (
+          {showDepartment && (complaint.citizen || (typeof complaint.createdBy === 'object' && complaint.createdBy?.fullName)) && (
             <span className="inline-flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-slate-400" />
               {complaint.citizen?.fullName || (typeof complaint.createdBy === 'object' ? complaint.createdBy?.fullName : '')}
             </span>
           )}
-           {showDepartment && (complaint.department || complaint.assignedDepartment) && (
-             <span className="inline-flex items-center gap-1.5">
-               <Building2 className="w-3.5 h-3.5 text-slate-400" />
-               {getDepartmentLabel((complaint.department || complaint.assignedDepartment)?.name)}
-             </span>
-           )}
-          {/* Assigned Repair Team - Visible to ALL roles */}
+          {/* Assigned Repair Team/Technician - Visible to ALL roles */}
           {(complaint.assignedTo || complaint.assignedTeam) && (
             <span className="inline-flex items-center gap-1.5">
               <Wrench className="w-3.5 h-3.5 text-slate-400" />
@@ -340,28 +352,9 @@ export const ComplaintCard = ({
                 </span>
               ) : (
                 <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
-                  {complaint.assignedTo.fullName}
+                  {complaint.assignedTo?.fullName}
                 </span>
               )}
-            </span>
-          )}
-          {/* Department (visible to all roles) */}
-          {(complaint.department || complaint.assignedDepartment) && (
-            <span className="inline-flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 text-slate-400" />
-              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                {getDepartmentLabel((complaint.department || complaint.assignedDepartment)?.name)}
-              </span>
-            </span>
-          )}
-          {showAssignedTo && (complaint.assignedTo || complaint.assignedTeam) && (
-            <span className="inline-flex items-center gap-1.5">
-              <Wrench className="w-3.5 h-3.5 text-slate-400" />
-              {complaint.assignedTeam ? (
-                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
-                  Repair team ({complaint.assignedTeam.members?.length || 1} technicians)
-                </span>
-              ) : complaint.assignedTo.fullName}
             </span>
           )}
           {showPriority && complaint.priorityScore !== undefined && (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslation } from "react-i18next";
 import {
   FileText, Wrench, Flag,
   Clock, AlertTriangle, Filter, Download, Search, CheckCircle,
@@ -23,6 +24,7 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import AISpikeAlertCard from "@/components/dashboard/AISpikeAlertCard";
 import TrendForecastChart from "@/components/dashboard/TrendForecastChart";
+import ManagerComplaintMap, { type ComplaintMapPoint } from "@/components/dashboard/ManagerComplaintMap";
 import type { BaseComplaint } from "@/components/ui";
 
 interface ManagerComplaint extends BaseComplaint {
@@ -42,6 +44,7 @@ interface ManagerComplaint extends BaseComplaint {
 }
 
 export default function ManagerDashboardPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, token } = useAuthStore();
 
@@ -61,6 +64,9 @@ export default function ManagerDashboardPage() {
   const [priorityScore, setPriorityScore] = useState<number>(5);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  const [mapData, setMapData] = useState<ComplaintMapPoint[]>([]);
+  const [mapLoading, setMapLoading] = useState(true);
 
   // Update available municipalities when governorate changes
   useEffect(() => {
@@ -101,6 +107,25 @@ export default function ManagerDashboardPage() {
     };
     fetch();
   }, [token, user, statusFilter]);
+
+  useEffect(() => {
+    const fetchMapData = async () => {
+      if (!token || !user || user.role !== "DEPARTMENT_MANAGER") return;
+      try {
+        setMapLoading(true);
+        const response = await managerService.getManagerComplaintsGeo();
+        if (response.data && Array.isArray(response.data)) {
+          setMapData(response.data);
+        }
+      } catch (err) {
+        console.error("Error fetching map data:", err);
+        setMapData([]);
+      } finally {
+        setMapLoading(false);
+      }
+    };
+    fetchMapData();
+  }, [token, user]);
 
   useEffect(() => {
     const fetchTechs = async () => {
@@ -268,15 +293,6 @@ export default function ManagerDashboardPage() {
       </div>
 
       <main className="max-w-7xl mx-auto px-6 py-6">
-        {/* AI Insights Row - Widget A and Widget B side by side */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">AI Insights</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <AISpikeAlertCard municipality={municipality} />
-            <TrendForecastChart municipality={municipality} category="" />
-          </div>
-        </div>
-
         {/* Complaints Overview Section */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Complaints Overview</h2>
@@ -301,7 +317,7 @@ export default function ManagerDashboardPage() {
                 onClick={() => setShowFilters(!showFilters)}
               >
                 <Filter className="w-4 h-4 mr-2" />
-                {showFilters ? "Hide Filters" : "Show Filters"}
+                {showFilters ? t("common.hideFilters") : t("common.showFilters")}
               </Button>
 
               <div className="flex gap-2 ml-auto">
@@ -337,16 +353,16 @@ export default function ManagerDashboardPage() {
                     <option value="RESOLVED">Resolved</option>
                   </select>
 
-                  <select
-                    value={priorityFilter}
-                    onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                  >
-                    <option value="">All Priorities</option>
-                    <option value="HIGH">High (≥15)</option>
-                    <option value="MEDIUM">Medium (6-14)</option>
-                    <option value="LOW">Low (&lt;6)</option>
-                  </select>
+                   <select
+                     value={priorityFilter}
+                     onChange={(e) => setPriorityFilter(e.target.value)}
+                     className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                   >
+                     <option value="">{t("manager.priorityFilterAll")}</option>
+                     <option value="HIGH">{t("manager.priorityFilterHigh")}</option>
+                     <option value="MEDIUM">{t("manager.priorityFilterMedium")}</option>
+                     <option value="LOW">{t("manager.priorityFilterLow")}</option>
+                   </select>
 
                   <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                     {filteredComplaints.length} results
@@ -386,16 +402,16 @@ export default function ManagerDashboardPage() {
                       actions={
                         <>
                           {!(complaint.assignedTo || complaint.assignedTeam) && (complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
-                            <button
-                              onClick={() => { setAssignTechTarget(id); setSelectedTechnicians([]); }}
-                              disabled={actionLoading === id}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
-                            >
-                              <Wrench className="w-4 h-4" />
-                              {complaint.status === "ASSIGNED" ? "Reassign Team" : "Assign Repair Team"}
-                            </button>
+                          <button
+                            onClick={() => { setAssignTechTarget(id); setSelectedTechnicians([]); }}
+                            disabled={actionLoading === id}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
+                          >
+                            <Wrench className="w-4 h-4" />
+                             {t("manager.assignRepairTeam")}
+                          </button>
                           )}
-                          {!(complaint.assignedTo || complaint.assignedTeam) && (complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
+                          {!(complaint.assignedTo || complaint.assignedTeam) && complaint.status === "VALIDATED" && !complaint.assignedDepartment && (
                           <button
                             onClick={() => {
                               setPriorityTarget(id);
@@ -454,15 +470,27 @@ export default function ManagerDashboardPage() {
           </div>
         </div>
 
-        {/* Map Section - Heatmap of complaint locations */}
+        {/* AI Insights Row - Widget A and Widget B side by side */}
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">AI Insights</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AISpikeAlertCard municipality={municipality} />
+          </div>
+        </div>
+
+        {/* AI Trend Forecasts - Full Width */}
+        <div className="mb-6">
+          <TrendForecastChart municipality={municipality} category="" />
+        </div>
+
+        {/* Map Section - Embedded complaint map */}
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Complaint Map</h2>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
-            <Link href="/dashboard/heatmap" className="flex items-center gap-3 text-primary hover:text-primary/80">
-              <MapPin className="w-5 h-5" />
-              <span>View heatmap of complaint locations in your managed zone</span>
-            </Link>
-          </div>
+          <ManagerComplaintMap 
+            data={mapData} 
+            municipality={user?.municipalityName || undefined}
+            height="450px"
+          />
         </div>
       </main>
 
@@ -527,7 +555,7 @@ export default function ManagerDashboardPage() {
       <Modal
         isOpen={priorityTarget !== null}
         onClose={() => setPriorityTarget(null)}
-        title="Update Priority"
+        title={t("manager.updatePriority")}
         description="Click pill matching list view colors."
         footer={
           <>
@@ -555,6 +583,7 @@ export default function ManagerDashboardPage() {
                   try {
                     await managerService.updatePriority(priorityTarget!, { urgency: level as string, priorityScore: score });
                     await refreshComplaints();
+                    alert('Priority updated successfully');
                   } catch (err) {
                     alert('Priority update failed');
                   } finally {

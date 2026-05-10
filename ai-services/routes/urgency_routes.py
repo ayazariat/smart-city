@@ -7,7 +7,7 @@ FastAPI routes for urgency prediction service (BL-24).
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 
 from services.urgency_predictor import predict_urgency, train_urgency_model
@@ -59,7 +59,7 @@ async def predict_urgency_endpoint(request: UrgencyPredictionRequest) -> Dict[st
             try:
                 submitted_at = datetime.fromisoformat(request.submittedAt.replace("Z", "+00:00"))
             except Exception:
-                submitted_at = datetime.now()
+                submitted_at = datetime.now(timezone.utc)
 
         # Timeout guard: 4s max, then return rule-based result
         try:
@@ -192,5 +192,5 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "ok",
         "service": "urgency_prediction",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }

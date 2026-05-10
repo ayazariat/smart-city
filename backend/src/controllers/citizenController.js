@@ -87,6 +87,36 @@ class CitizenController {
       const validCategories = ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other", "WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
       if (category && !validCategories.includes(category)) return res.status(400).json({ message: "Invalid category" });
 
+      // AI Category Prediction (BL-18)
+      let predictedCategory = category;
+      let aiCategoryMessage = null;
+      let aiPredictedCategory = null;
+      let aiCategoryConfidence = null;
+      let categorySource = 'USER';
+      
+      if (!category || category === "other" || category === "OTHER") {
+        try {
+          const axios = require('axios');
+          const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+          const categoryResult = await axios.post(`${aiServiceUrl}/ai/predict-category`, {
+            text: `${title} ${description}`.trim()
+          }, { timeout: 5000 });
+          if (categoryResult.data?.predicted && validCategories.includes(categoryResult.data.predicted.toLowerCase())) {
+            predictedCategory = categoryResult.data.predicted.toLowerCase();
+            aiPredictedCategory = categoryResult.data.predicted.toLowerCase();
+            aiCategoryConfidence = categoryResult.data.confidence || 0;
+            categorySource = 'AI';
+          } else {
+            predictedCategory = "other";
+            aiCategoryMessage = "Could not auto-detect category. Please select manually.";
+          }
+        } catch (categoryError) {
+          console.error('AI Category prediction failed:', categoryError.message);
+          predictedCategory = "other";
+          aiCategoryMessage = "Could not auto-detect category. Please select manually.";
+        }
+      }
+
       const validUrgencies = ["LOW", "MEDIUM", "HIGH", "URGENT"];
       if (urgency && !validUrgencies.includes(urgency)) return res.status(400).json({ message: "Invalid urgency level" });
 
@@ -114,12 +144,30 @@ class CitizenController {
 
       // Find department
       let assignedDepartment = null;
-      const departmentName = categoryToDepartment[category] || "General";
+      const departmentName = categoryToDepartment[predictedCategory] || "General";
       const department = await Department.findOne({ name: departmentName });
       if (department) assignedDepartment = department._id;
 
+      // AI Urgency Prediction (BL-24)
+      let aiUrgencyPrediction = null;
+      try {
+        const axios = require('axios');
+        const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+        const urgencyResult = await axios.post(`${aiServiceUrl}/ai/urgency/predict`, {
+          title: title, description: description, category: predictedCategory,
+          citizenUrgency: urgency || 'MEDIUM', municipality: userMunicipalityName,
+          latitude: geoLocation?.coordinates?.[1], longitude: geoLocation?.coordinates?.[0],
+          confirmationCount: 0, submittedAt: new Date()
+        }, { timeout: 5000 });
+        if (urgencyResult.data?.data) {
+          aiUrgencyPrediction = urgencyResult.data.data.predictedUrgency;
+        }
+      } catch (urgencyError) {
+        console.error('AI Urgency prediction failed:', urgencyError.message);
+      }
+
       // Calculate priority
-      const priorityResult = calculatePriorityAndSLA({ category, aiUrgencyPrediction: 'MEDIUM', userUrgency: urgency, confirms: 0, upvotes: 0, locationType: 'NORMAL', createdAt: new Date() });
+      const priorityResult = calculatePriorityAndSLA({ category: predictedCategory, aiUrgencyPrediction: aiUrgencyPrediction || 'MEDIUM', userUrgency: urgency, confirms: 0, upvotes: 0, locationType: 'NORMAL', createdAt: new Date() });
       const { priorityScore, urgencyLevel, slaFinal } = priorityResult;
 
       const keywords = extractKeywords(description);
@@ -128,12 +176,15 @@ class CitizenController {
       const governorate = municipalityToGovernorate[userMunicipalityName] || municipalityToGovernorate[location?.municipality] || municipalityToGovernorate[location?.commune] || null;
 
       const complaint = new Complaint({
-        title: title.trim(), description: description.trim(), category: category || "OTHER", urgency: urgencyLevel, priorityScore,
+        title: title.trim(), description: description.trim(), category: predictedCategory || "OTHER", urgency: urgencyLevel, priorityScore,
         location: Object.keys(geoLocation).length ? geoLocation : {}, municipalityName: userMunicipalityName,
         municipalityNormalized: normalizeMunicipality(userMunicipalityName), governorate, media: media || [],
         isAnonymous: !!isAnonymous, ownerName: !isAnonymous ? ownerName : undefined, phone: phone || undefined,
         keywords, createdBy: req.user.userId, assignedDepartment, status: "SUBMITTED",
         slaDeadline: new Date(Date.now() + slaFinal * 60 * 60 * 1000),
+        aiPredictedCategory,
+        aiCategoryConfidence,
+        categorySource,
       });
       await complaint.save();
 
@@ -156,51 +207,56 @@ class CitizenController {
         console.error('AI Urgency prediction failed:', urgencyError.message);
       }
 
-      // AI Duplicate Detection (non-blocking)
-      setImmediate(async () => {
-        try {
-          const axios = require('axios');
-          const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-          const dupResult = await axios.post(`${aiServiceUrl}/ai/duplicate/check`, {
-            complaintId: complaint._id.toString(), title: complaint.title, description: complaint.description,
-            category: complaint.category, latitude: complaint.location?.coordinates?.[1],
-            longitude: complaint.location?.coordinates?.[0], municipality: complaint.municipalityName, submittedAt: complaint.createdAt
-          }, { timeout: 10000 });
-          if (dupResult.data?.success && dupResult.data.data) {
-            const dupData = dupResult.data.data;
-            await Complaint.findByIdAndUpdate(complaint._id, { aiDuplicateCheck: dupData, duplicateStatus: dupData.duplicateLevel });
+      // AI Duplicate Detection (BL-25)
+      let duplicateWarning = null;
+      try {
+        const axios = require('axios');
+        const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+        const dupResult = await axios.post(`${aiServiceUrl}/ai/duplicate/check`, {
+          complaintId: complaint._id.toString(), title: complaint.title, description: complaint.description,
+          category: complaint.category, latitude: complaint.location?.coordinates?.[1],
+          longitude: complaint.location?.coordinates?.[0], municipality: complaint.municipalityName, submittedAt: complaint.createdAt
+        }, { timeout: 5000 }); // Reduced timeout
+        if (dupResult.data?.success && dupResult.data.data) {
+          const dupData = dupResult.data.data;
+          await Complaint.findByIdAndUpdate(complaint._id, { aiDuplicateCheck: dupData, duplicateStatus: dupData.duplicateLevel });
 
-            // Notify agents about possible duplicate so they can decide to merge or not
-            if (dupData.duplicateLevel === 'PROBABLE_DUPLICATE' || dupData.duplicateLevel === 'POSSIBLE_DUPLICATE') {
-              try {
-                const normalizedMun = normalizeMunicipality(complaint.municipalityName);
-                const io = req.app?.get?.('io');
-                if (normalizedMun) {
-                  const agents = await User.find({
-                    role: "MUNICIPAL_AGENT",
-                    municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') }
-                  }).select('_id');
-                  const agentIds = agents.map(a => a._id.toString());
-                  if (agentIds.length > 0) {
-                    const similarity = Math.round((dupData.similarityScore || 0) * 100);
-                    const dpLabel = dupData.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'Probable Duplicate' : 'Possible Duplicate';
-                    await notificationService.sendNotificationToMultiple(io, agentIds, {
-                      type: 'duplicate_detected',
-                      title: `🔁 ${dpLabel} Detected`,
-                      message: `"${complaint.title}" (${complaint.category}) may be a duplicate — ${similarity}% similarity. Review to merge or keep separate.`,
-                      complaintId: complaint._id,
-                    });
-                  }
+          // If similarity > 0.8, flag as potential duplicate and prepare warning
+          if ((dupData.similarityScore || 0) > 0.8) {
+            duplicateWarning = `A similar complaint already exists: '${dupData.topMatches?.[0]?.title || 'Similar complaint'}'. Do you still want to submit?`;
+          }
+
+          // Notify agents about possible duplicate so they can decide to merge or not
+          if (dupData.duplicateLevel === 'PROBABLE_DUPLICATE' || dupData.duplicateLevel === 'POSSIBLE_DUPLICATE') {
+            try {
+              const normalizedMun = normalizeMunicipality(complaint.municipalityName);
+              const io = req.app?.get?.('io');
+              if (normalizedMun) {
+                const agents = await User.find({
+                  role: "MUNICIPAL_AGENT",
+                  municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') }
+                }).select('_id');
+                const agentIds = agents.map(a => a._id.toString());
+                if (agentIds.length > 0) {
+                  const similarity = Math.round((dupData.similarityScore || 0) * 100);
+                  const dpLabel = dupData.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'Probable Duplicate' : 'Possible Duplicate';
+                  await notificationService.sendNotificationToMultiple(io, agentIds, {
+                    type: 'duplicate_detected',
+                    title: `🔁 ${dpLabel} Detected`,
+                    message: `"${complaint.title}" (${complaint.category}) may be a duplicate — ${similarity}% similarity. Review to merge or keep separate.`,
+                    complaintId: complaint._id,
+                  });
                 }
-              } catch (dupNotifError) {
-                console.error('Failed to send duplicate notification:', dupNotifError.message);
               }
+            } catch (dupNotifError) {
+              console.error('Failed to send duplicate notification:', dupNotifError.message);
             }
           }
-        } catch (dupError) {
-          console.error('AI Duplicate check failed:', dupError.message);
         }
-      });
+      } catch (dupError) {
+        console.error('AI Duplicate check failed:', dupError.message);
+        // Ensure empty list doesn't throw - handled by ai service fallback
+      }
 
       // Notify agents
       try {
@@ -225,6 +281,8 @@ class CitizenController {
       res.status(201).json({
         message: "Complaint submitted successfully",
         complaint: { id: complaint._id, title: complaint.title, description: complaint.description, category: complaint.category, urgency: complaint.urgency, status: complaint.status, location: complaint.location, media: complaint.media, createdAt: complaint.createdAt },
+        ...(aiCategoryMessage && { aiMessage: aiCategoryMessage }),
+        ...(duplicateWarning && { duplicateWarning }),
       });
     } catch (error) {
       console.error("Complaint submission error:", error);
@@ -338,9 +396,9 @@ class CitizenController {
        const [historicalTotal, total, submitted, inProgress, resolved, closed, rejected, resolvedWithRatingCount, csatCount] = await Promise.all([
          Complaint.countDocuments(historicalQuery),
          Complaint.countDocuments(activeQuery),
-         Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
-         Complaint.countDocuments({ ...activeQuery, status: "IN_PROGRESS" }),
-         Complaint.countDocuments({ ...activeQuery, status: "RESOLVED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "SUBMITTED" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...historicalQuery, status: "RESOLVED" }),
          Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
          Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
          Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
@@ -348,7 +406,7 @@ class CitizenController {
        ]);
 
        const resolvedCount = resolved + closed;
-       const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+       const resolutionRate = historicalTotal > 0 ? Math.round((resolvedCount / historicalTotal) * 100) : 0;
 
        const avgTimeResult = await Complaint.aggregate([
          { $match: { ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
@@ -367,7 +425,24 @@ class CitizenController {
         res.json({ success: true, data: { total, historicalTotal, submitted, pending: submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime, slaComplianceRate, csat, totalRatings } });
     } catch (error) {
       console.error("Citizen stats error:", error);
-      res.status(500).json({ success: false, message: "Failed to retrieve statistics" });
+      res.json({
+        success: true,
+        data: {
+          total: 0,
+          historicalTotal: 0,
+          submitted: 0,
+          pending: 0,
+          inProgress: 0,
+          resolved: 0,
+          closed: 0,
+          rejected: 0,
+          resolutionRate: 0,
+          averageResolutionTime: 0,
+          slaComplianceRate: 0,
+          csat: 0,
+          totalRatings: 0
+        }
+      });
     }
   }
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import {
   Users,
   Plus,
@@ -25,13 +26,10 @@ import { showToast } from "@/components/ui/Toast";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { getDepartmentLabel } from "@/lib/categories";
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  CITIZEN: "Citizen",
-  MUNICIPAL_AGENT: "Municipal Agent",
-  DEPARTMENT_MANAGER: "Department Manager",
-  TECHNICIAN: "Technician",
-  ADMIN: "Admin",
-};
+  // Get role label using i18n
+  const getRoleLabel = (role: UserRole): string => {
+    return t(`roles.${role}`, { defaultValue: role });
+  };
 
 const ROLE_COLORS: Record<UserRole, string> = {
   CITIZEN: "bg-blue-100 text-blue-700",
@@ -51,6 +49,7 @@ const ROLES_REQUIRING_DEPARTMENT: UserRole[] = ["DEPARTMENT_MANAGER", "TECHNICIA
  * Admin User Management Page with Autocomplete
  */
 export default function AdminUsersPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, token } = useAuthStore();
 
@@ -479,19 +478,19 @@ export default function AdminUsersPage() {
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search users by name or email..."
-                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              />
+               <input
+                 type="text"
+                 value={search}
+                 onChange={(e) => setSearch(e.target.value)}
+                 placeholder={t("admin.searchUsersPlaceholder")}
+                 className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+               />
             </div>
             <button
               type="submit"
               className="bg-primary text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 transition-all"
             >
-              Search
+              {t("common.search")}
             </button>
             <button
               type="button"
@@ -511,16 +510,16 @@ export default function AdminUsersPage() {
         <div className="bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">User</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Role</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Commune</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Phone</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">Status</th>
-                  <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">Actions</th>
-                </tr>
-              </thead>
+                <thead className="bg-slate-50 border-b border-slate-100">
+                 <tr>
+                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">{t("admin.table.user")}</th>
+                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">{t("admin.table.role")}</th>
+                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">{t("admin.table.commune")}</th>
+                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">{t("admin.table.phone")}</th>
+                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-600">{t("admin.table.status")}</th>
+                   <th className="text-right px-4 py-3 text-sm font-semibold text-slate-600">{t("admin.table.actions")}</th>
+                 </tr>
+               </thead>
               <tbody className="divide-y divide-slate-100">
                 {users.map((userItem) => (
                   <tr key={userItem.id} className="hover:bg-slate-50 transition-colors">
@@ -531,10 +530,10 @@ export default function AdminUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
-                        <Shield className="w-3 h-3 mr-1" />
-                        {ROLE_LABELS[userItem.role]}
-                      </span>
+                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
+                         <Shield className="w-3 h-3 mr-1" />
+                         {getRoleLabel(userItem.role)}
+                       </span>
                     </td>
                     <td className="px-4 py-4">
                       {userItem.municipality ? (
@@ -551,17 +550,17 @@ export default function AdminUsersPage() {
                       {userItem.phone || "-"}
                     </td>
                     <td className="px-4 py-4">
-                      {userItem.isActive ? (
-                        <span className="inline-flex items-center gap-1 text-success">
-                          <CheckCircle className="w-4 h-4" />
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-slate-500">
-                          <XCircle className="w-4 h-4" />
-                          Inactive
-                        </span>
-                      )}
+                   {userItem.isActive ? (
+                     <span className="inline-flex items-center gap-1 text-success">
+                       <CheckCircle className="w-4 h-4" />
+                       {t("admin.active")}
+                     </span>
+                   ) : (
+                     <span className="inline-flex items-center gap-1 text-slate-500">
+                       <XCircle className="w-4 h-4" />
+                       {t("admin.inactive")}
+                     </span>
+                   )}
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex justify-end gap-2">
@@ -633,10 +632,10 @@ export default function AdminUsersPage() {
                   <div className="font-semibold text-slate-900">{userItem.fullName}</div>
                   <div className="text-sm text-slate-500">{userItem.email}</div>
                 </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
-                  <Shield className="w-3 h-3 mr-1" />
-                  {ROLE_LABELS[userItem.role]}
-                </span>
+                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[userItem.role]}`}>
+                     <Shield className="w-3 h-3 mr-1" />
+                     {getRoleLabel(userItem.role)}
+                   </span>
               </div>
 
               {/* Details Grid */}

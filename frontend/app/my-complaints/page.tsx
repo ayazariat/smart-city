@@ -101,17 +101,22 @@ export default function MyComplaintsPage() {
     );
   });
 
-  // Stats (excluding closed/archived for active counts)
+  // Stats - Total includes ALL complaints except REJECTED
+  const total = complaints.filter(c => c.status !== "REJECTED" && c.status !== "ARCHIVED").length;
+  // Active complaints exclude CLOSED/REJECTED (those go to archive)
   const activeComplaints = complaints.filter(c => {
     const s = c.status as string;
     return s !== "CLOSED" && s !== "REJECTED" && s !== "ARCHIVED";
   });
-  const submitted = activeComplaints.filter(c => c.status === "SUBMITTED").length;
+  // Pending = Submitted (awaiting agent review)
+  const pending = activeComplaints.filter(c => c.status === "SUBMITTED").length;
+  // In Progress = Validated, Assigned, or In Progress (being worked on)
   const inProgress = activeComplaints.filter(c => ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(c.status)).length;
-  const resolved = activeComplaints.filter(c => c.status === "RESOLVED").length;
+  // Resolved = RESOLVED or CLOSED status (completed complaints)
+  const resolved = complaints.filter(c => ["RESOLVED", "CLOSED"].includes(c.status)).length;
+  // Closed = CLOSED status (fully resolved and approved)
   const closed = complaints.filter(c => c.status === "CLOSED").length;
   const rejected = complaints.filter(c => c.status === "REJECTED").length;
-  const total = complaints.length;
 
   if (!hydrated) return <LoadingSpinner fullScreen />;
   if (!user || user.role !== "CITIZEN") return null;
@@ -143,16 +148,16 @@ export default function MyComplaintsPage() {
                 <Clock className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-xs text-slate-500">Submitted</p>
-                <p className="text-xl font-bold text-slate-800">{submitted}</p>
+                <p className="text-xs text-slate-500">Pending</p>
+                <p className="text-xl font-bold text-slate-800">{pending}</p>
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200 animate-fadeInUp delay-75">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-5 h-text-blue-600" />
+                <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
               <div>
                 <p className="text-xs text-slate-500">In Progress</p>
@@ -160,7 +165,7 @@ export default function MyComplaintsPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200 animate-fadeInUp delay-150">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
@@ -179,8 +184,8 @@ export default function MyComplaintsPage() {
                 <FileText className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-slate-500">Total</p>
-                <p className="text-xl font-bold text-slate-800">{total}</p>
+                <p className="text-xs text-slate-500">Total Active</p>
+                <p className="text-xl font-bold text-slate-800">{activeComplaints.length}</p>
               </div>
             </div>
           </div>

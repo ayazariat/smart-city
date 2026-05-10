@@ -189,7 +189,7 @@ class AuthController {
         message: "Registration successful! Please check your email to verify your account.",
       });
     } catch (error) {
-      res.status(500).json({ message: "Server error during registration" });
+      res.status(500).json({ message: "Erreur serveur lors de l'inscription" });
     }
   }
 
@@ -246,7 +246,7 @@ class AuthController {
 
       res.json({ message: "Account verified successfully! You can now log in." });
     } catch (error) {
-      res.status(500).json({ message: "Server error during verification" });
+      res.status(500).json({ message: "Erreur serveur lors de la vérification" });
     }
   }
 
@@ -395,7 +395,7 @@ class AuthController {
       });
     } catch (error) {
       console.error("Magic link verification error:", error);
-      res.status(500).json({ message: "Server error during verification" });
+      res.status(500).json({ message: "Erreur serveur lors de la vérification" });
     }
   }
 
@@ -420,7 +420,7 @@ class AuthController {
       res.json({ message: "Pending registration deleted successfully" });
     } catch (error) {
       console.error("Delete pending error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -470,8 +470,9 @@ class AuthController {
       const accessToken = generateAccessToken(tokenUser);
       const refreshToken = generateRefreshToken(tokenUser);
 
-      // Save refresh token
+      // Save refresh token and last login time
       user.refreshToken = refreshToken;
+      user.lastLoginAt = new Date();
       await user.save();
 
       // Log successful login
@@ -514,7 +515,7 @@ class AuthController {
       });
     } catch (error) {
       console.error("Login error:", error);
-      res.status(500).json({ message: "Server error during login" });
+      res.status(500).json({ message: "Erreur serveur lors de la connexion" });
     }
   }
 
@@ -600,7 +601,7 @@ class AuthController {
       res.json({ message: "Logged out successfully" });
     } catch (error) {
       console.error("Logout error:", error);
-      res.status(500).json({ message: "Server error during logout" });
+      res.status(500).json({ message: "Erreur serveur lors de la déconnexion" });
     }
   }
 
@@ -641,7 +642,7 @@ class AuthController {
       res.json({ message: "If the email exists, a reset link has been sent" });
     } catch (error) {
       console.error("Forgot password error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -680,7 +681,7 @@ class AuthController {
       res.json({ message: "If the email is not verified, a verification link has been sent" });
     } catch (error) {
       console.error("Request verification error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -722,7 +723,7 @@ class AuthController {
       res.json({ message: "Password reset successfully" });
     } catch (error) {
       console.error("Reset password error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -766,7 +767,7 @@ class AuthController {
       res.json({ message: "Password set successfully. You can now login." });
     } catch (error) {
       console.error("Set password error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -798,7 +799,7 @@ class AuthController {
       });
     } catch (error) {
       console.error("Get current user error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -840,7 +841,7 @@ class AuthController {
       });
     } catch (error) {
       console.error("Update profile error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 
@@ -877,7 +878,7 @@ class AuthController {
       res.json({ message: "Password changed successfully" });
     } catch (error) {
       console.error("Change password error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Erreur serveur" });
     }
   }
 }

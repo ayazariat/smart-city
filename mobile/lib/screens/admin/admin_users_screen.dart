@@ -18,10 +18,10 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
   String? _error;
-  final int _page = 1;
+  int _page = 1;
   int _totalPages = 1;
   int _total = 0;
-  final String _searchQuery = '';
+  String _searchQuery = '';
   final _searchController = TextEditingController();
 
   bool _showCreateModal = false;
@@ -121,120 +121,122 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     }
   }
 
-  Future<void> _createUser() async {
-    _formErrors.clear();
-    final r = _createForm['role'];
-    final errs = <String, String>{
-      'fullName': _validate('fullName', _createForm['fullName'], r) ?? '',
-      'email': _validate('email', _createForm['email'], r) ?? '',
-      'governorate': _validate('governorate', _createForm['governorate'], r) ?? '',
-      'municipality': _validate('municipality', _createForm['municipality'], r) ?? '',
-      'department': _validate('department', _createForm['department'], r) ?? '',
-    }..removeWhere((_, v) => v.isEmpty);
-
-    if (errs.isNotEmpty) { setState(() => _formErrors.addAll(errs)); return; }
-
-    try {
-      await _adminService.createUser({
-        'fullName': _createForm['fullName'], 'email': _createForm['email'],
-        'role': _createForm['role'], 'phone': _createForm['phone'],
-        if (_createForm['governorate'].isNotEmpty) 'governorate': _createForm['governorate'],
-        if (_createForm['municipality'].isNotEmpty) 'municipality': _createForm['municipality'],
-        if (_createForm['department'].isNotEmpty) 'department': _createForm['department'],
-      });
-      setState(() => _showCreateModal = false);
-      _loadUsers(); _loadStats();
-      _showSnack('Utilisateur créé !', Colors.green);
-    } catch (e) {
-      final m = e.toString().toLowerCase();
-      if (m.contains('email') && m.contains('existe')) {
-        setState(() => _formErrors['email'] = 'Email déjà utilisé');
-      } else { _showSnack('Erreur: $e', Colors.red); }
-    }
-  }
-
-  Future<void> _updateUser() async {
-    if (_selectedUser == null) return;
-    try {
-      await _adminService.updateUser(_selectedUser['id'] ?? _selectedUser['_id'], {
-        'fullName': _editForm['fullName'], 'phone': _editForm['phone'], 'isActive': _editForm['isActive'],
-        if (_editForm['governorate'].isNotEmpty) 'governorate': _editForm['governorate'],
-        if (_editForm['municipality'].isNotEmpty) 'municipality': _editForm['municipality'],
-        if (_editForm['department'].isNotEmpty) 'department': _editForm['department'],
-      });
-      if (_editForm['role'] != _selectedUser['role']) {
-        await _adminService.updateUserRole(_selectedUser['id'] ?? _selectedUser['_id'], _editForm['role']);
-      }
-      setState(() => _showEditModal = false);
-      _loadUsers(); _loadStats();
-      _showSnack('Mis à jour !', Colors.green);
-    } catch (e) { _showSnack('Erreur: $e', Colors.red); }
-  }
-
-  Future<void> _toggleActive(String id, bool isActive) async {
-    try {
-      await _adminService.toggleUserActive(id, !isActive);
-      _loadUsers(); _loadStats();
-      _showSnack(isActive ? 'Désactivé' : 'Activé', Colors.green);
-    } catch (e) { _showSnack('Erreur: $e', Colors.red); }
-  }
-
-  Future<void> _deleteUser(String id) async {
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Supprimer ?'),
-      content: const Text('Action irréversible.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('Supprimer')),
-      ],
-    ));
-    if (ok != true) return;
-    try { await _adminService.deleteUser(id); _loadUsers(); _loadStats(); _showSnack('Supprimé', Colors.green); }
-    catch (e) { _showSnack('Erreur: $e', Colors.red); }
-  }
-
-  void _showSnack(String msg, Color color) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(msg), backgroundColor: color),
-  );
-
   List<String> _getMunicipalities(String g) => TunisiaGeography.getMunicipalities(g);
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white, foregroundColor: AppColors.textPrimary, elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
-        title: const Text('Utilisateurs', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _loadUsers)],
+  Widget _buildFormField(String label, String key, Map<String, dynamic> form, {bool required = false, TextInputType? keyboardType}) {
+    return TextFormField(
+      initialValue: form[key]?.toString() ?? '',
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.grey[50],
       ),
-      body: _isLoading && _users.isEmpty
-        'fullName': _createForm['fullName'],
-        'email': _createForm['email'],
-        'role': _createForm['role'],
-        'phone': _createForm['phone'],
-        if (_createForm['governorate'].isNotEmpty) 'governorate': _createForm['governorate'],
-        if (_createForm['municipality'].isNotEmpty) 'municipality': _createForm['municipality'],
-        if (_createForm['department'].isNotEmpty) 'department': _createForm['department'],
-      });
-      
-      @override
-  setState(() => _showCreateModal = false);
-      _loadUsers();
-      _loadStats();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content = Text('Utilisateur créé avec succès !'), backgroundColor = Colors.green),
-      );
-    } void catch (e) {
-      final msg = e.toString().toLowerCase();
-      if (msg.contains('email') && (msg.contains('existe') || msg.contains('already'))) {
-        setState(() => _formErrors['email'] = 'Un compte existe déjà avec cet email');
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+      keyboardType: keyboardType,
+      onChanged: (v) => form[key] = v,
+    );
+  }
+
+  Widget _buildAutocompleteField(
+    String label,
+    String key,
+    Map<String, dynamic> form,
+    List<String> options, {
+    void Function(String)? onChanged,
+  }) {
+    return Autocomplete<String>(
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        if (textEditingValue.text.isEmpty) {
+          return const Iterable<String>.empty();
+        }
+        return options.where((String option) {
+          return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+        });
+      },
+      onSelected: (String selection) {
+        form[key] = selection;
+        onChanged?.call(selection);
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: label,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            filled: true,
+            fillColor: Colors.grey[50],
+          ),
+          onFieldSubmitted: (value) {
+            form[key] = value;
+          },
         );
-      }
+      },
+    );
+  }
+
+  Widget _buildRoleDropdown(
+    String label,
+    String key,
+    Map<String, dynamic> form,
+    void Function(String?) onChanged,
+  ) {
+    return DropdownButtonFormField<String>(
+      value: form[key],
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.grey[50],
+      ),
+      items: _roleOptions.map((option) {
+        return DropdownMenuItem<String>(
+          value: option['value'],
+          child: Text(option['label']!),
+        );
+      }).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildDepartmentDropdown(
+    String label,
+    String key,
+    Map<String, dynamic> form,
+  ) {
+    return DropdownButtonFormField<String>(
+      value: form[key],
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        filled: true,
+        fillColor: Colors.grey[50],
+      ),
+      items: _departments.map((dept) {
+        return DropdownMenuItem<String>(
+          value: dept['_id']?.toString() ?? dept['id']?.toString(),
+          child: Text(dept['name'] ?? dept['label'] ?? 'Unknown'),
+        );
+      }).toList(),
+      onChanged: (v) => form[key] = v,
+    );
+  }
+
+  Future<void> _createUser() async {
+    setState(() => _isLoading = true);
+    try {
+      await _adminService.createUser(_createForm);
+      setState(() => _showCreateModal = false);
+      _loadUsers();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utilisateur créé avec succès')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -322,8 +324,14 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     }
   }
 
-  List<String> _getMunicipalities(String governorate) {
-    return TunisiaGeography.getMunicipalities(governorate);
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'ADMIN': return const Color(0xFFEF4444);
+      case 'DEPARTMENT_MANAGER': return const Color(0xFF8B5CF6);
+      case 'TECHNICIAN': return const Color(0xFFF59E0B);
+      case 'MUNICIPAL_AGENT': return const Color(0xFF3B82F6);
+      default: return const Color(0xFF6B7280);
+    }
   }
 
   @override
@@ -815,12 +823,14 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                   ),
                   const SizedBox(height: 16),
                   _buildRoleDropdown('Rôle', 'role', _editForm, (v) {
-                    setState(() {
-                      _editForm['role'] = v;
-                      _editForm['governorate'] = '';
-                      _editForm['municipality'] = '';
-                      _editForm['department'] = '';
-                    });
+                    if (v != null) {
+                      setState(() {
+                        _editForm['role'] = v;
+                        _editForm['governorate'] = '';
+                        _editForm['municipality'] = '';
+                        _editForm['department'] = '';
+                      });
+                    }
                   }),
                   const SizedBox(height: 16),
                   if (_requiresMunicipality(_editForm['role'])) ...[
@@ -848,3 +858,14 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                   ],
                   if (_requiresDepartment(_editForm['role'])) ...[
                     _buildDepartmentDropdown('Département', 'department', _editForm),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

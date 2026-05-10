@@ -13,8 +13,16 @@ class ComplaintService {
     final response = await _apiClient.get(
       '/citizen/complaints?page=$page&limit=$limit',
     );
-    final list = response['complaints'] ?? [];
-    return (list as List).map((c) => Complaint.fromJson(c)).toList();
+    List<dynamic> list = [];
+    if (response is Map) {
+      final data = response['data'];
+      if (data is Map) {
+        list = (data['complaints'] as List?) ?? [];
+      } else {
+        list = (response['complaints'] as List?) ?? [];
+      }
+    }
+    return list.map((c) => Complaint.fromJson(c as Map<String, dynamic>)).toList();
   }
 
   Future<Complaint> getComplaintById(String id) async {
@@ -50,7 +58,40 @@ class ComplaintService {
 
   Future<Map<String, dynamic>> getCitizenStats() async {
     final response = await _apiClient.get('/citizen/stats');
-    return response['data'] ?? {};
+    return _extractData(response);
+  }
+
+  Future<Map<String, dynamic>> getAgentStats() async {
+    final response = await _apiClient.get('/agent/stats');
+    return _extractData(response);
+  }
+
+  Future<Map<String, dynamic>> getManagerStats() async {
+    final response = await _apiClient.get('/manager/stats');
+    return _extractData(response);
+  }
+
+  Future<Map<String, dynamic>> getTechnicianStats() async {
+    final response = await _apiClient.get('/technician/stats');
+    return _extractData(response);
+  }
+
+  Future<Map<String, dynamic>> getAdminStats() async {
+    final response = await _apiClient.get('/admin/stats');
+    return _extractData(response);
+  }
+
+  /// Safely extract data from an API response.
+  Map<String, dynamic> _extractData(dynamic response) {
+    if (response is Map) {
+      final data = response['data'];
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      // Response itself might be the data
+      if (response is Map<String, dynamic>) return response;
+      return Map<String, dynamic>.from(response);
+    }
+    return {};
   }
 
   // ─── Confirm / Upvote ───
@@ -77,6 +118,35 @@ class ComplaintService {
       'text': text,
       'anonymous': anonymous,
     });
+  }
+
+  Future<void> submitRating(String id, int rating, String comment, bool resolvedCorrectly) async {
+    await _apiClient.post('/citizen/complaints/$id/rating', {
+      'rating': rating,
+      'comment': comment,
+      'resolvedCorrectly': resolvedCorrectly,
+    });
+  }
+
+  Future<void> confirmResolution(String id) async {
+    await _apiClient.post('/citizen/complaints/$id/confirm-resolution', {});
+  }
+
+  Future<Map<String, dynamic>> predictCategory(String description) async {
+    final response = await _apiClient.post('/ai/predict-category', {
+      'description': description,
+    });
+    return response['data'] ?? {};
+  }
+
+  Future<Map<String, dynamic>> checkDuplicates(Map<String, dynamic> data) async {
+    final response = await _apiClient.post('/ai/check-duplicates', data);
+    return response['data'] ?? {};
+  }
+
+  Future<Map<String, dynamic>> predictUrgency(Map<String, dynamic> data) async {
+    final response = await _apiClient.post('/ai/predict-urgency', data);
+    return response['data'] ?? {};
   }
 
   // ─── Agent ───
@@ -184,11 +254,6 @@ class ComplaintService {
     });
   }
 
-  Future<Map<String, dynamic>> getTechnicianStats() async {
-    final response = await _apiClient.get('/technician/stats');
-    return response['data'] ?? {};
-  }
-
   // ─── Manager ───
 
   Future<List<Complaint>> getManagerComplaints({
@@ -212,11 +277,6 @@ class ComplaintService {
     await _apiClient.put('/manager/complaints/$id/priority', {
       'urgency': urgency,
     });
-  }
-
-  Future<Map<String, dynamic>> getManagerStats() async {
-    final response = await _apiClient.get('/manager/stats');
-    return response['data'] ?? {};
   }
 
   Future<void> assignTechnician(String complaintId, String technicianId) async {
@@ -270,11 +330,6 @@ class ComplaintService {
     return (list as List).map((c) => Complaint.fromJson(c)).toList();
   }
 
-  Future<Map<String, dynamic>> getAdminStats() async {
-    final response = await _apiClient.get('/admin/users/stats');
-    return response['data'] ?? response;
-  }
-
   // ─── Archive ───
 
   Future<List<Complaint>> getArchivedComplaints({
@@ -292,7 +347,17 @@ class ComplaintService {
 
   Future<Map<String, dynamic>> getPublicStats() async {
     final response = await _apiClient.get('/public/stats');
-    return response['data'] ?? {};
+    if (response is Map) {
+      // Try response['data'] first (standard API wrapper)
+      final data = response['data'];
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      // Fallback: response itself might be the stats object
+      if (response['total'] != null || response['resolved'] != null) {
+        return Map<String, dynamic>.from(response);
+      }
+    }
+    return {};
   }
 
   Future<List<Complaint>> getPublicComplaints({
@@ -309,11 +374,20 @@ class ComplaintService {
       endpoint += '&category=$category';
     }
     final response = await _apiClient.get(endpoint);
-    final data = response['data'];
-    final list = data is Map
-        ? (data['complaints'] ?? [])
-        : (response['complaints'] ?? []);
-    return (list as List).map((c) => Complaint.fromJson(c)).toList();
+    List<dynamic> list = [];
+    if (response is Map) {
+      final data = response['data'];
+      if (data is Map) {
+        list = (data['complaints'] as List?) ?? [];
+      } else if (data is List) {
+        list = data;
+      } else {
+        list = (response['complaints'] as List?) ?? [];
+      }
+    } else if (response is List) {
+      list = response;
+    }
+    return list.map((c) => Complaint.fromJson(c as Map<String, dynamic>)).toList();
   }
 
   // ─── Municipality & Public ───
@@ -353,12 +427,6 @@ class ComplaintService {
     return response['data'] ?? [];
   }
 
-  Future<void> confirmResolution(String id) async {
-    await _apiClient.patch('/complaints/$id/status', {
-      'status': 'CLOSED',
-    });
-  }
-
   // ─── Notifications ───
 
   Future<List<dynamic>> getNotifications({int page = 1, int limit = 50}) async {
@@ -390,14 +458,15 @@ class ComplaintService {
     double? latitude,
     double? longitude,
   }) async {
-    final response = await _apiClient.post('/ai/duplicate/check', {
+    final body = <String, dynamic>{
       'title': title,
       'description': description,
       'category': category,
       'municipality': municipality,
-      'latitude': ?latitude,
-      'longitude': ?longitude,
-    });
+    };
+    if (latitude != null) body['latitude'] = latitude;
+    if (longitude != null) body['longitude'] = longitude;
+    final response = await _apiClient.post('/ai/duplicate/check', body);
     return response;
   }
 

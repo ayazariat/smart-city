@@ -590,7 +590,6 @@ Row(
                      ),
                    ],
                  ),
-                 ),
                 const SizedBox(height: 12),
                 Text(
                   complaint.title,

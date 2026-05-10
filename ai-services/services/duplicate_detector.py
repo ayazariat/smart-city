@@ -34,15 +34,26 @@ try:
         global _sentence_model, _sentence_tokenizer
         if _sentence_model is None:
             model_name = "sentence-transformers/all-MiniLM-L6-v2"
-            _sentence_tokenizer = AutoTokenizer.from_pretrained(model_name)
-            _sentence_model = AutoModel.from_pretrained(model_name)
-            _sentence_model.eval()
+            try:
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                _sentence_tokenizer = AutoTokenizer.from_pretrained(model_name)
+                _sentence_model = AutoModel.from_pretrained(model_name)
+                _sentence_model = _sentence_model.to(device)
+                _sentence_model.eval()
+            except Exception as e:
+                print(f"Error loading sentence model with device: {e}, falling back to CPU")
+                _sentence_tokenizer = AutoTokenizer.from_pretrained(model_name)
+                _sentence_model = AutoModel.from_pretrained(model_name)
+                _sentence_model.eval()
         return _sentence_model, _sentence_tokenizer
     
     def encode_texts(texts: List[str]) -> np.ndarray:
         """Encode texts to embeddings using sentence-transformers."""
         model, tokenizer = get_sentence_model()
         encoded = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+        # Move to the same device as the model
+        device = next(model.parameters()).device
+        encoded = {k: v.to(device) for k, v in encoded.items()}
         with torch.no_grad():
             outputs = model(**encoded)
         # Mean pooling
@@ -50,7 +61,7 @@ try:
         token_embeddings = outputs.last_hidden_state
         input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
         embeddings = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-        return embeddings.numpy()
+        return embeddings.cpu().numpy()
     
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
@@ -215,7 +226,11 @@ class DuplicateDetector:
             try:
                 new_date = datetime.fromisoformat(new_date.replace("Z", "+00:00"))
             except:
-                new_date = datetime.now()
+                new_date = datetime.now(timezone.utc)
+        elif new_date is None:
+            new_date = datetime.now(timezone.utc)
+        elif new_date.tzinfo is None:
+            new_date = new_date.replace(tzinfo=timezone.utc)
         
         # Calculate text similarities
         text_scores = self._calculate_text_similarity(new_text, candidates)
@@ -248,9 +263,11 @@ class DuplicateDetector:
                 try:
                     cand_date = datetime.fromisoformat(cand_date.replace("Z", "+00:00"))
                 except:
-                    cand_date = datetime.now()
-            else:
-                cand_date = datetime.now()
+                    cand_date = datetime.now(timezone.utc)
+            elif cand_date is None:
+                cand_date = datetime.now(timezone.utc)
+            elif cand_date.tzinfo is None:
+                cand_date = cand_date.replace(tzinfo=timezone.utc)
             
             temporal_score = self._calculate_temporal_score(new_date, cand_date)
             

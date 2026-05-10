@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { 
   MapPin, 
   Clock, 
@@ -40,21 +41,22 @@ import { getCategoryLabel, getDepartmentLabel } from "@/lib/categories";
 import { getPhotoUrl } from "@/lib/photos";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
-const statusConfig: Record<string, { label: string; bgClass: string; textClass: string }> = {
-  ASSIGNED: { label: "ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
-  IN_PROGRESS: { label: "IN PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
-  RESOLVED: { label: "RESOLVED", bgClass: "bg-green-100", textClass: "text-green-800" },
-  CLOSED: { label: "CLOSED", bgClass: "bg-gray-100", textClass: "text-gray-800" },
+const statusConfig: Record<string, { labelKey: string; bgClass: string; textClass: string }> = {
+  ASSIGNED: { labelKey: "status.ASSIGNED", bgClass: "bg-purple-100", textClass: "text-purple-800" },
+  IN_PROGRESS: { labelKey: "status.IN_PROGRESS", bgClass: "bg-orange-100", textClass: "text-orange-800" },
+  RESOLVED: { labelKey: "status.RESOLVED", bgClass: "bg-green-100", textClass: "text-green-800" },
+  CLOSED: { labelKey: "status.CLOSED", bgClass: "bg-gray-100", textClass: "text-gray-800" },
 };
 
 const urgencyLabels: Record<string, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
-  URGENT: "Urgent",
+  LOW: "urgency.LOW",
+  MEDIUM: "urgency.MEDIUM",
+  HIGH: "urgency.HIGH",
+  URGENT: "urgency.CRITICAL",
 };
 
 export default function TechnicianTaskDetailPage() {
+  const { t } = useTranslation();
   const params = useParams();
   const router = useRouter();
   const { user, token, hydrated } = useAuthStore();
@@ -268,11 +270,11 @@ export default function TechnicianTaskDetailPage() {
     );
   }
 
-  const status = statusConfig[task.status] || {
-    label: task.status,
-    bgClass: "bg-slate-100",
-    textClass: "text-slate-700",
-  };
+   const status = statusConfig[task.status] || {
+     labelKey: `status.${task.status}`,
+     bgClass: "bg-slate-100",
+     textClass: "text-slate-700",
+   };
 
   // Check if this is a rejected resolution case
   const isReworkNeeded = task.status === "IN_PROGRESS" && task.resolutionRejectionReason;
@@ -283,11 +285,11 @@ export default function TechnicianTaskDetailPage() {
       <PageHeader
         title={`Task ${getComplaintIdDisplay(task._id || task.id || "")}`}
         onBackClick={handleBack}
-        rightContent={
-          <span className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${isReworkNeeded ? "bg-red-100 text-red-700" : status.bgClass} ${isReworkNeeded ? "" : status.textClass}`}>
-            {isReworkNeeded ? "REWORK NEEDED" : status.label}
-          </span>
-        }
+         rightContent={
+           <span className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${isReworkNeeded ? "bg-red-100 text-red-700" : status.bgClass} ${isReworkNeeded ? "" : status.textClass}`}>
+             {isReworkNeeded ? t("status.RESOLUTION_REJECTED") : t(status.labelKey, { defaultValue: task.status })}
+           </span>
+         }
       />
 
       <div className="max-w-6xl mx-auto px-4 py-3">
@@ -299,7 +301,7 @@ export default function TechnicianTaskDetailPage() {
               isLoading={actionLoading}
               icon={<Play className="w-4 h-4" />}
             >
-              Start Work
+              {t("tasks.startWork")}
             </Button>
           )}
           {task.status === "IN_PROGRESS" && (
@@ -309,7 +311,7 @@ export default function TechnicianTaskDetailPage() {
               icon={<CheckCircle className="w-4 h-4" />}
               className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
             >
-              Mark Resolved
+              {t("tasks.markResolved")}
             </Button>
           )}
         </div>
@@ -319,19 +321,19 @@ export default function TechnicianTaskDetailPage() {
         <div className="grid lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" />
-                Main Information
-              </h2>
+                <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-primary" />
+                  {t("complaintDetail.mainInformation")}
+                </h2>
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-2">Category</label>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
                     {categoryLabels[task.category] || task.category}
                   </span>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <label className="block text-sm font-medium text-slate-500 mb-2">Urgency</label>
+                  <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.urgency")}</label>
                   <div className="flex items-center gap-2">
                     <div className="flex gap-1">
                       {[1, 2, 3, 4, 5].map((level) => (
@@ -348,9 +350,9 @@ export default function TechnicianTaskDetailPage() {
                     <span className="text-xl font-bold text-orange-600">
                       {getUrgencyValue(task.urgency)}
                     </span>
-                    <span className="text-sm text-slate-500">
-                      ({urgencyLabels[task.urgency as string] || "Medium"})
-                    </span>
+                     <span className="text-sm text-slate-500">
+                       ({t(urgencyLabels[task.urgency as string] || "urgency.MEDIUM")})
+                     </span>
                   </div>
                 </div>
               </div>
@@ -359,7 +361,7 @@ export default function TechnicianTaskDetailPage() {
             <section className="bg-gradient-to-r from-primary/5 to-secondary/50 rounded-2xl shadow-lg p-6 border border-primary/10">
               <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
-                Status Timeline
+                {t("complaintDetail.statusTimeline")}
               </h2>
               <div className="flex items-center justify-between relative">
                 <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-200 rounded-full -translate-y-1/2"></div>
@@ -372,45 +374,45 @@ export default function TechnicianTaskDetailPage() {
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${task.status !== 'ASSIGNED' ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Assigned</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("status.ASSIGNED")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${task.status === 'IN_PROGRESS' || task.status === 'RESOLVED' || task.status === 'CLOSED' ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <Clock className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">In Progress</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("status.IN_PROGRESS")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${task.status === 'RESOLVED' || task.status === 'CLOSED' ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Resolved</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("status.RESOLVED")}</span>
                 </div>
                 <div className="relative z-10 flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${task.status === 'CLOSED' ? 'bg-gray-600 text-white' : 'bg-slate-200 text-slate-400'} transition-all duration-300`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-xs mt-1 font-medium text-slate-600">Closed</span>
+                  <span className="text-xs mt-1 font-medium text-slate-600">{t("status.CLOSED")}</span>
                 </div>
               </div>
               
               {/* REWORK NEEDED - Show when resolution was rejected */}
-              {task.resolutionRejectionReason && (
-                <div className="mt-4 pt-4 border-t border-red-200">
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                    <h3 className="text-red-800 font-semibold flex items-center gap-2 mb-2">
-                      <AlertTriangle className="w-5 h-5" />
-                      Resolution Rejected - Action Required
-                    </h3>
-                    <p className="text-red-700 text-sm">
-                      {task.resolutionRejectionReason}
-                    </p>
-                    <p className="text-red-600 text-xs mt-2">
-                      Please review the feedback and complete the work properly before resubmitting.
-                    </p>
-                  </div>
-                </div>
-              )}
+                   {task.resolutionRejectionReason && (
+                     <div className="mt-4 pt-4 border-t border-red-200">
+                       <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                         <h3 className="text-red-800 font-semibold flex items-center gap-2 mb-2">
+                           <AlertTriangle className="w-5 h-5" />
+                           {t("status.RESOLUTION_REJECTED")}
+                         </h3>
+                         <p className="text-red-700 text-sm">
+                           {task.resolutionRejectionReason}
+                         </p>
+                         <p className="text-red-600 text-xs mt-2">
+                           {t("tasks.reviewFeedback")}
+                         </p>
+                       </div>
+                     </div>
+                   )}
               
               {/* SLA Countdown */}
               {task.slaDeadline && (
@@ -462,26 +464,26 @@ export default function TechnicianTaskDetailPage() {
             </section>
 
             <section className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Description</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("complaintDetail.description")}</h2>
               <p className="text-gray-800 whitespace-pre-wrap">{task.description}</p>
             </section>
 
             {task.phone && (
               <section className="bg-green-50 rounded-xl shadow-sm p-6 border border-green-200">
-                <h2 className="text-sm font-medium text-green-800 mb-2">Contact Phone</h2>
+                 <h2 className="text-sm font-medium text-green-800 mb-2">{t("complaintDetail.contactPhone")}</h2>
                 <p className="text-green-700 font-bold text-lg">{task.phone}</p>
               </section>
             )}
 
             <section className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Location</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("complaintDetail.location")}</h2>
               {!hasLocation ? (
                 <div className="h-64 bg-red-50 rounded-lg flex items-center justify-center border-2 border-red-200 border-dashed">
                   <div className="text-center">
                     <svg className="w-12 h-12 mx-auto mb-2 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
-                    <p className="text-red-600 font-medium">Location not available</p>
+                     <p className="text-red-600 font-medium">{t("complaintDetail.locationNotProvided")}</p>
                   </div>
                 </div>
               ) : (
@@ -493,7 +495,7 @@ export default function TechnicianTaskDetailPage() {
                       if (lat && lng) {
                         return (
                           <iframe
-                            title="Task Location"
+                            title={t("complaintDetail.location")}
                             width="100%"
                             height="100%"
                             style={{ border: 0 }}
@@ -580,7 +582,7 @@ export default function TechnicianTaskDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <Building2 className="w-5 h-5 text-primary" />
-                  Department
+                  {t("complaintDetail.department")}
                 </h2>
                  <p className="font-semibold text-slate-900">
                    {getCategoryLabel(task.category)}
@@ -589,15 +591,15 @@ export default function TechnicianTaskDetailPage() {
             )}
 
             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                Dates
-              </h2>
+                <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  {t("complaintDetail.dates")}
+                </h2>
               <dl className="space-y-3 text-sm">
                 <div className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
                   <dt className="text-slate-500 flex items-center gap-2">
                     <Clock className="w-4 h-4" />
-                    Created:
+                    {t("complaintDetail.created")}:
                   </dt>
                   <dd className="text-slate-900 font-medium">
                     {new Date(task.createdAt).toLocaleDateString("fr-FR", {
@@ -611,7 +613,7 @@ export default function TechnicianTaskDetailPage() {
                   <div className="flex justify-between items-center p-2 bg-orange-50 rounded-lg">
                     <dt className="text-orange-600 flex items-center gap-2">
                       <Play className="w-4 h-4" />
-                      Started:
+                      {t("timeline.started")}:
                     </dt>
                     <dd className="text-orange-700 font-medium">
                       {new Date(task.startedAt).toLocaleDateString("fr-FR", {
@@ -623,10 +625,10 @@ export default function TechnicianTaskDetailPage() {
                 )}
                 {task.resolvedAt && (
                   <div className="flex justify-between items-center p-2 bg-green-50 rounded-lg">
-                    <dt className="text-green-600 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Resolved:
-                    </dt>
+                     <dt className="text-green-600 flex items-center gap-2">
+                       <CheckCircle2 className="w-4 h-4" />
+                       {t("complaintDetail.resolved")}:
+                     </dt>
                     <dd className="text-green-700 font-medium">
                       {new Date(task.resolvedAt).toLocaleDateString("fr-FR", {
                         day: "numeric",
@@ -642,7 +644,7 @@ export default function TechnicianTaskDetailPage() {
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <Star className="w-5 h-5 text-primary" />
-                  Priority Score
+                  {t("complaintDetail.priorityScore")}
                 </h2>
                 <div className="flex items-center gap-2">
                   <span className="text-3xl font-bold text-primary">{task.priorityScore}</span>
@@ -661,8 +663,8 @@ export default function TechnicianTaskDetailPage() {
           setResolveNote("");
           setProofPhotos([]);
         }}
-        title="Mark as Resolved"
-        description="Add resolution notes and proof photos to complete this task"
+        title={t("tasks.resolutionModal.title")}
+        description={t("tasks.resolutionModal.description")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setResolveModal(false)} disabled={actionLoading}>
@@ -676,10 +678,10 @@ export default function TechnicianTaskDetailPage() {
               className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
             >
               {proofPhotos.length === 0 
-                ? "Add proof photo required" 
+                ? t("tasks.addProofRequired")
                 : resolveNote.trim().length < 10
-                  ? `${10 - resolveNote.trim().length} more chars needed`
-                  : "Confirm Resolution"}
+                  ? t("tasks.charsNeeded", { count: 10 - resolveNote.trim().length })
+                  : t("tasks.submitResolution")}
             </Button>
           </>
         }
@@ -687,19 +689,19 @@ export default function TechnicianTaskDetailPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Resolution Report <span className="text-red-500">*</span>
+              {t("tasks.resolutionModal.label")} <span className="text-red-500">*</span>
             </label>
             <textarea
               value={resolveNote}
               onChange={(e) => setResolveNote(e.target.value)}
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
               rows={5}
-              placeholder="Describe the work done..."
+              placeholder={t("tasks.resolutionModal.placeholder")}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Proof Photos <span className="text-red-500">*</span>
+              {t("tasks.proofPhotos")} <span className="text-red-500">*</span>
             </label>
             <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-colors ${
               proofPhotos.length > 0 ? "border-green-300 bg-green-50" : "border-slate-200 hover:border-primary/40"

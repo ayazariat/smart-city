@@ -7,10 +7,11 @@ import {
   FileText, Wrench, Flag, TrendingUp, Users,
   Clock, AlertTriangle, Filter, Download, Search, CheckCircle
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/store/useAuthStore";
 import { managerService } from "@/services/manager.service";
 import { STATUS_OPTIONS, categoryLabels } from "@/lib/complaints";
-import { getCategoryLabel } from "@/lib/categories";
+import { getCategoryLabel, getDepartmentLabel } from "@/lib/categories";
 import { showToast } from "@/components/ui/Toast";
 import {
   PageHeader,
@@ -41,13 +42,14 @@ interface ManagerComplaint extends BaseComplaint {
 }
 
 export default function ManagerPendingPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, token } = useAuthStore();
 
   const [complaints, setComplaints] = useState<ManagerComplaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("IN_PROGRESS");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [departmentName, setDepartmentName] = useState<string>("");
   const [technicians, setTechnicians] = useState<Array<{ _id: string; fullName: string }>>([]);
@@ -305,7 +307,7 @@ export default function ManagerPendingPage() {
     <div className="min-h-screen bg-slate-50/50">
       <PageHeader
         title="Active Complaints"
-        subtitle={departmentName ? `Complaints in ${departmentName}` : "Manager complaint management"}
+        subtitle={departmentName ? `Complaints in ${getDepartmentLabel(departmentName)}` : "Manager complaint management"}
         backHref="/dashboard"
         rightContent={
           <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
@@ -461,16 +463,16 @@ export default function ManagerPendingPage() {
                 </select>
 
                 {/* Priority Filter */}
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-                >
-                  <option value="">All Priorities</option>
-                  <option value="HIGH">High (≥15)</option>
-                  <option value="MEDIUM">Medium (6-14)</option>
-                  <option value="LOW">Low (&lt;6)</option>
-                </select>
+                 <select
+                   value={priorityFilter}
+                   onChange={(e) => setPriorityFilter(e.target.value)}
+                   className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                 >
+                   <option value="">{t("manager.priorityFilterAll")}</option>
+                   <option value="HIGH">{t("manager.priorityFilterHigh")}</option>
+                   <option value="MEDIUM">{t("manager.priorityFilterMedium")}</option>
+                   <option value="LOW">{t("manager.priorityFilterLow")}</option>
+                 </select>
 
                 {/* Results Count */}
                 <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
@@ -518,7 +520,7 @@ export default function ManagerPendingPage() {
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-700 transition-all text-sm font-semibold disabled:opacity-50 hover:shadow-lg hover:shadow-primary/25"
                           >
                             <Wrench className="w-4 h-4" />
-                            {complaint.status === "ASSIGNED" ? "Reassign Team" : "Assign Repair Team"}
+                             {t("manager.assignRepairTeam")}
                           </button>
                         )}
                         {!(complaint.assignedTo || complaint.assignedTeam) && (complaint.status === "VALIDATED" || complaint.status === "ASSIGNED") && (
@@ -555,15 +557,15 @@ export default function ManagerPendingPage() {
       <Modal
         isOpen={assignTechTarget !== null}
         onClose={() => { setAssignTechTarget(null); setSelectedTechnicians([]); }}
-        title="Assign Repair Team"
-        description="Select one or more technicians to form a repair team for this complaint."
+        title={t("manager.assignRepairTeam")}
+        description={t("manager.selectTechniciansDesc")}
         footer={
           <>
             <Button variant="ghost" onClick={() => { setAssignTechTarget(null); setSelectedTechnicians([]); }} disabled={actionLoading !== null}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={handleAssignTechnician} isLoading={actionLoading !== null} disabled={selectedTechnicians.length === 0 || actionLoading !== null}>
-              {selectedTechnicians.length > 1 ? `Assign Team (${selectedTechnicians.length})` : "Assign"}
+              {selectedTechnicians.length > 1 ? t("manager.assignTeam", { count: selectedTechnicians.length }) : t("manager.assign")}
             </Button>
           </>
         }

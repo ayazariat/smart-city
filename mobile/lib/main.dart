@@ -2,10 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
+import 'package:smart_city_app/models/user_model.dart';
 import 'package:smart_city_app/providers/locale_provider.dart';
 import 'package:smart_city_app/screens/auth/login_screen.dart';
 import 'package:smart_city_app/screens/auth/register_screen.dart';
@@ -13,20 +14,8 @@ import 'package:smart_city_app/screens/auth/forgot_password_screen.dart';
 import 'package:smart_city_app/screens/auth/reset_password_screen.dart';
 import 'package:smart_city_app/screens/auth/set_password_screen.dart';
 import 'package:smart_city_app/screens/verify_email_screen.dart';
-import 'package:smart_city_app/screens/home_screen.dart';
-import 'package:smart_city_app/screens/dashboard_screen.dart'
-    as citizen_dashboard;
-import 'package:smart_city_app/screens/complaints_screen.dart';
-import 'package:smart_city_app/screens/new_complaint_screen.dart';
-import 'package:smart_city_app/screens/complaint_detail_screen.dart';
-import 'package:smart_city_app/screens/profile_screen.dart';
-import 'package:smart_city_app/screens/settings_screen.dart';
-import 'package:smart_city_app/screens/transparency_screen.dart';
-import 'package:smart_city_app/screens/archive_screen.dart';
-import 'package:smart_city_app/screens/notifications_screen.dart';
-import 'package:smart_city_app/screens/technician/technician_tasks_screen.dart';
-import 'package:smart_city_app/screens/technician/technician_task_detail_screen.dart';
-import 'package:smart_city_app/screens/dashboard/heatmap_screen.dart';
+import 'package:smart_city_app/screens/home/home_screen.dart' as home;
+import 'package:smart_city_app/screens/home/transparency_screen.dart' as home_transparency;
 import 'package:smart_city_app/routes/app_routes.dart';
 
 void main() async {
@@ -38,12 +27,38 @@ void main() async {
     ),
   );
   await _initializeApp();
+  setPreloadedAuthUser(_preloadedUser);
   runApp(const ProviderScope(child: MyApp()));
 }
 
+User? _preloadedUser;
+
 Future<void> _initializeApp() async {
   try {
-    await ApiClient().loadTokens();
+    final api = ApiClient();
+    await api.loadTokens();
+    if (api.token != null) {
+      try {
+        final me = await api.get('/auth/me');
+        if (me is Map) {
+          // /auth/me returns the user object directly (flat, no wrapper)
+          // but also handle {user: {...}} format just in case
+          dynamic userData = me;
+          if (me['user'] is Map) {
+            userData = me['user'];
+          }
+          final userMap = userData is Map<String, dynamic>
+              ? userData
+              : Map<String, dynamic>.from(userData as Map);
+          if (userMap['id'] != null || userMap['_id'] != null) {
+            _preloadedUser = User.fromJson(userMap);
+          }
+        }
+      } catch (e) {
+        debugPrint('Session restore failed: $e');
+        await api.clearTokens();
+      }
+    }
   } catch (e) {
     debugPrint('Auth init: $e');
   }
@@ -54,87 +69,48 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-    final user = authState.user;
-    final locale = ref.watch(localeProvider);
+    final localeNotifier = ref.watch(localeProvider.notifier);
 
-    // Route guard: redirect to login if not authenticated
-    // and to role-based home if authenticated
-    String initialRoute;
-    if (user == null) {
-      initialRoute = AppRoutes.login;
-    } else {
-      initialRoute = AppRoutes.home;
-    }
-
-     return MaterialApp(
-       title: 'Smart City Tunisia',
-       debugShowCheckedModeBanner: false,
-       initialRoute: initialRoute,
-        locale: locale.currentLocale,
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('fr', 'FR'),
-          Locale('en', 'US'),
-          Locale('ar', 'SA'),
-        ],
-        localeResolutionCallback: (deviceLocale, supportedLocales) {
-          if (deviceLocale == null) return const Locale('fr');
-          for (var supported in supportedLocales) {
-            if (supported.languageCode == deviceLocale.languageCode) {
-              return supported;
-            }
+    return MaterialApp(
+      title: 'Smart City Tunisia',
+      debugShowCheckedModeBanner: false,
+      locale: localeNotifier.currentLocale,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('fr', 'FR'),
+        Locale('en', 'US'),
+        Locale('ar', 'SA'),
+      ],
+      localeResolutionCallback: (deviceLocale, supportedLocales) {
+        if (deviceLocale == null) return const Locale('fr');
+        for (var supported in supportedLocales) {
+          if (supported.languageCode == deviceLocale.languageCode) {
+            return supported;
           }
-          return const Locale('fr');
-        },
-        theme: buildTheme(),
+        }
+        return const Locale('fr');
+      },
+      theme: _buildTheme(),
+      // AuthGate reacts to auth state changes — no initialRoute needed
+      home: const AuthGate(),
       routes: {
-        // Auth
         AppRoutes.login: (_) => const LoginScreen(),
         AppRoutes.register: (_) => const RegisterScreen(),
         AppRoutes.forgotPassword: (_) => const ForgotPasswordScreen(),
         AppRoutes.resetPassword: (_) => const ResetPasswordScreen(token: ''),
-        AppRoutes.setPassword: (_) =>
-            const SetPasswordScreen(token: '', email: ''),
+        AppRoutes.setPassword: (_) => const SetPasswordScreen(token: '', email: ''),
         AppRoutes.verifyEmail: (_) => const VerifyEmailScreen(email: ''),
-        // Role-based home (redirects based on role)
-        AppRoutes.home: (_) => HomeScreen(
-          userRole: user?.role ?? '',
-          userName: user?.fullName ?? '',
-          onLogout: () => ref.read(authProvider.notifier).logout(),
-        ),
-        // Citizen
-        AppRoutes.complaints: (_) => ComplaintsScreen(
-          onLogout: () => ref.read(authProvider.notifier).logout(),
-        ),
-        AppRoutes.newComplaint: (_) =>
-            NewComplaintScreen(onComplaintSubmitted: () {}, onBack: () {}),
-        AppRoutes.complaintDetail: (_) =>
-            ComplaintDetailScreen(complaintId: ''),
-        AppRoutes.profile: (_) => ProfileScreen(
-          onLogout: () => ref.read(authProvider.notifier).logout(),
-          userName: user?.fullName ?? '',
-          userRole: user?.role ?? '',
-        ),
-        AppRoutes.settings: (_) => const SettingsScreen(),
-        // Public
-        AppRoutes.transparency: (_) => const TransparencyScreen(),
-        AppRoutes.archive: (_) => const ArchiveScreen(),
-        AppRoutes.notifications: (_) => const NotificationsScreen(),
-        AppRoutes.heatmap: (_) => const HeatmapScreen(),
-        // Technician
-        AppRoutes.technicianTasks: (_) => const TechnicianTasksScreen(),
-        AppRoutes.technicianTaskDetail: (_) =>
-            TechnicianTaskDetailScreen(taskId: ''),
+        // Public dashboard accessible from login screen button
+        AppRoutes.transparency: (_) => const home_transparency.TransparencyScreen(),
       },
     );
   }
 
-  ThemeData buildTheme() => ThemeData(
+  ThemeData _buildTheme() => ThemeData(
     primaryColor: AppColors.primary,
     scaffoldBackgroundColor: AppColors.background,
     colorScheme: const ColorScheme.light(
@@ -144,4 +120,19 @@ class MyApp extends ConsumerWidget {
     useMaterial3: true,
     visualDensity: VisualDensity.adaptivePlatformDensity,
   );
+}
+
+/// Reactive auth gate — rebuilds whenever auth state changes.
+/// Authenticated → HomeScreen, Unauthenticated → LoginScreen.
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authProvider).user;
+    if (user != null) {
+      return const home.HomeScreen();
+    }
+    return const LoginScreen();
+  }
 }

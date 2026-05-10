@@ -174,33 +174,56 @@ class _TransparencyScreenState extends State<TransparencyScreen>
       final complaintsRes = responses[5];
 
       setState(() {
-        _stats = statsRes is Map ? (statsRes['data'] ?? statsRes) : {};
+        _stats = statsRes is Map ? (statsRes['data'] as Map<String, dynamic>? ?? statsRes as Map<String, dynamic>) : {};
         _allTimeStats = allTimeRes is Map
-            ? (allTimeRes['data'] ?? allTimeRes)
+            ? (allTimeRes['data'] as Map<String, dynamic>? ?? allTimeRes as Map<String, dynamic>)
             : {};
-        _categoryStats = catRes is Map ? (catRes['data'] ?? catRes) : {};
-        _municipalityStats = munRes is List
-            ? munRes
-            : (munRes is Map ? (munRes['data'] ?? []) : []);
-        _monthlyTrends = trendsRes is List
-            ? trendsRes
-            : (trendsRes is Map ? (trendsRes['data'] ?? []) : []);
+        _categoryStats = catRes is Map ? (catRes['data'] as Map<String, dynamic>? ?? catRes as Map<String, dynamic>) : {};
+        
+        // Handle municipality stats - could be List or Map with data property
+        if (munRes is List) {
+          _municipalityStats = munRes;
+        } else if (munRes is Map) {
+          final data = munRes['data'];
+          _municipalityStats = data is List ? data : (munRes['municipalities'] ?? []);
+        } else {
+          _municipalityStats = [];
+        }
+        
+        // Handle monthly trends - could be List or Map with data property
+        if (trendsRes is List) {
+          _monthlyTrends = trendsRes;
+        } else if (trendsRes is Map) {
+          final data = trendsRes['data'];
+          _monthlyTrends = data is List ? data : (trendsRes['trends'] ?? []);
+        } else {
+          _monthlyTrends = [];
+        }
 
+        // Handle complaints response
         final complaintData = complaintsRes;
         List<Complaint> found = [];
         if (complaintData is Map) {
           final data = complaintData['data'];
           if (data is Map && data['complaints'] != null) {
-            found = (data['complaints'] as List)
-                .map((c) => Complaint.fromJson(c))
-                .toList();
+            final complaintsList = data['complaints'];
+            if (complaintsList is List) {
+              found = (complaintsList)
+                  .map((c) => Complaint.fromJson(c as Map<String, dynamic>))
+                  .toList();
+            }
           } else if (complaintData['complaints'] != null) {
-            found = (complaintData['complaints'] as List)
-                .map((c) => Complaint.fromJson(c))
-                .toList();
+            final complaintsList = complaintData['complaints'];
+            if (complaintsList is List) {
+              found = (complaintsList)
+                  .map((c) => Complaint.fromJson(c as Map<String, dynamic>))
+                  .toList();
+            }
           }
         } else if (complaintData is List) {
-          found = complaintData.map((c) => Complaint.fromJson(c)).toList();
+          found = complaintData
+              .map((c) => Complaint.fromJson(c as Map<String, dynamic>))
+              .toList();
         }
         _complaints = found;
         _error = '';

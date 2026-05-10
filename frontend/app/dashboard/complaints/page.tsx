@@ -913,25 +913,25 @@ function DashboardContent() {
                             {getCategoryLabel(complaint.category)}
                           </span>
                         </div>
-                      <div className="absolute top-2 right-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shadow-sm ${
-                          complaint.status === "RESOLVED" ? "bg-green-100 text-green-700" :
-                          complaint.status === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" :
-                          complaint.status === "ASSIGNED" ? "bg-purple-100 text-purple-700" :
-                          "bg-blue-100 text-blue-700"
-                        }`}>
-                          {complaint.status.replace('_', ' ')}
-                        </span>
-                      </div>
+                       <div className="absolute top-2 right-2">
+                         <span className={`px-2 py-0.5 rounded text-[10px] font-semibold shadow-sm ${
+                           complaint.status === "RESOLVED" ? "bg-green-100 text-green-700" :
+                           complaint.status === "IN_PROGRESS" ? "bg-orange-100 text-orange-700" :
+                           complaint.status === "ASSIGNED" ? "bg-purple-100 text-purple-700" :
+                           "bg-blue-100 text-blue-700"
+                         }`}>
+                           {t(`status.${complaint.status}`)}
+                         </span>
+                       </div>
                     </div>
 
                     {/* Content */}
                     <div className="p-3">
-                      {isOwnComplaint && (
-                        <div className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                          Your complaint
-                        </div>
-                      )}
+                       {isOwnComplaint && (
+                         <div className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                           {t("common.yourComplaint")}
+                         </div>
+                       )}
 
                       <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
                         {complaint.title}
@@ -948,7 +948,7 @@ function DashboardContent() {
                           {isOwnComplaint ? (
                             <div className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium">
                               <CheckCircle className="w-3.5 h-3.5" />
-                              <span>Your complaint</span>
+                              <span>{t("common.yourComplaint")}</span>
                               <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
                                 {complaint.confirmationCount || 0}
                               </span>
@@ -1032,7 +1032,7 @@ function DashboardContent() {
                     )}
                     <div className="absolute top-2 right-2">
                       <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 shadow-sm">
-                        {complaint.status === "CLOSED" ? "CLOSED" : "RESOLVED"}
+                        {t(`status.${complaint.status === "CLOSED" ? "CLOSED" : "RESOLVED"}`)}
                       </span>
                     </div>
                   </div>

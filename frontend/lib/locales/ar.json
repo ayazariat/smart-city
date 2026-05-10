@@ -1,5 +1,5 @@
 {
-  "common": {
+   "common": {
     "loading": "جاري التحميل...",
     "smartCity": "المدينة الذكية",
     "tunisia": "تونس",
@@ -13,33 +13,46 @@
     "back": "رجوع",
     "next": "التالي",
     "search": "بحث...",
-    "noData": "لا توجد بيانات متاحة",
+    "noData": "لا توجد بيانات",
+    "noDataYet": "لا توجد بيانات بعد",
+    "tryAdjustingFilters": "حاول تعديل البحث أو الفلاتر.",
     "refresh": "تحديث",
     "processing": "جاري المعالجة...",
     "all": "الكل",
     "active": "نشط",
-    "resolved": "محلول",
+    "resolved": "تم الحل",
     "help": "مساعدة",
     "unknown": "غير معروف",
+    "yourComplaint": "شكواك",
+    "showFilters": "إظهار الفلاتر",
+    "hideFilters": "إخفاء الفلاتر",
     "timeAgo": {
-      "now": "الآن",
-      "minutes": "منذ {{n}} د",
-      "hours": "منذ {{n}} س",
-      "days": "منذ {{n}} ي"
-     }
-   },
-   "errors": {
-     "loadFailed": "فشل تحميل البيانات. يرجى المحاولة مرة أخرى.",
-     "generic": "حدث خطأ. يرجى المحاولة مرة أخرى.",
-     "notFound": "المورد المطلوب غير موجود.",
-     "invalidActivation": "رابط تفعيل غير صالح. يرجى الاتصال بالمسؤول.",
-     "fillAllFields": "يرجى ملء جميع الحقول",
-     "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
-     "passwordTooShort": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
-     "passwordComplexity": "يجب أن تحتوي كلمة المرور على أحرف كبيرة وصغيرة وأرقام",
-     "failedSetPassword": "فشل تعيين كلمة المرور. يرجى المحاولة مرة أخرى."
-   },
-   "sidebar": {
+        "now": "الآن",
+        "minutes": "منذ {{n}} دقيقة",
+        "hours": "منذ {{n}} ساعة",
+        "days": "منذ {{n}} يوم"
+      }
+  },
+  "badges": {
+    "overdue": "متأخر",
+    "atRisk": "معرض للخطر",
+    "reportPending": "تقرير قيد الانتظار",
+    "approved": "موافق عليه",
+    "popular": "شائع",
+    "reworkNeeded": "يتطلب إعادة عمل"
+  },
+  "errors": {
+    "loadFailed": "فشل تحميل البيانات. يرجى المحاولة مرة أخرى.",
+    "generic": "حدث خطأ. يرجى المحاولة مرة أخرى.",
+    "notFound": "المورد المطلوب غير موجود.",
+    "invalidActivation": "رابط تفعيل غير صالح. يرجى الاتصال بالمسؤول.",
+    "fillAllFields": "يرجى ملء جميع الحقول",
+    "passwordsDoNotMatch": "كلمات المرور غير متطابقة",
+    "passwordTooShort": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
+    "passwordComplexity": "يجب أن تحتوي كلمة المرور على أحرف كبيرة وصغيرة وأرقام",
+    "failedSetPassword": "فشل تعيين كلمة المرور. يرجى المحاولة مرة أخرى."
+  },
+  "sidebar": {
     "navigation": "التنقل",
     "dashboard": "لوحة التحكم",
     "myComplaints": "شكاواي",
@@ -64,6 +77,62 @@
     "DEPARTMENT_MANAGER": "رئيس القسم",
     "TECHNICIAN": "فني",
     "ADMIN": "مدير النظام"
+  },
+  "admin": {
+    "settings": {
+      "title": "إعدادات النظام",
+      "subtitle": "إدارة الأقسام وقواعد SLA وتكوين المنصة",
+      "loadFailed": "فشل تحميل الإعدادات",
+      "tabs": {
+        "departments": "الأقسام",
+        "sla": "قواعد SLA",
+        "categories": "الفئات"
+      },
+      "departments": {
+        "title": "الأقسام",
+        "add": "إضافة قسم",
+        "addDepartment": "إضافة قسم",
+        "editDepartment": "تعديل القسم",
+        "departmentModalDescription": "تكوين تفاصيل القسم وفئات الشكاوى التي يديرها.",
+        "departmentName": "اسم القسم",
+        "departmentNamePlaceholder": "مثال: الطرق والبنية التحتية",
+        "noDepartments": "لم يتم تكوين أي قسم بعد.",
+        "deptNameRequired": "اسم القسم مطلوب",
+        "deptUpdated": "تم تحديث القسم",
+        "deptCreated": "تم إنشاء القسم",
+        "deptSaveFailed": "فشل حفظ القسم",
+        "deptDeleteConfirm": "حذف هذا القسم؟ لا يمكن التراجع عن هذا الإجراء.",
+        "deptDeleted": "تم حذف القسم",
+        "deptDeleteFailed": "فشل حذف القسم"
+      },
+      "sla": {
+        "description": "تحدد مهلات SLA المدة التي يمكن أن تظل فيها الشكوى مفتوحة قبل أن يتم وضع علامة عليها كمتأخرة. يمكن لكل فئة أن يكون لها مهلات مختلفة حسب مستوى الاستعجال. تنطبق التغييرات على الشكاوى الجديدة فقط.",
+        "urgency": "الاستعجال",
+        "hours": "ساعات",
+        "label": "التسمية",
+        "actions": "الإجراءات",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "edit": "تعديل",
+        "slaUpdated": "تم تحديث قاعدة SLA",
+        "slaUpdateFailed": "فشل تحديث قاعدة SLA"
+      },
+      "edit": "تعديل",
+      "delete": "حذف"
+    }
+  },
+  "manager": {
+    "noPendingComplaints": "لا توجد شكاوى معلقة لقسمك.",
+    "priorityFilterAll": "جميع الأولويات",
+    "priorityFilterHigh": "عالية (15+)",
+    "priorityFilterMedium": "متوسطة (6-14)",
+    "priorityFilterLow": "منخفضة (<6)",
+    "reassignTeam": "إعادة تعيين الفريق",
+    "assignRepairTeam": "تعيين فريق إصلاح",
+    "selectTechniciansDesc": "اختر تقنياً أو أكثر لتشكيل فريق إصلاح لهذه الشكوى.",
+    "assignTeam": "تعيين الفريق ({{count}})",
+    "assign": "تعيين",
+    "updatePriority": "تحديث الأولوية"
   },
   "topbar": {
     "back": "رجوع"
@@ -232,32 +301,14 @@
   },
   "complaintsList": {
     "subtitle": "{{area}} — {{n}} شكوى",
-    "searchPlaceholder": "بحث في الشكاوى...",
+    "searchPlaceholder": "البحث عن الشكاوى...",
     "all": "الكل",
     "noComplaints": "لم يتم العثور على شكاوى",
     "confirm": "تأكيد",
     "prioritize": "تحديد الأولوية",
-    "unknown": "غير معروف"
-  },
-  "activity": {
-    "title": "النشاط الأخير",
-    "systemWide": "على مستوى النظام",
-    "latestUpdates": "آخر التحديثات",
-    "noActivity": "لا يوجد نشاط حديث",
-    "citizenHint": "قدّم شكوى لرؤية التحديثات هنا",
-    "defaultHint": "ستظهر هنا تغييرات الحالة والتعيينات والحلول",
-    "events": {
-      "SUBMITTED": "مقدمة",
-      "VALIDATED": "مصادق عليها",
-      "REJECTED": "مرفوضة",
-      "ASSIGNED": "معينة",
-      "IN_PROGRESS": "قيد التنفيذ",
-      "RESOLVED": "محلولة",
-      "CLOSED": "مغلقة",
-      "RESOLUTION_REJECTED": "رُفض الحل",
-      "ARCHIVED": "مؤرشفة",
-      "UPDATE": "تحديث"
-    }
+    "unknown": "غير معروف",
+    "allComplaints": "جميع الشكاوى",
+    "filteredResults": "{{n}} نتيجة مصفاة"
   },
   "municipalityOverview": {
     "geographicOverview": "نظرة جغرافية",
@@ -288,16 +339,17 @@
     "filterActive": "نشطة",
     "filterResolved": "محلولة"
   },
-  "status": {
-    "SUBMITTED": "مقدمة",
-    "VALIDATED": "مصادق عليها",
-    "ASSIGNED": "معينة",
-    "IN_PROGRESS": "قيد التنفيذ",
-    "RESOLVED": "محلولة",
-    "CLOSED": "مغلقة",
-    "REJECTED": "مرفوضة",
-    "ARCHIVED": "مؤرشفة"
-  },
+   "status": {
+     "SUBMITTED": "مقدمة",
+     "VALIDATED": "مصادق عليها",
+     "ASSIGNED": "معينة",
+     "IN_PROGRESS": "قيد التنفيذ",
+     "RESOLVED": "محلولة",
+     "CLOSED": "مغلقة",
+     "REJECTED": "مرفوضة",
+     "RESOLUTION_REJECTED": "تحديث مطلوب",
+     "ARCHIVED": "مؤرشفة"
+   },
   "categories": {
     "waste": "النفايات والنظافة",
     "wasteDesc": "القمامة، الحاويات الممتلئة، المكبات غير القانونية، تنظيف الشوارع.",
@@ -404,7 +456,12 @@
     "duplicateModal": {
       "title": "تم اكتشاف شكوى مكررة محتملة",
       "cancel": "إلغاء",
-      "submitAnyway": "تقديم على أي حال"
+      "submitAnyway": "تقديم على أي حال",
+      "viewDetails": "عرض التفاصيل",
+      "upvote": "تصويت",
+      "upvoted": "تم التصويت",
+      "upvoteFailed": "فشل التصويت. قد تكون قد أكدت هذه الشكوى بالفعل.",
+      "confirm": "تأكيد"
     }
   },
   "transparency": {
@@ -422,6 +479,7 @@
     "governorateOverview": "نظرة على الولايات",
     "allComplaints": "جميع الشكاوى",
     "municipalities": "البلديات",
+    "reportProblem": "لوحة التحكم",
     "hero": {
       "title": "هل ترى مشكلة؟ أبلغ عنها.",
       "subtitle": "ساعدنا في تحسين مدينتنا. أبلغ عن مشاكل البنية التحتية والطرق والنفايات والمزيد. تقاريرك تجعل مجتمعاتنا أكثر أماناً ونظافة.",
@@ -619,6 +677,18 @@
     "fr": "Français",
     "ar": "العربية"
   },
+  "departments": {
+    "waste": "النظافة والنفايات",
+    "roads": "الطرق والمرور",
+    "lighting": "الإنارة العامة",
+    "water": "المياه والصرف الصحي",
+    "safety": "السلامة العامة والضوضاء",
+    "property": "الممتلكات العامة",
+    "parks": "الحدائق والمساحات الخضراء",
+    "other": "الخدمات العامة",
+    "assignToDepartment": "تعيين للقسم",
+    "selectDepartmentDescription": "اختر القسم المسؤول عن معالجة هذه الشكوى"
+  },
   "register": {
     "title": "إنشاء حساب",
     "subtitle": "انضم إلى المدينة الذكية تونس لإدارة الخدمات الحضرية والإبلاغ عنها",
@@ -679,6 +749,8 @@
     "rejected": "مرفوضة",
     "history": "السجل",
     "description": "الوصف",
+    "addCommentPlaceholder": "أضف تعليق...",
+    "addComment": "إضافة تعليق",
     "contactPhone": "هاتف التواصل",
     "location": "الموقع",
     "locationNotProvided": "الموقع غير متوفر",
@@ -727,6 +799,7 @@
     "validateComplaint": "التحقق من الشكوى",
     "rejectComplaint": "رفض الشكوى",
     "assignToDepartment": "إسناد إلى القسم",
+    "selectDepartmentDescription": "اختر القسم الذي سيتعامل مع هذه الشكوى.",
     "updatePriority": "تحديث الأولوية",
     "assignToRepairTeam": "إسناد إلى فريق الإصلاح",
     "assignedToRepairTeam": "تم الإسناد إلى فريق الإصلاح",
@@ -756,46 +829,63 @@
     ,"generateGlobalReports": "إنشاء تقارير عامة"
     ,"aiAnalysis": "تحليل الذكاء الاصطناعي"
     ,"aiUrgencyPrediction": "توقع الأولوية بالذكاء الاصطناعي"
-    ,"duplicateCheck": "فحص التكرار"
-    ,"beforeWorkPhotos": "صور قبل العمل"
-    ,"afterWorkPhotos": "صور بعد العمل"
-    ,"comments": "التعليقات"
-    ,"dateUnknown": "تاريخ غير معروف"
-    ,"internalNotes": "ملاحظات داخلية"
-    ,"communitySupport": "دعم المجتمع"
-    ,"confirmations": "التأكيدات"
-    ,"upvotes": "الأصوات"
-    ,"confirmed": "مؤكد"
-    ,"confirmIssue": "تأكيد المشكلة"
-    ,"upvoted": "تم التصويت"
-    ,"upvote": "تصويت"
-    ,"communityHelpHint": "ساعد في تحديد أولوية هذه المشكلة بتأكيد وجودها في منطقتك"
-    ,"actions": "الإجراءات"
-    ,"approved": "معتمد"
-    ,"pendingReview": "في انتظار المراجعة"
-    ,"techResolutionNotes": "ملاحظات حل الفني"
-    ,"resolvedOn": "تم الحل في"
-    ,"proofOfCompletion": "دليل الإنجاز"
-    ,"approve": "اعتماد"
-    ,"selectDepartment": "اختر القسم"
-    ,"chooseDepartment": "اختر قسماً..."
-    ,"noDepartments": "لا توجد أقسام متاحة"
-    ,"assign": "تعيين"
-    ,"selectTechnicians": "اختر فني(ين) لفريق الإصلاح"
-    ,"noTechnicians": "لا يوجد فنيون متاحون"
-    ,"noTechniciansHint": "لا يوجد فنيون معينون لهذا القسم بعد"
-    ,"selectOneOrMore": "اختر فنياً واحداً أو أكثر:"
-    ,"techTeamSelected": "تم اختيار {{count}} فنيين — سيتم إنشاء فريق إصلاح"
-    ,"createTeamAssign": "إنشاء الفريق والتعيين"
-    ,"aboutToApprove": "أنت على وشك اعتماد تقرير الحل لـ:"
-    ,"approveWillClose": "سيؤدي هذا إلى إغلاق الشكوى وإخطار المواطن والفني."
-    ,"confirmApproval": "تأكيد الاعتماد"
-    ,"rejectResolutionPlaceholder": "اشرح سبب رفض تقرير الحل هذا..."
-    ,"failedRejectResolution": "فشل رفض الحل"
-    ,"failedApproveResolution": "فشل اعتماد الحل"
-    ,"failedAssignTechnician": "فشل تعيين الفني. يرجى المحاولة مرة أخرى."
-    ,"startWorkConfirm": "هل أنت متأكد أنك تريد بدء العمل على الشكوى {{id}}؟"
-    ,"resolveConfirm": "تقديم حلك لـ {{id}}؟ سيراجع الوكيل تقريرك."
+    ,"duplicateCheck": "فحص التكرار",
+    "checkingDuplicates": "البحث عن شكاوى مشابهة...",
+    "similarComplaintsFound": "تم العثور على شكاوى مشابهة — راجع قبل التحقق",
+    "differentIssuesContinue": "هذه مشاكل مختلفة — متابعة التحقق",
+    "view": "عرض",
+    "merge": "دمج",
+    "merging": "جاري الدمج...",
+    "mergeConfirm": "تحديد هذه الشكوى كمكرر من [{{rc}}]؟ سيتم إغلاق الشكوى وسيتم إخطار المواطن.",
+    "mergedSuccess": "تم دمج الشكوى كمكرر بنجاح.",
+    "mergeFailed": "فشل في دمج الشكوى.",
+    "beforeWorkPhotos": "صور قبل العمل",
+    "afterWorkPhotos": "صور بعد العمل",
+    "comments": "التعليقات",
+    "dateUnknown": "تاريخ غير معروف",
+    "internalNotes": "ملاحظات داخلية",
+    "communitySupport": "دعم المجتمع",
+    "confirmations": "التأكيدات",
+    "upvotes": "الأصوات",
+    "confirmed": "مؤكد",
+    "confirmIssue": "تأكيد المشكلة",
+    "upvoted": "تم التصويت",
+    "upvote": "تصويت",
+    "communityHelpHint": "ساعد في تحديد أولوية هذه المشكلة بتأكيد وجودها في منطقتك",
+    "actions": "الإجراءات",
+    "approved": "معتمد",
+    "pendingReview": "في انتظار المراجعة",
+    "techResolutionNotes": "ملاحظات حل الفني",
+    "resolvedOn": "تم الحل في",
+    "proofOfCompletion": "دليل الإنجاز",
+    "approve": "اعتماد",
+    "selectDepartment": "اختر القسم",
+    "chooseDepartment": "اختر قسماً...",
+    "noDepartments": "لا توجد أقسام متاحة",
+    "assign": "تعيين",
+    "selectTechnicians": "اختر فني(ين) لفريق الإصلاح",
+    "noTechnicians": "لا يوجد فنيون متاحون",
+    "noTechniciansHint": "لا يوجد فنيون معينون لهذا القسم بعد",
+    "selectOneOrMore": "اختر فنياً واحداً أو أكثر:",
+    "techTeamSelected": "تم اختيار {{count}} فنيين — سيتم إنشاء فريق إصلاح",
+    "createTeamAssign": "إنشاء الفريق والتعيين",
+    "aboutToApprove": "أنت على وشك اعتماد تقرير الحل لـ:",
+    "approveWillClose": "سيؤدي هذا إلى إغلاق الشكوى وإخطار المواطن والفني.",
+    "confirmApproval": "تأكيد الاعتماد",
+    "approveResolution": "قبول الحل",
+    "rejectResolution": "رفض الحل",
+    "resolutionApproved": "تم قبول الحل بنجاح",
+    "aboutToReject": "أنت على وشك رفض تقرير الحل لـ:",
+    "rejectWillReturnToProgress": "سيؤدي هذا إلى إعادة الشكوى إلى حالة 'قيد التنفيذ' وسيحتاج الفني إلى إعادة العمل.",
+    "rejectionReasonRequired": "يرجى تقديم سبب للرفض",
+    "rejectionReasonPlaceholder": "اشرح سبب رفض تقرير الحل هذا...",
+    "resolutionRejected": "تم رفض الحل بنجاح",
+    "rejectResolutionPlaceholder": "اشرح سبب رفض تقرير الحل هذا...",
+    "failedRejectResolution": "فشل رفض الحل",
+    "failedApproveResolution": "فشل اعتماد الحل",
+    "failedAssignTechnician": "فشل تعيين الفني. يرجى المحاولة مرة أخرى.",
+    "startWorkConfirm": "هل أنت متأكد أنك تريد بدء العمل على الشكوى {{id}}؟",
+    "resolveConfirm": "تقديم حلك لـ {{id}}؟ سيراجع الوكيل تقريرك."
   },
   "geoErrors": {
     "notSupported": "المتصفح لا يدعم تحديد الموقع الجغرافي",

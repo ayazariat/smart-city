@@ -111,7 +111,8 @@ export const uploadMedia = async (
 
     return { success: true, data: result.data };
   } catch (error) {
-    return { success: false, message: 'Failed to upload files' };
+    console.error('Upload error:', error);
+    return { success: false, message: 'Failed to upload files. Please check your internet connection and try again.' };
   }
 };
 
@@ -160,6 +161,8 @@ export const getMyComplaints = async (params?: {
       page: number;
       limit: number;
       pages: number;
+      totalCount?: number;
+      totalPages?: number;
     };
   }>(endpoint);
   return result;
@@ -243,6 +246,8 @@ export const getAllComplaints = async (params?: {
       page: number;
       limit: number;
       pages: number;
+      totalCount?: number;
+      totalPages?: number;
     };
   };
 }> => {
@@ -268,6 +273,8 @@ export const getAllComplaints = async (params?: {
         page: number;
         limit: number;
         pages: number;
+        totalCount?: number;
+        totalPages?: number;
       };
     };
   }>(endpoint);

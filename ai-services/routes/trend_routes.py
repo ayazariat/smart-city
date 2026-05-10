@@ -6,7 +6,7 @@ FastAPI routes for trend prediction service (BL-37).
 
 from fastapi import APIRouter, Query
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from utils.db import get_db
 
@@ -17,7 +17,7 @@ router = APIRouter()
 async def _fetch_historical_data(db, days_back: int = 90) -> List[Dict]:
     """Aggregate complaints by municipality + category + date from MongoDB."""
     try:
-        cutoff = datetime.utcnow() - timedelta(days=days_back)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
         pipeline = [
             {"$match": {"createdAt": {"$gte": cutoff}}},
             {"$group": {
@@ -50,7 +50,7 @@ async def _save_predictions(db, batch_result: Dict) -> None:
         if db is None:
             return
         col = db.ai_trend_predictions
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Upsert each prediction
         for pred in batch_result.get("predictions", []) + batch_result.get("_all_results", []):
             await col.update_one(
@@ -161,9 +161,11 @@ async def get_forecast_endpoint(
                     if isinstance(updated_at, str):
                         try:
                             updated_at = datetime.fromisoformat(updated_at)
+                            if updated_at.tzinfo is None:
+                                updated_at = updated_at.replace(tzinfo=timezone.utc)
                         except Exception:
                             updated_at = None
-                    if updated_at and (datetime.utcnow() - updated_at) > timedelta(hours=24):
+                    if updated_at and (datetime.now(timezone.utc) - updated_at) > timedelta(hours=24):
                         stale = True
 
                 forecast_key = "forecast7Days" if period == 7 else "forecast30Days"
@@ -256,7 +258,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "ok",
         "service": "trend_prediction",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 

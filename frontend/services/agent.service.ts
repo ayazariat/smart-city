@@ -127,7 +127,14 @@ export const getAgentStats = async (): Promise<{
     totalOverdue: number;
     totalAtRisk: number;
     resolutionRate: number;
-    averageResolutionTime: number;
+    avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
+    resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
+    citizenSatisfaction: {
+      value: number | null;
+      totalRated: number;
+      notConfirmed: number;
+      vsLast: number | null;
+    };
     byCategory: Record<string, number>;
     byMonth: Record<string, number>;
   };

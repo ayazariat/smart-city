@@ -30,6 +30,7 @@ import {
   Building2,
   TreePine,
   Tag,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import DashboardLayout from "@/components/layout/DashboardLayout";
@@ -180,11 +181,13 @@ export default function NewComplaintPage() {
   const [duplicateWarning, setDuplicateWarning] = useState<{
     isDuplicate: boolean;
     duplicateLevel: string;
-    topMatches: Array<{ complaintId: string; referenceId: string; title: string; overallScore: number; status: string }>;
+    topMatches: Array<{ complaintId: string; referenceId: string; title: string; overallScore: number; status: string; upvoted?: boolean }>;
     recommendation: string;
   } | null>(null);
   const [duplicateChecking, setDuplicateChecking] = useState(false);
   const [duplicateOverride, setDuplicateOverride] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<string | null>(null);
+  const [showMatchDetails, setShowMatchDetails] = useState(false);
 
   // Additional fields
   const [incidentDate, setIncidentDate] = useState(new Date().toISOString().split("T")[0]);
@@ -309,6 +312,12 @@ export default function NewComplaintPage() {
 
   // BL-25: Proactive duplicate check while typing
   useEffect(() => {
+    // Don't check if user has already overridden duplicate warnings
+    if (duplicateOverride) {
+      setProactiveDuplicates([]);
+      return;
+    }
+
     if (!title.trim() || !description.trim() || !category) {
       setProactiveDuplicates([]);
       return;
@@ -321,7 +330,7 @@ export default function NewComplaintPage() {
           title.trim(),
           description.trim(),
           category as string,
-          commune || detectedCommune || "Tunis",
+          commune || detectedCommune || "Unknown",
           location?.latitude,
           location?.longitude
         );
@@ -336,7 +345,7 @@ export default function NewComplaintPage() {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [title, description, category, commune, detectedCommune, location]);
+  }, [title, description, category, commune, detectedCommune, location, duplicateOverride]);
 
   useEffect(() => {
     if (!category && aiSuggestedCategory) {
@@ -644,7 +653,7 @@ export default function NewComplaintPage() {
     if (!validateForm()) return;
 
     // BL-25: Check for duplicates before submitting (unless user already overrode)
-    if (!duplicateOverride && category && (commune || detectedCommune)) {
+    if (!duplicateOverride && category) {
       setDuplicateChecking(true);
       try {
         const { checkDuplicate } = await import("@/services/complaint.service");
@@ -652,7 +661,7 @@ export default function NewComplaintPage() {
           title.trim(),
           description.trim(),
           category as string,
-          commune || detectedCommune || "Tunis",
+          commune || detectedCommune || "Unknown",
           location?.latitude,
           location?.longitude
         );
@@ -1341,7 +1350,7 @@ export default function NewComplaintPage() {
             <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
-                <span className="font-semibold text-amber-800">Plaintes similaires détectées</span>
+                <span className="font-semibold text-amber-800">{t('complaint.duplicateWarning')}</span>
                 <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-semibold ${
                   duplicateWarning.duplicateLevel === 'PROBABLE_DUPLICATE' ? 'bg-orange-200 text-orange-700' : 'bg-yellow-200 text-yellow-700'
                 }`}>
@@ -1351,24 +1360,79 @@ export default function NewComplaintPage() {
               {duplicateWarning.topMatches.length > 0 && (
                 <div className="space-y-2 mb-3">
                   {duplicateWarning.topMatches.slice(0, 3).map((match, i) => (
-                    <Link 
-                      key={i}
-                      href={`/dashboard/complaints/${match.complaintId}`}
-                      className="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100 hover:border-amber-300 hover:bg-amber-50 transition-colors"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-700 truncate pr-2">{match.title || `Problème similaire (${match.category})`}</p>
-                        <p className="text-xs text-slate-500">{match.referenceId} • {match.status}</p>
+                    <div key={i} className="p-3 bg-white rounded-lg border border-amber-100 hover:border-amber-300 transition-colors">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-700 truncate pr-2">{match.title || `Problème similaire`}</p>
+                          <p className="text-xs text-slate-500">{match.referenceId} • {match.status}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 text-right">
+                          <span className="text-sm font-semibold text-amber-600">
+                            {Math.round(match.overallScore * 100)}%
+                          </span>
+                          <Link 
+                            href={`/dashboard/complaints/${match.complaintId}`}
+                            className="text-xs text-primary font-medium hover:underline"
+                          >
+                            {t('complaint.duplicateModal.viewDetails')} →
+                          </Link>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 text-right">
-                        <span className="text-sm font-semibold text-amber-600">
-                          {Math.round(match.overallScore * 100)}%
-                        </span>
-                        <span className="text-xs text-primary font-medium hover:underline">
-                          Voir détails →
-                        </span>
+                      <div className="flex gap-2 mt-2 pt-2 border-t border-amber-100">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const { upvoteComplaint } = await import("@/services/complaint.service");
+                              await upvoteComplaint(match.complaintId);
+                              setDuplicateWarning({
+                                ...duplicateWarning,
+                                topMatches: duplicateWarning.topMatches.map(m => 
+                                  m.complaintId === match.complaintId ? { ...m, upvoted: true } : m
+                                )
+                              });
+                            } catch (error) {
+                              alert(t('complaint.duplicateModal.upvoteFailed') || "Failed to upvote. You may have already upvoted this complaint.");
+                            }
+                          }}
+                          disabled={match.upvoted}
+                          className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            match.upvoted 
+                              ? 'bg-green-100 text-green-700 border border-green-300' 
+                              : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {match.upvoted ? t('complaint.duplicateModal.upvoted') : t('complaint.duplicateModal.upvote')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const { confirmComplaint } = await import("@/services/complaint.service");
+                              await confirmComplaint(match.complaintId);
+                              setDuplicateWarning({
+                                ...duplicateWarning,
+                                topMatches: duplicateWarning.topMatches.map(m => 
+                                  m.complaintId === match.complaintId ? { ...m, confirmed: true } : m
+                                )
+                              });
+                            } catch (error) {
+                              alert(t('complaint.duplicateModal.confirmFailed') || "Failed to confirm. You may have already confirmed this complaint.");
+                            }
+                          }}
+                          disabled={match.confirmed}
+                          className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            match.confirmed 
+                              ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                              : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {match.confirmed ? t('complaint.duplicateModal.confirmed') : t('complaint.duplicateModal.confirm')}
+                        </button>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1381,14 +1445,14 @@ export default function NewComplaintPage() {
                   onClick={() => setDuplicateWarning(null)}
                   className="flex-1 px-4 py-2.5 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-semibold hover:bg-amber-50 hover:border-amber-300 transition-all"
                 >
-                  Annuler
+                  {t('complaint.duplicateModal.cancel')}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setDuplicateOverride(true); setDuplicateWarning(null); }}
                   className="flex-1 px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-lg text-sm font-semibold shadow-lg hover:from-amber-700 hover:to-amber-800 transition-all"
                 >
-                  Soumettre quand même
+                  {t('complaint.duplicateModal.submitAnyway')}
                 </button>
               </div>
             </div>

@@ -1,24 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, CheckCircle, Loader2, X } from "lucide-react";
+import { Bell, CheckCircle, Loader2, X, ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useTranslation } from "react-i18next";
 import type { Notification } from "@/types";
 
-function formatDate(dateString: string, short = false): string {
+function formatDate(dateString: string, short = false, t: any): string {
   const date = new Date(dateString);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
 
-  if (diff < 60000) return "Just now";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  if (short) return `${Math.floor(diff / 86400000)}d ago`;
+  if (diff < 60000) return t("timeAgo.now");
+  if (diff < 3600000) return t("timeAgo.minutes", { n: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t("timeAgo.hours", { n: Math.floor(diff / 3600000) });
+  if (short) return t("timeAgo.days", { n: Math.floor(diff / 86400000) });
 
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function getNotifStyle(type: string): { color: string } {
@@ -42,6 +43,7 @@ function getNotifIcon(type: string) {
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
+  const router = useRouter();
   const { user } = useAuthStore();
   const { notifications, unreadCount, loading, fetchNotifications, markAsRead, markAllAsRead } =
     useNotifications();
@@ -98,7 +100,7 @@ export default function NotificationsPage() {
               {notif.message || notif.title}
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              {formatDate(notif.createdAt)}
+              {formatDate(notif.createdAt, false, t)}
             </p>
           </div>
           {!notif.isRead && (
@@ -123,18 +125,27 @@ export default function NotificationsPage() {
     <DashboardLayout>
       <main className="px-4 md:px-6 py-6 md:py-8 max-w-4xl mx-auto">
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Notifications</h1>
-            <p className="text-slate-500 mt-1 text-sm">
-              {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
-            </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.back()}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              title={t("common.back") || "Back"}
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-600" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Notifications</h1>
+              <p className="text-slate-500 mt-1 text-sm">
+                {unreadCount > 0 ? `${unreadCount} non lues` : "À jour"}
+              </p>
+            </div>
           </div>
           {unreadCount > 0 && (
             <button
               onClick={markAllAsRead}
               className="text-sm text-primary hover:underline font-medium"
             >
-              Mark all as read
+              Tout marquer comme lu
             </button>
           )}
         </div>
@@ -150,7 +161,7 @@ export default function NotificationsPage() {
             {groupToday.length > 0 && (
               <section>
                 <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                  Today
+                  {t("notifications.today")}
                 </h2>
                 {groupToday.map(renderNotif)}
               </section>
@@ -158,7 +169,7 @@ export default function NotificationsPage() {
             {groupEarlier.length > 0 && (
               <section>
                 <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                  Earlier
+                  {t("notifications.earlier")}
                 </h2>
                 {groupEarlier.map(renderNotif)}
               </section>

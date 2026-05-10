@@ -19,6 +19,8 @@ const aiRoutes = require("./routes/ai.routes");
 const publicRoutes = require("./routes/public.routes");
 const heatmapRoutes = require("./routes/heatmap.routes");
 const activityRoutes = require("./routes/activity.routes");
+const satisfactionRoutes = require("./routes/satisfaction.routes");
+const slaRoutes = require("./routes/sla.routes");
 
 const app = express();
 
@@ -36,6 +38,10 @@ const staticAllowedOrigins = new Set([
   "http://localhost:51271",
   "http://127.0.0.1:51271",
   "http://10.0.2.2:51271",
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+  "http://localhost:52605",
+  "http://127.0.0.1:52605",
 ]);
 
 const dynamicAllowedOriginPatterns = [
@@ -80,9 +86,9 @@ app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
-// Rate limiters
-const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, message: { message: "Too many requests, please try again later." } });
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { message: "Too many authentication attempts, please try again later." } });
+// Rate limiters - increased for development
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 1000, message: { message: "Too many requests, please try again later." } });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { message: "Too many authentication attempts, please try again later." } });
 // Stricter limiter for complaint creation — applied at route level in complaints.js
 app.use("/api", apiLimiter);
 
@@ -111,16 +117,18 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/heatmap", heatmapRoutes);
 app.use("/api/activity", activityRoutes);
+app.use("/api/admin/sla-rules", slaRoutes);
+app.use("/api/satisfaction", satisfactionRoutes);
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+  res.status(404).json({ message: "Route non trouvée" });
 });
 
 // Error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  res.status(500).json({ message: "Something went wrong!" });
+  res.status(500).json({ message: "Une erreur s'est produite" });
 });
 
 module.exports = app;

@@ -272,8 +272,9 @@ export async function getTechnicianStats(): Promise<{
     totalOverdue?: number;
     totalAtRisk?: number;
     resolutionRate?: number;
-    averageResolutionTime?: number;
-    slaComplianceRate?: number;
+    avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
+    resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
+    citizenSatisfaction: { value: number | null; totalRated: number; notConfirmed: number; vsLast: number | null };
     csat?: number;
     totalRatings?: number;
   };
@@ -285,7 +286,16 @@ export async function getTechnicianStats(): Promise<{
       assigned: number;
       inProgress: number;
       resolved: number;
-      blocked: number;
+      closed?: number;
+      rejected?: number;
+      totalOverdue?: number;
+      totalAtRisk?: number;
+      resolutionRate?: number;
+      avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
+      resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
+      citizenSatisfaction: { value: number | null; totalRated: number; notConfirmed: number; vsLast: number | null };
+      csat?: number;
+      totalRatings?: number;
     };
   }>("/technician/stats");
 }

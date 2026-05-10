@@ -16,6 +16,8 @@ type HistoryItem = {
 interface TimelineProps {
   history: HistoryItem[];
   userRole?: string;
+  userId?: string;
+  complaintOwnerId?: string;
 }
 
 const getActionColor = (action: string) => {
@@ -73,7 +75,7 @@ const formatDate = (ts?: string) => {
   return d.toLocaleString();
 };
 
-const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
+const Timeline: React.FC<TimelineProps> = ({ history, userRole, userId, complaintOwnerId }) => {
   const { t } = useTranslation();
   if (!history || history.length === 0) return null;
 
@@ -89,20 +91,27 @@ const Timeline: React.FC<TimelineProps> = ({ history, userRole }) => {
   // Filter based on user role for citizens
   if (userRole === "CITIZEN") {
     // Citizens only see status changes and public notes
+    normalizedHistory = normalizedHistory.map(h => {
+      // Hide actual submitter name if this is not the user's complaint
+      let actorName = h.actorName;
+      if (h.action === "SUBMITTED" && userId && complaintOwnerId && userId !== complaintOwnerId) {
+        actorName = t("timeline.citizen");
+      } else if (h.action !== "SUBMITTED" && h.actorName !== t("timeline.system")) {
+        actorName = t("timeline.municipalAgent");
+      }
+      return {
+        ...h,
+        actorName,
+        actorRole: "",
+      };
+    });
+    
+    // Citizens only see status changes and public notes
     normalizedHistory = normalizedHistory.filter(h => {
-      // Show status changes
       const isStatusChange = ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED"].includes(h.action);
-      // Show public notes (notes that are not internal types)
       const isPublicNote = h.note && !h.note.includes("[INTERNAL]") && !h.note.includes("[BLOCAGE]");
       return isStatusChange || isPublicNote;
     });
-    
-    // Replace actor names with generic labels for citizens
-    normalizedHistory = normalizedHistory.map(h => ({
-      ...h,
-      actorName: h.actorName === t("timeline.system") ? t("timeline.system") : t("timeline.municipalAgent"),
-      actorRole: "",
-    }));
   }
 
   if (normalizedHistory.length === 0) return null;

@@ -4,6 +4,7 @@ const Department = require("../models/Department");
 const { normalizeMunicipality } = require("../utils/normalize");
 const notificationService = require("../services/notification.service");
 const { calculateSLADeadline } = require("../utils/sla");
+const { SLA_HOURS } = require("../utils/slaConfig");
 
 const ACTIVE_STATUSES = [
   "SUBMITTED",
@@ -90,6 +91,7 @@ class AgentController {
           .populate("assignedTo", "fullName")
           .populate("assignedDepartment", "name")
           .populate("municipality", "name governorate")
+          .select('location title category status referenceId createdAt municipalityName municipality municipalityNormalized assignedTo assignedDepartment assignedTeam media description urgency priorityScore slaDeadline')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(parseInt(limit)),
@@ -565,11 +567,11 @@ class AgentController {
         const citizenId = typeof complaint.createdBy === 'object' ? complaint.createdBy._id : complaint.createdBy;
         if (citizenId) {
           await notificationService.sendNotification(req.app?.get?.('io'), citizenId, {
-            type: "in_progress",
-            title: "Work Restarted",
-            message: `Work has restarted on your complaint '${complaint.title}'. The team is addressing the issue again.`,
+            type: "resolution_rejected",
+            title: "Resolution Rejected",
+            message: `The resolution for your complaint '${complaint.title}' was rejected. Reason: ${rejectionReason}. The team will redo the work.`,
             complaintId: complaint._id.toString(),
-            metadata: { reason: rejectionReason },
+            metadata: { rejectionReason },
           });
         }
       } catch (notifErr) {
@@ -595,6 +597,240 @@ class AgentController {
     } catch (error) {
       console.error("Error rejecting resolution:", error);
       res.status(500).json({ success: false, message: "Failed to reject resolution" });
+    }
+  }
+
+  async getStats(req, res) {
+    try {
+      const user = await getAgentMunicipality(req.user.userId);
+      const userMunicipality = normalizeMunicipality(user?.municipalityName || req.user.municipalityName || "");
+
+      if (!userMunicipality) {
+        return res.status(400).json({ message: "Municipality not configured for this user" });
+      }
+
+      const munRegex = new RegExp("^" + userMunicipality.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "$", "i");
+
+      const query = {
+        $or: [
+          { municipalityNormalized: userMunicipality },
+          { municipalityName: munRegex },
+          { "location.municipality": munRegex }
+        ],
+      };
+
+      const activeQuery = {
+        ...query,
+        isArchived: { $ne: true },
+        status: { $in: ACTIVE_STATUSES },
+      };
+      const historicalQuery = { ...query };
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+      const [historicalTotal, activeTotal, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory, resolvedWithRatingCount, csatCount, confirmationCount, totalResolvedForSatisfaction, resolvedWithConfirmation] = await Promise.all([
+        Complaint.countDocuments(historicalQuery),
+        Complaint.countDocuments(activeQuery),
+        Complaint.countDocuments({ ...historicalQuery, status: "SUBMITTED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "VALIDATED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "ASSIGNED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "IN_PROGRESS" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "RESOLVED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
+        Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
+        Complaint.countDocuments({ ...historicalQuery, slaStatus: "OVERDUE", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...historicalQuery, slaStatus: "AT_RISK", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.aggregate([
+          { $match: historicalQuery },
+          { $group: { _id: "$category", count: { $sum: 1 } } }
+        ]),
+        Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
+        Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+        Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] } }),
+        Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] } }),
+        Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, confirmationCount: { $gt: 0 } }),
+      ]);
+
+      const total = historicalTotal;
+      const resolutionRate = historicalTotal > 0 ? Math.round((resolved + closed) / historicalTotal * 100) : 0;
+
+      // Part A - Avg Fix Time (days with comparison)
+      const currentPeriodQuery = { 
+        ...historicalQuery, 
+        status: { $in: ["RESOLVED", "CLOSED"] }, 
+        resolvedAt: { $exists: true, $ne: null },
+        createdAt: { $gte: startOfMonth }
+      };
+      const prevPeriodQuery = { 
+        ...historicalQuery, 
+        status: { $in: ["RESOLVED", "CLOSED"] }, 
+        resolvedAt: { $exists: true, $ne: null },
+        createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth }
+      };
+
+      const [currentAvgResult, prevAvgResult] = await Promise.all([
+        Complaint.aggregate([
+          { $match: currentPeriodQuery },
+          { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+        ]),
+        Complaint.aggregate([
+          { $match: prevPeriodQuery },
+          { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+        ])
+      ]);
+
+      let avgFixTimeValue = null;
+      let avgFixTimeVsLast = null;
+      let avgFixTimeTrend = "no_change";
+
+      if (currentAvgResult[0] && currentAvgResult[0].avgTime) {
+        avgFixTimeValue = Math.round((currentAvgResult[0].avgTime / (1000 * 60 * 60 * 24)) * 10) / 10;
+        if (prevAvgResult[0] && prevAvgResult[0].avgTime && prevAvgResult[0].avgTime > 0) {
+          const prevDays = prevAvgResult[0].avgTime / (1000 * 60 * 60 * 24);
+          const change = ((avgFixTimeValue - prevDays) / prevDays) * 100;
+          avgFixTimeVsLast = Math.round(change * 10) / 10;
+          avgFixTimeTrend = change > 0 ? "up" : change < 0 ? "down" : "no_change";
+        }
+      }
+
+      // Part B - Resolved On Time (SLA compliance)
+      const resolvedCountForSLA = resolved + closed;
+      const onTimeQuery = {
+        ...historicalQuery,
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        resolvedAt: { $exists: true },
+        createdAt: { $exists: true }
+      };
+
+      const resolvedComplaints = await Complaint.find(onTimeQuery).select('createdAt resolvedAt urgency category').lean();
+      
+      let onTimeCount = 0;
+      let prevOnTimeCount = 0;
+      
+      for (const c of resolvedComplaints) {
+        if (!c.createdAt || !c.resolvedAt) continue;
+        const createdAt = new Date(c.createdAt);
+        const resolvedAt = new Date(c.resolvedAt);
+        const resolutionHours = (resolvedAt - createdAt) / (1000 * 60 * 60);
+        
+        const urgency = c.urgency?.toUpperCase() || 'MEDIUM';
+        let slaHours = SLA_HOURS[urgency] || SLA_HOURS.MEDIUM;
+        if (urgency === 'URGENT') slaHours = SLA_HOURS.HIGH;
+        
+        if (resolutionHours <= slaHours) {
+          onTimeCount++;
+          if (createdAt >= startOfPrevMonth && createdAt <= endOfPrevMonth) {
+            prevOnTimeCount++;
+          }
+        }
+      }
+
+       let slaComplianceRate = resolvedCountForSLA > 0 ? Math.round((onTimeCount / resolvedCountForSLA) * 100 * 10) / 10 : null;
+      
+      const prevResolvedCountQuery = {
+        ...historicalQuery,
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth }
+      };
+      const prevResolvedCount = await Complaint.countDocuments(prevResolvedCountQuery);
+      
+      let slaVsLast = null;
+      if (prevResolvedCount > 0 && prevOnTimeCount >= 0) {
+        const prevSlaRate = Math.round((prevOnTimeCount / prevResolvedCount) * 1000) / 10;
+        slaVsLast = Math.round((slaComplianceRate - prevSlaRate) * 10) / 10;
+      }
+
+      // Part C - Citizen Satisfaction
+       const satisfactionRate = totalResolvedForSatisfaction > 0 
+         ? Math.round((resolvedWithConfirmation / totalResolvedForSatisfaction) * 100 * 10) / 10 
+         : null;
+
+      const prevSatisfactionQuery = {
+        ...historicalQuery,
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth }
+      };
+      const [prevTotalResolved, prevConfirmedResolved] = await Promise.all([
+        Complaint.countDocuments(prevSatisfactionQuery),
+        Complaint.countDocuments({ ...prevSatisfactionQuery, confirmationCount: { $gt: 0 } })
+      ]);
+
+       let satisfactionVsLast = null;
+       if (prevTotalResolved > 0 && satisfactionRate !== null) {
+         const prevSatisfactionRate = Math.round((prevConfirmedResolved / prevTotalResolved) * 1000) / 10;
+         satisfactionVsLast = Math.round((satisfactionRate - prevSatisfactionRate) * 10) / 10;
+       }
+
+      const totalRatings = resolvedWithRatingCount;
+      const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
+
+      res.json({
+        success: true,
+        data: {
+          total,
+          historicalTotal,
+          submitted,
+          pending: submitted,
+          validated,
+          assigned,
+          inProgress,
+          resolved,
+          closed,
+          rejected,
+          totalOverdue: overdue,
+          totalAtRisk: atRisk,
+          resolutionRate,
+          avgFixTime: avgFixTimeValue !== null 
+            ? { value: avgFixTimeValue, unit: "days", vsLast: avgFixTimeVsLast, trend: avgFixTimeTrend }
+            : { value: null, unit: "days", vsLast: null, trend: "no_change" },
+          resolvedOnTime: { 
+            value: slaComplianceRate, 
+            vsLast: slaVsLast,
+            trend: slaVsLast !== null ? (slaVsLast > 0 ? "up" : slaVsLast < 0 ? "down" : "no_change") : "no_change"
+          },
+          citizenSatisfaction: { 
+            value: satisfactionRate, 
+            totalRated: resolvedWithConfirmation,
+            notConfirmed: totalResolvedForSatisfaction - resolvedWithConfirmation,
+            vsLast: satisfactionVsLast 
+          },
+          csat,
+          totalRatings,
+          byCategory: byCategory.reduce((acc, item) => {
+            acc[item._id] = item.count;
+            return acc;
+          }, {})
+        }
+      });
+    } catch (error) {
+      console.error("Agent get stats error:", error);
+      res.json({
+        success: true,
+        data: {
+          total: 0,
+          historicalTotal: 0,
+          submitted: 0,
+          pending: 0,
+          validated: 0,
+          assigned: 0,
+          inProgress: 0,
+          resolved: 0,
+          closed: 0,
+          rejected: 0,
+          totalOverdue: 0,
+          totalAtRisk: 0,
+          resolutionRate: 0,
+          avgFixTime: { value: null, unit: "days", vsLast: null, trend: "no_change" },
+          resolvedOnTime: { value: null, vsLast: null, trend: "no_change" },
+          citizenSatisfaction: { value: null, totalRated: 0, notConfirmed: 0, vsLast: null },
+          csat: 0,
+          totalRatings: 0,
+          byCategory: {}
+        }
+      });
     }
   }
 }

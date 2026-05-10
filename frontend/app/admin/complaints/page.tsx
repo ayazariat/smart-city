@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/store/useAuthStore";
 import { complaintService } from "@/services/complaint.service";
 import { adminService } from "@/services/admin.service";
@@ -23,12 +24,17 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function AdminComplaintsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, token } = useAuthStore();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("IN_PROGRESS");
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("status") || "";
+  });
   const [governorateFilter, setGovernorateFilter] = useState<string>("");
   const [municipalityFilter, setMunicipalityFilter] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
@@ -67,7 +73,7 @@ export default function AdminComplaintsPage() {
         setLoading(true);
         const response = await complaintService.getAllComplaints({
           page: 1,
-          limit: 100,
+          limit: 20,
           status: statusFilter || undefined,
           governorate: governorateFilter || undefined,
           municipality: municipalityFilter || undefined,
@@ -75,10 +81,12 @@ export default function AdminComplaintsPage() {
         });
         if (response.data?.complaints) {
           setComplaints(response.data.complaints);
+          setTotalCount(response.data.pagination?.totalCount ?? response.data.pagination?.total ?? response.data.complaints.length);
         }
       } catch (err) {
         console.error("Error fetching complaints:", err);
         setComplaints([]);
+        setTotalCount(0);
       } finally {
         setLoading(false);
       }
@@ -208,16 +216,16 @@ export default function AdminComplaintsPage() {
   return (
     <DashboardLayout>
     <div className="min-h-screen bg-slate-50/50">
-      <PageHeader
-        title="System Supervision — Complaints"
-        subtitle="Read-only monitoring and administrative oversight"
-        backHref="/dashboard"
-        rightContent={
-          <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
-            {stats.total ?? complaints.length} active total · {filteredComplaints.length} shown
-          </span>
-        }
-      />
+        <PageHeader
+          title={`All Complaints (${totalCount})`}
+          subtitle={t("admin.complaintsPageSubtitle")}
+          backHref="/dashboard"
+          rightContent={
+            <span className="px-3 py-1 bg-white/20 text-white rounded-full text-sm font-medium">
+              {t("admin.complaintsCount", { total: totalCount || stats.total || complaints.length, shown: filteredComplaints.length })}
+            </span>
+          }
+        />
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Stats Cards - Clickable Quick Filters */}
@@ -228,7 +236,7 @@ export default function AdminComplaintsPage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Total Complaints</p>
+                 <p className="text-sm text-slate-500">{t("admin.totalComplaints")}</p>
                 <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total ?? complaints.length}</p>
               </div>
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
@@ -243,7 +251,7 @@ export default function AdminComplaintsPage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Resolved</p>
+                 <p className="text-sm text-slate-500">{t("admin.resolved")}</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">{stats.resolved ?? resolvedCount}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
@@ -257,9 +265,9 @@ export default function AdminComplaintsPage() {
             className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'IN_PROGRESS' ? 'border-amber-500 ring-2 ring-amber-200' : 'border-slate-200 hover:border-amber-300'}`}
           >
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">At Risk (SLA)</p>
-                <p className="text-xs text-amber-500 mt-1">Close to deadline</p>
+                <div>
+                  <p className="text-sm text-slate-500">{t("admin.atRisk")}</p>
+                  <p className="text-xs text-amber-500 mt-1">{t("admin.closeToDeadline")}</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{stats.totalAtRisk ?? atRiskCount}</p>
               </div>
               <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -273,9 +281,9 @@ export default function AdminComplaintsPage() {
             className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'ASSIGNED' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 hover:border-red-300'}`}
           >
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-500">Overdue</p>
-                <p className="text-xs text-red-500 mt-1">Past deadline</p>
+                <div>
+                  <p className="text-sm text-slate-500">{t("admin.overdue")}</p>
+                  <p className="text-xs text-red-500 mt-1">{t("admin.pastDeadline")}</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{stats.totalOverdue ?? overdueCount}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -287,33 +295,33 @@ export default function AdminComplaintsPage() {
 
         {/* Team Performance */}
         <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200 mb-6">
-          <h3 className="text-sm font-semibold text-slate-700 mb-4">Team Performance</h3>
+          <h3 className="text-sm font-semibold text-slate-700 mb-4">{t("admin.teamPerformance")}</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-3 bg-blue-50 rounded-xl">
-              <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
-              <p className="text-xs text-slate-500 mt-1">In Progress</p>
-              <p className="text-[10px] text-blue-400">Currently being worked on</p>
-            </div>
-            <div className="text-center p-3 bg-purple-50 rounded-xl">
-              <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
-              <p className="text-xs text-slate-500 mt-1">Average Days</p>
-              <p className="text-[10px] text-purple-400">Time to process</p>
-            </div>
-            <div className="text-center p-3 bg-emerald-50 rounded-xl">
-              <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
-              <p className="text-xs text-slate-500 mt-1">Resolution Rate</p>
-              <p className="text-[10px] text-emerald-400">Percentage resolved</p>
-            </div>
-            <div className="text-center p-3 bg-red-50 rounded-xl">
-              <p className="text-2xl font-bold text-red-600">{complaints.filter(c => (c.priorityScore || 0) >= 15).length}</p>
-              <p className="text-xs text-slate-500 mt-1">High Priority</p>
-              <p className="text-[10px] text-red-400">Urgent issues (score 15+)</p>
-            </div>
+             <div className="text-center p-3 bg-blue-50 rounded-xl">
+               <p className="text-2xl font-bold text-blue-600">{complaints.filter(c => c.status === "IN_PROGRESS").length}</p>
+               <p className="text-xs text-slate-500 mt-1">{t("admin.inProgress")}</p>
+               <p className="text-[10px] text-blue-400">{t("admin.currentlyWorked")}</p>
+             </div>
+             <div className="text-center p-3 bg-purple-50 rounded-xl">
+               <p className="text-2xl font-bold text-purple-600">{avgDays}</p>
+               <p className="text-xs text-slate-500 mt-1">{t("admin.averageDays")}</p>
+               <p className="text-[10px] text-purple-400">{t("admin.timeToProcess")}</p>
+             </div>
+             <div className="text-center p-3 bg-emerald-50 rounded-xl">
+               <p className="text-2xl font-bold text-emerald-600">{resolutionRate}%</p>
+               <p className="text-xs text-slate-500 mt-1">{t("admin.resolutionRate")}</p>
+               <p className="text-[10px] text-emerald-400">{t("admin.percentageResolved")}</p>
+             </div>
+             <div className="text-center p-3 bg-red-50 rounded-xl">
+               <p className="text-2xl font-bold text-red-600">{complaints.filter(c => (c.priorityScore || 0) >= 15).length}</p>
+               <p className="text-xs text-slate-500 mt-1">{t("admin.highPriority")}</p>
+               <p className="text-[10px] text-red-400">{t("admin.urgentIssues")}</p>
+             </div>
           </div>
           
           {/* Categories */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <p className="text-sm text-slate-600 mb-2">Categories:</p>
+            <div className="mt-4 pt-4 border-t border-slate-100">
+             <p className="text-sm text-slate-600 mb-2">{t("admin.categories")}</p>
             <div className="flex flex-wrap gap-2">
                 {Object.entries(categoryCount).slice(0, 5).map(([cat, count]) => (
                   <span key={cat} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
@@ -332,13 +340,13 @@ export default function AdminComplaintsPage() {
             {/* Search */}
             <div className="flex-1 w-full relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search by description or category..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
-              />
+               <input
+                 type="text"
+                 placeholder={t("admin.searchPlaceholder")}
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-slate-50/50"
+               />
             </div>
 
             <button
@@ -346,7 +354,7 @@ export default function AdminComplaintsPage() {
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm border rounded-xl transition-all ${showFilters ? 'bg-primary/5 border-primary text-primary' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
             >
               <Filter className="w-4 h-4" />
-              Filters {(governorateFilter || municipalityFilter || categoryFilter || priorityFilter || statusFilter || dateFrom || dateTo) && (
+              {t("admin.filtersButton")} {(governorateFilter || municipalityFilter || categoryFilter || priorityFilter || statusFilter || dateFrom || dateTo) && (
                 <span className="w-2 h-2 bg-primary rounded-full" />
               )}
             </button>
@@ -354,15 +362,15 @@ export default function AdminComplaintsPage() {
             {/* Export Buttons */}
             <Button onClick={exportCSV} variant="outline" size="sm">
               <Download className="w-4 h-4 mr-1" />
-              CSV
+              {t("admin.exportCSV")}
             </Button>
             <Button onClick={exportPDF} variant="outline" size="sm" className="border-red-200 text-red-600 hover:bg-red-50">
               <Download className="w-4 h-4 mr-1" />
-              PDF
+              {t("admin.exportPDF")}
             </Button>
 
             <span className="hidden md:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary whitespace-nowrap">
-              {filteredComplaints.length} results
+              {t("admin.resultsCount", { count: filteredComplaints.length })}
             </span>
           </div>
 
@@ -422,21 +430,21 @@ export default function AdminComplaintsPage() {
                 ))}
               </select>
 
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-              >
-                <option value="">All Priorities</option>
-                <option value="HIGH">High (≥15)</option>
-                <option value="MEDIUM">Medium (6-14)</option>
-                <option value="LOW">Low (&lt;6)</option>
-              </select>
+               <select
+                 value={priorityFilter}
+                 onChange={(e) => setPriorityFilter(e.target.value)}
+                 className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+               >
+                 <option value="">{t("manager.priorityFilterAll")}</option>
+                 <option value="HIGH">{t("manager.priorityFilterHigh")}</option>
+                 <option value="MEDIUM">{t("manager.priorityFilterMedium")}</option>
+                 <option value="LOW">{t("manager.priorityFilterLow")}</option>
+               </select>
 
               {/* Date Range */}
               <div className="flex gap-2 sm:col-span-2 lg:col-span-2">
-                <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium pointer-events-none">FROM</span>
+                 <div className="flex-1 relative">
+                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium pointer-events-none">{t("dateRange.from")}</span>
                   <input
                     type="date"
                     value={dateFrom}
@@ -444,8 +452,8 @@ export default function AdminComplaintsPage() {
                     className="w-full pl-14 pr-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
                   />
                 </div>
-                <div className="flex-1 relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium pointer-events-none">TO</span>
+                 <div className="flex-1 relative">
+                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium pointer-events-none">{t("dateRange.to")}</span>
                   <input
                     type="date"
                     value={dateTo}

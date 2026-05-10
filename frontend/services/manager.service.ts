@@ -53,6 +53,15 @@ interface ManagerStatsResponse {
     totalOverdue?: number;
     totalAtRisk?: number;
     resolutionRate?: number;
+    avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
+    resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
+    citizenSatisfaction: {
+      value: number | null;
+      totalRated: number;
+      notConfirmed: number;
+      vsLast: number | null;
+    };
+    // Legacy backward compatibility (computed from new fields)
     averageResolutionTime?: number;
     slaComplianceRate?: number;
     csat?: number;
@@ -84,6 +93,13 @@ export const managerService = {
     if (params.limit) queryParams.append("limit", params.limit.toString());
 
     return apiClient.get<ManagerComplaintsResponse>(`/manager/complaints?${queryParams.toString()}`);
+  },
+
+  /**
+   * Get complaints with location data for map display
+   */
+  async getManagerComplaintsGeo() {
+    return apiClient.get<{ success: boolean; data: Array<{ _id: string; title: string; description?: string; category: string; status: string; priorityScore?: number; urgency?: string; referenceId?: string; createdAt: string; location: { lat: number; lng: number; address?: string }; municipalityName?: string }>; count: number }>(`/manager/complaints/geo`);
   },
 
   /**

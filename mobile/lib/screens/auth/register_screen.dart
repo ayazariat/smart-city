@@ -316,345 +316,431 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final error = ref.watch(authProvider).errorMessage;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFF8FAFC), Color(0xFFF1F5F9)],
+          ),
         ),
-        title: const Text(
-          'Créer un compte',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [AppColors.primary, AppColors.primaryDark],
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 40),
+                  Center(
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppColors.primary, Color(0xFF1E40AF)],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.25),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.person_add,
+                              size: 40,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.person_add,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Rejoignez Smart City Tunisia',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Créez un compte pour signaler les problèmes de votre ville',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 24),
-                    if (error != null)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red.shade100),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Create Account',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
                         ),
-                        child: Row(
+                        const SizedBox(height: 8),
+                        Text(
+                          'Join Smart City Tunisia to report issues',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Sign Up',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Fill in your information to create an account',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 24),
+                        if (error != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.red.shade100),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.error_outline, color: Colors.red[600]),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    error,
+                                    style: TextStyle(color: Colors.red[700]),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        TextFormField(
+                          controller: _fullNameController,
+                          decoration: InputDecoration(
+                            labelText: 'Full Name',
+                            hintText: 'John Doe',
+                            prefixIcon: const Icon(Icons.person_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          validator: (v) => v == null || v.length < 3
+                              ? 'Name must be at least 3 characters'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            labelText: 'Email',
+                            hintText: 'your@email.com',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          validator: (v) => v == null || v.isEmpty
+                              ? 'Email is required'
+                              : (!v.contains('@') ? 'Invalid email' : null),
+                        ),
+                        const SizedBox(height: 16),
+                        // Location section with governorate and municipality
+                        Row(
                           children: [
-                            Icon(Icons.error_outline, color: Colors.red[600]),
+                            const Icon(Icons.location_on, size: 20, color: Color(0xFF64748B)),
                             const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                error,
-                                style: TextStyle(color: Colors.red[700]),
+                            const Text(
+                              'Location',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: _isLoadingLocation ? null : _useMyLocation,
+                              icon: _isLoadingLocation
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.primary,
+                                      ),
+                                    )
+                                  : const Icon(Icons.navigation, size: 18),
+                              label: const Text('Use my location'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.primary,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    TextFormField(
-                      controller: _fullNameController,
-                      decoration: InputDecoration(
-                        labelText: 'Nom complet',
-                        hintText: 'Votre nom complet',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<GovernorateData>(
+                          value: _selectedGovernorate,
+                          decoration: InputDecoration(
+                            labelText: 'Governorate',
+                            hintText: 'Select governorate',
+                            prefixIcon: const Icon(Icons.map_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          items: TunisiaGeography.governorates.map((gov) {
+                            return DropdownMenuItem(
+                              value: gov,
+                              child: Text(gov.name),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedGovernorate = value;
+                              _selectedMunicipality = null;
+                            });
+                          },
                         ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F7FA),
-                      ),
-                      validator: (v) => v == null || v.length < 3
-                          ? 'Le nom doit contenir au moins 3 caractères'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        hintText: 'votre@email.com',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: _selectedMunicipality,
+                          decoration: InputDecoration(
+                            labelText: 'Municipality',
+                            hintText: _selectedGovernorate == null
+                                ? 'Select governorate first'
+                                : 'Select municipality',
+                            prefixIcon: const Icon(Icons.location_city),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          items: _selectedGovernorate?.municipalities.map((muni) {
+                            return DropdownMenuItem(
+                              value: muni,
+                              child: Text(muni),
+                            );
+                          }).toList() ?? [],
+                          onChanged: _selectedGovernorate == null ? null : (value) {
+                            setState(() {
+                              _selectedMunicipality = value;
+                            });
+                          },
                         ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F7FA),
-                      ),
-                      validator: (v) => v == null || v.isEmpty
-                          ? 'Email obligatoire'
-                          : (!v.contains('@') ? 'Email invalide' : null),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        labelText: 'Téléphone (optionnel)',
-                        hintText: '+216 XX XXX XXX',
-                        prefixIcon: const Icon(Icons.phone_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            labelText: 'Phone',
+                            hintText: '2X XXX XXX',
+                            prefixIcon: const Icon(Icons.phone_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Phone is required';
+                            if (v.length != 8) return 'Phone must be 8 digits';
+                            return null;
+                          },
                         ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F7FA),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<GovernorateData>(
-                      initialValue: _selectedGovernorate,
-                      decoration: InputDecoration(
-                        labelText: 'Gouvernorat (optionnel)',
-                        prefixIcon: const Icon(Icons.location_on_outlined),
-                        suffixIcon: IconButton(
-                          icon: _isLoadingLocation
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          onChanged: _updatePasswordStrength,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            hintText: '••••••••',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          validator: (v) => v == null || v.length < 8
+                              ? 'Password must be at least 8 characters'
+                              : null,
+                        ),
+                        if (_passwordController.text.isNotEmpty)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Password Strength',
+                                    style: TextStyle(fontSize: 12),
                                   ),
-                                )
-                              : const Icon(Icons.my_location),
-                          onPressed: _isLoadingLocation ? null : _useMyLocation,
-                          tooltip: 'Utiliser ma position',
+                                  Text(
+                                    _getStrengthLabel(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: _getStrengthColor(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                                child: FractionallySizedBox(
+                                  widthFactor: _passwordStrength / 4,
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: _getStrengthColor(),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _confirmPasswordController,
+                          obscureText: _obscureConfirm,
+                          decoration: InputDecoration(
+                            labelText: 'Confirm Password',
+                            hintText: '••••••••',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirm
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscureConfirm = !_obscureConfirm,
+                              ),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF5F7FA),
+                          ),
+                          validator: (v) => v != _passwordController.text
+                              ? 'Passwords do not match'
+                              : null,
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F7FA),
-                      ),
-                      items: TunisiaGeography.governorates
-                          .map(
-                            (g) =>
-                                DropdownMenuItem(value: g, child: Text(g.name)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        _selectedGovernorate = v;
-                        _selectedMunicipality = null;
-                      }),
-                    ),
-                    if (_selectedGovernorate != null) ...[
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedMunicipality,
-                        decoration: InputDecoration(
-                          labelText: 'Municipalité',
-                          prefixIcon: const Icon(Icons.location_city_outlined),
-                          border: OutlineInputBorder(
+                        const SizedBox(height: 24),
+                        Container(
+                          height: 52,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppColors.primary,
+                                AppColors.primaryDark,
+                              ],
+                            ),
                             borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          filled: true,
-                          fillColor: const Color(0xFFF5F7FA),
-                        ),
-                        items: _selectedGovernorate!.municipalities
-                            .map(
-                              (m) => DropdownMenuItem(value: m, child: Text(m)),
-                            )
-                            .toList(),
-                        onChanged: (v) =>
-                            setState(() => _selectedMunicipality = v),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      onChanged: _updatePasswordStrength,
-                      decoration: InputDecoration(
-                        labelText: 'Mot de passe',
-                        hintText: '••••••••',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
-                          ),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F7FA),
-                      ),
-                      validator: (v) => v == null || v.length < 6
-                          ? 'Le mot de passe doit contenir au moins 6 caractères'
-                          : null,
-                    ),
-                    if (_passwordController.text.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: _passwordStrength / 4,
-                                backgroundColor: Colors.grey[200],
-                                valueColor: AlwaysStoppedAnimation(
-                                  _getStrengthColor(),
-                                ),
-                                minHeight: 6,
+                          child: ElevatedButton(
+                            onPressed: isLoading ? null : _handleRegister,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
                               ),
                             ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Create Account',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            _getStrengthLabel(),
-                            style: TextStyle(
-                              color: _getStrengthColor(),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Already have an account?',
+                              style: TextStyle(color: Colors.grey[600]),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _confirmPasswordController,
-                      obscureText: _obscureConfirm,
-                      decoration: InputDecoration(
-                        labelText: 'Confirmer le mot de passe',
-                        hintText: '••••••••',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureConfirm
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () => setState(
-                            () => _obscureConfirm = !_obscureConfirm,
-                          ),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xFFF5F7FA),
-                      ),
-                      validator: (v) => v != _passwordController.text
-                          ? 'Les mots de passe ne correspondent pas'
-                          : null,
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [AppColors.primary, AppColors.primaryDark],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : _handleRegister,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Créer mon compte',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Déjà un compte?',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Se connecter'),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Sign In'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

@@ -7,14 +7,14 @@ FastAPI routes for duplicate detection service (BL-25).
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils.db import get_db
 
 
 router = APIRouter()
 
 
-async def _fetch_candidates_from_db(municipality: str, category: str, days_back: int = 90, limit: int = 500) -> List[Dict]:
+async def _fetch_candidates_from_db(municipality: str, category: str, days_back: int = 365, limit: int = 500) -> List[Dict]:
     """Fetch candidate complaints from MongoDB for duplicate comparison."""
     try:
         db = await get_db()
@@ -22,15 +22,20 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
             print("[DUPLICATE] ERROR: Database connection failed!")
             return []
 
-        cutoff = datetime.utcnow() - timedelta(days=days_back)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
         
         # Build query - search for ANY status in the municipality (not filtered by status!)
+        # Use regex for flexible municipality matching (case-insensitive, handle accents)
         query = {
             "createdAt": {"$gte": cutoff}
         }
         
         if municipality:
-            query["municipalityName"] = municipality
+            # Remove accents and use regex for flexible matching
+            import unicodedata
+            normalized_mun = ''.join(c for c in unicodedata.normalize('NFD', municipality) 
+                                    if unicodedata.category(c) != 'Mn')
+            query["municipalityName"] = {"$regex": normalized_mun, "$options": "i"}
             
         print(f"[DUPLICATE] Query: {query}")
         
@@ -49,7 +54,14 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
         async for doc in cursor:
             doc["_id"] = str(doc["_id"])
             if "createdAt" in doc and not doc.get("submittedAt"):
-                doc["submittedAt"] = doc["createdAt"].isoformat() if isinstance(doc["createdAt"], datetime) else doc["createdAt"]
+                # Ensure createdAt is timezone-aware before converting to ISO
+                created_at = doc["createdAt"]
+                if isinstance(created_at, datetime):
+                    if created_at.tzinfo is None:
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                    doc["submittedAt"] = created_at.isoformat()
+                else:
+                    doc["submittedAt"] = created_at
             candidates.append(doc)
         return candidates
     except Exception as e:
@@ -90,7 +102,7 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
             try:
                 submitted_at = datetime.fromisoformat(request.submittedAt.replace("Z", "+00:00"))
             except Exception:
-                submitted_at = datetime.now()
+                submitted_at = datetime.now(timezone.utc)
 
         new_complaint = {
             "title": request.title or "",
@@ -213,7 +225,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "ok",
         "service": "duplicate_detection",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -228,7 +240,7 @@ async def get_stats() -> Dict[str, Any]:
                 "data": {"total_checked": 0, "duplicates_found_today": 0, "merge_rate": 0.0}
             }
 
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
         total_checked = await db.complaints.count_documents(
             {"duplicateStatus": {"$exists": True}}

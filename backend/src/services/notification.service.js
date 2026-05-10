@@ -5,6 +5,7 @@
  */
 
 const User = require('../models/User');
+const { t, formatRelativeTime } = require('../utils/i18n');
 
 /**
  * Normalize user ID to string
@@ -247,59 +248,62 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, ext
     if (complaint?.title) complaintTitle = complaint.title;
   } catch (e) { /* non-blocking */ }
 
-  const deptName = extras.departmentName || 'a department';
-  const reason = extras.reason ? ` Reason: ${extras.reason}.` : '';
+  // Get user language preference
+  let locale = 'en';
+  try {
+    const user = await User.findById(citizenId).select('language').lean();
+    if (user?.language) locale = user.language;
+  } catch (e) { /* fallback to en */ }
 
-  const titleMap = {
-    'VALIDATED': 'Complaint Validated',
-    'REJECTED': 'Complaint Rejected',
-    'ASSIGNED': 'Complaint Assigned',
-    'IN_PROGRESS': 'Work Started',
-    'RESOLVED': 'Complaint Resolved',
-    'CLOSED': 'Complaint Closed',
-  };
+  const deptName = extras.departmentName || t('notifications.complaintAssigned.department', locale) || 'a department';
+  const reason = extras.reason ? ` ${t('notifications.complaintRejected.reason', locale) || 'Reason:'} ${extras.reason}.` : '';
 
-  const messageMap = {
-    'VALIDATED': `Your complaint '${complaintTitle}' has been validated and is now visible publicly.`,
-    'REJECTED': `Your complaint '${complaintTitle}' was rejected.${reason}`,
-    'ASSIGNED': `Your complaint '${complaintTitle}' has been assigned to ${deptName}.`,
-    'IN_PROGRESS': `Work has started on your complaint '${complaintTitle}'.`,
-    'RESOLVED': `Your complaint '${complaintTitle}' has been resolved! Please confirm if the issue is fixed.`,
-    'CLOSED': `Your complaint '${complaintTitle}' has been officially closed.`,
-  };
+  const titleKey = `notifications.${status.toLowerCase()}Complaint.title`;
+  const messageKey = `notifications.${status.toLowerCase()}Complaint.message`;
 
-  const type = status.toLowerCase();
-  const title = titleMap[status] || `Status: ${status}`;
-  const message = messageMap[status] || `Your complaint '${complaintTitle}' status has been updated to ${status}.`;
+  const title = t(titleKey, locale) || `Status: ${status}`;
+  const message = t(messageKey, locale, { complaintTitle, department: deptName, reason }) || `Your complaint '${complaintTitle}' status has been updated to ${status}.`;
 
   return sendNotification(io, citizenId, {
-    type,
+    type: status.toLowerCase(),
     title,
     message,
     complaintId,
-    metadata: { status, ...extras },
+    metadata: { status, complaintTitle, departmentName: extras.departmentName, reason: extras.reason, ...extras },
   });
 };
 
 /**
- * Notify about resolution submission (citizen gets notified that technician marked it resolved)
+ * Notify about resolution submission (department manager gets notified for review)
  */
 const notifyResolutionSubmitted = async (io, complaintId, resolutionNotes) => {
   const Complaint = require('../models/Complaint');
+  const Department = require('../models/Department');
+  const User = require('../models/User');
+
   const complaint = await Complaint.findById(complaintId)
-    .populate('createdBy', '_id')
-    .populate('assignedTo', '_id')
+    .populate('assignedDepartment', 'id name responsable')
     .lean();
 
-  if (!complaint?.createdBy) return null;
+  if (!complaint?.assignedDepartment) return null;
+
+  // Find department manager
+  const departmentManager = await User.findById(complaint.assignedDepartment.responsable).select('_id language').lean();
+  
+  if (!departmentManager) return null;
+
+  // Get user language preference
+  const locale = departmentManager.language || 'en';
 
   const message = resolutionNotes
-    ? `Technician has marked your complaint as resolved: "${resolutionNotes.slice(0, 100)}${resolutionNotes.length > 100 ? '...' : ''}"`
-    : 'Technician has marked your complaint as resolved.';
+    ? t('notifications.resolutionSubmitted.message', locale, { notes: `${resolutionNotes.slice(0, 100)}${resolutionNotes.length > 100 ? '...' : ''}` })
+    : t('notifications.resolutionSubmittedNoNotes.message', locale);
 
-  return sendNotification(io, complaint.createdBy._id.toString(), {
+  const title = t('notifications.resolutionSubmitted.title', locale);
+
+  return sendNotification(io, departmentManager._id.toString(), {
     type: 'report_submitted',
-    title: 'Resolution Reported',
+    title,
     message,
     complaintId,
     metadata: { resolutionNotes },
@@ -314,7 +318,7 @@ const notifyUpvote = async (io, complaintId, upvoterId) => {
   const User = require('../models/User');
 
   const complaint = await Complaint.findById(complaintId)
-    .populate('createdBy', '_id fullName')
+    .populate('createdBy', '_id fullName language')
     .lean();
 
   const upvoter = await User.findById(upvoterId).select('fullName').lean();
@@ -323,13 +327,19 @@ const notifyUpvote = async (io, complaintId, upvoterId) => {
     return null; // Don't notify self
   }
 
+  // Get user language preference
+  const locale = complaint.createdBy.language || 'en';
+  const complaintTitle = complaint.title?.slice(0, 50) || '';
+
   const message = upvoter?.fullName
-    ? `${upvoter.fullName} upvoted your complaint: "${complaint.title?.slice(0, 50) || ''}"`
-    : 'Someone upvoted your complaint.';
+    ? t('notifications.upvoteReceived.message', locale, { upvoterName: upvoter.fullName, complaintTitle })
+    : t('notifications.upvoteReceivedAnonymous.message', locale);
+
+  const title = t('notifications.upvoteReceived.title', locale);
 
   return sendNotification(io, complaint.createdBy._id.toString(), {
     type: 'upvoted',
-    title: 'Your complaint got an upvote!',
+    title,
     message,
     complaintId,
     metadata: { upvoterId, upvoterName: upvoter?.fullName },
@@ -343,10 +353,15 @@ const notifyDuplicateDetected = async (io, complaintId, duplicateOf) => {
   const Complaint = require('../models/Complaint');
   let complaintTitle = 'your complaint';
   let duplicateTitle = 'an existing complaint';
+  let locale = 'en';
 
   try {
-    const complaint = await Complaint.findById(complaintId).select('title').lean();
+    const complaint = await Complaint.findById(complaintId)
+      .populate('createdBy', '_id language')
+      .select('title')
+      .lean();
     if (complaint?.title) complaintTitle = complaint.title;
+    if (complaint?.createdBy?.language) locale = complaint.createdBy.language;
   } catch (e) {}
 
   try {
@@ -354,10 +369,13 @@ const notifyDuplicateDetected = async (io, complaintId, duplicateOf) => {
     if (dup?.title) duplicateTitle = dup.title;
   } catch (e) {}
 
+  const title = t('notifications.duplicateDetected.title', locale);
+  const message = t('notifications.duplicateDetected.message', locale, { complaintTitle, duplicateTitle });
+
   return sendNotification(io, complaintId, {
     type: 'duplicate_detected',
-    title: 'Possible Duplicate Detected',
-    message: `Your complaint "${complaintTitle}" may be a duplicate of "${duplicateTitle}". We'll review it.`,
+    title,
+    message,
     complaintId,
     metadata: { duplicateOf, duplicateTitle },
   });

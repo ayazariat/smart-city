@@ -25,11 +25,21 @@ try:
     def get_urgency_classifier():
         global _urgency_classifier
         if _urgency_classifier is None:
-            _urgency_classifier = hf_pipeline(
-                "zero-shot-classification",
-                model="facebook/bart-large-mnli",
-                device=-1  # CPU
-            )
+            try:
+                import torch
+                device = 0 if torch.cuda.is_available() else -1
+                _urgency_classifier = hf_pipeline(
+                    "zero-shot-classification",
+                    model="facebook/bart-large-mnli",
+                    device=device
+                )
+            except Exception as e:
+                print(f"Error loading urgency classifier with device: {e}, falling back to CPU")
+                _urgency_classifier = hf_pipeline(
+                    "zero-shot-classification",
+                    model="facebook/bart-large-mnli",
+                    device=-1
+                )
         return _urgency_classifier
     
     TRANSFORMERS_AVAILABLE = True

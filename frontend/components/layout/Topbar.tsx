@@ -12,13 +12,14 @@ import { useTranslation } from "react-i18next";
 const BackButton = () => {
   const router = useRouter();
   const pathname = usePathname();
+  const { t } = useTranslation();
   if (pathname === "/dashboard") return null;
   return (
     <button
       onClick={() => router.back()}
       className="btn secondary sm icon-only"
       style={{ marginRight: 8 }}
-      title="Retour"
+      title={t('common.back')}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
         <polyline points="15 18 9 12 15 6" />
@@ -39,11 +40,12 @@ const NotificationBell = () => {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
-  const getNotifStyle = (type: string) => {
-    const t = type.toLowerCase();
-    if (t.includes("validated") || t.includes("resolved") || t.includes("closed")) return { icon: CheckCircle, color: "text-emerald-600" };
-    if (t.includes("rejected") || t.includes("reject")) return { icon: X, color: "text-red-600" };
-    if (t.includes("assigned") || t.includes("assign")) return { icon: ChevronDown, color: "text-purple-600" };
+  const getNotifStyle = (type: string | undefined) => {
+    if (!type) return { icon: Bell, color: "text-gray-600" };
+    const typeLower = type.toLowerCase();
+    if (typeLower.includes("validated") || typeLower.includes("resolved") || typeLower.includes("closed")) return { icon: CheckCircle, color: "text-emerald-600" };
+    if (typeLower.includes("rejected") || typeLower.includes("reject")) return { icon: X, color: "text-red-600" };
+    if (typeLower.includes("assigned") || typeLower.includes("assign")) return { icon: ChevronDown, color: "text-purple-600" };
     return { icon: Bell, color: "text-gray-600" };
   };
 
@@ -80,7 +82,7 @@ const NotificationBell = () => {
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
         className="relative p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"
-        title="Notifications"
+        title={t('sidebar.notifications')}
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (

@@ -15,6 +15,7 @@ require('./jobs/trend-prediction.job');
 require('./models/User');
 require('./models/Municipality');
 require('./models/Department');
+require('./models/SatisfactionSurvey');
 
 const PORT = process.env.PORT || 5000;
 

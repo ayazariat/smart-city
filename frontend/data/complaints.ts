@@ -2,12 +2,13 @@
 export { 
   statusConfig, 
   getCategoryLabel,
-  getCategoryOptions,
   categoryLabels,
   STATUS_OPTIONS,
   getComplaintIdDisplay,
   CATEGORIES 
 } from "@/lib/complaints";
+
+import { categoryOptions } from "@/lib/categories";
 
 // Urgency labels
 export const urgencyLabels: Record<string, string> = {

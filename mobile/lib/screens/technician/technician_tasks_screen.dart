@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:smart_city_app/core/constants/colors.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
+import 'package:smart_city_app/services/complaint_service.dart';
+import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/screens/technician/technician_task_detail_screen.dart';
 
 class TechnicianTasksScreen extends ConsumerStatefulWidget {
@@ -17,7 +21,9 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
   String _statusFilter = 'ALL';
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
-  final bool _actionLoading = false;
+  bool _actionLoading = false;
+  final ComplaintService _complaintService = ComplaintService();
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -59,7 +65,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppTheme.background,
       body: RefreshIndicator(
         onRefresh: _loadTasks,
         child: CustomScrollView(
@@ -68,13 +74,13 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
               expandedHeight: 180,
               floating: false,
               pinned: true,
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.textPrimary,
+              backgroundColor: AppTheme.surface,
+              foregroundColor: AppTheme.textPrimary,
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [AppColors.primary, AppColors.primaryDark],
+                      colors: [AppTheme.primary, AppTheme.primaryDark],
                     ),
                   ),
                   child: SafeArea(
@@ -89,7 +95,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
+                                  color: Colors.white.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: const Icon(
@@ -104,7 +110,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'Mes tâches',
+                                      'Mes Tâches',
                                       style: TextStyle(
                                         fontSize: 22,
                                         fontWeight: FontWeight.bold,
@@ -149,30 +155,10 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                       crossAxisSpacing: 12,
                       childAspectRatio: 1.4,
                       children: [
-                        _buildStatCard(
-                          'Total',
-                          '${stats?.total ?? 0}',
-                          Icons.summarize,
-                          AppColors.primary,
-                        ),
-                        _buildStatCard(
-                          'Assignées',
-                          '${stats?.submitted ?? stats?.pending ?? 0}',
-                          Icons.assignment,
-                          const Color(0xFFF97316),
-                        ),
-                        _buildStatCard(
-                          'En cours',
-                          '${stats?.inProgress ?? 0}',
-                          Icons.engineering,
-                          const Color(0xFF8B5CF6),
-                        ),
-                        _buildStatCard(
-                          'Résolues',
-                          '${stats?.resolved ?? 0}',
-                          Icons.check_circle,
-                          const Color(0xFF22C55E),
-                        ),
+                        _buildStatCard('Total', '${stats?.total ?? 0}', Icons.summarize, AppTheme.primary),
+                        _buildStatCard('Assignées', '${stats?.submitted ?? 0}', Icons.assignment, const Color(0xFF8B5CF6)),
+                        _buildStatCard('En cours', '${stats?.inProgress ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+                        _buildStatCard('Résolues', '${stats?.resolved ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -180,24 +166,24 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildFilterChip('ALL', 'Toutes'),
+                          _buildFilterChip('ALL', 'Tous'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('ASSIGNED', 'Assignées'),
+                          _buildFilterChip('ASSIGNED', 'Assigné'),
                           const SizedBox(width: 8),
                           _buildFilterChip('IN_PROGRESS', 'En cours'),
                           const SizedBox(width: 8),
-                          _buildFilterChip('RESOLVED', 'Résolues'),
+                          _buildFilterChip('RESOLVED', 'Résolu'),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.surface,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
+                            color: Colors.black.withOpacity(0.05),
                             blurRadius: 8,
                           ),
                         ],
@@ -226,7 +212,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
             if (state.isLoading)
               const SliverFillRemaining(
                 child: Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
+                  child: CircularProgressIndicator(color: AppTheme.primary),
                 ),
               )
             else if (tasks.isEmpty)
@@ -238,7 +224,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F7FA),
+                          color: AppTheme.background,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -277,6 +263,310 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
     );
   }
 
+  // ─── Helper methods ───────────────────────────────────────────────────────
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'ASSIGNED': return const Color(0xFF8B5CF6);
+      case 'IN_PROGRESS': return const Color(0xFFF97316);
+      case 'RESOLVED': return const Color(0xFF22C55E);
+      case 'CLOSED': return const Color(0xFF64748B);
+      default: return AppTheme.textMuted;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'ASSIGNED': return 'Assigné';
+      case 'IN_PROGRESS': return 'En cours';
+      case 'RESOLVED': return 'Résolu';
+      case 'CLOSED': return 'Clôturé';
+      default: return status;
+    }
+  }
+
+  Color _urgencyColor(String urgency) {
+    switch (urgency.toUpperCase()) {
+      case 'LOW': return const Color(0xFF22C55E);
+      case 'MEDIUM': return const Color(0xFFF59E0B);
+      case 'HIGH': return const Color(0xFFF97316);
+      case 'URGENT': return const Color(0xFFEF4444);
+      default: return AppTheme.textMuted;
+    }
+  }
+
+  String _categoryLabel(String cat) {
+    switch (cat.toUpperCase()) {
+      case 'ROAD': return 'Routes';
+      case 'LIGHTING': return 'Éclairage';
+      case 'WASTE': return 'Déchets';
+      case 'WATER': return 'Eau';
+      case 'SAFETY': return 'Sécurité';
+      case 'PUBLIC_PROPERTY': return 'Domaine public';
+      case 'GREEN_SPACE': return 'Espaces verts';
+      default: return cat;
+    }
+  }
+
+  String _priorityLabel(int score) {
+    if (score >= 20) return 'CRITIQUE';
+    if (score >= 15) return 'HAUTE';
+    if (score >= 10) return 'MOYENNE';
+    return 'BASSE';
+  }
+
+  Color _priorityColor(int score) {
+    if (score >= 20) return const Color(0xFFEF4444);
+    if (score >= 15) return const Color(0xFFF97316);
+    if (score >= 10) return const Color(0xFFF59E0B);
+    return const Color(0xFF22C55E);
+  }
+
+  // ─── Actions ──────────────────────────────────────────────────────────────
+
+  void _confirmStartWork(Complaint task) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Démarrer le travail'),
+        content: Text('Voulez-vous démarrer le travail sur "${task.title}" ? Le statut passera à En cours.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _startWork(task.id);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
+            child: const Text('Démarrer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startWork(String taskId) async {
+    setState(() => _actionLoading = true);
+    try {
+      await ref.read(technicianTasksProvider.notifier).startTask(taskId);
+      await _loadTasks();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Travail démarré avec succès !'), backgroundColor: Color(0xFF22C55E)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionLoading = false);
+    }
+  }
+
+  void _showResolveModal(Complaint task) {
+    final notesController = TextEditingController();
+    List<File> selectedPhotos = [];
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 20, right: 20, top: 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text('Marquer comme résolu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Task info
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                  child: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+                const SizedBox(height: 16),
+                // Resolution notes
+                const Text('Rapport de résolution *', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: notesController,
+                  maxLines: 5,
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Décrivez le travail effectué pour résoudre ce problème...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primary)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${notesController.text.length}/20 caractères minimum',
+                  style: TextStyle(fontSize: 12, color: notesController.text.length >= 20 ? const Color(0xFF22C55E) : AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                // Proof photos
+                const Text('Photos de preuve *', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () async {
+                    final images = await _picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
+                    if (images.isNotEmpty) {
+                      setModalState(() {
+                        selectedPhotos.addAll(images.map((x) => File(x.path)));
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: selectedPhotos.isNotEmpty ? const Color(0xFFF0FDF4) : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selectedPhotos.isNotEmpty ? const Color(0xFF22C55E) : Colors.grey.shade300,
+                        style: BorderStyle.solid,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.camera_alt, size: 32, color: selectedPhotos.isNotEmpty ? const Color(0xFF22C55E) : Colors.grey),
+                        const SizedBox(height: 8),
+                        Text(
+                          selectedPhotos.isNotEmpty ? '${selectedPhotos.length} photo(s) sélectionnée(s)' : 'Appuyez pour ajouter des photos',
+                          style: TextStyle(color: selectedPhotos.isNotEmpty ? const Color(0xFF22C55E) : Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (selectedPhotos.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: selectedPhotos.length,
+                      itemBuilder: (_, i) => Stack(
+                        children: [
+                          Container(
+                            width: 80, height: 80,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              image: DecorationImage(image: FileImage(selectedPhotos[i]), fit: BoxFit.cover),
+                            ),
+                          ),
+                          Positioned(
+                            top: 0, right: 8,
+                            child: GestureDetector(
+                              onTap: () => setModalState(() => selectedPhotos.removeAt(i)),
+                              child: Container(
+                                width: 20, height: 20,
+                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                child: const Icon(Icons.close, size: 14, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                // Submit button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: (isSubmitting || notesController.text.trim().length < 20 || selectedPhotos.isEmpty)
+                        ? null
+                        : () async {
+                            setModalState(() => isSubmitting = true);
+                            try {
+                              // Upload photos first
+                              List<String> photoUrls = [];
+                              if (selectedPhotos.isNotEmpty) {
+                                try {
+                                  final uploadResult = await ApiClient().uploadFiles(
+                                    '/upload',
+                                    selectedPhotos.map((f) => f.path).toList(),
+                                    fieldName: 'media',
+                                  );
+                                  if (uploadResult != null && uploadResult['data'] != null) {
+                                    for (final item in uploadResult['data']) {
+                                      if (item['url'] != null) photoUrls.add(item['url'].toString());
+                                    }
+                                  }
+                                } catch (_) {}
+                              }
+                              await _complaintService.completeTask(task.id, {
+                                'resolutionNotes': notesController.text.trim(),
+                                if (photoUrls.isNotEmpty) 'proofPhotos': photoUrls.map((u) => {'url': u, 'type': 'photo'}).toList(),
+                              });
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              await _loadTasks();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Tâche résolue avec succès !'), backgroundColor: Color(0xFF22C55E)),
+                                );
+                              }
+                            } catch (e) {
+                              setModalState(() => isSubmitting = false);
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text('Erreur: $e'), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF22C55E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text(
+                            notesController.text.trim().length >= 20 && selectedPhotos.isNotEmpty
+                                ? 'Soumettre la résolution'
+                                : selectedPhotos.isEmpty
+                                    ? 'Photo de preuve requise'
+                                    : '${20 - notesController.text.trim().length} caractères manquants',
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatCard(
     String label,
     String value,
@@ -286,10 +576,10 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -298,7 +588,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -328,10 +618,10 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.white,
+          color: isSelected ? AppTheme.primary : AppTheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? AppColors.primary : const Color(0xFFE2E8F0),
+            color: isSelected ? AppTheme.primary : AppTheme.border,
           ),
         ),
         child: Text(
@@ -348,107 +638,220 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
 
   Widget _buildTaskCard(Complaint task) {
     final statusColor = _statusColor(task.status);
+    final statusLabel = _statusLabel(task.status);
+    final urgencyColor = _urgencyColor(task.urgency ?? 'LOW');
+    final urgencyLabel = task.urgency ?? 'LOW';
+    final priorityLabel = _priorityLabel(task.priorityScore.toInt());
+    final priorityColor = _priorityColor(task.priorityScore.toInt());
+
+    // SLA countdown
+    String? slaText;
+    Color slaColor = AppTheme.success;
+    if (task.slaDeadline != null && !['RESOLVED', 'CLOSED'].contains(task.status)) {
+      final diff = task.slaDeadline!.difference(DateTime.now());
+      if (diff.isNegative) {
+        final abs = diff.abs();
+        slaText = abs.inDays > 0 ? '${abs.inDays}j ${abs.inHours % 24}h en retard' : '${abs.inHours}h en retard';
+        slaColor = Colors.red;
+      } else if (diff.inHours < 48) {
+        slaText = diff.inDays > 0 ? '${diff.inDays}j ${diff.inHours % 24}h restant' : '${diff.inHours}h restant';
+        slaColor = const Color(0xFFF97316);
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: statusColor.withOpacity(0.3)),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => TechnicianTaskDetailScreen(taskId: task.id),
-            ),
-          ),
+            MaterialPageRoute(builder: (_) => TechnicianTaskDetailScreen(taskId: task.id)),
+          ).then((_) => _loadTasks()),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                // Badges row
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
+                    // Reference ID
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        _statusLabel(task.status),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
+                        '#${task.id.length > 6 ? task.id.substring(task.id.length - 6).toUpperCase() : task.id.toUpperCase()}',
+                        style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textSecondary),
                       ),
                     ),
-                    const Spacer(),
-                    Text(
-                      '${task.createdAt.day}/${task.createdAt.month}/${task.createdAt.year}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    // Status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                          const SizedBox(width: 4),
+                          Text(statusLabel, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: statusColor)),
+                        ],
+                      ),
                     ),
+                    // Category badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(_categoryLabel(task.category), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primary)),
+                    ),
+                    // Urgency badge
+                    if (task.urgency != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: urgencyColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(urgencyLabel, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: urgencyColor)),
+                      ),
+                    // Priority badge
+                    if (task.priorityScore >= 15)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: priorityColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber, size: 12, color: priorityColor),
+                            const SizedBox(width: 3),
+                            Text(priorityLabel, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: priorityColor)),
+                          ],
+                        ),
+                      ),
+                    // SLA badge
+                    if (slaText != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: slaColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.access_time, size: 12, color: slaColor),
+                            const SizedBox(width: 3),
+                            Text(slaText, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: slaColor)),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
+                // Title
                 Text(
                   task.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                  maxLines: 1,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   task.description,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
+                // Meta row
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    if (task.municipalityName != null)
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.location_city, size: 13, color: AppTheme.textMuted),
+                        const SizedBox(width: 3),
+                        Text(task.municipalityName!, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                      ]),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.calendar_today, size: 13, color: AppTheme.textMuted),
+                      const SizedBox(width: 3),
+                      Text('${task.createdAt.day}/${task.createdAt.month}/${task.createdAt.year}', style: const TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                    ]),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Action buttons
                 Row(
                   children: [
-                    Icon(Icons.category, size: 14, color: Colors.grey[400]),
-                    const SizedBox(width: 4),
-                    Text(
-                      task.category,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                    ),
-                    if (task.municipalityName != null) ...[
-                      const SizedBox(width: 12),
-                      Icon(
-                        Icons.location_city,
-                        size: 14,
-                        color: Colors.grey[400],
+                    if (task.status == 'ASSIGNED') ...[
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _actionLoading ? null : () => _confirmStartWork(task),
+                          icon: const Icon(Icons.play_arrow, size: 16),
+                          label: const Text('Démarrer'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        task.municipalityName!,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      ),
+                      const SizedBox(width: 8),
                     ],
-                    const Spacer(),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: AppColors.primary,
+                    if (task.status == 'IN_PROGRESS') ...[
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _actionLoading ? null : () => _showResolveModal(task),
+                          icon: const Icon(Icons.check_circle, size: 16),
+                          label: const Text('Marquer résolu'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF22C55E),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TechnicianTaskDetailScreen(taskId: task.id)),
+                      ).then((_) => _loadTasks()),
+                      icon: const Icon(Icons.visibility, size: 16),
+                      label: const Text('Détails'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
                   ],
                 ),
@@ -458,35 +861,5 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
         ),
       ),
     );
-  }
-
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'ASSIGNED':
-        return AppColors.statusAssignee;
-      case 'IN_PROGRESS':
-        return AppColors.statusEnCours;
-      case 'RESOLVED':
-        return AppColors.statusResolue;
-      case 'CLOSED':
-        return AppColors.statusCloturee;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'ASSIGNED':
-        return 'Assignée';
-      case 'IN_PROGRESS':
-        return 'En cours';
-      case 'RESOLVED':
-        return 'Résolue';
-      case 'CLOSED':
-        return 'Clôturée';
-      default:
-        return status;
-    }
   }
 }

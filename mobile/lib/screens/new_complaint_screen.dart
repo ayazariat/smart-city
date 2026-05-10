@@ -55,6 +55,17 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     'OTHER': 'Other',
   };
 
+  static const Map<String, String> _categoryDescriptions = {
+    'ROAD': 'Potholes, damaged roads, traffic signs',
+    'LIGHTING': 'Street lights, broken lamps, dark areas',
+    'WASTE': 'Garbage collection, overflowing bins',
+    'WATER': 'Leaks, flooding, drainage issues',
+    'SAFETY': 'Public hazards, dangerous areas',
+    'PUBLIC_PROPERTY': 'Damaged buildings, public facilities',
+    'GREEN_SPACE': 'Parks maintenance, trees, gardens',
+    'OTHER': 'Other urban issues',
+  };
+
   static const Map<String, IconData> _categoryIcons = {
     'ROAD': Icons.add_road,
     'LIGHTING': Icons.lightbulb,
@@ -74,9 +85,8 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
   }
 
   void _onTextChanged() {
-    if (!_duplicateOverride &&
-        _titleController.text.trim().length >= 5 &&
-        _descriptionController.text.trim().length >= 10 &&
+    if (_titleController.text.trim().length >= 5 &&
+        _descriptionController.text.trim().length >= 20 &&
         _selectedCategory != null &&
         _selectedMunicipality != null) {
       _checkDuplicates();
@@ -97,11 +107,10 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     return id?.toString();
   }
 
-  // Check for duplicates proactively (BL-25)
-  @protected
+  // Check for duplicates proactively
   Future<void> _checkDuplicates() async {
     if (_titleController.text.trim().length < 5 ||
-        _descriptionController.text.trim().length < 10 ||
+        _descriptionController.text.trim().length < 20 ||
         _selectedCategory == null ||
         _selectedMunicipality == null ||
         _duplicateOverride) {
@@ -175,132 +184,165 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
       ).showSnackBar(const SnackBar(content: Text('Maximum 5 photos allowed')));
       return;
     }
-    final image = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 80,
-      maxWidth: 1200,
-    );
-    if (image != null) {
-      setState(() => _photos.add(image));
+    try {
+      final image = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 1200,
+      );
+      if (image != null) {
+        setState(() => _photos.add(image));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error taking photo: $e')),
+        );
+      }
     }
   }
 
-   Future<void> _getLocation() async {
-     setState(() => _gettingLocation = true);
-     try {
-       LocationPermission permission = await Geolocator.checkPermission();
-       if (permission == LocationPermission.denied) {
-         permission = await Geolocator.requestPermission();
-         if (permission == LocationPermission.denied) {
-           throw Exception('Location permission denied');
-         }
-       }
-       if (permission == LocationPermission.deniedForever) {
-         throw Exception('Location permissions are permanently denied');
-       }
-       final position = await Geolocator.getCurrentPosition(
-         locationSettings: const LocationSettings(
-           accuracy: LocationAccuracy.high,
-         ),
-       );
-       setState(() {
-         _latitude = position.latitude;
-         _longitude = position.longitude;
-       });
-       // Also perform reverse geocoding
-       await _reverseGeocode(position.latitude, position.longitude);
-     } catch (e) {
-       if (mounted) {
-         ScaffoldMessenger.of(
-           context,
-         ).showSnackBar(SnackBar(content: Text('Could not get location: $e')));
-       }
-     } finally {
-       setState(() => _gettingLocation = false);
-     }
-   }
-
-   // Reverse geocode to get address/municipality from coordinates
-   Future<void> _reverseGeocode(double lat, double lng) async {
-     try {
-       final client = HttpClient();
-       final request = await client.getUrl(Uri.parse(
-           'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&accept-language=fr'));
-       final response = await request.close();
-       if (response.statusCode == 200) {
-         final body = await response.transform(utf8.decoder).join();
-         final data = jsonDecode(body) as Map<String, dynamic>?;
-         if (data != null) {
-           final address = data['address'] as Map<String, dynamic>?;
-           if (address != null) {
-             // Extract municipality, governorate, city etc.
-             String? city = address['city'] as String?;
-             String? town = address['town'] as String?;
-             String? municipality = city ?? town;
-             String? state = address['state'] as String?;
-             String? county = address['county'] as String?;
-             
-             setState(() {
-               if (municipality != null && municipality.isNotEmpty) {
-                 _selectedMunicipality = municipality;
-               }
-               if (state != null && state.isNotEmpty) {
-                 _selectedGovernorate = state;
-               }
-               // Could also store full address if needed
-             });
-           }
-         }
-       }
-       client.close();
-     } catch (e) {
-       // Silently fail - location still valid without address
-     }
+  Future<void> _getLocation() async {
+    setState(() => _gettingLocation = true);
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permission denied');
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permissions are permanently denied');
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+      });
+      await _reverseGeocode(position.latitude, position.longitude);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not get location: $e')));
+      }
+    } finally {
+      setState(() => _gettingLocation = false);
     }
- 
-   // Helper method to get address from current location
-   Future<String?> _getAddressFromLocation() async {
-     if (_latitude == null || _longitude == null) return null;
-     
-     try {
-       final client = HttpClient();
-       final request = await client.getUrl(Uri.parse(
-           'https://nominatim.openstreetmap.org/reverse?lat=$_latitude&lon=$_longitude&format=json&accept-language=fr'));
-       final response = await request.close();
-       if (response.statusCode == 200) {
-         final body = await response.transform(utf8.decoder).join();
-         final data = jsonDecode(body) as Map<String, dynamic>?;
-         if (data != null) {
-           final addressData = data['address'] as Map<String, dynamic>?;
-           if (addressData != null) {
-             // Build address string from components
-             String? road = addressData['road'] as String?;
-             String? houseNumber = addressData['house_number'] as String?;
-             String? city = addressData['city'] as String?;
-             String? town = addressData['town'] as String?;
-             String? village = addressData['village'] as String?;
-             
-             List<String> addressParts = [];
-             if (houseNumber != null && houseNumber.isNotEmpty) addressParts.add(houseNumber);
-             if (road != null && road.isNotEmpty) addressParts.add(road);
-             if (city != null && city.isNotEmpty) addressParts.add(city);
-             else if (town != null && town.isNotEmpty) addressParts.add(town);
-             else if (village != null && village.isNotEmpty) addressParts.add(village);
-             
-             if (addressParts.isNotEmpty) {
-               return addressParts.join(', ');
-             }
-           }
-         }
-       }
-       client.close();
-     } catch (e) {
-       debugPrint('Error getting address: $e');
-     }
-     return null;
-   }
- 
-   Future<void> _submitComplaint() async {
+  }
+
+  Future<void> _reverseGeocode(double lat, double lng) async {
+    try {
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&accept-language=fr'));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>?;
+        if (data != null) {
+          final address = data['address'] as Map<String, dynamic>?;
+          if (address != null) {
+            String? city = address['city'] as String?;
+            String? town = address['town'] as String?;
+            String? municipality = address['municipality'] as String?;
+            String? village = address['village'] as String?;
+            String? county = address['county'] as String?;
+            String? state = address['state'] as String?;
+            String? stateDistrict = address['state_district'] as String?;
+            
+            // Try to find the best match for Tunisian municipality
+            String? bestMunicipalityMatch = municipality ?? city ?? town ?? village ?? county;
+            String? bestGovernorateMatch = state ?? stateDistrict;
+            
+            // Try to match against Tunisian geography data
+            if (bestMunicipalityMatch != null && bestGovernorateMatch != null) {
+              final gov = TunisiaGeography.governorates.firstWhere(
+                (g) => g.name.toLowerCase().contains(bestGovernorateMatch!.toLowerCase()) ||
+                        bestGovernorateMatch.toLowerCase().contains(g.name.toLowerCase()),
+                orElse: () => const GovernorateData(name: '', municipalities: []),
+              );
+              
+              if (gov.municipalities.isNotEmpty) {
+                // Find closest matching municipality
+                final matchedMunicipality = gov.municipalities.firstWhere(
+                  (m) => m.toLowerCase().contains(bestMunicipalityMatch!.toLowerCase()) ||
+                          bestMunicipalityMatch.toLowerCase().contains(m.toLowerCase()),
+                  orElse: () => gov.municipalities.first,
+                );
+                
+                setState(() {
+                  _selectedGovernorate = gov.name;
+                  _selectedMunicipality = matchedMunicipality;
+                });
+                return;
+              }
+            }
+            
+            setState(() {
+              if (bestMunicipalityMatch != null && bestMunicipalityMatch.isNotEmpty) {
+                _selectedMunicipality = bestMunicipalityMatch;
+              }
+              if (bestGovernorateMatch != null && bestGovernorateMatch.isNotEmpty) {
+                _selectedGovernorate = bestGovernorateMatch;
+              }
+            });
+          }
+        }
+      }
+      client.close();
+    } catch (e) {
+      debugPrint('Reverse geocoding error: $e');
+    }
+  }
+
+  Future<String?> _getAddressFromLocation() async {
+    if (_latitude == null || _longitude == null) return null;
+    
+    try {
+      final client = HttpClient();
+      final request = await client.getUrl(Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?lat=$_latitude&lon=$_longitude&format=json&accept-language=en'));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final body = await response.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>?;
+        if (data != null) {
+          final addressData = data['address'] as Map<String, dynamic>?;
+          if (addressData != null) {
+            String? road = addressData['road'] as String?;
+            String? houseNumber = addressData['house_number'] as String?;
+            String? city = addressData['city'] as String?;
+            String? town = addressData['town'] as String?;
+            String? village = addressData['village'] as String?;
+            
+            List<String> addressParts = [];
+            if (houseNumber != null && houseNumber.isNotEmpty) addressParts.add(houseNumber);
+            if (road != null && road.isNotEmpty) addressParts.add(road);
+            if (city != null && city.isNotEmpty) {
+              addressParts.add(city);
+            } else if (town != null && town.isNotEmpty) addressParts.add(town);
+            else if (village != null && village.isNotEmpty) addressParts.add(village);
+            
+            if (addressParts.isNotEmpty) {
+              return addressParts.join(', ');
+            }
+          }
+        }
+      }
+      client.close();
+    } catch (e) {
+      debugPrint('Error getting address: $e');
+    }
+    return null;
+  }
+
+  Future<void> _submitComplaint() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCategory == null ||
         _selectedGovernorate == null ||
@@ -315,7 +357,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     });
 
     try {
-      // Upload photos first if any
       List<Map<String, String>> mediaUrls = [];
       if (_photos.isNotEmpty) {
         final uploadResult = await _apiClient.uploadFiles(
@@ -384,7 +425,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // BL-25: Duplicate warning
+              // Duplicate warning
               if (_proactiveDuplicates.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -615,87 +656,60 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 2.0,
                 children: _categoryMap.entries.map((entry) {
                   final selected = _selectedCategory == entry.key;
-                  return SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedCategory = entry.key),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: selected 
+                            ? AppColors.primary.withAlpha(26)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: selected ? AppColors.primary : const Color(0xFFE2E8F0),
+                          width: selected ? 2 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(
                             _categoryIcons[entry.key] ?? Icons.help_outline,
-                            size: 16,
-                            color: selected ? Colors.white : AppColors.primary,
+                            size: 24,
+                            color: selected ? AppColors.primary : AppColors.textSecondary,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(height: 8),
                           Text(
                             entry.value,
                             style: TextStyle(
                               fontSize: 12,
-                              color: selected
-                                  ? Colors.white
-                                  : AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                              color: selected ? AppColors.primary : AppColors.textPrimary,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                      selected: selected,
-                      selectedColor: AppColors.primary,
-                      backgroundColor: AppColors.secondary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      onSelected: (selected) {
-                        setState(() => _selectedCategory = selected ? entry.key : null);
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _categoryMap.entries.map((entry) {
-                  final selected = _selectedCategory == entry.key;
-                  return SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _categoryIcons[entry.key] ?? Icons.help_outline,
-                            size: 16,
-                            color: selected ? Colors.white : AppColors.primary,
-                          ),
-                          const SizedBox(width: 4),
+                          const SizedBox(height: 4),
                           Text(
-                            entry.value,
+                            _categoryDescriptions[entry.key] ?? '',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: selected
-                                  ? Colors.white
-                                  : AppColors.textPrimary,
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
-                      selected: selected,
-                      selectedColor: AppColors.primary,
-                      backgroundColor: AppColors.secondary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      onSelected: (selected) {
-                        setState(() => _selectedCategory = selected ? entry.key : null);
-                      },
                     ),
                   );
                 }).toList(),
@@ -780,34 +794,34 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 validator: (v) =>
                     v == null ? 'Please select a municipality' : null,
               ),
-               const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-               // Location Picker with Interactive Map
-               const Text(
-                 'Location *',
-                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-               ),
-               const SizedBox(height: 8),
-                LocationPickerMap(
-                  initialLatitude: _latitude,
-                  initialLongitude: _longitude,
-                  address: _address,
-                  onLocationSelected: (lat, lng) {
+              // Location Picker with Interactive Map
+              const Text(
+                'Location *',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              LocationPickerMap(
+                initialLatitude: _latitude,
+                initialLongitude: _longitude,
+                address: _address,
+                onLocationSelected: (lat, lng) {
+                  setState(() {
+                    _latitude = lat;
+                    _longitude = lng;
+                    _selectedMunicipality = null;
+                    _selectedGovernorate = null;
+                  });
+                  _getAddressFromLocation().then((address) {
                     setState(() {
-                      _latitude = lat;
-                      _longitude = lng;
-                      _selectedMunicipality = null;
-                      _selectedGovernorate = null;
+                      _address = address;
                     });
-                    _getAddressFromLocation().then((address) {
-                      setState(() {
-                        _address = address;
-                      });
-                    });
-                    _reverseGeocode(lat, lng);
-                  },
-                ),
-               const SizedBox(height: 20),
+                  });
+                  _reverseGeocode(lat, lng);
+                },
+              ),
+              const SizedBox(height: 20),
 
               // Photos
               const Text(
@@ -820,56 +834,55 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
-if (_photos.isNotEmpty) ...[
-                 SizedBox(
-                   height: 100,
-                   child: ListView.builder(
-                     scrollDirection: Axis.horizontal,
-                     itemCount: _photos.length,
-                     itemBuilder: (context, index) {
-                       return Padding(
-                         padding: const EdgeInsets.only(right: 8),
-                         child: Stack(
-                           children: [
-                             ClipRRect(
-                               borderRadius: BorderRadius.circular(12),
-                               child: Image.file(
-                                 File(_photos[index].path),
-                                 width: 100,
-                                 height: 100,
-                                 fit: BoxFit.cover,
-                               ),
-                             ),
-                             Positioned(
-                               top: 0,
-                               right: 0,
-                               child: GestureDetector(
-                                 onTap: () =>
-                                     setState(() => _photos.removeAt(index)),
-                                  child: Container(
-                                    width: 44,
-                                    height: 44,
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 18,
-                                      color: Colors.white,
-                                    ),
+              if (_photos.isNotEmpty) ...[
+                SizedBox(
+                  height: 100,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _photos.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(_photos[index].path),
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () =>
+                                    setState(() => _photos.removeAt(index)),
+                                child: Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.white,
                                   ),
                                 ),
-                             ),
-                           ],
-                         ),
-                       );
-                     },
-                   ),
-                 ),
-                 const SizedBox(height: 8),
-               ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -936,6 +949,6 @@ if (_photos.isNotEmpty) ...[
           ),
         ),
       ),
-    )
+    );
   }
 }

@@ -1,4 +1,5 @@
 const CLOUDINARY_CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD || "smart-city-tunisia";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export const getPhotoUrl = (url: string | undefined): string | null => {
   if (!url) return null;
@@ -9,11 +10,16 @@ export const getPhotoUrl = (url: string | undefined): string | null => {
   // Already a full HTTPS URL
   if (url.startsWith("https://")) return url;
   
-  // Handle HTTP URLs (local uploads) - convert to HTTPS or keep as is
+  // Handle HTTP URLs (local uploads) - keep as is
   if (url.startsWith("http://")) return url;
   
   // Protocol-relative URL (//cloudinary...)
   if (url.startsWith("//")) return `https:${url}`;
+  
+  // Handle local backend uploads (starts with /uploads or /api/uploads)
+  if (url.startsWith("/uploads") || url.startsWith("/api/uploads")) {
+    return `${API_URL}${url}`;
+  }
   
   // Cloudinary public ID or partial path - construct full URL
   // Handle different formats: uploaded files, old format, etc.

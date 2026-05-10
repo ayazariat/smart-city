@@ -26,7 +26,7 @@ import { Button } from "@/components/ui";
 import { useLastVisitedPage } from "@/hooks/useLastVisitedPage";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
-import { getDepartmentLabel, categoryOptions } from "@/lib/categories";
+import { getDepartmentLabel, categoryOptions, getCategoryLabel } from "@/lib/categories";
 import { useTranslation } from "react-i18next";
 
 export default function MyComplaintDetailPage() {
@@ -120,7 +120,7 @@ export default function MyComplaintDetailPage() {
    // Update edit data when complaint loads
    useEffect(() => {
      if (complaint) {
-       setEditData({
+       setEditForm({
          title: complaint.title,
          description: complaint.description,
          category: complaint.category,
@@ -140,7 +140,7 @@ export default function MyComplaintDetailPage() {
   const handleCancelEdit = () => {
     setIsEditing(false);
     if (complaint) {
-      setEditData({
+      setEditForm({
         title: complaint.title,
         description: complaint.description,
         category: complaint.category,
@@ -156,11 +156,11 @@ export default function MyComplaintDetailPage() {
     setIsSaving(true);
     try {
       const response = await complaintService.updateComplaint(complaintId, {
-        title: editData.title,
-        description: editData.description,
-        category: editData.category as ComplaintCategory,
-        urgency: editData.urgency as ComplaintUrgency,
-        phone: editData.phone
+        title: editForm.title,
+        description: editForm.description,
+        category: editForm.category as ComplaintCategory,
+        urgency: editForm.urgency as ComplaintUrgency,
+        phone: editForm.phone
       });
       
       if (response.complaint) {
@@ -300,11 +300,11 @@ export default function MyComplaintDetailPage() {
     return null;
   }
 
-  const status = statusConfig[complaint.status] || {
-    label: complaint.status,
-    bgClass: "bg-gray-100",
-    textClass: "text-gray-800",
-  };
+   const status = statusConfig[complaint.status] || {
+     labelKey: `status.${complaint.status}`,
+     bgClass: "bg-gray-100",
+     textClass: "text-gray-800",
+   };
 
   return (
     <DashboardLayout>
@@ -385,13 +385,13 @@ export default function MyComplaintDetailPage() {
                    {getDepartmentLabel(complaint.assignedDepartment.name)}
                  </span>
                )}
-              <span 
-                className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass} flex items-center gap-2`}
-                aria-label={`Statut: ${status.label}`}
-              >
-                <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
-                {status.label}
-              </span>
+               <span 
+                 className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${status.bgClass} ${status.textClass} flex items-center gap-2`}
+                 aria-label={`Statut: ${t(status.labelKey, { defaultValue: complaint.status })}`}
+               >
+                 <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
+                 {t(status.labelKey, { defaultValue: complaint.status })}
+               </span>
               {complaint.status === "SUBMITTED" && !isEditing && (
                 <div className="flex items-center gap-2">
                   <button
@@ -453,8 +453,8 @@ export default function MyComplaintDetailPage() {
                 {isEditing ? (
                   <input
                     type="text"
-                    value={editData.title}
-                    onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                     placeholder={t("complaintDetail.titlePlaceholder")}
                   />
@@ -468,8 +468,8 @@ export default function MyComplaintDetailPage() {
                   <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   {isEditing ? (
                     <select
-                      value={editData.category}
-                      onChange={(e) => setEditData({ ...editData, category: e.target.value })}
+                      value={editForm.category}
+                      onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                     >
                       {categoryOptions.map(cat => (
@@ -478,7 +478,7 @@ export default function MyComplaintDetailPage() {
                     </select>
                   ) : (
                     <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
-                      {categoryLabels[complaint.category] || complaint.category}
+                      {getCategoryLabel(complaint.category)}
                     </span>
                   )}
                 </div>
@@ -486,8 +486,8 @@ export default function MyComplaintDetailPage() {
                   <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.priority")}</label>
                   {isEditing ? (
                     <select
-                      value={editData.urgency}
-                      onChange={(e) => setEditData({ ...editData, urgency: e.target.value })}
+                      value={editForm.urgency}
+                      onChange={(e) => setEditForm({ ...editForm, urgency: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                     >
                       <option value="LOW">{t("complaintDetail.low")}</option>
@@ -507,8 +507,8 @@ export default function MyComplaintDetailPage() {
                 {isEditing ? (
                   <input
                     type="tel"
-                    value={editData.phone}
-                    onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                     placeholder={t("complaintDetail.phonePlaceholder")}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                   />
@@ -578,21 +578,23 @@ export default function MyComplaintDetailPage() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-slate-900">
-                            {entry.status === 'SUBMITTED' ? 'Submitted' :
-                             entry.status === 'VALIDATED' ? 'Validated' :
-                             entry.status === 'ASSIGNED' ? 'Assigned to department' :
-                             entry.status === 'IN_PROGRESS' ? 'Work started' :
-                             entry.status === 'RESOLVED' ? 'Resolved' :
-                             entry.status === 'CLOSED' ? 'Closed' :
-                             entry.status === 'REJECTED' ? 'Rejected' :
+                            {entry.status === 'SUBMITTED' ? t("complaintDetail.submitted") :
+                             entry.status === 'VALIDATED' ? t("complaintDetail.validated") :
+                             entry.status === 'ASSIGNED' ? t("complaintDetail.assigned") :
+                             entry.status === 'IN_PROGRESS' ? t("complaintDetail.inProgress") :
+                             entry.status === 'RESOLVED' ? t("complaintDetail.resolved") :
+                             entry.status === 'CLOSED' ? t("complaintDetail.closed") :
+                             entry.status === 'REJECTED' ? t("complaintDetail.rejected") :
                              entry.status}
                           </span>
                           <span className="text-xs text-slate-500">
                             {entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : ''}
                           </span>
                         </div>
-                        {entry.updatedBy?.fullName && (
-                          <p className="text-sm text-slate-600">By {entry.updatedBy.fullName}</p>
+                        {entry.updatedBy && (
+                          <p className="text-sm text-slate-600">
+                            By {entry.status === 'SUBMITTED' ? 'Citizen' : 'Staff'}
+                          </p>
                         )}
                         {entry.notes && (
                           <p className="text-sm text-slate-500 mt-1 italic">{entry.notes}</p>
@@ -609,8 +611,8 @@ export default function MyComplaintDetailPage() {
               <h2 id="description-title" className="text-lg font-semibold text-gray-900 mb-4">{t("complaintDetail.description")}</h2>
               {isEditing ? (
                 <textarea
-                  value={editData.description}
-                  onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                   rows={6}
                   className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-primary resize-none"
                   placeholder="Describe the issue in detail..."

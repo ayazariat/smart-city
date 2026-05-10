@@ -31,7 +31,10 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
     }
 
     try {
+      print('[PublicStatsScreen] Loading stats...');
       final stats = await _complaintService.getPublicStats();
+      print('[PublicStatsScreen] Stats loaded: $stats');
+      print('[PublicStatsScreen] Total: ${stats['total']}, Resolved: ${stats['resolved']}');
       if (!mounted) {
         return;
       }
@@ -41,7 +44,9 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
         _error = null;
         _isLoading = false;
       });
+      print('[PublicStatsScreen] After setState, _stats: $_stats');
     } catch (e) {
+      print('[PublicStatsScreen] Error loading stats: $e');
       if (!mounted) {
         return;
       }
@@ -56,9 +61,9 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
   String _formatError(Object error) {
     final message = error.toString().replaceFirst('Exception: ', '').trim();
     if (message.isEmpty) {
-      return 'Unable to load the public dashboard right now.';
+      return 'Unable to load the public dashboard right now. Error: $error';
     }
-    return message;
+    return 'Error: $message';
   }
 
   Map<String, dynamic> _readMap(dynamic value) {
@@ -69,31 +74,39 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
   }
 
   Map<String, dynamic> _readGovernorateCounts() {
-    final directCounts = _readMap(_stats?['byGovernorate']);
-    if (directCounts.isNotEmpty) {
-      return directCounts;
+    final byGovernorate = _stats?['byGovernorate'];
+    
+    // Handle new backend format: object with governorate names as keys
+    if (byGovernorate is Map) {
+      final counts = <String, dynamic>{};
+      byGovernorate.forEach((key, value) {
+        if (key is String && value is Map) {
+          counts[key] = value['total'] ?? 0;
+        }
+      });
+      return counts;
     }
-
+    
+    // Handle old format: array of governorate objects
     final governorates = _stats?['governorates'];
-    if (governorates is! List) {
-      return {};
+    if (governorates is List) {
+      final counts = <String, dynamic>{};
+      for (final item in governorates) {
+        if (item is! Map) {
+          continue;
+        }
+
+        final governorate = item['governorate']?.toString();
+        if (governorate == null || governorate.isEmpty) {
+          continue;
+        }
+
+        counts[governorate] = item['total'] ?? 0;
+      }
+      return counts;
     }
 
-    final counts = <String, dynamic>{};
-    for (final item in governorates) {
-      if (item is! Map) {
-        continue;
-      }
-
-      final governorate = item['governorate']?.toString();
-      if (governorate == null || governorate.isEmpty) {
-        continue;
-      }
-
-      counts[governorate] = item['total'] ?? 0;
-    }
-
-    return counts;
+    return {};
   }
 
   @override
@@ -121,7 +134,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'Transparence',
+                      'Transparency',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -191,7 +204,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            _error ?? 'Une erreur est survenue',
+            _error ?? 'An error occurred',
             style: TextStyle(color: Colors.red.shade700),
             textAlign: TextAlign.center,
           ),
@@ -199,7 +212,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
           ElevatedButton(
             onPressed: _loadStats,
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Réessayer'),
+            child: const Text('Retry'),
           ),
         ],
       ),
@@ -223,7 +236,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: _buildStatCard(
-            'Résolus',
+            'Resolved',
             '$resolved',
             Icons.check_circle,
             AppColors.success,
@@ -316,7 +329,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'Taux de résolution',
+                'Resolution Rate',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -352,12 +365,12 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
             children: [
               Text(
                 rate >= 80
-                    ? 'Excellente performance!'
-                    : 'En cours d\'amélioration',
+                    ? 'Excellent performance!'
+                    : 'Improving',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
               Text(
-                '$resolved / $total plaintes',
+                '$resolved / $total complaints',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
               ),
             ],
@@ -404,7 +417,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'Par catégorie',
+                'By Category',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -513,7 +526,7 @@ class _PublicStatsScreenState extends State<PublicStatsScreen> {
               ),
               const SizedBox(width: 12),
               const Text(
-                'Par gouvernorat',
+                'By Governorate',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,

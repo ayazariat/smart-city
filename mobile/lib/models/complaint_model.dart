@@ -11,12 +11,15 @@ class Complaint {
   final String? rejectionReason;
   final String? resolutionNotes;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final DateTime? validatedAt;
   final DateTime? resolvedAt;
   final DateTime? closedAt;
   final List<ComplaintMedia> media;
   final List<StatusHistoryItem> statusHistory;
+  final List<dynamic> history;
   final UserInfo? createdBy;
+  final UserInfo? submittedBy;
   final String? assignedToName;
   final String? assignedDepartmentName;
   final int confirmationCount;
@@ -47,12 +50,15 @@ class Complaint {
     this.rejectionReason,
     this.resolutionNotes,
     required this.createdAt,
+    required this.updatedAt,
     this.validatedAt,
     this.resolvedAt,
     this.closedAt,
     this.media = const [],
     this.statusHistory = const [],
+    this.history = const [],
     this.createdBy,
+    this.submittedBy,
     this.assignedToName,
     this.assignedDepartmentName,
     this.confirmationCount = 0,
@@ -72,6 +78,24 @@ class Complaint {
   });
 
   factory Complaint.fromJson(Map<String, dynamic> json) {
+    // Helper: safely parse a UserInfo that might be a String ID or a Map
+    UserInfo? safeUserInfo(dynamic value) {
+      if (value == null) return null;
+      if (value is Map<String, dynamic>) return UserInfo.fromJson(value);
+      if (value is Map) return UserInfo.fromJson(Map<String, dynamic>.from(value));
+      // It's a String ID — return a minimal UserInfo with just the id
+      return UserInfo(id: value.toString(), fullName: '');
+    }
+
+    // Helper: safely parse a ComplaintMedia that might be a String URL or a Map
+    ComplaintMedia? safeMedia(dynamic value) {
+      if (value == null) return null;
+      if (value is Map<String, dynamic>) return ComplaintMedia.fromJson(value);
+      if (value is Map) return ComplaintMedia.fromJson(Map<String, dynamic>.from(value));
+      // It's a String URL
+      return ComplaintMedia(type: 'photo', url: value.toString());
+    }
+
     return Complaint(
       id: json['_id'] ?? json['id'] ?? '',
       title: json['title'] ?? '',
@@ -85,46 +109,57 @@ class Complaint {
       rejectionReason: json['rejectionReason'],
       resolutionNotes: json['resolutionNotes'],
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] ?? '') ?? DateTime.now(),
       validatedAt: json['validatedAt'] != null
-          ? DateTime.tryParse(json['validatedAt'])
+          ? DateTime.tryParse(json['validatedAt'].toString())
           : null,
       resolvedAt: json['resolvedAt'] != null
-          ? DateTime.tryParse(json['resolvedAt'])
+          ? DateTime.tryParse(json['resolvedAt'].toString())
           : null,
       closedAt: json['closedAt'] != null
-          ? DateTime.tryParse(json['closedAt'])
+          ? DateTime.tryParse(json['closedAt'].toString())
           : null,
-      media:
-          (json['media'] as List<dynamic>?)
-              ?.map((m) => ComplaintMedia.fromJson(m))
+      media: (json['media'] as List<dynamic>?)
+              ?.map((m) => safeMedia(m))
+              .whereType<ComplaintMedia>()
               .toList() ??
           [],
-      statusHistory:
-          (json['statusHistory'] as List<dynamic>?)
-              ?.map((s) => StatusHistoryItem.fromJson(s))
+      statusHistory: (json['statusHistory'] as List<dynamic>?)
+              ?.map((s) {
+                if (s is Map<String, dynamic>) return StatusHistoryItem.fromJson(s);
+                if (s is Map) return StatusHistoryItem.fromJson(Map<String, dynamic>.from(s));
+                return null;
+              })
+              .whereType<StatusHistoryItem>()
               .toList() ??
           [],
-      createdBy: json['createdBy'] != null
-          ? UserInfo.fromJson(json['createdBy'])
-          : null,
+      history: json['history'] ?? [],
+      createdBy: safeUserInfo(json['createdBy']),
+      submittedBy: safeUserInfo(json['submittedBy']) ?? safeUserInfo(json['createdBy']),
       assignedToName: json['assignedTo'] is Map
-          ? json['assignedTo']['fullName']
-          : null,
+          ? (json['assignedTo']['fullName'] ?? json['assignedTo']['name'])
+          : (json['assignedTo'] is String ? null : null),
       assignedDepartmentName: json['assignedDepartment'] is Map
-          ? json['assignedDepartment']['name']
-          : null,
+          ? (json['assignedDepartment']['name'])
+          : (json['assignedDepartment'] is String ? null : null),
       confirmationCount: json['confirmationCount'] ?? 0,
       upvoteCount: json['upvoteCount'] ?? 0,
       confirmations: json['confirmations'] ?? [],
       upvotes: json['upvotes'] ?? [],
-      publicComments:
-          (json['publicComments'] as List<dynamic>?)
-              ?.map((c) => PublicComment.fromJson(c))
+      publicComments: (json['publicComments'] as List<dynamic>?)
+              ?.map((c) {
+                if (c is Map<String, dynamic>) return PublicComment.fromJson(c);
+                if (c is Map) return PublicComment.fromJson(Map<String, dynamic>.from(c));
+                return null;
+              })
+              .whereType<PublicComment>()
               .toList() ??
           [],
       location: json['location'] is Map<String, dynamic>
           ? json['location'] as Map<String, dynamic>
-          : null,
+          : json['location'] is Map
+              ? Map<String, dynamic>.from(json['location'] as Map)
+              : null,
       slaDeadline: json['slaDeadline'] != null
           ? DateTime.tryParse(json['slaDeadline'].toString())
           : null,
@@ -134,7 +169,9 @@ class Complaint {
       materialsUsed: json['materialsUsed'] ?? [],
       aiDuplicateCheck: json['aiDuplicateCheck'] is Map<String, dynamic>
           ? json['aiDuplicateCheck'] as Map<String, dynamic>
-          : null,
+          : json['aiDuplicateCheck'] is Map
+              ? Map<String, dynamic>.from(json['aiDuplicateCheck'] as Map)
+              : null,
       duplicateStatus: json['duplicateStatus'],
       phone: json['phone'],
     );
@@ -216,8 +253,8 @@ class ComplaintMedia {
 
   factory ComplaintMedia.fromJson(Map<String, dynamic> json) {
     return ComplaintMedia(
-      type: json['type'] ?? 'photo',
-      url: json['url'] ?? '',
+      type: (json['type'] ?? 'photo').toString(),
+      url: (json['url'] ?? '').toString(),
     );
   }
 
@@ -268,10 +305,10 @@ class UserInfo {
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
     return UserInfo(
-      id: json['_id'] ?? json['id'] ?? '',
-      fullName: json['fullName'] ?? '',
-      email: json['email'],
-      phone: json['phone'],
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      fullName: (json['fullName'] ?? json['name'] ?? '').toString(),
+      email: json['email']?.toString(),
+      phone: json['phone']?.toString(),
     );
   }
 }

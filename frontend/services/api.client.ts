@@ -181,7 +181,8 @@ export const apiClient = {
       useAuthStore.setState({ user: null, token: null, refreshToken: null, isAuthenticated: false });
       // Redirect to login so the user knows they need to re-authenticate
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        const currentPath = window.location.pathname + window.location.search;
+        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
       }
       throw new Error("Session expired. Please log in again.");
     }

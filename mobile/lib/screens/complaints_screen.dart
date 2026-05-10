@@ -5,6 +5,7 @@ import 'package:smart_city_app/core/constants/colors.dart';
 import 'package:smart_city_app/screens/new_complaint_screen.dart';
 import 'package:smart_city_app/screens/complaint_detail_screen.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/services/api_client.dart';
 
 const Map<String, Map<String, dynamic>> _statusConfig = {
@@ -94,7 +95,10 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(myComplaintsProvider.notifier).load();
+      final authState = ref.read(authProvider);
+      if (authState.user != null) {
+        ref.read(myComplaintsProvider.notifier).load();
+      }
     });
   }
 
@@ -323,21 +327,6 @@ class _ComplaintsScreenState extends ConsumerState<ComplaintsScreen> {
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NewComplaintScreen(
-                onComplaintSubmitted: _loadComplaints,
-                onBack: () => Navigator.pop(context),
-              ),
-            ),
-          );
-        },
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }

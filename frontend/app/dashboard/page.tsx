@@ -3,9 +3,10 @@
 import { useEffect, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { FileText, Plus, Sparkles, Shield, Loader2, BarChart3, MapPin, CheckCircle, ArrowRight, TrendingUp, AlertTriangle, MessageSquare, Clock, Star } from "lucide-react";
+import { FileText, Plus, Sparkles, Shield, Loader2, BarChart3, MapPin, CheckCircle, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, MessageSquare, Clock, Star } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import MunicipalityOverview from "@/components/dashboard/MunicipalityOverview";
+import MunicipalityMiniMap from "@/components/dashboard/MunicipalityMiniMap";
 
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
@@ -29,11 +30,15 @@ interface DashboardStats {
   totalOverdue?: number;
   overdue?: number;
   resolutionRate?: number;
-  averageResolutionTime?: number; // in hours
-  slaComplianceRate?: number; // percentage
-  csat?: number; // percentage
+  averageResolutionTime?: number; // in hours (legacy)
+  slaComplianceRate?: number; // percentage (legacy)
+  csat?: number; // percentage (legacy)
   totalRatings?: number;
   byCategory?: Record<string, number>;
+  // New format objects (optional for compatibility)
+  avgFixTime?: { value: number | null; unit: string; vsLast: number | null; trend: string } | null;
+  resolvedOnTime?: { value: number | null; vsLast: number | null; trend: string } | null;
+  citizenSatisfaction?: { value: number | null; totalRated: number; notConfirmed: number; vsLast: number | null };
   [key: string]: unknown;
 }
 
@@ -43,8 +48,12 @@ interface MunicipalityComplaint {
   description?: string;
   category: string;
   status: string;
+  priority?: string | number | null;
+  resolvedAt?: string;
   createdBy?: string | { _id?: string; id?: string };
+  municipality?: string | { _id?: string; name?: string; governorate?: string } | null;
   municipalityName?: string;
+  assignedDepartment?: { id?: string; _id?: string; name?: string } | null;
   location?: { municipality?: string; address?: string };
   media?: { url: string; type?: string }[];
   confirmationCount?: number;
@@ -73,6 +82,8 @@ function DashboardContent() {
 
   // Recent resolutions
   const [recentResolutions, setRecentResolutions] = useState<MunicipalityComplaint[]>([]);
+  const [recentResolutionsLoaded, setRecentResolutionsLoaded] = useState(false);
+  const [isConfirming, setIsConfirming] = useState<string | null>(null);
 
   const getOwnerId = (complaint: MunicipalityComplaint): string | undefined => {
     if (!complaint.createdBy) return undefined;
@@ -86,68 +97,172 @@ function DashboardContent() {
     return u.id || u._id;
   })();
 
-  // Fetch stats for all roles
-  const fetchStats = async () => {
-    const { token } = useAuthStore.getState();
-    if (!token || !user) return;
-    
-    try {
-      setLoadingStats(true);
-      
-      let statsRes;
-      if (user.role === "MUNICIPAL_AGENT") {
-        statsRes = await agentService.getStats();
-      } else if (user.role === "DEPARTMENT_MANAGER") {
-        statsRes = await managerService.getStats();
-      } else if (user.role === "TECHNICIAN") {
-        statsRes = await technicianService.getTechnicianStats();
-      } else if (user.role === "ADMIN") {
-        statsRes = await adminService.getStats();
-      } else if (user.role === "CITIZEN") {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-        const res = await fetch(`${apiUrl}/citizen/stats`, {
-          credentials: "include",
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const json = await res.json();
-        if (json.success) {
-          statsRes = { data: json.data };
-        }
-      }
-      
-      if (statsRes?.data) {
-        const d = statsRes.data as DashboardStats;
-        setStats(d);
-        setByCategory(d.byCategory || {});
-      }
-    } catch (err) {
-      console.error("Error fetching stats:", err);
-    } finally {
-      setLoadingStats(false);
-    }
+  const getComplaintsListHref = () => {
+    return "/complaints?status=RESOLVED,CLOSED";
   };
 
-  // Fetch municipality complaints for citizens
+  const formatResolvedDate = (value?: string) => {
+    if (!value) return "Resolved date unavailable";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Resolved date unavailable";
+    return `Resolved on ${date.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    })}`;
+  };
+
+  // Fetch stats for all roles
+   const fetchStats = async () => {
+     const { token } = useAuthStore.getState();
+     if (!token || !user) return;
+
+     try {
+       setLoadingStats(true);
+
+       let statsRes;
+       if (user.role === "MUNICIPAL_AGENT") {
+         statsRes = await agentService.getStats();
+       } else if (user.role === "DEPARTMENT_MANAGER") {
+         statsRes = await managerService.getStats();
+       } else if (user.role === "TECHNICIAN") {
+         statsRes = await technicianService.getTechnicianStats();
+       } else if (user.role === "ADMIN") {
+         statsRes = await adminService.getStats();
+       } else if (user.role === "CITIZEN") {
+         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+         const res = await fetch(`${apiUrl}/citizen/stats`, {
+           credentials: "include",
+           headers: { Authorization: `Bearer ${token}` }
+         });
+         const json = await res.json();
+         if (json.success) {
+           statsRes = { data: json.data };
+         }
+       }
+
+        if (statsRes?.data) {
+          const raw = statsRes.data as Record<string, unknown>;
+          const mapped: DashboardStats = {
+            total: raw.total as number,
+            submitted: raw.submitted as number | undefined,
+            pending: raw.pending as number | undefined,
+            assigned: raw.assigned as number,
+            inProgress: raw.inProgress as number,
+            resolved: raw.resolved as number,
+            closed: raw.closed as number | undefined,
+            totalOverdue: raw.totalOverdue as number | undefined,
+            overdue: raw.overdue as number | undefined,
+            resolutionRate: raw.resolutionRate as number | undefined,
+            // Keep legacy fields for backwards compatibility in other parts of UI
+            averageResolutionTime: (typeof raw.avgFixTime === 'object' && raw.avgFixTime?.value != null)
+              ? Math.round((raw.avgFixTime.value as number) * 24) // days -> hours
+              : raw.averageResolutionTime as number | undefined,
+            slaComplianceRate: (typeof raw.resolvedOnTime === 'object' && raw.resolvedOnTime?.value != null)
+              ? raw.resolvedOnTime.value as number
+              : raw.slaComplianceRate as number | undefined,
+            csat: (typeof raw.citizenSatisfaction === 'object' && raw.citizenSatisfaction?.value != null)
+              ? raw.citizenSatisfaction.value as number
+              : raw.csat as number | undefined,
+            totalRatings: raw.totalRatings as number | undefined,
+            byCategory: raw.byCategory as Record<string, number> | undefined,
+            // New object fields for detailed display (include even when value=null to show N/A card)
+            avgFixTime: typeof raw.avgFixTime === 'object' && raw.avgFixTime !== null
+              ? (raw.avgFixTime as { value: number | null; unit: string; vsLast: number | null; trend: string })
+              : null,
+            resolvedOnTime: typeof raw.resolvedOnTime === 'object' && raw.resolvedOnTime !== null
+              ? (raw.resolvedOnTime as { value: number | null; vsLast: number | null; trend: string })
+              : (raw.slaComplianceRate !== undefined)
+                ? { value: raw.slaComplianceRate as number, vsLast: null, trend: 'no_change' }
+                : null,
+            citizenSatisfaction: typeof raw.citizenSatisfaction === 'object' && raw.citizenSatisfaction !== null
+              ? (raw.citizenSatisfaction as { value: number | null; totalRated: number; notConfirmed: number; vsLast: number | null })
+              : (raw.csat !== undefined)
+                ? { value: raw.csat as number, totalRated: raw.totalRatings || 0, notConfirmed: 0, vsLast: null }
+                : null,
+          };
+          setStats(mapped);
+          setByCategory(mapped.byCategory || {});
+        }
+     } catch (err) {
+       console.error("Error fetching stats:", err);
+     } finally {
+       setLoadingStats(false);
+     }
+   };
+
+  // Fetch municipality complaints for citizens and agents
   const fetchMunicipalityComplaints = async () => {
     const { token } = useAuthStore.getState();
-    if (!token || !user || user.role !== "CITIZEN") return;
-    
+    if (!token || !user || (user.role !== "CITIZEN" && user.role !== "MUNICIPAL_AGENT")) return;
+
     try {
       setLoadingMunicipalityComplaints(true);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(
-        `${apiUrl}/public/my-municipality-complaints?limit=20&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`,
-        { 
+      
+      if (user.role === "MUNICIPAL_AGENT") {
+        // Agent fetches their municipality complaints
+        const response = await fetch(`${apiUrl}/agent/complaints?limit=50`, {
           credentials: "include",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
           }
+        });
+        const data = await response.json();
+        console.log("Agent municipality complaints response:", data);
+        if (data.success && data.data) {
+          setMunicipalityComplaints(data.data as MunicipalityComplaint[]);
+        } else if (data.success && Array.isArray(data.complaints)) {
+          setMunicipalityComplaints(data.complaints as MunicipalityComplaint[]);
+        } else if (Array.isArray(data)) {
+          setMunicipalityComplaints(data as MunicipalityComplaint[]);
+        } else {
+          console.error("Agent complaints unexpected structure:", data);
+          setMunicipalityComplaints([]);
         }
-      );
-      const data = await response.json();
-      if (data.success && data.complaints) {
-        setMunicipalityComplaints(data.complaints as MunicipalityComplaint[]);
+      } else {
+        // Citizen fetches public municipality complaints
+        const response = await fetch(
+          `${apiUrl}/public/my-municipality-complaints?limit=20&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`,
+          {
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            }
+          }
+        );
+        const data = await response.json();
+        console.log("Municipality complaints response:", data);
+        console.log("Response status:", response.status);
+        
+        // Handle empty or unexpected response
+        if (!data || Object.keys(data).length === 0) {
+          console.error("Empty response received");
+          setMunicipalityComplaints([]);
+          return;
+        }
+        
+        // Response structure: { success: true, complaints: [...] } or { success: true, data: [...] }
+        if (data.success && data.complaints) {
+          setMunicipalityComplaints(data.complaints as MunicipalityComplaint[]);
+        } else if (data.success && Array.isArray(data.data)) {
+          setMunicipalityComplaints(data.data as MunicipalityComplaint[]);
+        } else if (data.success && Array.isArray(data.data?.complaints)) {
+          setMunicipalityComplaints(data.data.complaints as MunicipalityComplaint[]);
+        } else if (Array.isArray(data.complaints)) {
+          setMunicipalityComplaints(data.complaints as MunicipalityComplaint[]);
+        } else if (Array.isArray(data)) {
+          setMunicipalityComplaints(data as MunicipalityComplaint[]);
+        } else if (response.status === 200 && data.success !== false) {
+          // Fallback: if status is 200 but structure is unexpected, try to log and set empty
+          console.error("Unexpected response structure with status 200:", data);
+          setMunicipalityComplaints([]);
+        } else {
+          console.error("Unexpected response structure:", data);
+          setMunicipalityComplaints([]);
+        }
       }
     } catch (err) {
       console.error("Error fetching municipality complaints:", err);
@@ -164,22 +279,30 @@ function DashboardContent() {
       return;
     }
 
-    const target = municipalityComplaints.find((c) => c._id === complaintId);
+    const target = [...municipalityComplaints, ...recentResolutions].find((c) => c._id === complaintId);
     if (target && currentUserId && getOwnerId(target) === currentUserId) {
       return;
     }
 
     try {
+      setIsConfirming(complaintId);
       const data = await confirmComplaint(complaintId);
       if (data.success) {
-        setMunicipalityComplaints(prev => prev.map(c => 
-          c._id === complaintId 
+        setMunicipalityComplaints(prev => prev.map(c =>
+          c._id === complaintId
+            ? { ...c, confirmationCount: data.confirmationCount ?? (c.confirmationCount || 0) + 1 }
+            : c
+        ));
+        setRecentResolutions(prev => prev.map(c =>
+          c._id === complaintId
             ? { ...c, confirmationCount: data.confirmationCount ?? (c.confirmationCount || 0) + 1 }
             : c
         ));
       }
     } catch (err) {
       console.error("Confirm failed:", err);
+    } finally {
+      setIsConfirming(null);
     }
   };
 
@@ -192,34 +315,36 @@ function DashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
 
-  // Fetch municipality complaints for citizens
+  // Fetch recent resolutions and municipality complaints
   useEffect(() => {
     const { token } = useAuthStore.getState();
-    if (hydrated && user && token && user.role === "CITIZEN") {
+    if (hydrated && user && token && (user.role === "CITIZEN" || user.role === "MUNICIPAL_AGENT")) {
       fetchMunicipalityComplaints();
-      // Fetch latest 6 recent resolutions and keep them fresh
+
       const fetchRecentResolutions = async () => {
         try {
           const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-          const res = await fetch(
-            `${apiUrl}/public/my-municipality-complaints?limit=6&status=RESOLVED&sort=-updatedAt`,
-            { credentials: "include", headers: { Authorization: `Bearer ${token}` } }
-          );
+          const res = await fetch(`${apiUrl}/complaints/recent-resolutions`, {
+            credentials: "include",
+            headers: { Authorization: `Bearer ${token}` }
+          });
           const data = await res.json();
-          if (data.success && data.complaints) {
-            const latest = [...data.complaints]
-              .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
-              .slice(0, 6);
-            setRecentResolutions(latest);
+          if (data.success && Array.isArray(data.data)) {
+            setRecentResolutions(data.data as MunicipalityComplaint[]);
+          } else {
+            setRecentResolutions([]);
           }
         } catch (err) {
           console.error("Error fetching recent resolutions:", err);
+          setRecentResolutions([]);
+        } finally {
+          setRecentResolutionsLoaded(true);
         }
       };
 
-      fetchRecentResolutions();
-      const interval = setInterval(fetchRecentResolutions, 60000);
-      return () => clearInterval(interval);
+      if (user.role === "CITIZEN") {
+        fetchRecentResolutions();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, user]);
@@ -230,7 +355,7 @@ function DashboardContent() {
       if (!user || !['DEPARTMENT_MANAGER', 'ADMIN', 'MUNICIPAL_AGENT'].includes(user.role)) {
         return;
       }
-      
+
       try {
         setLoadingTrendAlerts(true);
         const alerts = await getTrendAlerts();
@@ -241,7 +366,7 @@ function DashboardContent() {
         setLoadingTrendAlerts(false);
       }
     };
-    
+
     fetchAlerts();
     const interval = setInterval(fetchAlerts, 300000); // Refresh every 5 minutes
     return () => clearInterval(interval);
@@ -389,13 +514,7 @@ function DashboardContent() {
                       <ArrowRight className="w-4 h-4 text-amber-500" />
                     </Link>
                   )}
-                  {(stats.resolved || 0) > 0 && (
-                    <Link href="/agent/complaints?status=RESOLVED" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
-                      <span className="text-sm font-medium text-green-700">{stats.resolved} {t('priorities.resolutionsAwaiting')}</span>
-                      <ArrowRight className="w-4 h-4 text-green-500" />
-                    </Link>
-                  )}
-                  {(stats.totalOverdue || 0) === 0 && (stats.submitted || stats.pending || 0) === 0 && (stats.resolved || 0) === 0 && (
+                  {(stats.totalOverdue || 0) === 0 && (stats.submitted || stats.pending || 0) === 0 && (
                     <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <span className="text-sm font-medium text-green-700">{t('priorities.allClearAgent')}</span>
@@ -412,6 +531,12 @@ function DashboardContent() {
                       <ArrowRight className="w-4 h-4 text-red-500" />
                     </Link>
                   )}
+                  {(stats.resolved || 0) > 0 && (
+                    <Link href="/manager/pending?status=RESOLVED" className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition-colors shadow-sm">
+                      <span className="text-sm font-medium text-green-700">{stats.resolved} {t('priorities.resolutionsAwaiting')}</span>
+                      <ArrowRight className="w-4 h-4 text-green-500" />
+                    </Link>
+                  )}
                   {(stats.assigned || 0) > 0 && (
                     <Link href="/manager/pending?status=ASSIGNED" className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-200 hover:bg-purple-100 transition-colors shadow-sm">
                       <span className="text-sm font-medium text-purple-700">{stats.assigned} {t('priorities.needAssignment')}</span>
@@ -424,7 +549,7 @@ function DashboardContent() {
                       <ArrowRight className="w-4 h-4 text-blue-500" />
                     </Link>
                   )}
-                  {(stats.totalOverdue || stats.overdue || 0) === 0 && (stats.assigned || 0) === 0 && (stats.inProgress || 0) === 0 && (
+                  {(stats.totalOverdue || stats.overdue || 0) === 0 && (stats.resolved || 0) === 0 && (stats.assigned || 0) === 0 && (stats.inProgress || 0) === 0 && (
                     <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <span className="text-sm font-medium text-green-700">{t('priorities.allClearManager')}</span>
@@ -523,7 +648,7 @@ function DashboardContent() {
               </div>
             )}
           </div>
-          
+
           {/* Citizen Stats */}
            {user?.role === 'CITIZEN' && (
              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -549,7 +674,7 @@ function DashboardContent() {
                </div>
                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
                  <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
-                 <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                 <div className="text-sm text-red-600 font-medium">{t('stats.rejectedCases')}</div>
                  <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
                </div>
              </div>
@@ -581,12 +706,12 @@ function DashboardContent() {
                  </div>
                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
                    <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
-                   <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
+                   <div className="text-sm text-slate-600 font-medium">{t('stats.closedCases')}</div>
                    <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
                  </div>
                  <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
                    <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
-                   <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                   <div className="text-sm text-red-600 font-medium">{t('stats.rejectedCases')}</div>
                    <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
                  </div>
                  <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
@@ -635,12 +760,12 @@ function DashboardContent() {
                 </div>
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
                   <div className="text-2xl font-bold text-slate-700 mb-1">{stats.closed || 0}</div>
-                  <div className="text-sm text-slate-600 font-medium">{t('stats.closed') || 'Closed'}</div>
+                  <div className="text-sm text-slate-600 font-medium">{t('stats.closedCases')}</div>
                   <div className="text-xs text-slate-500 mt-1">{t('stats.closedCases') || 'Completed'}</div>
                 </div>
                 <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
                   <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
-                  <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                  <div className="text-sm text-red-600 font-medium">{t('stats.rejectedCases')}</div>
                   <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
                 </div>
                 <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
@@ -689,7 +814,7 @@ function DashboardContent() {
                  </div>
                  <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
                    <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
-                   <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                   <div className="text-sm text-red-600 font-medium">{t('stats.rejectedCases')}</div>
                    <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
                  </div>
                  <div className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
@@ -732,7 +857,7 @@ function DashboardContent() {
                  </div>
                  <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
                    <div className="text-2xl font-bold text-red-700 mb-1">{stats.rejected || 0}</div>
-                   <div className="text-sm text-red-600 font-medium">{t('stats.rejected') || 'Rejected'}</div>
+                   <div className="text-sm text-red-600 font-medium">{t('stats.rejectedCases')}</div>
                    <div className="text-xs text-red-500 mt-1">{t('stats.rejectedCases') || 'Rejected complaints'}</div>
                  </div>
                  <div className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}>
@@ -769,36 +894,45 @@ function DashboardContent() {
            )}
 
 {/* Additional Performance Metrics Row */}
-            {!(user?.role === "CITIZEN") && (stats.slaComplianceRate !== undefined || stats.csat !== undefined) && (
+            {!(user?.role === "CITIZEN") && (stats.resolvedOnTime || stats.citizenSatisfaction) && (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Resolved On Time % (SLA Compliance) */}
-                {(stats.slaComplianceRate !== undefined) && (
+                {stats.resolvedOnTime && (
                   <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200">
                     <div className="flex items-center gap-2 mb-2">
                       <Shield className="w-4 h-4 text-emerald-600" />
                       <span className="text-sm font-semibold text-emerald-800">{t('stats.resolvedOnTime')}</span>
                     </div>
-                    <div className="text-2xl font-bold text-emerald-700">{stats.slaComplianceRate}%</div>
-                    <div className="h-2 bg-emerald-200 rounded-full overflow-hidden mt-2">
-                      <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(stats.slaComplianceRate, 100)}%` }} />
+                    <div className="text-2xl font-bold text-emerald-700">
+                      {stats.resolvedOnTime.value != null ? `${stats.resolvedOnTime.value}%` : 'N/A'}
                     </div>
+                    {stats.resolvedOnTime.vsLast !== null && stats.resolvedOnTime.value != null && (
+                      <div className={`flex items-center gap-1 mt-2 text-xs ${stats.resolvedOnTime.vsLast >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {stats.resolvedOnTime.vsLast >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        <span className="font-medium">{stats.resolvedOnTime.vsLast >= 0 ? '+' : ''}{stats.resolvedOnTime.vsLast}%</span>
+                        <span className="text-slate-400">{t('stats.vsLast', 'vs last')}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Citizen Satisfaction */}
-                {(stats.csat !== undefined) && (
+                {stats.citizenSatisfaction && (
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
                     <div className="flex items-center gap-2 mb-2">
                       <Star className="w-4 h-4 text-purple-600" />
                       <span className="text-sm font-semibold text-purple-800">{t('stats.citizenSatisfaction')}</span>
                     </div>
-                    <div className="text-2xl font-bold text-purple-700">{stats.csat}%</div>
-                    <div className="text-xs text-purple-600 mt-1">{t('stats.basedOnResponses', { count: stats.totalRatings || 0 })}</div>
+                    <div className="text-2xl font-bold text-purple-700">
+                      {stats.citizenSatisfaction.value != null ? `${stats.citizenSatisfaction.value}%` : 'N/A'}
+                    </div>
+                    <div className="text-xs text-purple-600 mt-1">
+                      {t('stats.basedOnResponses', { count: stats.citizenSatisfaction.totalRated || 0 })}
+                    </div>
                   </div>
                 )}
               </div>
             )}
-
            {/* Category Chart - For roles that have category data */}
           {Object.keys(byCategory).length > 0 && (
             <div className="mt-6 pt-6 border-t border-slate-100">
@@ -812,7 +946,7 @@ function DashboardContent() {
                   const totalCount = Object.values(byCategory).reduce((sum, c) => sum + c, 0);
                   const barWidth = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
                   const sharePercent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
-                  
+
                   // Category colors
                   const categoryColors: Record<string, string> = {
                     waste: "from-green-500 to-green-600",
@@ -825,14 +959,14 @@ function DashboardContent() {
                     other: "from-slate-500 to-slate-600",
                   };
                   const colorClass = categoryColors[cat] || "from-primary to-primary-700";
-                  
+
                   return (
                     <div key={cat} className="flex items-center gap-3">
                       <div className="w-40 text-sm font-medium text-slate-700 truncate">
                         {getCategoryLabel(cat)}
                       </div>
                       <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
-                        <div 
+                        <div
                           className={`h-full bg-gradient-to-r ${colorClass} rounded-full transition-all duration-500`}
                           style={{ width: `${barWidth}%` }}
                         />
@@ -860,7 +994,7 @@ function DashboardContent() {
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {trendAlerts.slice(0, 6).map((alert, idx) => (
-                  <div 
+                  <div
                     key={idx}
                     className={`p-4 rounded-xl border ${
                       alert.severity === 'HIGH' ? 'bg-red-50 border-red-200' :
@@ -879,7 +1013,7 @@ function DashboardContent() {
                         alert.severity === 'MEDIUM' ? 'bg-amber-200 text-amber-700' :
                         'bg-blue-200 text-blue-700'
                       }`}>
-                        {alert.type.replace('_', ' ')}
+                        {t(`badges.${alert.type.toLowerCase()}`, { defaultValue: alert.type.replace('_', ' ') })}
                       </span>
                     </div>
                     <p className="text-sm text-slate-700 mb-1">{alert.message}</p>
@@ -910,7 +1044,39 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Municipality Complaints Section - For CITIZEN role */}
+        {/* Municipality Activity Map — For MUNICIPAL_AGENT role */}
+        {user?.role === "MUNICIPAL_AGENT" && municipalityComplaints && Array.isArray(municipalityComplaints) && municipalityComplaints.filter(c => c.location?.coordinates?.length === 2).length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden mt-6">
+            <div className="flex items-center justify-between p-5 pb-0">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-primary" />
+                {t('municipalityOverview.municipalityActivity')}
+              </h3>
+              <span className="text-xs text-slate-500">
+                {municipalityComplaints.filter(c => c.location?.coordinates?.length === 2).length} locations
+              </span>
+            </div>
+            <div className="p-5">
+              <MunicipalityMiniMap 
+                points={municipalityComplaints
+                  .filter(c => c.location?.coordinates?.length === 2)
+                  .map(c => ({
+                    lat: c.location.coordinates[1],
+                    lng: c.location.coordinates[0],
+                    count: 1,
+                    categories: [c.category],
+                    status: c.status,
+                    referenceId: c.referenceId,
+                    title: c.title,
+                    createdAt: c.createdAt
+                  }))} 
+                municipality={user?.municipalityName || user?.municipality} 
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Municipality Complaints Section — For CITIZEN role */}
         {user?.role === "CITIZEN" && municipalityComplaints && (
           <div id="complaints-area" className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
             <div className="flex items-center justify-between mb-6">
@@ -933,7 +1099,7 @@ function DashboardContent() {
                 </button>
               </div>
             </div>
-            
+
             {municipalityComplaints.length === 0 ? (
               <div className="text-center py-8">
                 <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
@@ -952,13 +1118,20 @@ function DashboardContent() {
                   >
                     {/* Image */}
                     <div className="relative h-28 bg-gradient-to-br from-slate-100 to-slate-50">
-                      {complaint.media?.[0]?.url ? (
-                        <img
-                          src={complaint.media[0].url}
-                          alt={complaint.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
+                      {complaint.media?.[0]?.url ? (() => {
+                        const photoUrl = complaint.media[0].url;
+                        const fullPhotoUrl = photoUrl?.startsWith("http") ? photoUrl : (photoUrl ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photoUrl}` : null);
+                        return fullPhotoUrl ? (
+                          <img
+                            src={fullPhotoUrl}
+                            alt={complaint.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : null;
+                      })() : (
                         <div className="w-full h-full flex items-center justify-center">
                           <FileText className="w-8 h-8 text-slate-300" />
                         </div>
@@ -982,20 +1155,20 @@ function DashboardContent() {
 
                     {/* Content */}
                     <div className="p-3">
-                      {isOwnComplaint && (
-                        <div className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                          Your complaint
-                        </div>
-                      )}
+                       {isOwnComplaint && (
+                         <div className="mb-2 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                           {t("common.yourComplaint")}
+                         </div>
+                       )}
 
                       <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
                         {complaint.title}
                       </h4>
                       <p className="text-xs text-slate-500 mb-3 flex items-center gap-1">
                         <MapPin className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">
-                          {complaint.location?.address || complaint.municipalityName || complaint.location?.municipality || "Unknown location"}
-                        </span>
+                         <span className="truncate">
+                           {complaint.location?.address || complaint.municipalityName || complaint.location?.municipality || t("common.unknown")}
+                         </span>
                       </p>
 
                       {(complaint.status === "VALIDATED" || complaint.status === "ASSIGNED" || complaint.status === "IN_PROGRESS") && (
@@ -1053,7 +1226,7 @@ function DashboardContent() {
         )}
 
         {/* Recent Resolutions — For CITIZEN role */}
-        {user?.role === "CITIZEN" && recentResolutions.length > 0 && (
+        {user?.role === "CITIZEN" && recentResolutionsLoaded && (
           <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 mt-6">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -1065,46 +1238,108 @@ function DashboardContent() {
                   {t('dashboard.recentResolutionsSubtitle')}
                 </p>
               </div>
+              <Link
+                href={getComplaintsListHref()}
+                className="text-sm text-primary hover:text-primary/80 font-medium inline-flex items-center gap-1"
+              >
+                {t('dashboard.viewAllComplaints', { defaultValue: 'View All Complaints' })} <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recentResolutions.map((complaint) => (
+            {recentResolutions.length === 0 ? (
+              <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-100">
+                <CheckCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500">No resolved complaints yet. Resolutions will appear here.</p>
+              </div>
+            ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recentResolutions.map((complaint) => {
+                const isClosed = complaint.status === "CLOSED";
+                const photoUrl = complaint.media?.[0]?.url || complaint.afterPhotos?.[0]?.url || complaint.proofPhotos?.[0]?.url;
+                const fullPhotoUrl = photoUrl?.startsWith("http") ? photoUrl : (photoUrl ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photoUrl}` : null);
+                const resolvedDate = complaint.resolvedAt || complaint.updatedAt || complaint.createdAt;
+                const resolvedMs = new Date(resolvedDate).getTime();
+                const createdMs = new Date(complaint.createdAt).getTime();
+                const daysToFix = (!isNaN(resolvedMs) && !isNaN(createdMs) && resolvedMs > createdMs) 
+                  ? Math.max(1, Math.round((resolvedMs - createdMs) / (1000 * 60 * 60 * 24))) 
+                  : null;
+                const hasConfirmed = complaint.confirmations?.some(c => c.citizenId === currentUserId);
+                const isConfirmingThis = complaint._id === isConfirming;
+                return (
                 <Link
                   key={complaint._id}
                   href={`/dashboard/complaints/${complaint._id}`}
-                  className="bg-green-50/50 rounded-xl border border-green-100 overflow-hidden hover:shadow-md transition-shadow group"
+                  className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer"
                 >
-                  <div className="relative h-28 bg-gradient-to-br from-green-50 to-slate-50">
-                    {complaint.media?.[0]?.url ? (
-                      <img
-                        src={complaint.media[0].url}
+                  <div className="relative h-40 bg-gradient-to-br from-green-50 to-slate-50">
+                    {fullPhotoUrl ? (
+                      <img 
+                        src={fullPhotoUrl} 
                         alt={complaint.title}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <CheckCircle className="w-8 h-8 text-green-200" />
+                      <div className="w-full h-full flex items-center justify-center bg-green-50">
+                        <FileText className="w-10 h-10 text-green-300" />
                       </div>
                     )}
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-green-500 text-white flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        {isClosed ? "Closed" : "Resolved"}
+                      </span>
+                    </div>
                     <div className="absolute top-2 right-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 shadow-sm">
-                        {complaint.status === "CLOSED" ? "CLOSED" : "RESOLVED"}
+                      <span className="px-2 py-0.5 rounded-lg text-xs font-medium bg-white/90 text-slate-700">
+                        {getCategoryLabel(complaint.category)}
                       </span>
                     </div>
                   </div>
-                  <div className="p-3">
-                    <h4 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 group-hover:text-green-700 transition-colors">
+                  <div className="p-4">
+                    <h4 className="font-semibold text-slate-800 text-sm mb-2 line-clamp-2">
                       {complaint.title}
                     </h4>
-                    <p className="text-xs text-slate-500 flex items-center gap-1">
-                      <MapPin className="w-3 h-3 flex-shrink-0" />
-                      <span className="truncate">
-                        {complaint.location?.address || complaint.municipalityName || "Unknown location"}
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+                      <MapPin className="w-3 h-3 text-green-500" />
+                      <span>{complaint.municipalityName || complaint.location?.municipality || "Unknown"}</span>
+                      {daysToFix && (
+                        <>
+                          <span className="mx-0.5">·</span>
+                          <span className="text-green-600 font-medium">Fixed in {daysToFix} day{daysToFix > 1 ? 's' : ''}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleConfirm(complaint._id);
+                          }}
+                          disabled={isConfirmingThis}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                            hasConfirmed
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+                          } disabled:opacity-50`}
+                        >
+                          <CheckCircle className="w-3 h-3" />
+                          {isConfirmingThis ? "..." : (complaint.confirmationCount || 0)}
+                        </button>
+                      </div>
+                      <span className="text-xs text-slate-400">
+                        {formatResolvedDate(complaint.resolvedAt)}
                       </span>
-                    </p>
+                    </div>
                   </div>
                 </Link>
-              ))}
+              );
+              })}
             </div>
+            )}
           </div>
         )}
       </main>

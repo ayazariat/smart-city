@@ -8,9 +8,112 @@ import re
 import unicodedata
 
 
+# Synonym mapping for common complaint-related terms
+SYNONYM_MAP = {
+    # English synonyms
+    "waste": ["garbage", "trash", "rubbish", "debris", "refuse", "litter"],
+    "road": ["street", "highway", "avenue", "boulevard", "lane"],
+    "lighting": ["light", "lamp", "streetlight", "illumination"],
+    "water": ["aqua", "plumbing", "pipe", "drainage"],
+    "safety": ["security", "danger", "hazard", "risk"],
+    "building": ["structure", "property", "house", "construction"],
+    "park": ["garden", "green space", "recreation area"],
+    "noise": ["sound", "loud", "disturbance"],
+    "broken": ["damaged", "cracked", "ruined", "destroyed"],
+    "leak": ["drip", "seep", "spill"],
+    
+    # French synonyms (common in Tunisia)
+    "déchets": ["ordures", "détritus", "poubelle", "déchets ménagers"],
+    "route": ["rue", "voie", "chaussée", "avenue"],
+    "éclairage": ["lumière", "lampadaire", "illumination"],
+    "eau": ["aqua", "plomberie", "tuyau", "drainage"],
+    "sécurité": ["sûreté", "danger", "risque"],
+    "bâtiment": ["immeuble", "propriété", "maison", "construction"],
+    "parc": ["jardin", "espace vert", "aire de jeux"],
+    "bruit": ["son", "fort", "perturbation"],
+    "cassé": ["endommagé", "fêlé", "ruiné", "détruit"],
+    "fuite": ["dégât", "fuite d'eau", "perturbation"],
+}
+
+# Reverse synonym map for lookup
+REVERSE_SYNONYM_MAP = {}
+for main_term, synonyms in SYNONYM_MAP.items():
+    for synonym in synonyms:
+        REVERSE_SYNONYM_MAP[synonym.lower()] = main_term.lower()
+    REVERSE_SYNONYM_MAP[main_term.lower()] = main_term.lower()
+
+def normalize_synonyms(text: str) -> str:
+    """
+    Replace words with their canonical synonyms.
+    
+    Args:
+        text: Text to normalize
+        
+    Returns:
+        Text with synonyms replaced by canonical forms
+    """
+    words = text.split()
+    normalized_words = []
+    
+    for word in words:
+        word_lower = word.lower()
+        if word_lower in REVERSE_SYNONYM_MAP:
+            normalized_words.append(REVERSE_SYNONYM_MAP[word_lower])
+        else:
+            normalized_words.append(word)
+    
+    return " ".join(normalized_words)
+
+
+def remove_plural(text: str) -> str:
+    """
+    Simple plural removal for common English and French patterns.
+    
+    Args:
+        text: Text to process
+        
+    Returns:
+        Text with plurals converted to singular
+    """
+    words = text.split()
+    singular_words = []
+    
+    for word in words:
+        word_lower = word.lower()
+        singular = word_lower
+        
+        # English plural patterns
+        if word_lower.endswith('s') and not word_lower.endswith('ss'):
+            # Remove trailing 's' for simple plurals
+            if word_lower.endswith('ies'):
+                singular = word_lower[:-3] + 'y'
+            elif word_lower.endswith('ves'):
+                singular = word_lower[:-3] + 'f'
+            elif word_lower.endswith('es'):
+                if word_lower.endswith('ches') or word_lower.endswith('shes') or word_lower.endswith('xes'):
+                    singular = word_lower[:-2]
+                else:
+                    singular = word_lower[:-1]
+            else:
+                singular = word_lower[:-1]
+        
+        # French plural patterns
+        elif word_lower.endswith('aux'):
+            singular = word_lower[:-3] + 'al'
+        elif word_lower.endswith('eux'):
+            singular = word_lower[:-3] + 'eu'
+        elif word_lower.endswith('oux'):
+            singular = word_lower[:-3] + 'ou'
+        
+        singular_words.append(singular)
+    
+    return " ".join(singular_words)
+
+
 def clean_text(text: str) -> str:
     """
     Clean and normalize text input.
+    Now includes synonym normalization and plural removal.
     
     Args:
         text: Raw text string
@@ -26,6 +129,25 @@ def clean_text(text: str) -> str:
     
     # Normalize unicode (French/Arabic accents)
     text = unicodedata.normalize('NFKD', text)
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if not unicodedata.combining(c))
+    text = unicodedata.normalize('NFC', text)
+    
+    # Remove accents from characters
+    text = re.sub(r'[àáâãäå]', 'a', text)
+    text = re.sub(r'[èéêë]', 'e', text)
+    text = re.sub(r'[ìíîï]', 'i', text)
+    text = re.sub(r'[òóôõö]', 'o', text)
+    text = re.sub(r'[ùúûü]', 'u', text)
+    text = re.sub(r'[ýÿ]', 'y', text)
+    text = re.sub(r'[ç]', 'c', text)
+    text = re.sub(r'[ñ]', 'n', text)
+    
+    # Normalize synonyms
+    text = normalize_synonyms(text)
+    
+    # Remove plurals
+    text = remove_plural(text)
     
     # Remove punctuation except spaces
     text = re.sub(r'[^\w\s]', ' ', text)

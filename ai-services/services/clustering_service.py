@@ -35,7 +35,8 @@ try:
     def get_cluster_model():
         global _cluster_model, _cluster_tokenizer
         if _cluster_model is None:
-            model_name = "sentence-transformers/all-MiniLM-L6-v2"
+            # Use multilingual model to support Arabic, French, and English
+            model_name = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
             _cluster_tokenizer = AutoTokenizer.from_pretrained(model_name)
             _cluster_model = AutoModel.from_pretrained(model_name)
             _cluster_model.eval()
@@ -79,9 +80,11 @@ class RootCauseClusteringService:
         self.vectorizer = None
         
     def _clean_text(self, text: str) -> str:
-        """Clean and normalize text."""
+        """Clean and normalize text while preserving Arabic and other non-Latin scripts."""
         text = text.lower()
-        text = re.sub(r'[^\w\s]', ' ', text)
+        # Preserve Arabic, Hebrew, Chinese, and other non-Latin scripts
+        # Only remove special characters and punctuation, keep letters (including Arabic)
+        text = re.sub(r'[^\w\s\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', ' ', text)
         text = re.sub(r'\s+', ' ', text).strip()
         return text
     

@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: false });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "Registration failed",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
           throw error;
@@ -74,11 +74,11 @@ export const useAuthStore = create<AuthState>()(
           const response = await authService.login(data);
           const token = response.accessToken || response.token;
           const refresh = response.refreshToken;
-          
+
           if (token) {
             setClientAuthTokens(token, refresh);
           }
-          
+
           set({
             user: response.user || undefined,
             token: token || undefined,
@@ -88,7 +88,7 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "Login failed",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
           throw error;
@@ -108,7 +108,7 @@ export const useAuthStore = create<AuthState>()(
           }
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "Verification failed",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
           throw error;
@@ -122,7 +122,7 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: false });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "Failed to delete pending registration",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
           throw error;
@@ -230,7 +230,7 @@ export const useAuthStore = create<AuthState>()(
           set({ user, isLoading: false });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "Failed to fetch profile",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
         }
@@ -243,7 +243,7 @@ export const useAuthStore = create<AuthState>()(
           set({ user, isLoading: false });
         } catch (error) {
           set({
-            error: error instanceof Error ? error.message : "Failed to update profile",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
           throw error;
@@ -263,7 +263,7 @@ export const useAuthStore = create<AuthState>()(
             throw error;
           }
           set({
-            error: error instanceof Error ? error.message : "Failed to change password",
+            error: "Une erreur s'est produite. Veuillez réessayer.",
             isLoading: false,
           });
           throw error;

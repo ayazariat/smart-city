@@ -1,36 +1,47 @@
 {
-  "common": {
-    "loading": "Loading...",
-    "smartCity": "Smart City",
-    "tunisia": "Tunisia",
-    "user": "User",
-    "cancel": "Cancel",
-    "submit": "Submit",
-    "save": "Save",
-    "delete": "Delete",
-    "confirm": "Confirm",
-    "close": "Close",
-    "back": "Back",
-    "next": "Next",
-    "search": "Search...",
-    "noData": "No data available",
-    "noDataYet": "No data yet",
-    "tryAdjustingFilters": "Try adjusting your search or filters.",
-    "refresh": "Refresh",
-    "processing": "Processing...",
-    "all": "All",
-    "active": "Active",
-    "resolved": "Resolved",
-    "help": "Help",
-    "unknown": "Unknown",
-    "timeAgo": {
-      "now": "Just now",
-      "minutes": "{{n}}m ago",
-      "hours": "{{n}}h ago",
-      "days": "{{n}}d ago"
-     }
-   },
-   "errors": {
+   "common": {
+     "loading": "Loading...",
+     "smartCity": "Smart City",
+     "tunisia": "Tunisia",
+     "user": "User",
+     "cancel": "Cancel",
+     "submit": "Submit",
+     "save": "Save",
+     "delete": "Delete",
+     "confirm": "Confirm",
+     "close": "Close",
+     "back": "Back",
+     "next": "Next",
+     "search": "Search...",
+     "noData": "No data available",
+     "noDataYet": "No data yet",
+     "tryAdjustingFilters": "Try adjusting your search or filters.",
+     "refresh": "Refresh",
+     "processing": "Processing...",
+     "all": "All",
+     "active": "Active",
+     "resolved": "Resolved",
+     "help": "Help",
+     "unknown": "Unknown",
+     "yourComplaint": "Your complaint",
+     "showFilters": "Show Filters",
+     "hideFilters": "Hide Filters",
+      "timeAgo": {
+        "now": "Just now",
+        "minutes": "{{n}}m ago",
+        "hours": "{{n}}h ago",
+        "days": "{{n}}d ago"
+      }
+    },
+    "badges": {
+      "overdue": "Overdue",
+      "atRisk": "At Risk",
+      "reportPending": "Report Pending",
+      "approved": "Approved",
+      "popular": "Popular",
+      "reworkNeeded": "Rework Needed"
+    },
+    "errors": {
      "loadFailed": "Failed to load data. Please try again.",
      "generic": "Something went wrong. Please try again.",
      "notFound": "The requested resource was not found.",
@@ -71,11 +82,121 @@
      "noAssignedComplaints": "No complaints assigned to you yet.",
      "noAssignedComplaintsFiltered": "No complaints match your current filters."
    },
-   "admin": {
-     "noComplaintsSubmitted": "No complaints have been submitted yet."
-   },
+    "admin": {
+      "settings": {
+        "title": "System Settings",
+        "subtitle": "Manage departments, SLA rules, and platform configuration",
+        "loadFailed": "Failed to load settings",
+        "tabs": {
+          "departments": "Departments",
+          "sla": "SLA Rules",
+          "categories": "Categories"
+        },
+        "departments": {
+          "title": "Departments",
+          "add": "Add Department",
+          "addDepartment": "Add Department",
+          "editDepartment": "Edit Department",
+          "departmentModalDescription": "Configure department details and which complaint categories it handles.",
+          "departmentName": "Department Name",
+          "departmentNamePlaceholder": "e.g. Roads & Infrastructure",
+          "noDepartments": "No departments configured yet.",
+          "deptNameRequired": "Department name is required",
+          "deptUpdated": "Department updated",
+          "deptCreated": "Department created",
+          "deptSaveFailed": "Failed to save department",
+          "deptDeleteConfirm": "Delete this department? This cannot be undone.",
+          "deptDeleted": "Department deleted",
+          "deptDeleteFailed": "Failed to delete department"
+        },
+        "sla": {
+          "description": "SLA deadlines define how long each complaint can remain open before being flagged as overdue. Each category can have different deadlines per urgency level. Changes apply to new complaints only.",
+          "urgency": "Urgency",
+          "hours": "Hours",
+          "label": "Label",
+          "actions": "Actions",
+          "save": "Save",
+          "cancel": "Cancel",
+          "edit": "Edit",
+          "slaUpdated": "SLA rule updated",
+          "slaUpdateFailed": "Failed to update SLA rule"
+        },
+        "edit": "Edit",
+        "delete": "Delete"
+      },
+      "noComplaintsSubmitted": "No complaints have been submitted yet.",
+      "complaintsPageTitle": "System Supervision — Complaints",
+      "complaintsPageSubtitle": "Read-only monitoring and administrative oversight",
+      "complaintsCount": "{{total}} active · {{shown}} shown",
+      "totalComplaints": "Total Complaints",
+      "resolved": "Resolved",
+      "atRisk": "At Risk (SLA)",
+      "closeToDeadline": "Close to deadline",
+      "overdue": "Overdue",
+      "pastDeadline": "Past deadline",
+      "teamPerformance": "Team Performance",
+      "inProgress": "In Progress",
+      "currentlyWorked": "Currently being worked on",
+      "averageDays": "Average Days",
+      "timeToProcess": "Time to process",
+      "resolutionRate": "Resolution Rate",
+      "percentageResolved": "Percentage resolved",
+      "highPriority": "High Priority",
+      "urgentIssues": "Urgent issues (score 15+)",
+      "categories": "Categories:",
+      "searchPlaceholder": "Search by description or category...",
+      "filtersButton": "Filters",
+      "exportCSV": "CSV",
+      "exportPDF": "PDF",
+      "resultsCount": "{{count}} results",
+      "usersPageTitle": "User Management",
+      "usersPageSubtitle": "Manage system users and their permissions",
+      "addNewUser": "Add New User",
+      "totalUsers": "Total Users",
+      "activeUsers": "Active Users",
+      "inactiveUsers": "Inactive Users",
+      "administrators": "Administrators",
+      "searchUsersPlaceholder": "Search users by name or email...",
+      "table": {
+        "user": "User",
+        "role": "Role",
+        "commune": "Commune",
+        "phone": "Phone",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "commune": "Commune",
+      "phone": "Phone",
+      "status": "Status",
+      "actions": "Actions",
+      "active": "Active",
+      "inactive": "Inactive",
+      "editUser": "Edit User",
+      "fullName": "Full Name",
+      "email": "Email",
+      "governorate": "Governorate",
+      "department": "Department",
+      "selectDepartment": "Select Department",
+      "chooseDepartment": "Choose a department...",
+      "noDepartments": "No departments available",
+      "cancel": "Cancel",
+      "save": "Save",
+      "deleteUser": "Delete User",
+      "confirmDeleteUser": "Are you sure you want to delete this user? This action cannot be undone.",
+      "loadingUsers": "Loading users..."
+    },
    "manager": {
-     "noPendingComplaints": "No complaints pending for your department."
+     "noPendingComplaints": "No complaints pending for your department.",
+     "priorityFilterAll": "All Priorities",
+     "priorityFilterHigh": "High (≥15)",
+     "priorityFilterMedium": "Medium (6-14)",
+     "priorityFilterLow": "Low (<6)",
+     "reassignTeam": "Reassign Team",
+     "assignRepairTeam": "Assign Repair Team",
+     "selectTechniciansDesc": "Select one or more technicians to form a repair team for this complaint.",
+     "assignTeam": "Assign Team ({{count}})",
+     "assign": "Assign",
+     "updatePriority": "Update Priority"
    },
    "topbar": {
     "back": "Back"
@@ -113,7 +234,11 @@
     "didntReceive": "Didn't receive the email? Try again",
     "publicStats": "View Public Statistics"
   },
-  "dashboard": {
+   "dateRange": {
+     "from": "FROM",
+     "to": "TO"
+   },
+   "dashboard": {
     "title": "Dashboard",
     "welcomeBack": "Welcome back, {{name}}",
     "subtitle": {
@@ -172,36 +297,46 @@
   },
   "stats": {
     "title": {
-      "CITIZEN": "My Complaints Statistics",
+      "CITIZEN": "My Complaints Stats",
       "MUNICIPAL_AGENT": "Complaints Statistics",
-      "DEPARTMENT_MANAGER": "Department Complaints Statistics",
-      "TECHNICIAN": "Repair Tasks Statistics",
-      "ADMIN": "System Complaints Statistics"
+      "DEPARTMENT_MANAGER": "Department Statistics",
+      "TECHNICIAN": "Repair Statistics",
+      "ADMIN": "System Statistics"
     },
     "myComplaints": "My Complaints",
-    "totalSubmitted": "Total submitted",
+    "totalSubmitted": "Total Submitted",
     "pending": "Pending",
-    "awaitingReview": "Awaiting review",
+    "awaitingReview": "Awaiting Review",
     "inProgress": "In Progress",
-    "beingWorked": "Being worked on",
-    "beingFixed": "Being fixed",
+    "beingWorked": "Being Worked On",
+    "beingFixed": "Being Fixed",
     "total": "Total",
-    "allComplaints": "All complaints",
+    "allComplaints": "All Complaints",
     "toValidate": "To Validate",
-    "needsReview": "Needs review",
-    "awaitingClosure": "Awaiting closure",
+    "needsReview": "Needs Review",
+    "awaitingClosure": "Awaiting Closure",
     "overdue": "Overdue",
-    "pastDeadline": "Past deadline",
+    "pastDeadline": "Past Deadline",
     "pastSLA": "Past SLA",
     "resolutionRate": "Resolution Rate",
     "slaCompliance": "SLA Compliance",
     "department": "Department",
-    "totalComplaints": "Total complaints",
+    "totalComplaints": "Total Complaints",
     "toAssign": "To Assign",
-    "needsTechnician": "Needs technician",
-    "allTasks": "Total tasks",
+    "needsTechnician": "Needs Technician",
+    "allTasks": "All Tasks",
     "newTasks": "New Tasks",
-    "readyToStart": "Ready to start",
+    "readyToStart": "Ready to Start",
+    "closed": "Closed Cases",
+    "rejectedCases": "Rejected Cases",
+    "resolvedOnTime": "Resolved On Time",
+    "citizenSatisfaction": "Citizen Satisfaction",
+    "basedOnResponses": "Based on Responses",
+    "satisfactionRate": "Satisfaction Rate",
+    "totalRated": "Total Rated",
+    "notConfirmed": "Not Confirmed",
+    "citizenSatisfactionDesc": "Based on citizen reviews of resolved complaints.",
+    "vsLast": "vs last",
     "workingOn": "Working on",
     "completed": "Completed",
     "resolvedTasks": "Resolved tasks",
@@ -251,7 +386,9 @@
     "noComplaints": "No complaints found",
     "confirm": "Confirm",
     "prioritize": "Prioritize",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "allComplaints": "All Complaints",
+    "filteredResults": "{{n}} filtered results"
   },
   "activity": {
     "title": "Recent Activity",
@@ -302,16 +439,17 @@
     "filterActive": "Active",
     "filterResolved": "Resolved"
   },
-  "status": {
-    "SUBMITTED": "Submitted",
-    "VALIDATED": "Validated",
-    "ASSIGNED": "Assigned",
-    "IN_PROGRESS": "In Progress",
-    "RESOLVED": "Resolved",
-    "CLOSED": "Closed",
-    "REJECTED": "Rejected",
-    "ARCHIVED": "Archived"
-  },
+   "status": {
+     "SUBMITTED": "Submitted",
+     "VALIDATED": "Validated",
+     "ASSIGNED": "Assigned",
+     "IN_PROGRESS": "In Progress",
+     "RESOLVED": "Resolved",
+     "CLOSED": "Closed",
+     "REJECTED": "Rejected",
+     "RESOLUTION_REJECTED": "Rework Needed",
+     "ARCHIVED": "Archived"
+   },
   "categories": {
     "waste": "Waste & Cleanliness",
     "wasteDesc": "Garbage, overflowing bins, illegal dumps, street cleaning.",
@@ -418,7 +556,11 @@
     "duplicateModal": {
       "title": "Possible Duplicate Detected",
       "cancel": "Cancel",
-      "submitAnyway": "Submit Anyway"
+      "submitAnyway": "Submit Anyway",
+      "viewDetails": "View Details",
+      "upvote": "Upvote",
+      "upvoted": "Upvoted",
+      "confirm": "Confirm"
     }
   },
   "transparency": {
@@ -428,7 +570,7 @@
     "login": "Login",
     "createAccount": "Create Account",
     "loadingDashboard": "Loading dashboard...",
-    "overview": "Overview",
+    "overview": "Dashboard",
     "recentResolutions": "Recent Resolutions",
     "leaderboard": "Leaderboard",
     "categoryPerformance": "Category Performance",
@@ -436,6 +578,8 @@
     "governorateOverview": "Governorate Overview",
     "allComplaints": "All Complaints",
     "municipalities": "Municipalities",
+    "reportProblem": "Dashboard",
+    "back": "Back to Transparency",
     "hero": {
       "title": "See Something? Report It.",
       "subtitle": "Help us improve our city. Report infrastructure issues, road damage, waste problems, and more. Your reports make our communities safer and cleaner.",
@@ -517,7 +661,8 @@
       "legendGood": "Good (70%+)",
       "legendModerate": "Moderate (50-70%)",
       "legendBad": "Needs Attention (<50%)",
-      "filters": "Filters:"
+      "filters": "Filters:",
+      "municipalities": "Municipalities"
     },
     "header": {
       "menu": "Menu",
@@ -633,6 +778,18 @@
     "fr": "Français",
     "ar": "العربية"
   },
+  "departments": {
+    "waste": "Waste & Cleanliness",
+    "roads": "Roads & Traffic",
+    "lighting": "Street Lighting",
+    "water": "Water & Drainage",
+    "safety": "Public Safety & Noise",
+    "property": "Public Property",
+    "parks": "Parks & Green Spaces",
+    "other": "General Services",
+    "assignToDepartment": "Assign to Department",
+    "selectDepartmentDescription": "Select the department responsible for handling this complaint"
+  },
    "notifications": {
      "title": "Notifications",
      "empty": "No notifications yet",
@@ -716,6 +873,8 @@
     "rejected": "Rejected",
     "history": "History",
     "description": "Description",
+    "addCommentPlaceholder": "Add a comment...",
+    "addComment": "Add Comment",
     "contactPhone": "Contact Phone",
     "location": "Location",
     "locationNotProvided": "Location not provided",
@@ -746,6 +905,7 @@
     "keywords": "Keywords",
     "errorNotFound": "Complaint not found",
     "errorOwnOnly": "Access denied. You can only view your own complaints.",
+    "notYetAssigned": "Not assigned yet",
     "errorAccessDenied": "Access denied. You don't have permission to view this complaint.",
     "errorSessionExpired": "Session expired. Please login again.",
     "errorLoading": "Error loading complaint",
@@ -764,6 +924,7 @@
     "validateComplaint": "Validate Complaint",
     "rejectComplaint": "Reject Complaint",
     "assignToDepartment": "Assign to Department",
+    "selectDepartmentDescription": "Select the department that will handle this complaint.",
     "updatePriority": "Update Priority",
     "assignToRepairTeam": "Assign to Repair Team",
     "assignedToRepairTeam": "Assigned to Repair Team",
@@ -793,46 +954,63 @@
     ,"generateGlobalReports": "Generate global reports"
     ,"aiAnalysis": "AI Analysis"
     ,"aiUrgencyPrediction": "AI Urgency Prediction"
-    ,"duplicateCheck": "Duplicate Check"
-    ,"beforeWorkPhotos": "Before Work Photos"
-    ,"afterWorkPhotos": "After Work Photos"
-    ,"comments": "Comments"
-    ,"dateUnknown": "Unknown date"
-    ,"internalNotes": "Internal Notes"
-    ,"communitySupport": "Community Support"
-    ,"confirmations": "Confirmations"
-    ,"upvotes": "Upvotes"
-    ,"confirmed": "Confirmed"
-    ,"confirmIssue": "Confirm Issue"
-    ,"upvoted": "Upvoted"
-    ,"upvote": "Upvote"
-    ,"communityHelpHint": "Help prioritize this issue by confirming it exists in your area"
-    ,"actions": "Actions"
-    ,"approved": "Approved"
-    ,"pendingReview": "Pending Review"
-    ,"techResolutionNotes": "Technician's Resolution Notes"
-    ,"resolvedOn": "Resolved on"
-    ,"proofOfCompletion": "Proof of completion"
-    ,"approve": "Approve"
-    ,"selectDepartment": "Select Department"
-    ,"chooseDepartment": "Choose a department..."
-    ,"noDepartments": "No departments available"
-    ,"assign": "Assign"
-    ,"selectTechnicians": "Select Technician(s) for Repair Team"
-    ,"noTechnicians": "No technicians available"
-    ,"noTechniciansHint": "No technicians assigned to this department yet"
-    ,"selectOneOrMore": "Select one or more technicians:"
-    ,"techTeamSelected": "{{count}} technicians selected — A repair team will be created"
-    ,"createTeamAssign": "Create Team & Assign"
-    ,"aboutToApprove": "You are about to approve the resolution report for:"
-    ,"approveWillClose": "This will close the complaint and notify the citizen and technician."
-    ,"confirmApproval": "Confirm Approval"
-    ,"rejectResolutionPlaceholder": "Explain why this resolution report is being rejected..."
-    ,"failedRejectResolution": "Failed to reject resolution"
-    ,"failedApproveResolution": "Failed to approve resolution"
-    ,"failedAssignTechnician": "Failed to assign technician. Please try again."
-    ,"startWorkConfirm": "Are you sure you want to start work on complaint {{id}}?"
-    ,"resolveConfirm": "Submit your resolution for {{id}}? The agent will review your report."
+    ,"duplicateCheck": "Duplicate Check",
+    "checkingDuplicates": "Checking for similar complaints...",
+    "similarComplaintsFound": "Similar complaints found — review before validating",
+    "differentIssuesContinue": "These are different issues — continue to validate",
+    "view": "View",
+    "merge": "Merge",
+    "merging": "Merging...",
+    "mergeConfirm": "Mark this complaint as a duplicate of [{{rc}}]? The complaint will be closed and the citizen will be notified.",
+    "mergedSuccess": "Complaint merged as duplicate successfully.",
+    "mergeFailed": "Failed to merge complaint.",
+    "beforeWorkPhotos": "Before Work Photos",
+    "afterWorkPhotos": "After Work Photos",
+    "comments": "Comments",
+    "dateUnknown": "Unknown date",
+    "internalNotes": "Internal Notes",
+    "communitySupport": "Community Support",
+    "confirmations": "Confirmations",
+    "upvotes": "Upvotes",
+    "confirmed": "Confirmed",
+    "confirmIssue": "Confirm Issue",
+    "upvoted": "Upvoted",
+    "upvote": "Upvote",
+    "communityHelpHint": "Help prioritize this issue by confirming it exists in your area",
+    "actions": "Actions",
+    "approved": "Approved",
+    "pendingReview": "Pending Review",
+    "techResolutionNotes": "Technician's Resolution Notes",
+    "resolvedOn": "Resolved on",
+    "proofOfCompletion": "Proof of completion",
+    "approve": "Approve",
+    "selectDepartment": "Select Department",
+    "chooseDepartment": "Choose a department...",
+    "noDepartments": "No departments available",
+    "assign": "Assign",
+    "selectTechnicians": "Select Technician(s) for Repair Team",
+    "noTechnicians": "No technicians available",
+    "noTechniciansHint": "No technicians assigned to this department yet",
+    "selectOneOrMore": "Select one or more technicians:",
+    "techTeamSelected": "{{count}} technicians selected — A repair team will be created",
+    "createTeamAssign": "Create Team & Assign",
+    "aboutToApprove": "You are about to approve the resolution report for:",
+    "approveWillClose": "This will close the complaint and notify the citizen and technician.",
+    "confirmApproval": "Confirm Approval",
+    "approveResolution": "Accept Resolution",
+    "rejectResolution": "Reject Resolution",
+    "resolutionApproved": "Resolution approved successfully",
+    "aboutToReject": "You are about to reject the resolution report for:",
+    "rejectWillReturnToProgress": "This will return the complaint to 'In Progress' status and the technician will need to redo the work.",
+    "rejectionReasonRequired": "Please provide a reason for rejection",
+    "rejectionReasonPlaceholder": "Explain why this resolution report is being rejected...",
+    "resolutionRejected": "Resolution rejected successfully",
+    "rejectResolutionPlaceholder": "Explain why this resolution report is being rejected...",
+    "failedRejectResolution": "Failed to reject resolution",
+    "failedApproveResolution": "Failed to approve resolution",
+    "failedAssignTechnician": "Failed to assign technician. Please try again.",
+    "startWorkConfirm": "Are you sure you want to start work on complaint {{id}}?",
+    "resolveConfirm": "Submit your resolution for {{id}}? The agent will review your report."
   },
   "geoErrors": {
     "notSupported": "Geolocation not supported by your browser",
@@ -930,7 +1108,24 @@
       "IN_PROGRESS": "Work in progress",
       "RESOLVED": "Fixed — under review",
       "CLOSED": "Fully resolved"
-    }
+    },
+    "rateResolution": "Rate the resolution",
+    "rateResolutionDesc": "How was the resolution of your issue? Your feedback helps us improve our service.",
+    "ratingCommentPlaceholder": "Share your experience (optional)...",
+    "submitRating": "Submit my rating"
+  },
+  "duplicateModal": {
+    "title": "Duplicate Detection",
+    "subtitle": "Review potential duplicate complaints and decide whether to merge.",
+    "noSimilarFound": "No similar complaints found.",
+    "uniqueComplaint": "This appears to be a unique complaint.",
+    "upvote": "Confirm",
+    "upvoted": "Confirmed",
+    "upvoteFailed": "Failed to upvote. You may have already confirmed this complaint.",
+    "confirm": "See Details",
+    "cancel": "Cancel",
+    "merge": "Merge",
+    "keepSeparate": "Keep Separate"
   },
   "tasks": {
     "title": "My Tasks",
@@ -946,12 +1141,12 @@
     "overdue": "Overdue",
     "total": "Total",
     "searchPlaceholder": "Search tasks...",
-     "low": "Low",
-     "medium": "Medium",
-     "high": "High",
-     "urgent": "Urgent",
-     "highPriority": "High Priority",
-     "photos": "{{n}} photos",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "urgent": "Urgent",
+    "highPriority": "High Priority",
+    "photos": "{{n}} photos",
     "dueDate": "Due: {{date}}",
     "startWork": "Start Work",
     "markResolved": "Mark Resolved",
@@ -963,6 +1158,7 @@
     "proofPhotos": "Proof Photos",
     "addPhotos": "Add Photos",
     "submitResolution": "Submit Resolution",
+    "reviewFeedback": "Please review the feedback and complete the work properly before resubmitting.",
     "notifications": "Notifications",
     "noNotifications": "No notifications",
     "markAllRead": "Mark all read",

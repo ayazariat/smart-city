@@ -315,7 +315,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             <button
                               onClick={(e) => { e.stopPropagation(); handleMarkRead(notif._id); }}
                               className="p-1 hover:bg-slate-200 rounded flex-shrink-0"
-                              title="Mark as read"
+                              title={translateOrFallback("dashboard.markRead", "Mark as read")}
                             >
                               <Check className="w-3 h-3 text-slate-400" />
                             </button>

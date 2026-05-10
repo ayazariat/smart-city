@@ -33,16 +33,16 @@ async function getManagerDepartment(userId) {
     return dept;
   }
   
-   // Auto-fix: If user is DEPARTMENT_MANAGER with no department, assign first available department
-   if (user?.role === "DEPARTMENT_MANAGER") {
-     const availableDept = await Department.findOne({ responsable: { $exists: false } }).limit(1);
-     if (availableDept) {
-       // Link both sides
-       await Department.findByIdAndUpdate(availableDept._id, { responsable: userId });
-       await User.findByIdAndUpdate(userId, { department: availableDept._id });
-       return availableDept;
-     }
-   }
+  // Auto-fix: If user is DEPARTMENT_MANAGER with no department, assign first available department
+  if (user?.role === "DEPARTMENT_MANAGER") {
+    const availableDept = await Department.findOne({ responsable: { $exists: false } }).limit(1);
+    if (availableDept) {
+      // Link both sides
+      await Department.findByIdAndUpdate(availableDept._id, { responsable: userId });
+      await User.findByIdAndUpdate(userId, { department: availableDept._id });
+      return availableDept;
+    }
+  }
   
   throw new Error("NO_DEPARTMENT_ASSIGNED");
 }
@@ -144,6 +144,75 @@ class ManagerController {
        }
        res.status(500).json({ success: false, message: "Failed to retrieve complaints" });
      }
+  }
+
+  async getComplaintsGeo(req, res) {
+    try {
+      let department;
+      let departmentId;
+      try {
+        department = await getManagerDepartment(req.user.userId);
+        departmentId = department?._id;
+      } catch (err) {
+        if (err.message !== "NO_DEPARTMENT_ASSIGNED") {
+          throw err;
+        }
+      }
+
+      const query = {};
+      
+      if (departmentId) {
+        query["assignedDepartment.id"] = departmentId;
+      } else {
+        const user = await User.findById(req.user.userId).select('municipality municipalityName').lean();
+        if (user?.municipality) {
+          query.municipality = user.municipality;
+        } else if (user?.municipalityName) {
+          query.municipalityName = user.municipalityName;
+        }
+      }
+      
+      query.status = { $in: MANAGER_ACTIVE_STATUSES };
+      query["location.coordinates"] = { $exists: true, $ne: null };
+
+      const complaints = await Complaint.find(query)
+        .select("_id title description category status priorityScore urgency createdAt location referenceId municipalityName")
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .lean();
+
+      const geoData = complaints
+        .filter(c => c.location && c.location.coordinates && c.location.coordinates.length === 2)
+        .map(c => ({
+          _id: c._id,
+          title: c.title,
+          description: c.description,
+          category: c.category,
+          status: c.status,
+          priorityScore: c.priorityScore,
+          urgency: c.urgency,
+          referenceId: c.referenceId,
+          createdAt: c.createdAt,
+          location: {
+            lat: c.location.coordinates[1],
+            lng: c.location.coordinates[0],
+            address: c.location.address
+          },
+          municipalityName: c.municipalityName
+        }));
+
+      res.json({
+        success: true,
+        data: geoData,
+        count: geoData.length
+      });
+    } catch (error) {
+      console.error("Manager get complaints geo error:", error);
+      if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+        return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+      }
+      res.status(500).json({ success: false, message: "Failed to retrieve complaint locations" });
+    }
   }
 
 async assignTechnician(req, res) {
@@ -486,11 +555,44 @@ async assignTechnician(req, res) {
       const departmentId = department?._id;
       const isAdmin = req.user.role === "ADMIN";
       
-      const assignedDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
-      const canAccess = isAdmin || !assignedDeptId || assignedDeptId === departmentId?.toString();
+      // Get assigned department ID (handle both ObjectId and string)
+      const assignedDeptId = complaint.assignedDepartment?._id || complaint.assignedDepartment;
+      
+      // Proper ObjectId comparison
+      const mongoose = require('mongoose');
+      let canAccess = isAdmin;
+      
+      if (!canAccess && departmentId && assignedDeptId) {
+        // Convert both to ObjectId for comparison
+        const deptObjectId = mongoose.Types.ObjectId.isValid(departmentId.toString()) 
+          ? new mongoose.Types.ObjectId(departmentId.toString()) 
+          : departmentId;
+        const assignedObjectId = mongoose.Types.ObjectId.isValid(assignedDeptId.toString()) 
+          ? new mongoose.Types.ObjectId(assignedDeptId.toString()) 
+          : assignedDeptId;
+        
+        canAccess = deptObjectId.toString() === assignedObjectId.toString();
+      }
+      
+      // Fallback: allow if complaint has no department assigned yet
+      if (!canAccess && !assignedDeptId) {
+        canAccess = true;
+      }
+      
+      // Fallback: allow if complaint is in manager's municipality (for complaints not yet assigned to a department)
+      if (!canAccess) {
+        const user = await User.findById(req.user.userId).select('municipality municipalityName governorate').lean();
+        const managerMunicipality = user?.municipality || user?.municipalityName;
+        const complaintMunicipality = complaint.municipalityName || complaint.municipality;
+        
+        if (managerMunicipality && complaintMunicipality) {
+          // Case-insensitive comparison
+          canAccess = managerMunicipality.toLowerCase() === complaintMunicipality.toLowerCase();
+        }
+      }
       
       if (!canAccess) {
-        return res.status(403).json({ success: false, message: "Complaint not in your department" });
+        return res.status(403).json({ success: false, message: "Complaint not in your department or jurisdiction" });
       }
 
       if (urgency) {
@@ -545,7 +647,7 @@ async assignTechnician(req, res) {
        if (error.message === "NO_DEPARTMENT_ASSIGNED") {
          return res.status(400).json({ success: false, message: "No department assigned to this manager" });
        }
-       res.status(500).json({ success: false, message: "Failed to update priority" });
+       res.status(500).json({ success: false, message: `Failed to update priority: ${error.message}` });
      }
   }
 
@@ -553,7 +655,8 @@ async assignTechnician(req, res) {
     try {
       const { search } = req.query;
       
-      let query = { role: "TECHNICIAN", isActive: true };
+      // Remove isActive filter since it defaults to false and would exclude all technicians
+      let query = { role: "TECHNICIAN" };
       
       if (search) {
         query.fullName = { $regex: search, $options: "i" };
@@ -569,16 +672,37 @@ async assignTechnician(req, res) {
          const department = await getManagerDepartment(req.user.userId);
          const departmentId = department?._id;
          
+         // If no department assigned, show all technicians as fallback
          if (!departmentId) {
-           // This should not happen if auto-fix works, but safeguard
-           return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+           console.warn(`Manager has no department assigned, showing all technicians`);
+           technicians = await User.find(query)
+             .select("fullName email phone")
+             .sort({ fullName: 1 });
+         } else {
+           // First try to get technicians in the manager's department
+           query.department = departmentId;
+           technicians = await User.find(query)
+             .select("fullName email phone")
+             .sort({ fullName: 1 });
+         
+           // If no technicians found in department, show all technicians as fallback
+           if (!technicians || technicians.length === 0) {
+             console.warn(`No technicians found in department ${departmentId}, showing all technicians`);
+             delete query.department;
+             technicians = await User.find(query)
+               .select("fullName email phone")
+               .sort({ fullName: 1 });
+           }
          }
-
-         query.department = departmentId;
-         technicians = await User.find(query)
-           .select("fullName email phone")
-           .sort({ fullName: 1 });
        }
+
+      if (!technicians || technicians.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          message: "No technicians available. Please add technicians in the admin panel."
+        });
+      }
 
       res.json({
         success: true,
@@ -595,37 +719,71 @@ async assignTechnician(req, res) {
 
   async getStats(req, res) {
     try {
-      const department = await getManagerDepartment(req.user.userId);
-      const departmentId = department?._id;
+      let department;
+      let departmentId;
+      try {
+        department = await getManagerDepartment(req.user.userId);
+        departmentId = department?._id;
+      } catch (err) {
+        if (err.message !== "NO_DEPARTMENT_ASSIGNED") {
+          throw err;
+        }
+      }
 
-      const historicalBaseQuery = { assignedDepartment: departmentId };
+      if (!departmentId) {
+        return res.json({
+          success: true,
+          data: {
+            total: 0,
+            historicalTotal: 0,
+            submitted: 0,
+            pending: 0,
+            validated: 0,
+            assigned: 0,
+            inProgress: 0,
+            resolved: 0,
+            closed: 0,
+            rejected: 0,
+            totalOverdue: 0,
+            totalAtRisk: 0,
+            resolutionRate: 0,
+            averageResolutionTime: 0,
+            slaComplianceRate: 0,
+            csat: 0,
+            totalRatings: 0,
+            byCategory: {}
+          }
+        });
+      }
+
+      const historicalBaseQuery = { "assignedDepartment.id": departmentId };
       const activeBaseQuery = {
         ...historicalBaseQuery,
         isArchived: false,
         status: { $in: MANAGER_ACTIVE_STATUSES },
       };
-      
+
        const [historicalTotal, total, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory, resolvedWithRatingCount, csatCount] = await Promise.all([
          Complaint.countDocuments(historicalBaseQuery),
          Complaint.countDocuments(activeBaseQuery),
          Complaint.countDocuments({ ...historicalBaseQuery, status: "SUBMITTED", isArchived: false }),
-         Complaint.countDocuments({ ...activeBaseQuery, status: "VALIDATED" }),
-         Complaint.countDocuments({ ...activeBaseQuery, status: "ASSIGNED" }),
-         Complaint.countDocuments({ ...activeBaseQuery, status: "IN_PROGRESS" }),
-         Complaint.countDocuments({ ...activeBaseQuery, status: "RESOLVED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "VALIDATED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "ASSIGNED" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...historicalBaseQuery, status: "RESOLVED" }),
          Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
          Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
-         Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "OVERDUE", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
-         Complaint.countDocuments({ ...activeBaseQuery, slaStatus: "AT_RISK", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "OVERDUE", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+         Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "AT_RISK", status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
          Complaint.aggregate([
-           { $match: activeBaseQuery },
+           { $match: historicalBaseQuery },
            { $group: { _id: "$category", count: { $sum: 1 } } }
          ]),
          Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
          Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
         ]);
 
-        const resolutionRate = total > 0 ? Math.round((resolved + closed) / total * 100) : 0;
+        const resolutionRate = historicalTotal > 0 ? Math.round((resolved + closed) / historicalTotal * 100) : 0;
 
         const avgTimeResult = await Complaint.aggregate([
           { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
@@ -634,11 +792,9 @@ async assignTechnician(req, res) {
         const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
         const resolvedCount = resolved + closed;
-        // SLA compliance rate
         const onTimeCountResult = await Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
         const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
 
-       // CSAT
        const totalRatings = resolvedWithRatingCount;
        const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
 
@@ -670,10 +826,29 @@ async assignTechnician(req, res) {
        });
      } catch (error) {
        console.error("Manager get stats error:", error);
-       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
-         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-       }
-       res.status(500).json({ success: false, message: "Failed to retrieve statistics" });
+       res.json({
+         success: true,
+         data: {
+           total: 0,
+           historicalTotal: 0,
+           submitted: 0,
+           pending: 0,
+           validated: 0,
+           assigned: 0,
+           inProgress: 0,
+           resolved: 0,
+           closed: 0,
+           rejected: 0,
+           totalOverdue: 0,
+           totalAtRisk: 0,
+           resolutionRate: 0,
+           averageResolutionTime: 0,
+           slaComplianceRate: 0,
+           csat: 0,
+           totalRatings: 0,
+           byCategory: {}
+         }
+       });
      }
   }
 

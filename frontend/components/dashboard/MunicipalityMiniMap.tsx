@@ -1,22 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap, ZoomControl } from "react-leaflet";
+import dynamic from "next/dynamic";
+import { useTranslation } from "react-i18next";
+import { MapPin, Layers, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
 import { formatTimeAgo } from "@/lib/date-utils";
 import { getCategoryLabel } from "@/lib/categories";
 import { statusConfig } from "@/lib/complaints";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { useTranslation } from "react-i18next";
-import { MapPin, Layers, Activity, CheckCircle2, AlertTriangle } from "lucide-react";
 
-// @ts-expect-error -- reset default icon paths for Next.js
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
+// Dynamically import Leaflet components to avoid SSR issues
+const MapContainer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import("react-leaflet").then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const CircleMarker = dynamic(
+  () => import("react-leaflet").then((mod) => mod.CircleMarker),
+  { ssr: false }
+);
+const Popup = dynamic(
+  () => import("react-leaflet").then((mod) => mod.Popup),
+  { ssr: false }
+);
+const ZoomControl = dynamic(
+  () => import("react-leaflet").then((mod) => mod.ZoomControl),
+  { ssr: false }
+);
+
+import "leaflet/dist/leaflet.css";
 
 interface HeatmapPoint {
   lat: number;
@@ -60,16 +74,6 @@ function formatCategory(cat: string): string {
   return getCategoryLabel(cat);
 }
 
-function FitBounds({ points }: { points: HeatmapPoint[] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (points.length === 0) return;
-    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
-    map.fitBounds(bounds.pad(0.2), { maxZoom: 15, animate: true });
-  }, [map, points]);
-  return null;
-}
-
 type FilterMode = "all" | "active" | "resolved";
 
 // Map tile options — use a cleaner tile style
@@ -99,9 +103,24 @@ export default function MunicipalityMiniMap({ points, municipality }: Municipali
   const [filter, setFilter] = useState<FilterMode>("all");
   const [tileIdx, setTileIdx] = useState(0);
 
+  // Configure Leaflet icons on client side only
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      import("leaflet").then((L) => {
+        // @ts-expect-error -- reset default icon paths for Next.js
+        delete L.default.Icon.Default.prototype._getIconUrl;
+        L.default.Icon.Default.mergeOptions({
+          iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+          iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+          shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        });
+      });
+    }
+  }, []);
+
   const tile = TILE_LAYERS[tileIdx];
 
-  const filteredPoints = points.filter((p) => {
+  const filteredPoints = (points || []).filter((p) => {
     if (filter === "all") return true;
     if (filter === "active") return !p.status || !["RESOLVED", "CLOSED", "ARCHIVED"].includes(p.status);
     return p.status === "RESOLVED" || p.status === "CLOSED";
@@ -121,11 +140,11 @@ export default function MunicipalityMiniMap({ points, municipality }: Municipali
       : defaultCenter;
 
   // Status breakdown
-  const activeCount = points.filter(p => !["RESOLVED", "CLOSED", "ARCHIVED"].includes(p.status || "")).reduce((s, p) => s + p.count, 0);
-  const resolvedCount = points.filter(p => ["RESOLVED", "CLOSED"].includes(p.status || "")).reduce((s, p) => s + p.count, 0);
-  const totalAll = points.reduce((s, p) => s + p.count, 0);
+  const activeCount = (points || []).filter(p => !["RESOLVED", "CLOSED", "ARCHIVED"].includes(p.status || "")).reduce((s, p) => s + p.count, 0);
+  const resolvedCount = (points || []).filter(p => ["RESOLVED", "CLOSED"].includes(p.status || "")).reduce((s, p) => s + p.count, 0);
+  const totalAll = (points || []).reduce((s, p) => s + p.count, 0);
 
-  if (points.length === 0) {
+  if (!points || points.length === 0) {
     return (
       <div className="h-[420px] bg-gradient-to-b from-slate-50 to-slate-100 rounded-2xl flex flex-col items-center justify-center border border-slate-200 gap-3">
         <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center">
@@ -221,7 +240,6 @@ export default function MunicipalityMiniMap({ points, municipality }: Municipali
         >
           <TileLayer key={tile.id} url={tile.url} attribution={tile.attribution} />
           <ZoomControl position="bottomright" />
-          <FitBounds points={filteredPoints} />
           {filteredPoints.map((point, idx) => {
             const sev = getSeverity(point.count, maxCount);
             const radius = getRadius(point.count, maxCount);
@@ -286,18 +304,18 @@ export default function MunicipalityMiniMap({ points, municipality }: Municipali
                           {formatCategory(cat)}
                         </span>
                       ))}
-                      {point.status && statusConfig[point.status] && (
-                        <span style={{
-                          background: "#f0fdf4",
-                          color: "#15803d",
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          fontSize: 10,
-                          fontWeight: 600,
-                        }}>
-                          {statusConfig[point.status].label}
-                        </span>
-                      )}
+                       {point.status && statusConfig[point.status] && (
+                         <span style={{
+                           background: "#f0fdf4",
+                           color: "#15803d",
+                           padding: "2px 6px",
+                           borderRadius: 4,
+                           fontSize: 10,
+                           fontWeight: 600,
+                         }}>
+                           {t(statusConfig[point.status].labelKey)}
+                         </span>
+                       )}
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#94a3b8" }}>
@@ -335,15 +353,6 @@ export default function MunicipalityMiniMap({ points, municipality }: Municipali
     </div>
   );
 }
-
-
-// @ts-expect-error -- reset default icon paths for Next.js
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
 
 interface HeatmapPoint {
   lat: number;

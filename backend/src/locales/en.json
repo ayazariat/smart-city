@@ -1,0 +1,83 @@
+{
+  "notifications": {
+    "complaintValidated": {
+      "title": "Complaint Validated",
+      "message": "Your complaint '{{complaintTitle}}' has been validated and is now visible publicly."
+    },
+    "complaintRejected": {
+      "title": "Complaint Rejected",
+      "message": "Your complaint '{{complaintTitle}}' was rejected.{{reason}}"
+    },
+    "complaintAssigned": {
+      "title": "Complaint Assigned",
+      "message": "Your complaint '{{complaintTitle}}' has been assigned to {{department}}."
+    },
+    "workStarted": {
+      "title": "Work Started",
+      "message": "Work has started on your complaint '{{complaintTitle}}'."
+    },
+    "complaintResolved": {
+      "title": "Complaint Resolved",
+      "message": "Your complaint '{{complaintTitle}}' has been resolved! Please confirm if the issue is fixed."
+    },
+    "complaintClosed": {
+      "title": "Complaint Closed",
+      "message": "Your complaint '{{complaintTitle}}' has been officially closed."
+    },
+    "resolutionSubmitted": {
+      "title": "Resolution Reported",
+      "message": "Technician has marked your complaint as resolved: \"{{notes}}\""
+    },
+    "resolutionSubmittedNoNotes": {
+      "title": "Resolution Reported",
+      "message": "Technician has marked your complaint as resolved."
+    },
+    "upvoteReceived": {
+      "title": "Your complaint got an upvote!",
+      "message": "{{upvoterName}} upvoted your complaint: \"{{complaintTitle}}\""
+    },
+    "upvoteReceivedAnonymous": {
+      "title": "Your complaint got an upvote!",
+      "message": "Someone upvoted your complaint."
+    },
+    "duplicateDetected": {
+      "title": "Possible Duplicate Detected",
+      "message": "Your complaint \"{{complaintTitle}}\" may be a duplicate of \"{{duplicateTitle}}\". We'll review it."
+    },
+    "taskAssigned": {
+      "title": "New Task Assigned",
+      "message": "You have been assigned to complaint: {{complaintTitle}}"
+    },
+    "teamAssigned": {
+      "title": "Team Assignment",
+      "message": "Your team has been assigned to complaint: {{complaintTitle}}"
+    },
+    "priorityUpdated": {
+      "title": "Priority Updated",
+      "message": "Priority for complaint '{{complaintTitle}}' has been updated to {{priority}}"
+    },
+    "statusUpdated": {
+      "title": "Status Updated",
+      "message": "Complaint '{{complaintTitle}}' status has been updated to {{status}}"
+    }
+  },
+  "timeAgo": {
+    "now": "Just now",
+    "minutes": "{{n}}m ago",
+    "hours": "{{n}}h ago",
+    "days": "{{n}}d ago"
+  },
+  "priorities": {
+    "HIGH": "High",
+    "MEDIUM": "Medium",
+    "LOW": "Low"
+  },
+  "statuses": {
+    "VALIDATED": "Validated",
+    "REJECTED": "Rejected",
+    "ASSIGNED": "Assigned",
+    "IN_PROGRESS": "In Progress",
+    "RESOLVED": "Resolved",
+    "CLOSED": "Closed"
+  }
+}

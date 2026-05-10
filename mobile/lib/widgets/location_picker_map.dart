@@ -99,6 +99,7 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
                   TileLayer(
                     urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.example.smart_city',
+                    maxZoom: 19,
                   ),
                   MarkerLayer(
                     markers: [

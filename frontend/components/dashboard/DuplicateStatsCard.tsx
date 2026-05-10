@@ -77,7 +77,7 @@ export default function DuplicateStatsCard() {
         <div className="text-center p-3 bg-green-50 rounded-xl">
           <div className="flex items-center justify-center gap-1">
             <CheckCircle className="w-4 h-4 text-green-500" />
-            <span className="text-2xl font-bold text-green-700">{stats.mergeRate}%</span>
+            <span className="text-2xl font-bold text-green-700">{stats.merge_rate}%</span>
           </div>
           <div className="text-xs text-green-600 mt-1">Merge Rate</div>
         </div>

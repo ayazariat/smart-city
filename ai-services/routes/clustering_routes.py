@@ -7,7 +7,7 @@ API routes for complaint clustering and systemic problem identification.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from services.clustering_service import analyze_root_causes
 
@@ -74,7 +74,7 @@ async def analyze_complaints(
         
         return {
             "success": True,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": results
         }
         

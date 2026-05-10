@@ -87,12 +87,13 @@ router.get("/archived", authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Archive error:', error);
-    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 });
 
 // Admin/Agent routes - manage all complaints
-router.get("/", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getAllComplaints);
+router.get("/recent-resolutions", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN", "CITIZEN"), (req, res) => complaintController.getRecentResolutions(req, res));
+router.get("/", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "TECHNICIAN"), (req, res) => complaintController.getAllComplaints(req, res));
 router.get("/stats", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getStats);
 router.get("/technicians", authorize("ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.getTechnicians);
 router.patch("/:id/status", authorize("MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"), complaintController.updateStatus);

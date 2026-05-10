@@ -30,7 +30,7 @@ class AuthService {
           'captchaToken': captchaToken,
       });
       await _persistTokensFromResponse(response);
-      return User.fromJson(response['user']);
+      return _parseUserFromResponse(response);
     } catch (e) {
       rethrow;
     }
@@ -59,7 +59,7 @@ class AuthService {
           'captchaToken': captchaToken,
       });
       await _persistTokensFromResponse(response);
-      return User.fromJson(response['user']);
+      return _parseUserFromResponse(response);
     } catch (e) {
       rethrow;
     }
@@ -135,7 +135,7 @@ class AuthService {
   Future<User?> getCurrentUser() async {
     await _apiClient.loadTokens();
     final response = await _apiClient.get('/auth/me');
-    return User.fromJson(response);
+    return _parseUserFromResponse(response);
   }
 
   Future<User?> updateProfile(
@@ -149,10 +149,43 @@ class AuthService {
         'lastName': lastName,
         'phone': phone,
       });
-      return User.fromJson(response['user']);
+      return _parseUserFromResponse(response);
     } catch (e) {
       rethrow;
     }
+  }
+
+  /// Safely parse a User from an API response.
+  /// Handles:
+  ///   - {user: {...}}           (login/register response)
+  ///   - {data: {user: {...}}}   (wrapped response)
+  ///   - {id: ..., fullName: ...} (flat user object, e.g. /auth/me)
+  User? _parseUserFromResponse(dynamic response) {
+    if (response is! Map) return null;
+
+    // 1. Try response['user'] (login/register)
+    dynamic userData = response['user'];
+
+    // 2. Try response['data']['user']
+    if (userData == null && response['data'] is Map) {
+      userData = (response['data'] as Map)['user'];
+    }
+
+    // 3. If response itself looks like a user object (flat /auth/me response)
+    if (userData == null && (response['id'] != null || response['_id'] != null)) {
+      userData = response;
+    }
+
+    if (userData == null) return null;
+
+    // userData must be a Map to parse
+    if (userData is Map<String, dynamic>) {
+      return User.fromJson(userData);
+    }
+    if (userData is Map) {
+      return User.fromJson(Map<String, dynamic>.from(userData));
+    }
+    return null;
   }
 
   Future<Map<String, dynamic>> changePassword({

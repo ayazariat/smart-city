@@ -584,6 +584,13 @@ class UserController {
       const inactiveUsers = await User.countDocuments({ isActive: false });
       const verifiedUsers = await User.countDocuments({ isVerified: true });
 
+      // Active this month: users with lastLoginAt in current month
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const activeThisMonth = await User.countDocuments({
+        lastLoginAt: { $gte: startOfMonth }
+      });
+
       const usersByRole = await User.aggregate([
         { $group: { _id: "$role", count: { $sum: 1 } } }
       ]);
@@ -623,6 +630,7 @@ class UserController {
           active: activeUsers,
           inactive: inactiveUsers,
           verified: verifiedUsers,
+          activeThisMonth,
           byRole: byRoleArray,
           byGovernorate: usersByGovernorate.reduce((acc, item) => {
             acc[item._id] = item.count;

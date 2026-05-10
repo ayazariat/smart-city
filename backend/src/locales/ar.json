@@ -1,0 +1,83 @@
+{
+  "notifications": {
+    "complaintValidated": {
+      "title": "تمت مصادقة الشكوى",
+      "message": "تمت مصادقة شكواك '{{complaintTitle}}' وظهرت الآن علناً."
+    },
+    "complaintRejected": {
+      "title": "تم رفض الشكوى",
+      "message": "تم رفض شكواك '{{complaintTitle}}'.{{reason}}"
+    },
+    "complaintAssigned": {
+      "title": "تم تعيين الشكوى",
+      "message": "تم تعيين شكواك '{{complaintTitle}}' إلى قسم {{department}}."
+    },
+    "workStarted": {
+      "title": "بدأ العمل",
+      "message": "بدأ العمل على شكواك '{{complaintTitle}}'."
+    },
+    "complaintResolved": {
+      "title": "تم حل الشكوى",
+      "message": "تم حل شكواك '{{complaintTitle}}' ! يرجى تأكيد ما إذا كان المشكلة قد تم إصلاحها."
+    },
+    "complaintClosed": {
+      "title": "تم إغلاق الشكوى",
+      "message": "تم إغلاق شكواك '{{complaintTitle}}' رسمياً."
+    },
+    "resolutionSubmitted": {
+      "title": "تم الإبلاغ عن الحل",
+      "message": "قام الفني بوضع علامة على شكواك كمحلولة : \"{{notes}}\""
+    },
+    "resolutionSubmittedNoNotes": {
+      "title": "تم الإبلاغ عن الحل",
+      "message": "قام الفني بوضع علامة على شكواك كمحلولة."
+    },
+    "upvoteReceived": {
+      "title": "حصلت شكواك على تصويت !",
+      "message": "{{upvoterName}} صوّت لشكواك : \"{{complaintTitle}}\""
+    },
+    "upvoteReceivedAnonymous": {
+      "title": "حصلت شكواك على تصويت !",
+      "message": "شخص ما صوّت لشكواك."
+    },
+    "duplicateDetected": {
+      "title": "تم اكتشاف تكرار محتمل",
+      "message": "قد تكون شكواك \"{{complaintTitle}}\" تكراراً لـ \"{{duplicateTitle}}\". سنقوم بمراجعتها."
+    },
+    "taskAssigned": {
+      "title": "مهمة جديدة معينة",
+      "message": "تم تعيينك للشكوى : {{complaintTitle}}"
+    },
+    "teamAssigned": {
+      "title": "تعيين الفريق",
+      "message": "تم تعيين فريقك للشكوى : {{complaintTitle}}"
+    },
+    "priorityUpdated": {
+      "title": "تم تحديث الأولوية",
+      "message": "تم تحديث أولوية الشكوى '{{complaintTitle}}' إلى {{priority}}"
+    },
+    "statusUpdated": {
+      "title": "تم تحديث الحالة",
+      "message": "تم تحديث حالة الشكوى '{{complaintTitle}}' إلى {{status}}"
+    }
+  },
+  "timeAgo": {
+    "now": "الآن",
+    "minutes": "منذ {{n}} دقيقة",
+    "hours": "منذ {{n}} ساعة",
+    "days": "منذ {{n}} يوم"
+  },
+  "priorities": {
+    "HIGH": "عالية",
+    "MEDIUM": "متوسطة",
+    "LOW": "منخفضة"
+  },
+  "statuses": {
+    "VALIDATED": "تمت المصادقة",
+    "REJECTED": "مرفوضة",
+    "ASSIGNED": "معينة",
+    "IN_PROGRESS": "قيد التنفيذ",
+    "RESOLVED": "محلولة",
+    "CLOSED": "مغلقة"
+  }
+}

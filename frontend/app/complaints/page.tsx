@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { ComplaintCard } from "@/components/ui/ComplaintCard";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   MapPin,
   FileText,
@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuthStore } from "@/store/useAuthStore";
-import { categoryLabels } from "@/lib/complaints";
+import { categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
+import { getCategoryLabel } from "@/lib/categories";
 import { upvoteComplaint, confirmComplaint } from "@/services/complaint.service";
 import { formatTimeAgo } from "@/lib/date-utils";
 import { useTranslation } from "react-i18next";
@@ -49,11 +50,17 @@ const statusColors: Record<string, string> = {
 export default function MunicipalityComplaintsPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, token } = useAuthStore();
   const [complaints, setComplaints] = useState<MunicipalityComplaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
+  
+  // Get filters from URL (for transparency page navigation)
+  const categoryFilter = searchParams.get('category') || '';
+  const municipalityFilter = searchParams.get('municipality') || '';
+  const fromTransparency = Boolean(categoryFilter || municipalityFilter);
 
   const getOwnerId = (complaint: MunicipalityComplaint): string | undefined => {
     if (!complaint.createdBy) return undefined;
@@ -68,21 +75,32 @@ export default function MunicipalityComplaintsPage() {
   })();
 
   const fetchComplaints = useCallback(async () => {
-    if (!token) return;
     try {
       setLoading(true);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       const status = statusFilter === "ALL" ? "VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED" : statusFilter;
-      const response = await fetch(
-        `${apiUrl}/public/my-municipality-complaints?limit=100&status=${status}`,
-        {
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      
+      let url;
+      let headers: Record<string, string> = {
+        "Content-Type": "application/json"
+      };
+      
+      if (fromTransparency) {
+        // Use public endpoint for transparency navigation
+        url = `${apiUrl}/public/complaints?limit=100&status=${status}`;
+        if (categoryFilter) url += `&category=${categoryFilter}`;
+        if (municipalityFilter) url += `&municipality=${encodeURIComponent(municipalityFilter)}`;
+      } else {
+        // Use authenticated endpoint for normal complaints page
+        if (!token) return;
+        url = `${apiUrl}/public/my-municipality-complaints?limit=100&status=${status}`;
+        headers.Authorization = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(url, {
+        credentials: "include",
+        headers,
+      });
       const data = await response.json();
       if (data.success && data.complaints) {
         setComplaints(data.complaints);
@@ -92,7 +110,7 @@ export default function MunicipalityComplaintsPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, statusFilter]);
+  }, [token, statusFilter, fromTransparency, categoryFilter, municipalityFilter]);
 
   useEffect(() => {
     fetchComplaints();
@@ -149,15 +167,21 @@ export default function MunicipalityComplaintsPage() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => router.push("/dashboard")} className="p-2 hover:bg-slate-100 rounded-lg">
+          <button 
+            onClick={() => router.push(fromTransparency ? "/transparency" : "/dashboard")} 
+            className="p-2 hover:bg-slate-100 rounded-lg"
+          >
             <ArrowLeft className="w-5 h-5 text-slate-600" />
           </button>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {t('municipality.title')}
+              {fromTransparency ? t('complaintsList.allComplaints') : t('municipality.title')}
             </h1>
             <p className="text-sm text-slate-500">
-              {t('complaintsList.subtitle', { area: user?.municipalityName || t('complaintsList.unknown'), n: filtered.length })}
+              {fromTransparency 
+                ? t('complaintsList.filteredResults', { n: filtered.length })
+                : t('complaintsList.subtitle', { area: user?.municipalityName || t('complaintsList.unknown'), n: filtered.length })
+              }
             </p>
           </div>
           <button
@@ -239,7 +263,7 @@ export default function MunicipalityComplaintsPage() {
                   )}
                   <div className="absolute top-2 left-2">
                     <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/90 text-slate-700 shadow-sm">
-                      {categoryLabels[complaint.category] || complaint.category}
+                      {getCategoryLabel(complaint.category)}
                     </span>
                   </div>
                   <div className="absolute top-2 right-2">
@@ -248,7 +272,7 @@ export default function MunicipalityComplaintsPage() {
                         statusColors[complaint.status] || "bg-slate-100 text-slate-700"
                       }`}
                     >
-                      {complaint.status.replace("_", " ")}
+                      {t(`status.${complaint.status}`)}
                     </span>
                   </div>
                 </div>

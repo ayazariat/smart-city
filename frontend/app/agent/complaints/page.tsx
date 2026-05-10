@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { 
   FileText, CheckCircle, XCircle, Building, TrendingUp,
   Clock, AlertTriangle, Filter, Download, Search, CheckCircle2, X,
-  Copy, Merge
+  Copy, Merge, MapPin
 } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { agentService } from "@/services/agent.service";
 import { Complaint } from "@/types";
-import { getCategoryLabel, categoryOptions, categoryLabels } from "@/lib/categories";
+import { getCategoryLabel, getDepartmentLabel } from "@/lib/categories";
+import { useTranslation } from "react-i18next";
+import { categoryOptions, categoryLabels } from "@/lib/categories";
 import { STATUS_OPTIONS } from "@/lib/complaints";
 import {
   PageHeader,
@@ -22,7 +24,6 @@ import {
   ConfirmationModal,
 } from "@/components/ui";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { useTranslation } from "react-i18next";
 
 export default function AgentComplaintsPage() {
   const { t } = useTranslation();
@@ -188,13 +189,17 @@ export default function AgentComplaintsPage() {
 
   // Handle duplicate check (BL-25) - Using direct API call
   const handleCheckDuplicate = async (complaintId: string) => {
+    console.log("handleCheckDuplicate called for complaintId:", complaintId);
     setDuplicateTarget(complaintId);
     setDuplicateLoading(true);
     setDuplicateComplaints([]);
     setDuplicateMatchScores({});
     try {
       const c = complaints.find(x => (x._id || x.id) === complaintId);
-      if (!c) return;
+      if (!c) {
+        console.error("Complaint not found:", complaintId);
+        return;
+      }
 
       // Extract coordinates from GeoJSON or flat fields
       const lat = c.location?.coordinates?.[1] ?? c.location?.latitude;
@@ -203,6 +208,7 @@ export default function AgentComplaintsPage() {
       const imageUrls = (c.media || []).map(m => m.url).filter(Boolean).slice(0, 3);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+      console.log("Making duplicate check request to:", `${apiUrl}/ai/duplicate/check`);
       const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -220,26 +226,66 @@ export default function AgentComplaintsPage() {
         }),
       });
       const result = await response.json();
-      
+
+      console.log("Duplicate check response:", result);
+      console.log("Response status:", response.status);
+
       // Check inside result.data (backend wraps response)
       const data = result.data || result;
-      if (data && data.topMatches && data.topMatches.length > 0) {
-        const matchIds = data.topMatches.map((m: { complaintId: string }) => m.complaintId);
-        // Build score map from AI response
-        const scores: Record<string, number> = {};
+      console.log("Parsed data:", data);
+      console.log("Data has topMatches:", !!data.topMatches);
+      console.log("TopMatches length:", data.topMatches?.length || 0);
+      console.log("Data has matches:", !!data.matches);
+      console.log("Matches length:", data.matches?.length || 0);
+      console.log("Data isDuplicate:", data.isDuplicate);
+      console.log("Data topScore:", data.topScore);
+
+      // Handle different response structures
+      let matches = [];
+      let scores: Record<string, number> = {};
+
+      if (data && data.topMatches && Array.isArray(data.topMatches)) {
+        matches = data.topMatches;
         (data.topMatches as Array<{ complaintId: string; overallScore?: number; similarity?: number }>).forEach(m => {
           scores[m.complaintId] = Math.round((m.overallScore ?? m.similarity ?? 0) * 100);
         });
+      } else if (data && data.matches && Array.isArray(data.matches)) {
+        matches = data.matches;
+        (data.matches as Array<{ complaintId: string; overallScore?: number; similarity?: number }>).forEach(m => {
+          scores[m.complaintId] = Math.round((m.overallScore ?? m.similarity ?? 0) * 100);
+        });
+      } else if (data && data.candidates && Array.isArray(data.candidates)) {
+        matches = data.candidates;
+        (data.candidates as Array<{ complaintId: string; overallScore?: number; similarity?: number }>).forEach(m => {
+          scores[m.complaintId] = Math.round((m.overallScore ?? m.similarity ?? 0) * 100);
+        });
+      } else if (data && data.duplicates && Array.isArray(data.duplicates)) {
+        matches = data.duplicates;
+        (data.duplicates as Array<{ complaintId: string; overallScore?: number; similarity?: number }>).forEach(m => {
+          scores[m.complaintId] = Math.round((m.overallScore ?? m.similarity ?? 0) * 100);
+        });
+      } else if (data && Array.isArray(data)) {
+        matches = data;
+      }
+
+      if (matches.length > 0) {
+        console.log("Processing matches:", matches.length);
+        const matchIds = matches.map((m: { complaintId: string }) => m.complaintId);
+        console.log("Match IDs:", matchIds);
         setDuplicateMatchScores(scores);
+        console.log("Duplicate match scores:", scores);
         // Match with loaded complaints first, then fall back to AI-provided titles
         const matched = complaints.filter(x => matchIds.includes(x._id || x.id));
+        console.log("Matched complaints from loaded list:", matched.length);
         if (matched.length > 0) {
+          console.log("Setting duplicateComplaints with matched items:", matched.length);
           setDuplicateComplaints(matched);
         } else {
-          // AI returned matches not in loaded list – build minimal objects from topMatches
-          const fallback = (data.topMatches as Array<{
+          // AI returned matches not in loaded list – build minimal objects from matches
+          console.log("Building fallback objects from matches");
+          const fallback = matches.map((m: {
             complaintId: string; title?: string; status?: string; referenceId?: string;
-          }>).map(m => ({
+          }) => ({
             _id: m.complaintId,
             id: m.complaintId,
             title: m.title || m.complaintId,
@@ -255,17 +301,22 @@ export default function AgentComplaintsPage() {
             updatedAt: "",
             referenceId: m.referenceId,
           } as import("@/types").Complaint));
+          console.log("Setting duplicateComplaints with fallback items:", fallback.length);
           setDuplicateComplaints(fallback);
         }
+      } else {
+        console.log("No matches found in response");
+        setDuplicateComplaints([]);
       }
-    } catch {
-      // silent
+    } catch (error) {
+      console.error("Duplicate check error:", error);
+      setDuplicateComplaints([]);
     } finally {
       setDuplicateLoading(false);
+      console.log("Duplicate check complete, duplicateTarget:", duplicateTarget, "duplicateComplaints.length:", (complaints.find(x => (x._id || x.id) === duplicateTarget) ? duplicateComplaints.length : "complaint not found"));
     }
   };
 
-  // Handle merge complaints (BL-25)
   const handleMergeComplaints = async (targetId: string, sourceIds: string[]) => {
     setActionLoading(targetId);
     try {
@@ -568,6 +619,7 @@ export default function AgentComplaintsPage() {
           </div>
         </div>
 
+        
 {/* Filters Section */}
         <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200">
           <div className="flex flex-col md:flex-row gap-3 items-center">
@@ -690,7 +742,7 @@ export default function AgentComplaintsPage() {
                     index={index}
                     actions={
                       <>
-                        {complaint.status === "SUBMITTED" && (
+                        {complaint.status === "SUBMITTED" && !complaint.assignedDepartment && (
                           <>
                             <button
                               onClick={() => { const c = complaints.find(x => (x._id || x.id) === id); setConfirmAction({ type: "validate", targetId: id, targetName: c?.title || " Complaint" }); }}
@@ -737,9 +789,12 @@ export default function AgentComplaintsPage() {
                         {complaint.status === "ASSIGNED" && complaint.assignedDepartment && (
                           <div className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-100 text-green-700 rounded-xl text-sm font-semibold">
                             <CheckCircle className="w-4 h-4" />
-                            {typeof complaint.assignedDepartment === 'object' && complaint.assignedDepartment.name 
-                              ? `Assigned to ${complaint.assignedDepartment.name}` 
-                              : 'Department Assigned'}
+                            {typeof complaint.assignedDepartment === 'object' && complaint.assignedDepartment.name
+                              ? `Assigned to ${getDepartmentLabel(complaint.assignedDepartment.name)}`
+                              : (() => {
+                                  const dept = departments.find(d => d._id === complaint.assignedDepartment);
+                                  return dept ? `Assigned to ${getDepartmentLabel(dept.name)}` : 'Department Assigned';
+                                })()}
                           </div>
                         )}
                         {/* BL-25: Duplicate suggestion badge + action button */}
@@ -749,8 +804,8 @@ export default function AgentComplaintsPage() {
                             <span>{t("agent.possibleDuplicate", { defaultValue: "Possible duplicate detected" })}</span>
                           </div>
                         )}
-                        {/* Check Duplicates button — visible for all active complaints */}
-                        {!["CLOSED", "REJECTED"].includes(complaint.status) && (
+                        {/* Check Duplicates button — visible for agent on SUBMITTED status only (not when assigned) */}
+                        {complaint.status === "SUBMITTED" && !complaint.assignedDepartment && (
                           <button
                             onClick={() => handleCheckDuplicate(id)}
                             disabled={actionLoading === id}
@@ -807,8 +862,8 @@ export default function AgentComplaintsPage() {
       <Modal
         isOpen={assignTarget !== null}
         onClose={() => { setAssignTarget(null); setSelectedDepartment(""); setAiSuggestion(null); }}
-        title="Assign to Department"
-        description="Select the department that will handle this complaint."
+        title={t('departments.assignToDepartment')}
+        description={t('departments.selectDepartmentDescription')}
         footer={
           <>
             <Button variant="ghost" onClick={() => { setAssignTarget(null); setSelectedDepartment(""); setAiSuggestion(null); }} disabled={actionLoading !== null}>
@@ -832,9 +887,9 @@ export default function AgentComplaintsPage() {
             onChange={(e) => setSelectedDepartment(e.target.value)}
             className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white transition-all"
           >
-            <option value="">Select department...</option>
+            <option value="">Choose Department</option>
             {departments.map((dept) => (
-              <option key={dept._id} value={dept._id}>{dept.name}</option>
+              <option key={dept._id} value={dept._id}>{getDepartmentLabel(dept.name)}</option>
             ))}
           </select>
         </div>

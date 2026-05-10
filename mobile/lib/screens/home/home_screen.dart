@@ -4,12 +4,16 @@ import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
+import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/screens/home/new_complaint_screen.dart';
 import 'package:smart_city_app/screens/home/my_complaints_screen.dart';
 import 'package:smart_city_app/screens/home/complaint_detail_screen.dart';
 import 'package:smart_city_app/screens/home/notifications_screen.dart';
 import 'package:smart_city_app/screens/home/profile_screen.dart';
 import 'package:smart_city_app/screens/home/transparency_screen.dart';
+import 'package:smart_city_app/screens/technician/technician_tasks_screen.dart';
+import 'package:smart_city_app/screens/manager/manager_dashboard_screen.dart';
+import 'package:smart_city_app/screens/agent/agent_complaints_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -21,24 +25,112 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
 
-  @override
-  Widget build(BuildContext context) {
-    final screens = [
-      const DashboardTab(),
-      const MyComplaintsScreen(),
-      const TransparencyScreen(),
-      const ProfileScreen(),
-    ];
+  List<Widget> _buildScreens(String role) {
+    switch (role) {
+      case 'TECHNICIAN':
+        return [
+          const DashboardTab(),
+          const TechnicianTasksScreen(),
+          const TransparencyScreen(),
+          const ProfileScreen(),
+        ];
+      case 'DEPARTMENT_MANAGER':
+        return [
+          const ManagerDashboardScreen(),
+          const MyComplaintsScreen(),
+          const TransparencyScreen(),
+          const ProfileScreen(),
+        ];
+      case 'MUNICIPAL_AGENT':
+        return [
+          const DashboardTab(),
+          const AgentComplaintsScreen(),
+          const TransparencyScreen(),
+          const ProfileScreen(),
+        ];
+      default: // CITIZEN, ADMIN, etc.
+        return [
+          const DashboardTab(),
+          const MyComplaintsScreen(),
+          const TransparencyScreen(),
+          const ProfileScreen(),
+        ];
+    }
+  }
 
-    return Scaffold(
-      body: screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        selectedItemColor: AppTheme.primary,
-        unselectedItemColor: AppTheme.textMuted,
-        type: BottomNavigationBarType.fixed,
-        items: const [
+  List<BottomNavigationBarItem> _buildNavItems(String role) {
+    switch (role) {
+      case 'TECHNICIAN':
+        return const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Accueil',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.task_alt_outlined),
+            activeIcon: Icon(Icons.task_alt),
+            label: 'Mes tâches',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.public_outlined),
+            activeIcon: Icon(Icons.public),
+            label: 'Transparence',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
+        ];
+      case 'DEPARTMENT_MANAGER':
+        return const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list_alt_outlined),
+            activeIcon: Icon(Icons.list_alt),
+            label: 'Signalements',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.public_outlined),
+            activeIcon: Icon(Icons.public),
+            label: 'Transparence',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
+        ];
+      case 'MUNICIPAL_AGENT':
+        return const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Accueil',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.inbox_outlined),
+            activeIcon: Icon(Icons.inbox),
+            label: 'File d\'attente',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.public_outlined),
+            activeIcon: Icon(Icons.public),
+            label: 'Transparence',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profil',
+          ),
+        ];
+      default:
+        return const [
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
@@ -59,7 +151,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             activeIcon: Icon(Icons.person),
             label: 'Profil',
           ),
-        ],
+        ];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final role = ref.watch(authProvider).user?.role ?? 'CITIZEN';
+    final screens = _buildScreens(role);
+
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: screens,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        selectedItemColor: AppTheme.primary,
+        unselectedItemColor: AppTheme.textMuted,
+        type: BottomNavigationBarType.fixed,
+        items: _buildNavItems(role),
       ),
     );
   }
@@ -91,22 +203,55 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    final role = ref.read(authProvider).user?.role ?? 'CITIZEN';
     try {
-      final statsData = await _complaintService.getCitizenStats();
-      final complaints = await _complaintService.getMyComplaints(limit: 10);
-      final active = complaints
-          .where((c) => c.status != 'CLOSED' && c.status != 'REJECTED')
-          .toList();
+      Map<String, dynamic> statsData;
+      switch (role) {
+        case 'MUNICIPAL_AGENT':
+          statsData = await _complaintService.getAgentStats();
+          break;
+        case 'DEPARTMENT_MANAGER':
+          statsData = await _complaintService.getManagerStats();
+          break;
+        case 'TECHNICIAN':
+          statsData = await _complaintService.getTechnicianStats();
+          break;
+        case 'ADMIN':
+          statsData = await _complaintService.getAdminStats();
+          break;
+        default:
+          statsData = await _complaintService.getCitizenStats();
+      }
+
+      // Only fetch citizen complaints for CITIZEN role — other roles have their own endpoints
+      List<Complaint> complaints = [];
+      if (role == 'CITIZEN' || role == 'ADMIN') {
+        try {
+          final all = await _complaintService.getMyComplaints(limit: 10);
+          complaints = all
+              .where((c) => c.status != 'CLOSED' && c.status != 'REJECTED')
+              .toList();
+        } catch (_) {
+          // Non-blocking — dashboard still shows stats
+        }
+      }
 
       setState(() {
         _stats = statsData;
-        _recentComplaints = active;
+        _recentComplaints = complaints;
         _isLoading = false;
+        _errorMessage = null;
       });
 
-      _loadMunicipalityComplaints();
-      _loadRecentResolutions();
-      _loadTrendAlerts();
+      // Only load municipality/resolution data for citizens
+      if (role == 'CITIZEN') {
+        _loadMunicipalityComplaints();
+        _loadRecentResolutions();
+      }
+      // Load trend alerts for managers/agents/admins
+      if (['MUNICIPAL_AGENT', 'DEPARTMENT_MANAGER', 'ADMIN'].contains(role)) {
+        _loadTrendAlerts();
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -922,13 +1067,38 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
     dynamic complaint, {
     bool isResolved = false,
   }) {
-    final status = complaint['status'] ?? 'SUBMITTED';
-    final statusColor = _getStatusColor(status);
+    // Handle both Complaint objects and raw Maps
+    final String status;
+    final String title;
+    final String? municipalityName;
     String photoUrl = '';
-    final media = complaint['media'] as List<dynamic>?;
-    if (media != null && media.isNotEmpty) {
-      photoUrl = media[0]['url']?.toString() ?? '';
+
+    if (complaint is Complaint) {
+      status = complaint.status;
+      title = complaint.title;
+      municipalityName = complaint.municipalityName;
+      if (complaint.media.isNotEmpty && complaint.media[0].url.isNotEmpty) {
+        final url = complaint.media[0].url;
+        photoUrl = url.startsWith('http') ? url : '${ApiClient.serverBaseUrl}$url';
+      }
+    } else if (complaint is Map) {
+      status = (complaint['status'] ?? 'SUBMITTED').toString();
+      title = (complaint['title'] ?? '').toString();
+      municipalityName = complaint['municipalityName']?.toString();
+      final media = complaint['media'];
+      if (media is List && media.isNotEmpty) {
+        final first = media[0];
+        if (first is Map) {
+          photoUrl = (first['url'] ?? '').toString();
+        } else if (first is String) {
+          photoUrl = first;
+        }
+      }
+    } else {
+      return const SizedBox.shrink();
     }
+
+    final statusColor = _getStatusColor(status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -947,7 +1117,16 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         child: InkWell(
-          onTap: () {},
+          onTap: () {
+            if (complaint is Complaint) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ComplaintDetailScreen(complaintId: complaint.id),
+                ),
+              );
+            }
+          },
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -958,7 +1137,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                   children: [
                     Expanded(
                       child: Text(
-                        complaint['title'] ?? '',
+                        title,
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
@@ -968,27 +1147,30 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: statusColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        status.toString().replaceAll('_', ' '),
-                        style: TextStyle(
-                          color: statusColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        status.replaceAll('_', ' '),
+                        style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                if (photoUrl.isNotEmpty)
+                if (municipalityName != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 12, color: AppTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Text(municipalityName, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ],
+                if (photoUrl.isNotEmpty) ...[
+                  const SizedBox(height: 8),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                     child: Image.network(
@@ -1003,6 +1185,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                       ),
                     ),
                   ),
+                ],
               ],
             ),
           ),

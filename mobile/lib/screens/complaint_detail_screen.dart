@@ -6,6 +6,7 @@ import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/core/constants/colors.dart';
+import 'package:smart_city_app/widgets/complaint_timeline.dart';
 
 class ComplaintDetailScreen extends ConsumerStatefulWidget {
   final String complaintId;
@@ -33,6 +34,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   bool _isPostingComment = false;
   final TextEditingController _commentController = TextEditingController();
   List<PublicComment> _publicComments = [];
+  List<TimelineItem> _timelineItems = [];
 
   @override
   void initState() {
@@ -59,6 +61,7 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
       setState(() {
         _complaint = complaint;
         _publicComments = complaint.publicComments;
+        _timelineItems = _buildTimelineItems(complaint);
         _isLoading = false;
       });
     } catch (e) {
@@ -67,6 +70,49 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  List<TimelineItem> _buildTimelineItems(Complaint complaint) {
+    final items = <TimelineItem>[];
+    
+    // Add initial submission
+    items.add(TimelineItem(
+      action: 'SUBMITTED',
+      actorName: complaint.submittedBy?.fullName ?? complaint.createdBy?.fullName ?? 'Citoyen',
+      timestamp: complaint.createdAt,
+    ));
+
+    // Add history items if available
+    if (complaint.history != null && complaint.history!.isNotEmpty) {
+      for (final h in complaint.history!) {
+        if (h is Map && (h['action'] != null || h['status'] != null)) {
+          items.add(TimelineItem(
+            action: h['action']?.toString() ?? h['status']?.toString() ?? '',
+            actorName: h['actorName']?.toString() ?? h['changedBy']?['fullName']?.toString() ?? 'Système',
+            note: h['note']?.toString() ?? h['comment']?.toString(),
+            timestamp: h['timestamp'] != null 
+                ? (h['timestamp'] is DateTime 
+                    ? h['timestamp'] as DateTime
+                    : DateTime.tryParse(h['timestamp'].toString()) ?? complaint.createdAt)
+                : complaint.createdAt,
+          ));
+        }
+      }
+    }
+
+    // Add current status if different from submission
+    if (complaint.status != 'SUBMITTED') {
+      final lastAction = items.isEmpty || items.last.action.toUpperCase() != complaint.status;
+      if (lastAction) {
+        items.add(TimelineItem(
+          action: complaint.status,
+          actorName: 'Système',
+          timestamp: complaint.updatedAt,
+        ));
+      }
+    }
+
+    return items;
   }
 
    String get _baseUrl => ApiClient.serverBaseUrl;
@@ -662,6 +708,28 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              if (_timelineItems.isNotEmpty)
+                _buildSection(
+                  'Chronologie du statut',
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: ComplaintTimeline(
+                      history: _timelineItems,
+                      userRole: _userRole,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 12),
               _buildSection(
                 'Location',

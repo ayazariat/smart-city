@@ -120,6 +120,7 @@ export default function TrendForecastChart({
               <div>
                 <div>SPIKE PREDICTED</div>
                 <div>Peak of {Math.max(...spikeDays)} complaints expected on {spikeDays.length} day(s) in {municipality || "your municipality"}</div>
+                <div className="text-xs font-normal text-red-100 mt-1">Plan for high volume</div>
               </div>
             </div>
           )}

@@ -59,12 +59,17 @@ interface Complaint {
   resolvedAt?: string;
   media?: ComplaintMedia[];
   proofPhotos?: ComplaintMedia[];
+  beforePhotos?: ComplaintMedia[];
+  afterPhotos?: ComplaintMedia[];
   confirmationCount?: number;
   upvoteCount?: number;
   viewsCount?: number;
   isOwnComplaint?: boolean;
   resolutionNote?: string;
+  resolutionNotes?: string;
   statusHistory?: Array<{ status: string; timestamp: string }>;
+  averageRating?: number;
+  ratingCount?: number;
 }
 
 const statusSteps = ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
@@ -105,7 +110,7 @@ export default function PublicComplaintDetailPage() {
   const [comments, setComments] = useState<Array<{ _id: string; text: string; authorName: string; authorRoleLabel?: string; createdAt: string }>>([]);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const handledActionRef = useRef<string | null>(null);
+    const handledActionRef = useRef<string | null>(null);
 
   useEffect(() => {
     const fetchComplaint = async () => {
@@ -178,6 +183,7 @@ export default function PublicComplaintDetailPage() {
   }, [actionParam, complaint, complaintId, hydrated, token, user]);
 
   const handleUpvote = async () => {
+    if (!hydrated) return; // Wait for hydration
     if (!user || !token) {
       const returnUrl = `/transparency/complaints/${complaintId}?action=upvote`;
       router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
@@ -193,9 +199,12 @@ export default function PublicComplaintDetailPage() {
         setComplaint({ ...complaint, upvoteCount: nextVotes });
       }
     } catch { /* silent */ }
+    // Clear action parameter after execution
+    router.replace(`/transparency/complaints/${complaintId}`);
   };
 
   const handleConfirm = async () => {
+    if (!hydrated) return; // Wait for hydration
     if (!user || !token) {
       const returnUrl = `/transparency/complaints/${complaintId}?action=confirm`;
       router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
@@ -216,6 +225,8 @@ export default function PublicComplaintDetailPage() {
         });
       }
     } catch { /* silent */ }
+    // Clear action parameter after execution
+    router.replace(`/transparency/complaints/${complaintId}`);
   };
 
   const handleComment = async () => {
@@ -244,6 +255,7 @@ export default function PublicComplaintDetailPage() {
     }
   };
 
+  
   const nextImage = () => {
     if (complaint?.media && complaint.media.length > 0) {
       setCurrentImageIndex((prev) => (prev + 1) % complaint.media!.length);
@@ -291,12 +303,17 @@ export default function PublicComplaintDetailPage() {
     );
   }
 
-  const statusInfo = sharedStatusConfig[complaint.status] || { label: complaint.status, bgClass: "bg-slate-100", textClass: "text-slate-700", dotClass: "bg-slate-500" };
+   const statusInfo = sharedStatusConfig[complaint.status] || { 
+     labelKey: `status.${complaint.status}`, 
+     bgClass: "bg-slate-100", 
+     textClass: "text-slate-700", 
+     dotClass: "bg-slate-500" 
+   };
   const currentStepIndex = statusSteps.indexOf(complaint.status);
   const municipality = complaint.municipalityName || complaint.location?.municipality || "Unknown";
   const governorate = complaint.location?.governorate || "";
-  const canEngage = ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(complaint.status);
-  const canConfirm = canEngage && !complaint.isOwnComplaint;
+  const canEngage = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"].includes(complaint.status);
+  const canConfirm = ["VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(complaint.status) && !complaint.isOwnComplaint;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
@@ -328,8 +345,8 @@ export default function PublicComplaintDetailPage() {
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
-                {statusInfo.label}
+               <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
+                 {t(statusInfo.labelKey)}
               </span>
             </div>
           </div>
@@ -466,9 +483,9 @@ export default function PublicComplaintDetailPage() {
                 <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700">
                   {getCategoryLabel(complaint.category)}
                 </span>
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
-                  {statusInfo.label}
-                </span>
+                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.bgClass} ${statusInfo.textClass}`}>
+                   {t(statusInfo.labelKey)}
+                 </span>
               </div>
               <h1 className="text-xl md:text-2xl font-bold text-slate-800 mb-4">{complaint.title}</h1>
               {complaint.description && (
@@ -510,8 +527,8 @@ export default function PublicComplaintDetailPage() {
                   {t("publicComplaint.resolutionReport")}
                 </h3>
                 <p className="text-sm text-green-700 mb-2">{t("publicComplaint.resolvedByTeam")}</p>
-                {complaint.resolutionNote && (
-                  <p className="text-sm text-green-800 bg-white rounded-lg p-3 border border-green-200 mb-3">{complaint.resolutionNote}</p>
+                {(complaint.resolutionNote || complaint.resolutionNotes) && (
+                  <p className="text-sm text-green-800 bg-white rounded-lg p-3 border border-green-200 mb-3">{complaint.resolutionNote || complaint.resolutionNotes}</p>
                 )}
                 {complaint.resolvedAt && (
                   <p className="text-xs text-green-600">
@@ -522,9 +539,9 @@ export default function PublicComplaintDetailPage() {
                     })()}
                   </p>
                 )}
-{(complaint.proofPhotos || [])?.length > 0 && (
+                {(complaint.afterPhotos || complaint.proofPhotos)?.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
-{(complaint.proofPhotos || []).map((photo, idx) => {
+{(complaint.afterPhotos || complaint.proofPhotos || []).map((photo, idx) => {
                       const proofUrl = resolveMediaUrl(photo.url);
                       return proofUrl ? (
                         <img key={idx} src={proofUrl} alt="Resolution proof" className="w-full h-32 object-cover rounded-lg" />

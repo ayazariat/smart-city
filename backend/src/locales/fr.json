@@ -1,0 +1,83 @@
+{
+  "notifications": {
+    "complaintValidated": {
+      "title": "Réclamation validée",
+      "message": "Votre réclamation '{{complaintTitle}}' a été validée et est désormais visible publiquement."
+    },
+    "complaintRejected": {
+      "title": "Réclamation rejetée",
+      "message": "Votre réclamation '{{complaintTitle}}' a été rejetée.{{reason}}"
+    },
+    "complaintAssigned": {
+      "title": "Réclamation assignée",
+      "message": "Votre réclamation '{{complaintTitle}}' a été assignée au département {{department}}."
+    },
+    "workStarted": {
+      "title": "Travail commencé",
+      "message": "Le travail a commencé sur votre réclamation '{{complaintTitle}}'."
+    },
+    "complaintResolved": {
+      "title": "Réclamation résolue",
+      "message": "Votre réclamation '{{complaintTitle}}' a été résolue ! Veuillez confirmer si le problème est corrigé."
+    },
+    "complaintClosed": {
+      "title": "Réclamation fermée",
+      "message": "Votre réclamation '{{complaintTitle}}' a été officiellement fermée."
+    },
+    "resolutionSubmitted": {
+      "title": "Rapport de résolution",
+      "message": "Le technicien a marqué votre réclamation comme résolue : \"{{notes}}\""
+    },
+    "resolutionSubmittedNoNotes": {
+      "title": "Rapport de résolution",
+      "message": "Le technicien a marqué votre réclamation comme résolue."
+    },
+    "upvoteReceived": {
+      "title": "Votre réclamation a reçu un vote !",
+      "message": "{{upvoterName}} a voté pour votre réclamation : \"{{complaintTitle}}\""
+    },
+    "upvoteReceivedAnonymous": {
+      "title": "Votre réclamation a reçu un vote !",
+      "message": "Quelqu'un a voté pour votre réclamation."
+    },
+    "duplicateDetected": {
+      "title": "Doublon potentiel détecté",
+      "message": "Votre réclamation \"{{complaintTitle}}\" peut être un doublon de \"{{duplicateTitle}}\". Nous allons l'examiner."
+    },
+    "taskAssigned": {
+      "title": "Nouvelle tâche assignée",
+      "message": "Vous avez été assigné à la réclamation : {{complaintTitle}}"
+    },
+    "teamAssigned": {
+      "title": "Assignation d'équipe",
+      "message": "Votre équipe a été assignée à la réclamation : {{complaintTitle}}"
+    },
+    "priorityUpdated": {
+      "title": "Priorité mise à jour",
+      "message": "La priorité de la réclamation '{{complaintTitle}}' a été mise à jour à {{priority}}"
+    },
+    "statusUpdated": {
+      "title": "Statut mis à jour",
+      "message": "Le statut de la réclamation '{{complaintTitle}}' a été mis à jour à {{status}}"
+    }
+  },
+  "timeAgo": {
+    "now": "À l'instant",
+    "minutes": "Il y a {{n}} min",
+    "hours": "Il y a {{n}} h",
+    "days": "Il y a {{n}} j"
+  },
+  "priorities": {
+    "HIGH": "Élevée",
+    "MEDIUM": "Moyenne",
+    "LOW": "Faible"
+  },
+  "statuses": {
+    "VALIDATED": "Validée",
+    "REJECTED": "Rejetée",
+    "ASSIGNED": "Assignée",
+    "IN_PROGRESS": "En cours",
+    "RESOLVED": "Résolue",
+    "CLOSED": "Fermée"
+  }
+}

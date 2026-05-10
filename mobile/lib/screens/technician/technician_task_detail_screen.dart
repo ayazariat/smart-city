@@ -64,7 +64,7 @@ class _TechnicianTaskDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Travail commencé avec succès!'),
+            content: Text('Work started successfully!'),
             backgroundColor: AppColors.primary,
           ),
         );
@@ -73,7 +73,7 @@ class _TechnicianTaskDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Échec du démarrage: $e'),
+            content: Text('Failed to start: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -116,7 +116,7 @@ class _TechnicianTaskDetailScreenState
                 Row(
                   children: [
                     const Text(
-                      'Marquer comme résolu',
+                      'Mark as Resolved',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -147,7 +147,7 @@ class _TechnicianTaskDetailScreenState
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Rapport de résolution *',
+                  'Resolution Report *',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -159,7 +159,7 @@ class _TechnicianTaskDetailScreenState
                   maxLines: 4,
                   decoration: InputDecoration(
                     hintText:
-                        'Décrivez le travail effectué pour résoudre ce problème...',
+                        'Describe the work done to resolve this issue...',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey.shade300),
@@ -175,7 +175,7 @@ class _TechnicianTaskDetailScreenState
                   ),
                 ),
                 Text(
-                  '${notesController.text.length}/20 caractères minimum',
+                  '${notesController.text.length}/20 characters minimum',
                   style: TextStyle(
                     fontSize: 12,
                     color: notesController.text.length >= 20
@@ -185,7 +185,7 @@ class _TechnicianTaskDetailScreenState
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Photos de preuve *',
+                  'Proof Photos *',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
@@ -225,8 +225,8 @@ class _TechnicianTaskDetailScreenState
                         const SizedBox(height: 8),
                         Text(
                           selectedPhotos.isNotEmpty
-                              ? '${selectedPhotos.length} photo(s) sélectionnée(s)'
-                              : 'Appuyez pour télécharger des photos',
+                              ? '${selectedPhotos.length} photo(s) selected'
+                              : 'Tap to upload photos',
                           style: TextStyle(color: AppColors.textSecondary),
                         ),
                       ],
@@ -308,10 +308,10 @@ class _TechnicianTaskDetailScreenState
                     child: Text(
                       notesController.text.length >= 20 &&
                               selectedPhotos.isNotEmpty
-                          ? 'Soumettre la résolution'
+                          ? 'Submit Resolution'
                           : selectedPhotos.isEmpty
-                          ? 'Ajouter une photo requise'
-                          : '${20 - notesController.text.length} caractères requis',
+                          ? 'Add a photo required'
+                          : '${20 - notesController.text.length} characters required',
                     ),
                   ),
                 ),
@@ -355,7 +355,7 @@ class _TechnicianTaskDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Tâche résolue avec succès!'),
+            content: Text('Task resolved successfully!'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -364,7 +364,7 @@ class _TechnicianTaskDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Échec de la résolution: $e'),
+            content: Text('Resolution failed: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -405,8 +405,8 @@ class _TechnicianTaskDetailScreenState
                     Expanded(
                       child: Text(
                         _task != null
-                            ? 'Tâche #${_task!.id.substring(0, _task!.id.length > 6 ? 6 : _task!.id.length)}'
-                            : 'Détails de la tâche',
+                            ? 'Task #${_task!.id.substring(0, _task!.id.length > 6 ? 6 : _task!.id.length)}'
+                            : 'Task Details',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -493,7 +493,7 @@ class _TechnicianTaskDetailScreenState
           ),
           const SizedBox(height: 16),
           Text(
-            _error ?? 'Une erreur est survenue',
+            _error ?? 'An error occurred',
             style: TextStyle(color: Colors.red.shade700),
             textAlign: TextAlign.center,
           ),
@@ -501,7 +501,7 @@ class _TechnicianTaskDetailScreenState
           ElevatedButton(
             onPressed: _loadTask,
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Réessayer'),
+            child: const Text('Retry'),
           ),
         ],
       ),
@@ -509,7 +509,7 @@ class _TechnicianTaskDetailScreenState
   }
 
   Widget _buildNotFoundState() {
-    return const Center(child: Text('Tâche introuvable'));
+    return const Center(child: Text('Task not found'));
   }
 
   Widget _buildStatusCard() {
@@ -535,7 +535,7 @@ class _TechnicianTaskDetailScreenState
           ),
           const SizedBox(width: 12),
           Text(
-            _getFrenchStatus(_task!.status ?? 'ASSIGNED'),
+            _getEnglishStatus(_task!.status ?? 'ASSIGNED'),
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: statusColors['color'] as Color,
@@ -559,7 +559,7 @@ class _TechnicianTaskDetailScreenState
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Haute priorité',
+                    'High Priority',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -574,16 +574,16 @@ class _TechnicianTaskDetailScreenState
     );
   }
 
-  String _getFrenchStatus(String status) {
+  String _getEnglishStatus(String status) {
     switch (status) {
       case 'ASSIGNED':
-        return 'Assignée';
+        return 'Assigned';
       case 'IN_PROGRESS':
-        return 'En cours';
+        return 'In Progress';
       case 'RESOLVED':
-        return 'Résolue';
+        return 'Resolved';
       case 'CLOSED':
-        return 'Clôturée';
+        return 'Closed';
       default:
         return status;
     }
@@ -652,7 +652,7 @@ class _TechnicianTaskDetailScreenState
                 Row(
                   children: [
                     const Text(
-                      'Urgence',
+                      'Urgency',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -660,7 +660,7 @@ class _TechnicianTaskDetailScreenState
                     ),
                     const Spacer(),
                     Text(
-                      '(${['', 'Faible', 'Moyenne', 'Haute', 'Urgente'][urgency.clamp(0, 4)]})',
+                      '(${['', 'Low', 'Medium', 'High', 'Urgent'][urgency.clamp(0, 4)]})',
                       style: TextStyle(
                         fontSize: 12,
                         color: _getUrgencyColor(urgency),
@@ -721,7 +721,7 @@ class _TechnicianTaskDetailScreenState
               Icon(Icons.timeline, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               const Text(
-                'Chronologie du statut',
+                'Status Timeline',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -763,9 +763,9 @@ class _TechnicianTaskDetailScreenState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildTimelineStep('Assignée', 1, progress),
-                  _buildTimelineStep('En cours', 2, progress),
-                  _buildTimelineStep('Résolue', 3, progress),
+                  _buildTimelineStep('Assigned', 1, progress),
+                  _buildTimelineStep('In Progress', 2, progress),
+                  _buildTimelineStep('Resolved', 3, progress),
                 ],
               ),
             ],
@@ -886,7 +886,7 @@ class _TechnicianTaskDetailScreenState
               const Icon(Icons.location_on, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               const Text(
-                'Localisation',
+                'Location',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -921,7 +921,7 @@ class _TechnicianTaskDetailScreenState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Localisation non disponible',
+                    'Location not available',
                     style: TextStyle(
                       color: Colors.red.shade700,
                       fontWeight: FontWeight.w500,
@@ -1051,14 +1051,14 @@ class _TechnicianTaskDetailScreenState
           ),
           const SizedBox(height: 12),
           _buildDateRow(
-            'Créée',
+            'Created',
             _formatDate(_task!.createdAt),
             Icons.add_circle_outline,
             AppColors.textSecondary,
           ),
           if (_task!.resolvedAt != null)
             _buildDateRow(
-              'Résolue',
+              'Resolved',
               _formatDate(_task!.resolvedAt!),
               Icons.check_circle_outline,
               const Color(0xFF22C55E),
@@ -1112,7 +1112,7 @@ class _TechnicianTaskDetailScreenState
                   ),
                 )
               : const Icon(Icons.play_arrow),
-          label: Text(_actionLoading ? 'Démarrage...' : 'Commencer le travail'),
+          label: Text(_actionLoading ? 'Starting...' : 'Start Work'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
@@ -1129,7 +1129,7 @@ class _TechnicianTaskDetailScreenState
         child: ElevatedButton.icon(
           onPressed: _showResolveModal,
           icon: const Icon(Icons.check_circle),
-          label: const Text('Marquer résolue'),
+          label: const Text('Mark as Resolved'),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF22C55E),
             foregroundColor: Colors.white,
@@ -1155,7 +1155,7 @@ class _TechnicianTaskDetailScreenState
             Icon(Icons.hourglass_empty, color: Color(0xFF22C55E), size: 20),
             SizedBox(width: 12),
             Text(
-              'En attente de validation de l\'agent',
+              'Awaiting agent validation',
               style: TextStyle(
                 color: Color(0xFF22C55E),
                 fontWeight: FontWeight.w600,
@@ -1179,7 +1179,7 @@ class _TechnicianTaskDetailScreenState
             Icon(Icons.check_circle, color: Color(0xFF64748B), size: 20),
             SizedBox(width: 12),
             Text(
-              'Tâche terminée et clôturée',
+              'Task completed and closed',
               style: TextStyle(
                 color: Color(0xFF64748B),
                 fontWeight: FontWeight.w600,

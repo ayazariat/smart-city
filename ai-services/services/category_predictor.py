@@ -17,11 +17,21 @@ try:
     def get_classifier():
         global _classifier
         if _classifier is None:
-            _classifier = pipeline(
-                "zero-shot-classification",
-                model="facebook/bart-large-mnli",
-                device=-1  # CPU
-            )
+            try:
+                import torch
+                device = 0 if torch.cuda.is_available() else -1
+                _classifier = pipeline(
+                    "zero-shot-classification",
+                    model="facebook/bart-large-mnli",
+                    device=device
+                )
+            except Exception as e:
+                print(f"Error loading classifier with device: {e}, falling back to CPU")
+                _classifier = pipeline(
+                    "zero-shot-classification",
+                    model="facebook/bart-large-mnli",
+                    device=-1
+                )
         return _classifier
     
     TRANSFORMERS_AVAILABLE = True
@@ -195,16 +205,36 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
     text_lower = text_to_analyze.lower()
     
     keyword_map = {
-        "ROAD": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussée", "nid de poule", "bitume", "asphalt"],
-        "LIGHTING": ["éclairage", "lampadaire", "light", "ampoule", "feu", "traffic light", "lumière"],
-        "WASTE": ["déchet", "poubelle", "garbage", "ordure", "waste", "dump", "sale", "dirty"],
-        "WATER": ["eau", "water", "fuite", "leak", "drainage", "inondation", "flood", "canalisation"],
-        "SAFETY": ["sécurité", "safety", "danger", "vol", "theft", "agression", "crime", "insécurité"],
-        "PUBLIC_PROPERTY": ["bâtiment", "building", "playground", "aire de jeu", "propriété publique", "école", "school"],
-        "GREEN_SPACE": ["parc", "park", "arbre", "tree", "jardin", "garden", "espace vert", "pelouse"],
-        "TRAFFIC": ["circulation", "traffic", "stationnement", "parking", "embouteillage", "signal"],
-        "URBAN_PLANNING": ["construction", "permis", "permit", "urbanisme", "bâtir", "violation"],
-        "EQUIPMENT": ["banc", "bench", "bus", "kiosque", "kiosk", "arrêt", "stop", "équipement"],
+        "ROAD": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussée", "nid de poule", "bitume", "asphalt",
+                 # Arabic keywords
+                 "طريق", "شارع", "حفرة", "نفق", "إسفلت", "رصيف", "طريق معطل", "تلف الطريق"],
+        "LIGHTING": ["éclairage", "lampadaire", "light", "ampoule", "feu", "traffic light", "lumière",
+                     # Arabic keywords
+                     "إنارة", "عمود إنارة", "مصباح", "ضوء", "ظلام", "إنارة معطلة", "مصباح مكسور"],
+        "WASTE": ["déchet", "poubelle", "garbage", "ordure", "waste", "dump", "sale", "dirty",
+                  # Arabic keywords
+                  "قمامة", "نفايات", "قارورة", "وسخ", "قذارة", "قذارة الطريق", "نفايات غير مرمى"],
+        "WATER": ["eau", "water", "fuite", "leak", "drainage", "inondation", "flood", "canalisation",
+                  # Arabic keywords
+                  "ماء", "تسرب", "فيضان", "تصريف", "مجاري", "سائل", "مياه راكدة", "مياه ملوثة"],
+        "SAFETY": ["sécurité", "safety", "danger", "vol", "theft", "agression", "crime", "insécurité",
+                   # Arabic keywords
+                   "سلامة", "خطر", "سرقة", "اعتداء", "جريمة", "تهديد", "عدم أمان", "منطقة خطر"],
+        "PUBLIC_PROPERTY": ["bâtiment", "building", "playground", "aire de jeu", "propriété publique", "école", "school",
+                            # Arabic keywords
+                            "مبنى", "ملعب", "ممتلكات عامة", "مدرسة", "مرافق عامة", "مجمع سكني", "أثاث عام"],
+        "GREEN_SPACE": ["parc", "park", "arbre", "tree", "jardin", "garden", "espace vert", "pelouse",
+                       # Arabic keywords
+                       "حديقة", "شجرة", "مساحة خضراء", "عشب", "منتزه", "حديقة عامة", "نباتات"],
+        "TRAFFIC": ["circulation", "traffic", "stationnement", "parking", "embouteillage", "signal",
+                    # Arabic keywords
+                    "مرور", "انتظار", "زحمة", "إشارة مرور", "توقيف", "ازدحام", "سير"],
+        "URBAN_PLANNING": ["construction", "permis", "permit", "urbanisme", "bâtir", "violation",
+                            # Arabic keywords
+                            "بناء", "رخصة", "تعمير", "هدم", "انتهاك", "تشيد", "مشروع بناء"],
+        "EQUIPMENT": ["banc", "bench", "bus", "kiosque", "kiosk", "arrêt", "stop", "équipement",
+                      # Arabic keywords
+                      "مقعد", "حافلة", "كيشك", "محطة", "توقف", "معدات", "أثاث شارع"],
     }
     
     scores = {}

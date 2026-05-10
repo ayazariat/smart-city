@@ -149,7 +149,7 @@ class LocalizedStrings {
     'descriptionMinLength': 'Description must be at least 10 characters',
     'locationRequired': 'Location is required',
     'photosRequired': 'At least one photo is required',
-    'submitFailed': 'Submission failed. Please try again.',
+    'submitFailed': 'Échec de l\'envoi. Veuillez réessayer.',
   };
 
   static const _ar = {

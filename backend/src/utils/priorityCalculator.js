@@ -4,9 +4,11 @@
  * Features:
  * 1. Classify urgency based on multiple factors
  * 2. Compute priority score
- * 3. Calculate final SLA
+ * 3. Calculate final SLA (now reads from database)
  * 4. Monitor SLA status
  */
+
+const { getSlaHoursFromDB } = require('./slaConfig');
 
 const CATEGORY_SCORES = {
   SAFETY: 5,
@@ -116,6 +118,33 @@ function calculateSLA({
   const finalSLA = Math.max(baseSLA * multiplier, slaMin);
   
   return Math.round(finalSLA);
+/**
+ * Calculate SLA from database (async version)
+ * Falls back to hardcoded values if database is unavailable
+ */
+async function calculateSLAFromDB({
+  category,
+  urgency
+}) {
+  try {
+    const normalizedCategory = category?.toUpperCase() || 'OTHER';
+    const normalizedUrgency = urgency?.toUpperCase() || 'MEDIUM';
+    
+    // Try to get SLA from database first
+    const slaHours = await getSlaHoursFromDB(normalizedCategory, normalizedUrgency);
+    
+    if (slaHours) {
+      return slaHours;
+    }
+    
+    // Fallback to hardcoded calculation
+    return calculateSLA({ category: normalizedCategory, urgency: normalizedUrgency });
+  } catch (error) {
+    console.error('Error calculating SLA from database, using fallback:', error);
+    return calculateSLA({ category, urgency });
+  }
+}
+
 }
 
 function calculateElapsedTime(createdAt) {
@@ -180,6 +209,50 @@ function calculatePriorityAndSLA(complaintData) {
     progress,
     status
   };
+/**
+ * Async version that reads SLA from database
+ */
+async function calculatePriorityAndSLAAsync(complaintData) {
+  const {
+    category,
+    aiUrgencyPrediction,
+    userUrgency,
+    confirms = 0,
+    upvotes = 0,
+    locationType = 'NORMAL',
+    createdAt
+  } = complaintData;
+  
+  const { priorityScore } = calculatePriorityScore({
+    category,
+    aiUrgencyPrediction,
+    userUrgency,
+    confirms,
+    upvotes,
+    locationType
+  });
+  
+  const urgencyLevel = getUrgencyLevel(priorityScore);
+  
+  const slaFinal = await calculateSLAFromDB({
+    category,
+    urgency: urgencyLevel
+  });
+  
+  const elapsedTime = createdAt ? calculateElapsedTime(createdAt) : 0;
+  const progress = getSLAProgress(elapsedTime, slaFinal);
+  const status = getSLAStatus(elapsedTime, slaFinal);
+  
+  return {
+    priorityScore,
+    urgencyLevel,
+    slaFinal,
+    elapsedTime,
+    progress,
+    status
+  };
+}
+
 }
 
 function explainCalculation({

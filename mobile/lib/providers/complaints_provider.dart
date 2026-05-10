@@ -44,6 +44,7 @@ class ComplaintsState {
   final int currentPage;
   final int totalPages;
   final DashboardStats? stats;
+  final Map<String, dynamic>? municipalityStats;
 
   ComplaintsState({
     this.complaints = const [],
@@ -53,6 +54,7 @@ class ComplaintsState {
     this.currentPage = 1,
     this.totalPages = 1,
     this.stats,
+    this.municipalityStats,
   });
 
   ComplaintsState copyWith({
@@ -61,6 +63,7 @@ class ComplaintsState {
     String? error,
     int? total,
     int? currentPage,
+    Map<String, dynamic>? municipalityStats,
     int? totalPages,
     DashboardStats? stats,
   }) {
@@ -70,6 +73,7 @@ class ComplaintsState {
       error: error,
       total: total ?? this.total,
       currentPage: currentPage ?? this.currentPage,
+      municipalityStats: municipalityStats ?? this.municipalityStats,
       totalPages: totalPages ?? this.totalPages,
       stats: stats ?? this.stats,
     );
@@ -128,8 +132,8 @@ class MyComplaintsNotifier extends StateNotifier<ComplaintsState> {
           'municipality': municipality,
         if (governorate != null && governorate.isNotEmpty)
           'governorate': governorate,
-        'latitude': ?latitude,
-        'longitude': ?longitude,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
         if (mediaUrls != null && mediaUrls.isNotEmpty) 'media': mediaUrls,
       };
       await _service.createComplaint(data);

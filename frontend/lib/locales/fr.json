@@ -1,11 +1,11 @@
 {
-  "common": {
+   "common": {
     "loading": "Chargement...",
-    "smartCity": "Smart City",
+    "smartCity": "Ville Intelligente",
     "tunisia": "Tunisie",
     "user": "Utilisateur",
     "cancel": "Annuler",
-    "submit": "Envoyer",
+    "submit": "Soumettre",
     "save": "Enregistrer",
     "delete": "Supprimer",
     "confirm": "Confirmer",
@@ -14,21 +14,34 @@
     "next": "Suivant",
     "search": "Rechercher...",
     "noData": "Aucune donnée disponible",
+    "noDataYet": "Pas encore de données",
+    "tryAdjustingFilters": "Essayez d'ajuster votre recherche ou vos filtres.",
     "refresh": "Actualiser",
     "processing": "Traitement...",
-    "all": "Tout",
+    "all": "Tous",
     "active": "Actif",
     "resolved": "Résolu",
     "help": "Aide",
     "unknown": "Inconnu",
+    "yourComplaint": "Votre réclamation",
+    "showFilters": "Afficher les filtres",
+    "hideFilters": "Masquer les filtres",
     "timeAgo": {
-      "now": "À l'instant",
-      "minutes": "il y a {{n}} min",
-      "hours": "il y a {{n}} h",
-      "days": "il y a {{n}} j"
-     }
-   },
-   "errors": {
+        "now": "À l'instant",
+        "minutes": "Il y a {{n}} min",
+        "hours": "Il y a {{n}} h",
+        "days": "Il y a {{n}} j"
+      }
+  },
+    "badges": {
+      "overdue": "En retard",
+      "atRisk": "À risque",
+      "reportPending": "Rapport en attente",
+      "approved": "Approuvé",
+      "popular": "Populaire",
+      "reworkNeeded": "Révision nécessaire"
+    },
+    "errors": {
      "loadFailed": "Échec du chargement des données. Veuillez réessayer.",
      "generic": "Une erreur s'est produite. Veuillez réessayer.",
      "notFound": "La ressource demandée est introuvable.",
@@ -64,8 +77,145 @@
     "DEPARTMENT_MANAGER": "Chef de département",
     "TECHNICIAN": "Technicien",
     "ADMIN": "Administrateur"
-  },
-  "topbar": {
+   },
+   "manager": {
+     "noPendingComplaints": "Aucune réclamation en attente pour votre département.",
+     "priorityFilterAll": "Toutes les priorités",
+     "priorityFilterHigh": "Élevée (≥15)",
+     "priorityFilterMedium": "Moyenne (6-14)",
+     "priorityFilterLow": "Faible (<6)",
+     "reassignTeam": "Réassigner l'équipe",
+     "assignRepairTeam": "Assigner une équipe de réparation",
+     "selectTechniciansDesc": "Sélectionnez un ou plusieurs techniciens pour former une équipe de réparation pour cette réclamation.",
+     "assignTeam": "Assigner l'équipe ({{count}})",
+     "assign": "Assigner",
+     "updatePriority": "Mettre à jour la priorité"
+   },
+   "agent": {
+    "title": "Tableau de bord Agent",
+    "pendingTitle": "Réclamations en attente",
+    "pendingSubtitle": "Examiner et valider les réclamations des citoyens",
+    "noPendingComplaints": "Aucune réclamation en attente à examiner",
+    "validating": "Validation en cours...",
+    "rejecting": "Rejet en cours...",
+    "possibleDuplicate": "Doublon potentiel détecté",
+    "checkDuplicates": "Vérifier les doublons",
+    "duplicateDetection": "Détection de doublons",
+    "duplicateDescription": "Examinez les réclamations en double potentielles et décidez de les fusionner.",
+    "keepSeparate": "Garder séparés",
+    "mergeSelected": "Fusionner la sélection",
+    "checkingDuplicates": "Recherche de doublons...",
+    "noSimilarComplaints": "Aucune réclamation similaire trouvée.",
+    "uniqueComplaint": "Cette réclamation semble être unique.",
+    "potentialDuplicatesFound": "Doublons potentiels trouvés !",
+    "duplicatesExplanation": "Ces réclamations semblent similaires. Vous pouvez les fusionner ou les garder séparées.",
+    "mainComplaint": "Réclamation principale (cible)",
+    "selectToMerge": "Sélectionnez les réclamations à fusionner :"
+   },
+    "admin": {
+      "settings": {
+        "title": "Paramètres système",
+        "subtitle": "Gérer les départements, les règles SLA et la configuration de la plateforme",
+        "loadFailed": "Échec du chargement des paramètres",
+        "tabs": {
+          "departments": "Départements",
+          "sla": "Règles SLA",
+          "categories": "Catégories"
+        },
+        "departments": {
+          "title": "Départements",
+          "add": "Ajouter un département",
+          "addDepartment": "Ajouter un département",
+          "editDepartment": "Modifier le département",
+          "departmentModalDescription": "Configurer les détails du département et les catégories de réclamations qu'il gère.",
+          "departmentName": "Nom du département",
+          "departmentNamePlaceholder": "ex. Routes et Infrastructures",
+          "noDepartments": "Aucun département configuré pour le moment.",
+          "deptNameRequired": "Le nom du département est requis",
+          "deptUpdated": "Département mis à jour",
+          "deptCreated": "Département créé",
+          "deptSaveFailed": "Échec de l'enregistrement du département",
+          "deptDeleteConfirm": "Supprimer ce département ? Cette action est irréversible.",
+          "deptDeleted": "Département supprimé",
+          "deptDeleteFailed": "Échec de la suppression du département"
+        },
+        "sla": {
+          "description": "Les délais SLA définissent la durée pendant laquelle une plainte peut rester ouverte avant d'être signalée comme en retard. Chaque catégorie peut avoir des délais différents par niveau d'urgence. Les modifications s'appliquent uniquement aux nouvelles plaintes.",
+          "urgency": "Urgence",
+          "hours": "Heures",
+          "label": "Libellé",
+          "actions": "Actions",
+          "save": "Enregistrer",
+          "cancel": "Annuler",
+          "edit": "Modifier",
+          "slaUpdated": "Règle SLA mise à jour",
+          "slaUpdateFailed": "Échec de la mise à jour de la règle SLA"
+        },
+        "edit": "Modifier",
+        "delete": "Supprimer"
+      },
+      "noComplaintsSubmitted": "Aucune réclamation n'a encore été soumise.",
+      "complaintsPageTitle": "Supervision du système — Réclamations",
+      "complaintsPageSubtitle": "Surveillance en lecture seule et oversight administratif",
+      "complaintsCount": "{{total}} actifs · {{shown}} affichés",
+      "totalComplaints": "Total des réclamations",
+      "resolved": "Résolues",
+      "atRisk": "À risque (SLA)",
+      "closeToDeadline": "Proche de l'échéance",
+      "overdue": "En retard",
+      "pastDeadline": "Dépassé",
+      "teamPerformance": "Performance de l'équipe",
+      "inProgress": "En cours",
+      "currentlyWorked": "Actuellement en traitement",
+      "averageDays": "Jours moyens",
+      "timeToProcess": "Délai de traitement",
+      "resolutionRate": "Taux de résolution",
+      "percentageResolved": "Pourcentage résolu",
+      "highPriority": "Haute priorité",
+      "urgentIssues": "Urgent (score 15+)",
+      "categories": "Catégories :",
+      "searchPlaceholder": "Rechercher par description ou catégorie...",
+      "filtersButton": "Filtres",
+      "exportCSV": "CSV",
+      "exportPDF": "PDF",
+      "resultsCount": "{{count}} résultats",
+      "usersPageTitle": "Gestion des utilisateurs",
+      "usersPageSubtitle": "Gérer les utilisateurs du système et leurs permissions",
+      "addNewUser": "Ajouter un utilisateur",
+      "totalUsers": "Total des utilisateurs",
+      "activeUsers": "Utilisateurs actifs",
+      "inactiveUsers": "Utilisateurs inactifs",
+      "administrators": "Administrateurs",
+      "searchUsersPlaceholder": "Rechercher des utilisateurs par nom ou email...",
+      "table": {
+        "user": "Utilisateur",
+        "role": "Rôle",
+        "commune": "Commune",
+        "phone": "Téléphone",
+        "status": "Statut",
+        "actions": "Actions"
+      },
+      "commune": "Commune",
+      "phone": "Téléphone",
+      "status": "Statut",
+      "actions": "Actions",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "editUser": "Modifier l'utilisateur",
+      "fullName": "Nom complet",
+      "email": "E-mail",
+      "governorate": "Gouvernorat",
+      "department": "Département",
+      "selectDepartment": "Sélectionner le département",
+      "chooseDepartment": "Choisir un département...",
+      "noDepartments": "Aucun département disponible",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "deleteUser": "Supprimer l'utilisateur",
+      "confirmDeleteUser": "Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cette action est irréversible.",
+      "loadingUsers": "Chargement des utilisateurs..."
+    },
+    "topbar": {
     "back": "Retour"
   },
   "theme": {
@@ -101,7 +251,11 @@
     "didntReceive": "Vous n'avez pas reçu l'email ? Réessayer",
     "publicStats": "Voir les statistiques publiques"
   },
-  "dashboard": {
+   "dateRange": {
+     "from": "DE",
+     "to": "À"
+   },
+   "dashboard": {
     "title": "Tableau de bord",
     "welcomeBack": "Bienvenue, {{name}}",
     "subtitle": {
@@ -186,8 +340,20 @@
     "department": "Département",
     "totalComplaints": "Total des réclamations",
     "toAssign": "À assigner",
-    "needsTechnician": "Nécessite un technicien",    "allTasks": "Total des tâches",    "newTasks": "Nouvelles tâches",
+    "needsTechnician": "Nécessite un technicien",
+    "allTasks": "Total des tâches",
+    "newTasks": "Nouvelles tâches",
     "readyToStart": "Prêtes à démarrer",
+    "closed": "Cas clôturés",
+    "rejectedCases": "Cas rejetés",
+    "resolvedOnTime": "Résolus dans les délais",
+    "citizenSatisfaction": "Satisfaction citoyenne",
+    "basedOnResponses": "Basé sur les réponses",
+    "satisfactionRate": "Taux de satisfaction",
+    "totalRated": "Total évalués",
+    "notConfirmed": "Non confirmés",
+    "citizenSatisfactionDesc": "Basé sur les avis des citoyens sur les réclamations résolues.",
+    "vsLast": "vs dernier",
     "workingOn": "En cours",
     "completed": "Terminées",
     "resolvedTasks": "Tâches résolues",
@@ -229,13 +395,15 @@
     "viewAll": "Voir toutes les réclamations"
   },
   "complaintsList": {
-    "subtitle": "{{area}} — {{n}} réclamations",
-    "searchPlaceholder": "Rechercher des réclamations...",
+    "subtitle": "{{area}} — {{n}} plaintes",
+    "searchPlaceholder": "Rechercher des plaintes...",
     "all": "Toutes",
-    "noComplaints": "Aucune réclamation trouvée",
+    "noComplaints": "Aucune plainte trouvée",
     "confirm": "Confirmer",
     "prioritize": "Prioriser",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "allComplaints": "Toutes les plaintes",
+    "filteredResults": "{{n}} résultats filtrés"
   },
   "activity": {
     "title": "Activité récente",
@@ -286,16 +454,17 @@
     "filterActive": "Actives",
     "filterResolved": "Résolues"
   },
-  "status": {
-    "SUBMITTED": "Soumise",
-    "VALIDATED": "Validée",
-    "ASSIGNED": "Assignée",
-    "IN_PROGRESS": "En cours",
-    "RESOLVED": "Résolue",
-    "CLOSED": "Clôturée",
-    "REJECTED": "Rejetée",
-    "ARCHIVED": "Archivée"
-  },
+   "status": {
+     "SUBMITTED": "Soumise",
+     "VALIDATED": "Validée",
+     "ASSIGNED": "Assignée",
+     "IN_PROGRESS": "En cours",
+     "RESOLVED": "Résolue",
+     "CLOSED": "Clôturée",
+     "REJECTED": "Rejetée",
+     "RESOLUTION_REJECTED": "Révision nécessaire",
+     "ARCHIVED": "Archivée"
+   },
   "categories": {
     "waste": "Déchets et Propreté",
     "wasteDesc": "Poubelles, bennes débordantes, décharges illégales, nettoyage des rues.",
@@ -402,7 +571,12 @@
     "duplicateModal": {
       "title": "Doublon potentiel détecté",
       "cancel": "Annuler",
-      "submitAnyway": "Soumettre quand même"
+      "submitAnyway": "Soumettre quand même",
+      "viewDetails": "Voir les détails",
+      "upvote": "Voter",
+      "upvoted": "Voté",
+      "upvoteFailed": "Échec du vote. Vous avez peut-être déjà confirmé cette réclamation.",
+      "confirm": "Confirmer"
     }
   },
   "transparency": {
@@ -417,9 +591,11 @@
     "leaderboard": "Classement",
     "categoryPerformance": "Performance par catégorie",
     "monthlyTrends": "Tendances mensuelles",
-    "governorateOverview": "Vue par gouvernorat",
+    "governorateOverview": "Aperçu des gouvernorats",
     "allComplaints": "Toutes les réclamations",
     "municipalities": "Municipalités",
+    "reportProblem": "Tableau de bord",
+    "back": "Retour à la transparence",
     "hero": {
       "title": "Vous voyez un problème ? Signalez-le.",
       "subtitle": "Aidez-nous à améliorer notre ville. Signalez les problèmes d'infrastructure, de routes, de déchets et plus encore. Vos signalements rendent nos communautés plus sûres et plus propres.",
@@ -501,7 +677,8 @@
       "legendGood": "Bon (70%+)",
       "legendModerate": "Modéré (50-70%)",
       "legendBad": "Nécessite attention (<50%)",
-      "filters": "Filtres :"
+      "filters": "Filtres :",
+      "municipalities": "Municipalités"
     },
     "header": {
       "menu": "Menu",
@@ -617,6 +794,18 @@
     "fr": "Français",
     "ar": "العربية"
   },
+  "departments": {
+    "waste": "Déchets et Propreté",
+    "roads": "Routes et Circulation",
+    "lighting": "Éclairage public",
+    "water": "Eau et Drainage",
+    "safety": "Sécurité et Bruit",
+    "property": "Propriété publique",
+    "parks": "Parcs et Espaces verts",
+    "other": "Services Généraux",
+    "assignToDepartment": "Assigner au département",
+    "selectDepartmentDescription": "Sélectionner le département responsable du traitement de cette plainte"
+  },
   "notifications": {
     "title": "Notifications",
     "empty": "Aucune notification pour le moment",
@@ -698,6 +887,8 @@
     "rejected": "Rejetée",
     "history": "Historique",
     "description": "Description",
+    "addCommentPlaceholder": "Ajouter un commentaire...",
+    "addComment": "Ajouter un commentaire",
     "contactPhone": "Téléphone de contact",
     "location": "Localisation",
     "locationNotProvided": "Localisation non fournie",
@@ -746,6 +937,7 @@
     "validateComplaint": "Valider la réclamation",
     "rejectComplaint": "Rejeter la réclamation",
     "assignToDepartment": "Assigner au département",
+    "selectDepartmentDescription": "Sélectionnez le département qui traitera cette plainte.",
     "updatePriority": "Mettre à jour la priorité",
     "assignToRepairTeam": "Assigner à l'équipe d'intervention",
     "assignedToRepairTeam": "Assigné à l'équipe d'intervention",
@@ -763,58 +955,75 @@
     "update": "Mettre à jour",
     "techWorking": "Le technicien travaille sur cette réclamation",
     "resolutionReportSubmitted": "Rapport de résolution soumis",
-    "reviewResolutionReport": "Consultez le rapport de résolution ci-dessus pour approuver ou rejeter"
-    ,"changeTechnician": "Changer le technicien"
-    ,"setPriority": "Définir la priorité"
-    ,"selectTechnicianHint": "Sélectionnez un technicien pour assigner cette tâche"
-    ,"departmentAssigned": "Département assigné"
-    ,"waitingTechnicianAssignment": "En attente d'assignation du technicien par le manager"
-    ,"departmentStats": "Statistiques du département"
-    ,"viewPerformanceMetrics": "Voir les indicateurs de performance"
-    ,"reports": "Rapports"
-    ,"generateGlobalReports": "Générer des rapports globaux"
-    ,"aiAnalysis": "Analyse IA"
-    ,"aiUrgencyPrediction": "Prédiction d'urgence IA"
-    ,"duplicateCheck": "Vérification des doublons"
-    ,"beforeWorkPhotos": "Photos avant travaux"
-    ,"afterWorkPhotos": "Photos après travaux"
-    ,"comments": "Commentaires"
-    ,"dateUnknown": "Date inconnue"
-    ,"internalNotes": "Notes internes"
-    ,"communitySupport": "Soutien communautaire"
-    ,"confirmations": "Confirmations"
-    ,"upvotes": "Votes"
-    ,"confirmed": "Confirmé"
-    ,"confirmIssue": "Confirmer le problème"
-    ,"upvoted": "Voté"
-    ,"upvote": "Voter"
-    ,"communityHelpHint": "Aidez à prioriser ce problème en confirmant qu'il existe dans votre quartier"
-    ,"actions": "Actions"
-    ,"approved": "Approuvé"
-    ,"pendingReview": "En attente de révision"
-    ,"techResolutionNotes": "Notes de résolution du technicien"
-    ,"resolvedOn": "Résolu le"
-    ,"proofOfCompletion": "Preuve d'achèvement"
-    ,"approve": "Approuver"
-    ,"selectDepartment": "Sélectionner le département"
-    ,"chooseDepartment": "Choisir un département..."
-    ,"noDepartments": "Aucun département disponible"
-    ,"assign": "Assigner"
-    ,"selectTechnicians": "Sélectionner technicien(s) pour l'équipe"
-    ,"noTechnicians": "Aucun technicien disponible"
-    ,"noTechniciansHint": "Aucun technicien assigné à ce département"
-    ,"selectOneOrMore": "Sélectionnez un ou plusieurs techniciens :"
-    ,"techTeamSelected": "{{count}} techniciens sélectionnés — Une équipe sera créée"
-    ,"createTeamAssign": "Créer l'équipe et assigner"
-    ,"aboutToApprove": "Vous allez approuver le rapport de résolution pour :"
-    ,"approveWillClose": "Cela clôturera la réclamation et notifiera le citoyen et le technicien."
-    ,"confirmApproval": "Confirmer l'approbation"
-    ,"rejectResolutionPlaceholder": "Expliquez pourquoi ce rapport de résolution est rejeté..."
-    ,"failedRejectResolution": "Échec du rejet de la résolution"
-    ,"failedApproveResolution": "Échec de l'approbation de la résolution"
-    ,"failedAssignTechnician": "Échec de l'assignation du technicien. Veuillez réessayer."
-    ,"startWorkConfirm": "Êtes-vous sûr de vouloir commencer les travaux sur la réclamation {{id}} ?"
-    ,"resolveConfirm": "Soumettre votre résolution pour {{id}} ? L'agent examinera votre rapport."
+    "reviewResolutionReport": "Consultez le rapport de résolution ci-dessus pour approuver ou rejeter",
+    "changeTechnician": "Changer le technicien",
+    "setPriority": "Définir la priorité",
+    "selectTechnicianHint": "Sélectionnez un technicien pour assigner cette tâche",
+    "departmentAssigned": "Département assigné",
+    "waitingTechnicianAssignment": "En attente d'assignation du technicien par le manager",
+    "departmentStats": "Statistiques du département",
+    "viewPerformanceMetrics": "Voir les indicateurs de performance",
+    "reports": "Rapports",
+    "generateGlobalReports": "Générer des rapports globaux",
+    "aiAnalysis": "Analyse IA",
+    "aiUrgencyPrediction": "Prédiction d'urgence IA",
+    "duplicateCheck": "Vérification des doublons",
+    "checkingDuplicates": "Recherche de plaintes similaires...",
+    "similarComplaintsFound": "Plaintes similaires trouvées — vérifiez avant de valider",
+    "differentIssuesContinue": "Ce sont des problèmes différents — continuer à valider",
+    "view": "Voir",
+    "merge": "Fusionner",
+    "merging": "Fusion en cours...",
+    "mergeConfirm": "Marquer cette plainte comme doublon de [{{rc}}]? La plainte sera fermée et le citoyen sera notifié.",
+    "mergedSuccess": "Plainte fusionnée comme doublon avec succès.",
+    "mergeFailed": "Échec de la fusion de la plainte.",
+    "beforeWorkPhotos": "Photos avant travaux",
+    "afterWorkPhotos": "Photos après travaux",
+    "comments": "Commentaires",
+    "dateUnknown": "Date inconnue",
+    "internalNotes": "Notes internes",
+    "communitySupport": "Soutien communautaire",
+    "confirmations": "Confirmations",
+    "upvotes": "Votes",
+    "confirmed": "Confirmé",
+    "confirmIssue": "Confirmer le problème",
+    "upvoted": "Voté",
+    "upvote": "Voter",
+    "communityHelpHint": "Aidez à prioriser ce problème en confirmant qu'il existe dans votre quartier",
+    "actions": "Actions",
+    "approved": "Approuvé",
+    "pendingReview": "En attente de révision",
+    "techResolutionNotes": "Notes de résolution du technicien",
+    "resolvedOn": "Résolu le",
+    "proofOfCompletion": "Preuve d'achèvement",
+    "approve": "Approuver",
+    "selectDepartment": "Sélectionner le département",
+    "chooseDepartment": "Choisir un département...",
+    "noDepartments": "Aucun département disponible",
+    "assign": "Assigner",
+    "selectTechnicians": "Sélectionner technicien(s) pour l'équipe",
+    "noTechnicians": "Aucun technicien disponible",
+    "noTechniciansHint": "Aucun technicien assigné à ce département",
+    "selectOneOrMore": "Sélectionnez un ou plusieurs techniciens :",
+    "techTeamSelected": "{{count}} techniciens sélectionnés — Une équipe sera créée",
+    "createTeamAssign": "Créer l'équipe et assigner",
+    "aboutToApprove": "Vous allez approuver le rapport de résolution pour :",
+    "approveWillClose": "Cela clôturera la réclamation et notifiera le citoyen et le technicien.",
+    "confirmApproval": "Confirmer l'approbation",
+    "approveResolution": "Accepter la résolution",
+    "rejectResolution": "Rejeter la résolution",
+    "resolutionApproved": "Résolution approuvée avec succès",
+    "aboutToReject": "Vous allez rejeter le rapport de résolution pour :",
+    "rejectWillReturnToProgress": "Cela ramènera la réclamation à l'état 'En cours' et le technicien devra refaire le travail.",
+    "rejectionReasonRequired": "Veuillez fournir une raison pour le rejet",
+    "rejectionReasonPlaceholder": "Expliquez pourquoi ce rapport de résolution est rejeté...",
+    "resolutionRejected": "Résolution rejetée avec succès",
+    "rejectResolutionPlaceholder": "Expliquez pourquoi ce rapport de résolution est rejeté...",
+    "failedRejectResolution": "Échec du rejet de la résolution",
+    "failedApproveResolution": "Échec de l'approbation de la résolution",
+    "failedAssignTechnician": "Échec de l'assignation du technicien. Veuillez réessayer.",
+    "startWorkConfirm": "Êtes-vous sûr de vouloir commencer les travaux sur la réclamation {{id}} ?",
+    "resolveConfirm": "Soumettre votre résolution pour {{id}} ? L'agent examinera votre rapport."
   },
   "geoErrors": {
     "notSupported": "La géolocalisation n'est pas supportée par votre navigateur",
@@ -912,65 +1121,71 @@
       "IN_PROGRESS": "Travaux en cours",
       "RESOLVED": "Réparée — en cours de vérification",
       "CLOSED": "Entièrement résolue"
-    }
+    },
+    "rateResolution": "Évaluez la résolution",
+    "rateResolutionDesc": "Comment s'est passée la résolution de votre problème ? Votre avis nous aide à améliorer notre service.",
+    "ratingCommentPlaceholder": "Partagez votre expérience (optionnel)...",
+    "submitRating": "Envoyer mon avis"
   },
-  "tasks": {
-    "title": "Mes tâches",
-    "subtitle": "Gérez vos tâches de réparation assignées",
-    "loading": "Chargement des tâches...",
-    "noTasks": "Aucune tâche trouvée",
-    "noTasksHint": "Vous n'avez pas encore de tâches assignées.",
-    "all": "Tout",
-    "assigned": "Assignée",
-    "inProgress": "En cours",
-    "resolved": "Résolue",
-    "closed": "Clôturée",
-    "overdue": "En retard",
-    "total": "Total",
-    "searchPlaceholder": "Rechercher des tâches...",
-    "low": "Faible",
-    "medium": "Moyen",
-    "high": "Élevé",
-    "urgent": "Urgent",
-    "photos": "{{n}} photos",
-    "dueDate": "Échéance : {{date}}",
-    "startWork": "Commencer le travail",
-    "markResolved": "Marquer comme résolu",
-    "viewDetails": "Voir les détails",
-    "startWorkConfirm": "Commencer à travailler sur cette tâche ?",
-    "resolveTitle": "Soumettre la résolution",
-    "resolveNote": "Notes de résolution",
-    "resolveNotePlaceholder": "Décrivez ce qui a été fait pour résoudre ce problème...",
-    "proofPhotos": "Photos de preuve",
-    "addPhotos": "Ajouter des photos",
-    "submitResolution": "Soumettre la résolution",
-    "notifications": "Notifications",
-    "noNotifications": "Aucune notification",
-    "markAllRead": "Tout marquer comme lu",
-    "statsTotal": "Total des tâches",
-    "statsAssigned": "Assignées",
-    "statsInProgress": "En cours",
-    "statsResolved": "Résolues",
-    "statsOverdue": "En retard",
-    "notification": {
-      "status": {
-        "validated": "Réclamation validée",
-        "validated.desc": "Votre réclamation a été validée et sera traitée.",
-        "rejected": "Réclamation rejetée",
-        "rejected.desc": "Votre réclamation a été rejetée.",
-        "assigned": "Réclamation assignée",
-        "assigned.desc": "Votre réclamation a été assignée à une équipe.",
-        "inProgress": "Traitement en cours",
-        "inProgress.desc": "Votre réclamation est en cours de traitement.",
-        "resolved": "Réclamation résolue",
-        "resolved.desc": "Votre réclamation a été résolue.",
-        "closed": "Réclamation fermée",
-        "closed.desc": "Votre réclamation a été fermée."
-      },
-      "newComplaint": "Nouvelle réclamation",
-      "newComplaint.desc": "Une nouvelle réclamation a été soumise.",
-      "assignedToYou": "Réclamation assignée",
-      "assignedToYou.desc": "Une réclamation vous a été assignée."
-    }
-  }
+   "tasks": {
+     "title": "Mes tâches",
+     "subtitle": "Gérez vos tâches de réparation assignées",
+     "loading": "Chargement des tâches...",
+     "noTasks": "Aucune tâche trouvée",
+     "noTasksHint": "Vous n'avez pas encore de tâches assignées.",
+     "all": "Tout",
+     "assigned": "Assignée",
+     "inProgress": "En cours",
+     "resolved": "Résolue",
+     "closed": "Clôturée",
+     "overdue": "En retard",
+     "total": "Total",
+     "searchPlaceholder": "Rechercher des tâches...",
+     "low": "Faible",
+     "medium": "Moyen",
+     "high": "Élevé",
+     "urgent": "Urgent",
+     "highPriority": "Haute priorité",
+     "photos": "{{n}} photos",
+     "dueDate": "Échéance : {{date}}",
+     "startWork": "Commencer le travail",
+     "markResolved": "Marquer comme résolu",
+     "viewDetails": "Voir les détails",
+     "startWorkConfirm": "Commencer à travailler sur cette tâche ?",
+     "resolveTitle": "Soumettre la résolution",
+     "resolveNote": "Notes de résolution",
+     "resolveNotePlaceholder": "Décrivez ce qui a été fait pour résoudre ce problème...",
+     "proofPhotos": "Photos de preuve",
+     "addPhotos": "Ajouter des photos",
+     "submitResolution": "Soumettre la résolution",
+     "reviewFeedback": "Veuillez examiner les commentaires et terminer le travail correctement avant de soumettre à nouveau.",
+     "notifications": "Notifications",
+     "noNotifications": "Aucune notification",
+     "markAllRead": "Tout marquer comme lu",
+     "statsTotal": "Total des tâches",
+     "statsAssigned": "Assignées",
+     "statsInProgress": "En cours",
+     "statsResolved": "Résolues",
+     "statsOverdue": "En retard",
+     "notification": {
+       "status": {
+         "validated": "Réclamation validée",
+         "validated.desc": "Votre réclamation a été validée et sera traitée.",
+         "rejected": "Réclamation rejetée",
+         "rejected.desc": "Votre réclamation a été rejetée.",
+         "assigned": "Réclamation assignée",
+         "assigned.desc": "Votre réclamation a été assignée à une équipe.",
+         "inProgress": "Traitement en cours",
+         "inProgress.desc": "Votre réclamation est en cours de traitement.",
+         "resolved": "Réclamation résolue",
+         "resolved.desc": "Votre réclamation a été résolue.",
+         "closed": "Réclamation fermée",
+         "closed.desc": "Votre réclamation a été fermée."
+       },
+       "newComplaint": "Nouvelle réclamation",
+       "newComplaint.desc": "Une nouvelle réclamation a été soumise.",
+       "assignedToYou": "Réclamation assignée",
+       "assignedToYou.desc": "Une réclamation vous a été assignée."
+     }
+   }
 }

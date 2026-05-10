@@ -76,6 +76,12 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // User language preference for notifications
+    language: {
+      type: String,
+      enum: ["en", "fr", "ar"],
+      default: "en",
+    },
     // Security-related fields
     refreshToken: { type: String }, // current valid refresh token (rotation)
     // MFA skeleton fields (to be used for agents/managers/admin)
@@ -89,6 +95,7 @@ const userSchema = new mongoose.Schema(
     resetToken: { type: String }, // Password reset token
     resetTokenExpires: { type: Date }, // Password reset token expiration
     passwordLastChanged: { type: Date }, // Track when password was last changed
+    lastLoginAt: { type: Date }, // Track last login time
   },
   { timestamps: true }
 );

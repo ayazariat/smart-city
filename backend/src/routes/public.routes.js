@@ -2,93 +2,370 @@ const express = require("express");
 const router = express.Router();
 const Complaint = require("../models/Complaint");
 const Department = require("../models/Department");
-const aiService = require("../services/ai.service");
-const { authenticate } = require("../middleware/auth");
-
-// Cache control middleware (optional, can be adjusted)
-const setCacheHeaders = (req, res, next) => {
-  res.set("Cache-Control", "public, max-age=60"); // 1 minute cache
-  next();
-};
-router.use(setCacheHeaders);
+const { getSlaHours, getSlaHoursByCategory } = require("../utils/slaConfig");
 
 /**
- * Helper function to predict department based on category/description
+ * GET /api/public/complaints - public complaint feed for transparency pages
  */
-const predictDepartment = (category, description) => {
-  const keywords = {
-    "Roads & Infrastructure": ["road", "pavement", "hole", "damage", "street", "road", "infrastructure", "bridge", "sidewalk"],
-    "Public Lighting": ["light", "lamp", "dark", "streetlight", "lighting", "electricity", "power"],
-    "Waste Management": ["waste", "garbage", "trash", "bin", "clean", " collecte", "déchet", " poubelle", "salubrit"],
-    "Parks & Green Spaces": ["park", "tree", "garden", "green", "vegetation", "jardin", "espace vert", "arbre"],
-    "Water & Sanitation": ["water", "drainage", "sewer", "flood", "égout", "eau", "assainissement", "inondation"],
-    "Traffic & Road Signage": ["traffic", "sign", "signal", "road sign", "stop", "signalisation", "panneau", "circulation"],
-    "Urban Planning": ["building", "construction", "permit", "urban", "construction", "bâtiment", "permis", "urbanisme"],
-    "Public Equipment": ["equipment", "bench", "furniture", "équipement", "banc", "mobilier"],
-  };
-  
-  const categoryMap = {
-    "ROAD": "Roads & Infrastructure",
-    "LIGHTING": "Public Lighting",
-    "WASTE": "Waste Management",
-    "WATER": "Water & Sanitation",
-    "SAFETY": "Traffic & Road Signage",
-    "PUBLIC_PROPERTY": "Public Equipment",
-    "GREEN_SPACE": "Parks & Green Spaces",
-    "BUILDING": "Urban Planning",
-    "NOISE": "Waste Management",
-    "OTHER": "Roads & Infrastructure",
-  };
-  
-  // First try category mapping
-  if (category && categoryMap[category]) {
-    return { department: categoryMap[category], confidence: 75 };
-  }
-  
-  // Then try keyword matching in description
-  const descLower = (description || "").toLowerCase();
-  let bestMatch = { department: "Roads & Infrastructure", confidence: 40 };
-  
-  for (const [dept, words] of Object.entries(keywords)) {
-    let matches = 0;
-    for (const word of words) {
-      if (descLower.includes(word.toLowerCase())) matches++;
-    }
-    if (matches > 0) {
-      const confidence = Math.min(95, 50 + (matches * 15));
-      if (confidence > bestMatch.confidence) {
-        bestMatch = { department: dept, confidence };
-      }
-    }
-  }
-  
-  return bestMatch;
-};
-
-/**
- * POST /api/public/ai/predict-department - AI department suggestion
- */
-router.post("/ai/predict-department", async (req, res) => {
+router.get("/complaints", async (req, res) => {
   try {
-    const { category, description } = req.body;
-    
-    const prediction = predictDepartment(category, description);
-    
-    // Find the department by name
-    const department = await Department.findOne({ name: prediction.department });
-    
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const requestedStatuses =
+      typeof req.query.status === "string"
+        ? req.query.status
+            .split(",")
+            .map((status) => status.trim().toUpperCase())
+            .filter(Boolean)
+        : [];
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "CLOSED"];
+    const statuses = requestedStatuses.length > 0
+      ? requestedStatuses.filter((status) => publicStatuses.includes(status))
+      : publicStatuses;
+
+    const query = {
+      status: { $in: statuses },
+      isArchived: { $ne: true },
+    };
+
+    const skip = (page - 1) * limit;
+    const [complaints, totalCount] = await Promise.all([
+      Complaint.find(query)
+        .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId")
+        .populate("municipality", "name governorate")
+        .sort({ resolvedAt: -1, updatedAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Complaint.countDocuments(query),
+    ]);
+
     res.json({
       success: true,
       data: {
-        suggestedDepartment: department?._id,
-        departmentName: prediction.department,
-        confidence: prediction.confidence,
-        message: `AI suggests: ${prediction.department} (${prediction.confidence}% confidence)`
-      }
+        complaints,
+        pagination: {
+          total: totalCount,
+          totalCount,
+          page,
+          limit,
+          pages: Math.ceil(totalCount / limit),
+          totalPages: Math.ceil(totalCount / limit),
+        },
+      },
     });
   } catch (error) {
-    console.error("AI prediction error:", error);
-    res.status(500).json({ success: false, message: "Failed to predict department" });
+    console.error("Public complaints error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch public complaints" });
+  }
+});
+
+/**
+ * GET /api/public/complaints/:id - get single complaint details for public view
+ */
+router.get("/complaints/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+        
+    const complaint = await Complaint.findOne({ _id: id, isArchived: { $ne: true } })
+      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
+      .populate("municipality", "name governorate")
+      .lean();
+
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    // Increment view count
+    await Complaint.findByIdAndUpdate(id, { $inc: { viewsCount: 1 } });
+
+    // Only show complaints that are in public statuses
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "CLOSED"];
+    if (!publicStatuses.includes(complaint.status)) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    res.json({
+      success: true,
+      data: complaint,
+    });
+  } catch (error) {
+    console.error("Public complaint detail error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch complaint details" });
+  }
+});
+
+/**
+ * GET /api/public/complaints/:id/comments - get public comments for a complaint
+ */
+router.get("/complaints/:id/comments", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const Comment = require("../models/Comment");
+    
+    const comments = await Comment.find({ complaint: id })
+      .populate("author", "name role")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formattedComments = comments.map(comment => ({
+      _id: comment._id,
+      text: comment.text,
+      authorName: comment.isAnonymous ? "Anonymous" : (comment.author?.name || "Unknown"),
+      authorRoleLabel: comment.isAnonymous ? undefined : (comment.author?.role || "User"),
+      createdAt: comment.createdAt,
+    }));
+
+    res.json({
+      success: true,
+      data: formattedComments,
+    });
+  } catch (error) {
+    console.error("Public comments error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch comments" });
+  }
+});
+
+/**
+ * POST /api/public/complaints/:id/comment - post a public comment (requires authentication)
+ */
+router.post("/complaints/:id/comment", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { token } = req.headers;
+    const { text, anonymous } = req.body;
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({ success: false, message: "Comment text is required" });
+    }
+
+    const jwt = require("jsonwebtoken");
+    const User = require("../models/User");
+    let userId;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+      userId = decoded.userId || decoded.id || decoded._id;
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid token" });
+    }
+
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    const user = await User.findById(userId).select("fullName name").lean();
+    const authorName = user?.fullName || user?.name || "Anonymous";
+
+    const Comment = require("../models/Comment");
+    const comment = new Comment({
+      complaint: id,
+      text: text.trim(),
+      author: userId,
+      authorName: authorName,
+      isAnonymous: !!anonymous,
+      createdAt: new Date(),
+    });
+
+    await comment.save();
+
+    res.json({
+      success: true,
+      message: "Comment posted successfully",
+      data: {
+        _id: comment._id,
+        text: comment.text,
+        authorName: comment.isAnonymous ? "Anonymous" : authorName,
+        createdAt: comment.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Public comment error:", error);
+    res.status(500).json({ success: false, message: "Failed to post comment" });
+  }
+});
+
+/**
+ * POST /api/public/complaints/:id/upvote - upvote a complaint (requires authentication)
+ */
+router.post("/complaints/:id/upvote", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { token } = req.headers;
+    
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    const jwt = require("jsonwebtoken");
+    const User = require("../models/User");
+    let userId;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+      userId = decoded.userId || decoded.id || decoded._id;
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid token" });
+    }
+
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    // Check if user already upvoted
+    if (!complaint.upvotedBy) complaint.upvotedBy = [];
+    if (complaint.upvotedBy.includes(userId)) {
+      return res.status(400).json({ success: false, message: "Already upvoted" });
+    }
+
+    // Add upvote
+    complaint.upvotedBy.push(userId);
+    complaint.upvoteCount = (complaint.upvoteCount || 0) + 1;
+    await complaint.save();
+
+    res.json({
+      success: true,
+      upvoteCount: complaint.upvoteCount,
+    });
+  } catch (error) {
+    console.error("Public upvote error:", error);
+    res.status(500).json({ success: false, message: "Failed to upvote complaint" });
+  }
+});
+
+/**
+ * GET /api/public/my-municipality-complaints - get complaints for citizen's municipality
+ */
+router.get("/my-municipality-complaints", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : req.headers.token;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const status = req.query.status;
+    
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    const jwt = require("jsonwebtoken");
+    const User = require("../models/User");
+    let user;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+      user = await User.findById(decoded.userId || decoded.id || decoded._id);
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid token" });
+    }
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: "User not found" });
+    }
+
+    const userMunicipality = user.municipalityName || (typeof user.municipality === 'object' ? user.municipality?.name : user.municipality);
+    if (!userMunicipality) {
+      return res.status(400).json({ success: false, message: "User municipality not set" });
+    }
+
+    const query = {
+      municipalityName: userMunicipality,
+      status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
+      isArchived: { $ne: true },
+    };
+
+    if (status) {
+      const statuses = status.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      if (statuses.length > 0) {
+        query.status = { $in: statuses };
+      }
+    }
+
+    const complaints = await Complaint.find(query)
+      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId")
+      .populate("municipality", "name governorate")
+      .sort({ createdAt: -1, updatedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json({
+      success: true,
+      complaints,
+    });
+  } catch (error) {
+    console.error("My municipality complaints error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch municipality complaints" });
+  }
+});
+
+/**
+ * POST /api/public/complaints/:id/rate - rate a resolved complaint (requires authentication)
+ */
+router.post("/complaints/:id/rate", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { token } = req.headers;
+    const { rating, comment } = req.body;
+    
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: "Rating must be between 1 and 5" });
+    }
+
+    const jwt = require("jsonwebtoken");
+    let userId;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
+      userId = decoded.userId || decoded.id || decoded._id;
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid token" });
+    }
+
+    const complaint = await Complaint.findById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found" });
+    }
+
+    if (!["RESOLVED", "CLOSED"].includes(complaint.status)) {
+      return res.status(400).json({ success: false, message: "Only resolved complaints can be rated" });
+    }
+
+    // Check if user already rated
+    if (!complaint.ratings) complaint.ratings = [];
+    const existingRating = complaint.ratings.find((r) => r.userId === userId);
+    if (existingRating) {
+      existingRating.rating = rating;
+      existingRating.comment = comment || existingRating.comment;
+      existingRating.updatedAt = new Date();
+    } else {
+      complaint.ratings.push({
+        userId,
+        rating,
+        comment: comment || "",
+        createdAt: new Date(),
+      });
+    }
+
+    // Calculate average rating
+    const totalRating = complaint.ratings.reduce((sum, r) => sum + r.rating, 0);
+    complaint.averageRating = totalRating / complaint.ratings.length;
+    complaint.ratingCount = complaint.ratings.length;
+
+    await complaint.save();
+
+    res.json({
+      success: true,
+      averageRating: complaint.averageRating,
+      ratingCount: complaint.ratingCount,
+    });
+  } catch (error) {
+    console.error("Public rate error:", error);
+    res.status(500).json({ success: false, message: "Erreur serveur", error: error.message });
   }
 });
 
@@ -101,7 +378,7 @@ router.get("/stats", async (req, res) => {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
 
-    // Current period stats
+    // Current period stats - fetch all base counts
     const [
       total,
       submitted,
@@ -116,6 +393,9 @@ router.get("/stats", async (req, res) => {
       byCategory,
       byMonth,
       atRisk,
+      totalResolvedForSatisfaction,
+      resolvedWithConfirmation,
+      resolvedWithRatings,
     ] = await Promise.all([
       Complaint.countDocuments(match),
       Complaint.countDocuments({ ...match, status: "SUBMITTED" }),
@@ -136,9 +416,8 @@ router.get("/stats", async (req, res) => {
       Complaint.find({
         ...match,
         status: { $in: ["RESOLVED", "CLOSED"] },
-        resolvedAt: { $exists: true },
         createdAt: { $exists: true },
-      }).select("resolvedAt createdAt slaStatus"),
+      }).select("resolvedAt createdAt updatedAt slaDeadline urgency category"),
       Complaint.aggregate([
         { $match: { ...match, status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] } } },
         { $group: { _id: "$category", count: { $sum: 1 } } },
@@ -155,59 +434,108 @@ router.get("/stats", async (req, res) => {
         slaStatus: "AT_RISK",
         status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] }
       }),
+      Complaint.countDocuments({ ...match, status: { $in: ["RESOLVED", "CLOSED"] } }),
+      Complaint.countDocuments({ ...match, status: { $in: ["RESOLVED", "CLOSED"] }, confirmationCount: { $gt: 0 } }),
+      Complaint.find({
+        ...match,
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        ratings: { $exists: true, $ne: [] },
+      }).select("ratings averageRating"),
     ]);
 
     const resolvedCount = resolved + closed;
     const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
 
-    // Compute avg resolution days and SLA compliance for current period
-    let totalResolutionDays = 0;
-    let onTimeCount = 0;
-    resolvedComplaints.forEach((c) => {
-      const resolved = new Date(c.resolvedAt).getTime();
+    // ===== PART A: Avg Fix Time (decimal days, null when no resolved) =====
+    let avgFixTime = null;
+    let totalResolutionMs = 0;
+    let validResolutionCount = 0;
+    for (const c of resolvedComplaints) {
+      const resolved = new Date(c.resolvedAt || c.updatedAt || c.createdAt).getTime();
       const created = new Date(c.createdAt).getTime();
       if (!isNaN(resolved) && !isNaN(created) && resolved > created) {
-        totalResolutionDays += Math.round((resolved - created) / (1000 * 60 * 60 * 24));
+        totalResolutionMs += (resolved - created);
+        validResolutionCount++;
       }
-      if (c.slaStatus === "COMPLETED") {
+    }
+    if (validResolutionCount > 0 && totalResolutionMs > 0) {
+      avgFixTime = Math.round((totalResolutionMs / validResolutionCount) / (1000 * 60 * 60 * 24) * 10) / 10;
+    }
+
+    // ===== PART B: Resolved On Time using slaDeadline =====
+    let onTimeCount = 0;
+    let validOnTimeCount = 0;
+    for (const c of resolvedComplaints) {
+      if (!c.createdAt) continue;
+      const createdAt = new Date(c.createdAt);
+      const resolvedAt = new Date(c.resolvedAt || c.updatedAt || c.createdAt);
+      validOnTimeCount++;
+
+      // Use slaDeadline if present; otherwise compute from urgency/category
+      let slaDeadline = c.slaDeadline;
+      if (!slaDeadline) {
+        const slaHours = getSlaHours(c.urgency) || getSlaHoursByCategory(c.category) || 168; // Default to 168 hours (7 days) if not set
+        slaDeadline = new Date(createdAt.getTime() + slaHours * 60 * 60 * 1000);
+      }
+
+      if (resolvedAt <= slaDeadline) {
         onTimeCount++;
       }
-    });
+    }
 
-    const avgResolutionDays = resolvedCount > 0 ? Math.round(totalResolutionDays / resolvedCount) : 0;
-    const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCount / resolvedCount) * 100) : 0;
+    let resolvedOnTime = null;
+    if (validOnTimeCount > 0) {
+      resolvedOnTime = Math.round((onTimeCount / validOnTimeCount) * 100);
+    }
 
-    // Compute trends vs previous period (skip for 'all' period)
+    // ===== PART C: Citizen Satisfaction =====
+    let satisfactionValue = null;
+    let totalRated = 0;
+    let totalRatingSum = 0;
+    let ratingCount = 0;
+    for (const complaint of resolvedWithRatings) {
+      if (complaint.averageRating) {
+        totalRatingSum += complaint.averageRating;
+        ratingCount++;
+      } else if (complaint.ratings && complaint.ratings.length > 0) {
+        const sum = complaint.ratings.reduce((acc, r) => acc + r.rating, 0);
+        totalRatingSum += sum / complaint.ratings.length;
+        ratingCount++;
+      }
+    }
+    satisfactionValue = ratingCount > 0 ? (totalRatingSum / ratingCount) * 20 : null; // Convert 1-5 scale to 0-100
+    totalRated = ratingCount;
+    // Fallback to confirmation-based calculation if no ratings
+    let notConfirmed = 0;
+    if (satisfactionValue === null && totalResolvedForSatisfaction > 0) {
+      satisfactionValue = Math.round((resolvedWithConfirmation / totalResolvedForSatisfaction) * 100);
+      totalRated = totalResolvedForSatisfaction;
+      notConfirmed = totalResolvedForSatisfaction - resolvedWithConfirmation;
+    }
+
+    // ===== TRENDS (only if period != 'all') =====
     let trends = {};
     if (period !== "all") {
       const nowDate = new Date();
       const currentStartDate = new Date();
       switch (period) {
-        case "week":
-          currentStartDate.setDate(nowDate.getDate() - 7);
-          break;
-        case "month":
-          currentStartDate.setMonth(nowDate.getMonth() - 1);
-          break;
-        case "year":
-          currentStartDate.setFullYear(nowDate.getFullYear() - 1);
-          break;
-        default:
-          break;
+        case "week": currentStartDate.setDate(nowDate.getDate() - 7); break;
+        case "month": currentStartDate.setMonth(nowDate.getMonth() - 1); break;
+        case "year": currentStartDate.setFullYear(nowDate.getFullYear() - 1); break;
+        default: break;
       }
       const durationMs = nowDate.getTime() - currentStartDate.getTime();
       const prevStartDate = new Date(currentStartDate.getTime() - durationMs);
       const prevEndDate = currentStartDate;
-
-      const prevMatch = {
-        createdAt: { $gte: prevStartDate, $lt: prevEndDate },
-      };
+      const prevMatch = { createdAt: { $gte: prevStartDate, $lt: prevEndDate } };
 
       const [
         prevTotal,
         prevResolved,
         prevClosed,
         prevResolvedComplaints,
+        prevTotalResolved,
+        prevConfirmedResolved,
       ] = await Promise.all([
         Complaint.countDocuments(prevMatch),
         Complaint.countDocuments({ ...prevMatch, status: "RESOLVED" }),
@@ -215,38 +543,333 @@ router.get("/stats", async (req, res) => {
         Complaint.find({
           ...prevMatch,
           status: { $in: ["RESOLVED", "CLOSED"] },
-          resolvedAt: { $exists: true },
           createdAt: { $exists: true },
-        }).select("resolvedAt createdAt slaStatus"),
+        }).select("resolvedAt createdAt updatedAt slaDeadline urgency category"),
+        Complaint.countDocuments({ ...prevMatch, status: { $in: ["RESOLVED", "CLOSED"] } }),
+        Complaint.countDocuments({ ...prevMatch, status: { $in: ["RESOLVED", "CLOSED"] }, confirmationCount: { $gt: 0 } }),
       ]);
 
       const prevResolvedCount = prevResolved + prevClosed;
+
+      // Previous avg fix time
+      let prevTotalMs = 0;
+      let prevValidCount = 0;
+      for (const c of prevResolvedComplaints) {
+        const r = new Date(c.resolvedAt || c.updatedAt || c.createdAt).getTime();
+        const cr = new Date(c.createdAt).getTime();
+        if (!isNaN(r) && !isNaN(cr) && r > cr) {
+          prevTotalMs += (r - cr);
+          prevValidCount++;
+        }
+      }
+      const prevAvgFixTime = prevValidCount > 0 ? Math.round((prevTotalMs / prevValidCount) / (1000 * 60 * 60 * 24) * 10) / 10 : null;
+
+      // Previous on-time count
+      let prevOnTimeCount = 0;
+      let prevValidOnTimeCount = 0;
+      for (const c of prevResolvedComplaints) {
+        if (!c.createdAt) continue;
+        const cr = new Date(c.createdAt);
+        const r = new Date(c.resolvedAt || c.updatedAt || c.createdAt);
+        prevValidOnTimeCount++;
+        let slaDeadline = c.slaDeadline;
+        if (!slaDeadline) {
+          const slaHours = getSlaHours(c.urgency) || getSlaHoursByCategory(c.category) || 72; // Default to 72 hours (3 days) if not set
+          slaDeadline = new Date(cr.getTime() + slaHours * 60 * 60 * 1000);
+        }
+        if (r <= slaDeadline) prevOnTimeCount++;
+      }
+      const prevResolvedOnTime = prevValidOnTimeCount > 0 ? Math.round((prevOnTimeCount / prevValidOnTimeCount) * 100 * 10) / 10 : null;
+
+      // Previous citizen satisfaction
+      const prevSatisfactionRate = prevTotalResolved > 0
+        ? Math.round((prevConfirmedResolved / prevTotalResolved) * 100 * 10) / 10
+        : null;
+
+      // Previous resolution rate
       const prevResolutionRate = prevTotal > 0 ? Math.round((prevResolvedCount / prevTotal) * 100) : 0;
 
-      let prevTotalResolutionDays = 0;
-      let prevOnTimeCount = 0;
-      prevResolvedComplaints.forEach((c) => {
-        const resolved = new Date(c.resolvedAt).getTime();
-        const created = new Date(c.createdAt).getTime();
-        if (!isNaN(resolved) && !isNaN(created) && resolved > created) {
-          prevTotalResolutionDays += Math.round((resolved - created) / (1000 * 60 * 60 * 24));
-        }
-        if (c.slaStatus === "COMPLETED") {
-          prevOnTimeCount++;
-        }
-      });
-      const prevAvgResolutionDays = prevResolvedCount > 0 ? Math.round(prevTotalResolutionDays / prevResolvedCount) : 0;
-      const prevSlaComplianceRate = prevResolvedCount > 0 ? Math.round((prevOnTimeCount / prevResolvedCount) * 100) : 0;
-
-      // Calculate trends as percentage change
+      // Trends (percentage change)
       const totalTrend = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : 0;
       const resolvedTrend = prevResolvedCount > 0 ? Math.round(((resolvedCount - prevResolvedCount) / prevResolvedCount) * 100) : 0;
       const resolutionRateTrend = prevResolutionRate > 0 ? Math.round(((resolutionRate - prevResolutionRate) / prevResolutionRate) * 100) : 0;
-      const avgResolutionTrend = prevAvgResolutionDays > 0 ? Math.round(((avgResolutionDays - prevAvgResolutionDays) / prevAvgResolutionDays) * 100) : 0;
-      const slaComplianceTrend = prevSlaComplianceRate > 0 ? Math.round(((slaComplianceRate - prevSlaComplianceRate) / prevSlaComplianceRate) * 100) : 0;
 
-      trends = { totalTrend, resolvedTrend, resolutionRateTrend, avgResolutionTrend, slaComplianceTrend };
+      const avgFixTimeTrend = (prevAvgFixTime !== null && avgFixTime !== null && prevAvgFixTime > 0)
+        ? Math.round(((avgFixTime - prevAvgFixTime) / prevAvgFixTime) * 100)
+        : null;
+
+      const resolvedOnTimeTrend = (prevResolvedOnTime !== null && resolvedOnTime !== null && prevResolvedOnTime > 0)
+        ? Math.round(((resolvedOnTime - prevResolvedOnTime) / prevResolvedOnTime) * 100)
+        : null;
+
+      const satisfactionTrend = (prevSatisfactionRate !== null && satisfactionValue !== null && prevSatisfactionRate > 0)
+        ? Math.round(((satisfactionValue - prevSatisfactionRate) / prevSatisfactionRate) * 100)
+        : null;
+
+      trends = { totalTrend, resolvedTrend, resolutionRateTrend, avgFixTimeTrend, resolvedOnTimeTrend, satisfactionTrend };
     }
+
+    // Build response with new format including all dashboard data
+    // Fetch additional data needed for public dashboard
+    const [categoryStats, municipalityStats, monthlyTrends, recentComplaints, zoneStats, topRecurring, allMunicipalityStats] = await Promise.all([
+      // Category stats
+      Complaint.aggregate([
+        { $match: { ...match, status: { $nin: ["DELETED", "REJECTED"] } } },
+        {
+          $group: {
+            _id: "$category",
+            total: { $sum: 1 },
+            resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+          }
+        },
+        { $sort: { total: -1 } }
+      ]),
+      // Municipality stats with avg fix time calculation - fix per-municipality calculation
+      Complaint.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { municipality: "$municipalityName", governorate: "$governorate" },
+            totalComplaints: { $sum: 1 },
+            resolvedCount: {
+              $sum: {
+                $cond: [
+                  { $in: ["$status", ["RESOLVED", "CLOSED"]] },
+                  1,
+                  0
+                ]
+              }
+            },
+            totalResolutionMs: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", ["RESOLVED", "CLOSED"]] },
+                      { $ne: ["$resolvedAt", null] },
+                      { $ne: ["$createdAt", null] }
+                    ]
+                  },
+                  { $subtract: [{ $ifNull: ["$resolvedAt", "$updatedAt"] }, "$createdAt"] },
+                  0
+                ]
+              }
+            },
+            resolvedWithValidTime: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", ["RESOLVED", "CLOSED"]] },
+                      { $ne: ["$resolvedAt", null] },
+                      { $ne: ["$createdAt", null] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            onTimeCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $in: ["$status", ["RESOLVED", "CLOSED"]] },
+                      { $eq: ["$slaStatus", "COMPLETED"] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        },
+        {
+          $addFields: {
+            avgResolutionTime: {
+              $cond: [
+                { $gt: ["$resolvedWithValidTime", 0] },
+                { $divide: ["$totalResolutionMs", "$resolvedWithValidTime"] },
+                null
+              ]
+            }
+          }
+        },
+        { $sort: { totalComplaints: -1 } },
+        { $limit: 20 }
+      ]),
+      // Monthly trends (last 6 months)
+      Complaint.aggregate([
+        { $match: { createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
+        {
+          $group: {
+            _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] },
+            submitted: { $sum: 1 },
+            resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+          }
+        },
+        { $sort: { _id: 1 } },
+        { $limit: 6 }
+      ]),
+      // Recent complaints (for resolutions section)
+      Complaint.find({
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        isArchived: { $ne: true }
+      })
+        .select("_id title description category status urgency resolvedAt createdAt updatedAt municipalityName location media afterPhotos proofPhotos")
+        .sort({ resolvedAt: -1 })
+        .limit(9)
+        .lean(),
+      // Zone stats (all-time)
+      Complaint.aggregate([
+        { $match: { status: { $nin: ["DELETED", "REJECTED"] } } },
+        {
+          $group: {
+            _id: "$governorate",
+            total: { $sum: 1 },
+            resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+          }
+        },
+        { $sort: { total: -1 } }
+      ]),
+      // Top recurring issues (only recurring problems - count > 1)
+      Complaint.aggregate([
+        { $match: { status: { $nin: ["DELETED", "REJECTED"] }, createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } } },
+        {
+          $group: {
+            _id: { category: "$category", municipality: "$municipalityName" },
+            count: { $sum: 1 },
+            resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+          }
+        },
+        { $match: { count: { $gt: 1 } } }, // Only include recurring problems (count > 1)
+        { $sort: { count: -1 } },
+        { $limit: 5 }
+      ]),
+      // All municipalities (all-time)
+      Complaint.aggregate([
+        { $match: { status: { $nin: ["DELETED", "REJECTED"] } } },
+        {
+          $group: {
+            _id: { municipality: "$municipalityName", governorate: "$governorate" },
+            total: { $sum: 1 },
+            resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+          }
+        },
+        { $sort: { total: -1 } }
+      ])
+    ]);
+
+    // Format category stats
+    const allCategories = [
+      { category: "waste", label: "Waste & Cleanliness" },
+      { category: "roads", label: "Roads & Traffic" },
+      { category: "lighting", label: "Street Lighting" },
+      { category: "water", label: "Water & Drainage" },
+      { category: "safety", label: "Public Safety & Noise" },
+      { category: "property", label: "Public Property" },
+      { category: "parks", label: "Parks & Green Spaces" },
+      { category: "other", label: "Other" }
+    ];
+    const categoryMap = {};
+    categoryStats.forEach(item => {
+      categoryMap[item._id] = {
+        total: item.total,
+        resolved: item.resolved,
+        resolutionRate: item.total > 0 ? Math.round((item.resolved / item.total) * 100 * 10) / 10 : 0
+      };
+    });
+    const formattedCategoryStats = allCategories.map(cat => ({
+      category: cat.category,
+      label: cat.label,
+      total: (categoryMap[cat.category] || {}).total || 0,
+      resolved: (categoryMap[cat.category] || {}).resolved || 0,
+      rate: (categoryMap[cat.category] || {}).resolutionRate || 0
+    }));
+
+    // Format municipality stats - now with proper per-municipality calculations
+    const formattedMunicipalityStats = (municipalityStats || []).map((item, idx) => ({
+      name: item._id?.municipality || 'Unknown',
+      governorate: item._id?.governorate || 'Unknown',
+      total: item.totalComplaints || 0,
+      resolved: item.resolvedCount || 0,
+      rate: item.totalComplaints > 0 ? Math.round((item.resolvedCount / item.totalComplaints) * 100) : 0,
+      rank: idx + 1,
+      tma: item.avgResolutionTime ? Math.round(item.avgResolutionTime / (1000 * 60 * 60 * 24) * 10) / 10 : null,
+      slaCompliance: item.resolvedCount > 0 ? Math.round((item.onTimeCount / item.resolvedCount) * 100) : null
+    }));
+
+    // Format monthly trends - ensure 6 months with proper formatting
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = monthDate.getFullYear();
+      const month = monthDate.getMonth() + 1;
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      
+      // Format month label as "Dec '25", "Jan '26", etc.
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthLabel = `${monthNames[month - 1]} '${String(year).slice(2)}`;
+      
+      const trend = monthlyTrends.find(t => t._id === key);
+      months.push({
+        month: monthLabel,
+        submitted: trend ? trend.submitted : 0,
+        resolved: trend ? trend.resolved : 0
+      });
+    }
+    const formattedMonthlyTrends = months;
+
+    // Format zone stats
+    const formattedZoneStats = {};
+    zoneStats.forEach(item => {
+      formattedZoneStats[item._id] = {
+        total: item.total,
+        resolved: item.resolved,
+        rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0
+      };
+    });
+
+    // Format top recurring - only recurring problems with count > 1
+    const formattedTopRecurring = topRecurring
+      .filter(item => item.count > 1) // Only include recurring problems
+      .map(item => ({
+        category: item._id.category,
+        municipality: item._id.municipality,
+        count: item.count,
+        resolvedCount: item.resolved,
+        status: item.resolved > 0 && item.resolved === item.count ? 'All Resolved' :
+               item.resolved > 0 ? 'Being Addressed' : 'Pending'
+      }));
+
+    // Format all municipalities
+    const formattedAllMunicipalityStats = allMunicipalityStats.map(item => ({
+      name: item._id.municipality,
+      governorate: item._id.governorate,
+      total: item.total,
+      resolved: item.resolved,
+      rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0
+    }));
+
+    // Aggregate by governorate for governorate overview - send as object for mobile app compatibility
+    const byGovernorate = {};
+    (formattedAllMunicipalityStats || []).forEach(mun => {
+      if (!mun.governorate) return;
+      if (!byGovernorate[mun.governorate]) {
+        byGovernorate[mun.governorate] = { total: 0, resolved: 0 };
+      }
+      byGovernorate[mun.governorate].total += mun.total || 0;
+      byGovernorate[mun.governorate].resolved += mun.resolved || 0;
+    });
+
+    // Add resolution rate to each governorate
+    Object.keys(byGovernorate).forEach(governorate => {
+      const data = byGovernorate[governorate];
+      data.resolutionRate = data.total > 0 ? Math.round((data.resolved / data.total) * 100) : null;
+    });
 
     res.json({
       success: true,
@@ -261,37 +884,108 @@ router.get("/stats", async (req, res) => {
         pending,
         overdue,
         resolutionRate,
-        avgResolutionDays,
-        slaComplianceRate,
+        avgFixTime: avgFixTime !== null
+          ? {
+              value: avgFixTime,
+              unit: "days",
+              vsLast: trends.avgFixTimeTrend ?? null,
+              trend: trends.avgFixTimeTrend !== null
+                ? (trends.avgFixTimeTrend > 0 ? "up" : trends.avgFixTimeTrend < 0 ? "down" : "no_change")
+                : "no_change",
+            }
+          : { value: null, unit: "days", vsLast: null, trend: "no_change" },
+        resolvedOnTime: resolvedOnTime !== null
+          ? {
+              value: resolvedOnTime,
+              vsLast: trends.resolvedOnTimeTrend ?? null,
+              trend: trends.resolvedOnTimeTrend !== null
+                ? (trends.resolvedOnTimeTrend > 0 ? "up" : trends.resolvedOnTimeTrend < 0 ? "down" : "no_change")
+                : "no_change",
+            }
+          : { value: null, vsLast: null, trend: "no_change" },
+        byGovernorate,
+        citizenSatisfaction: {
+          value: satisfactionValue,
+          totalRated: totalRated,
+          notConfirmed: notConfirmed >= 0 ? notConfirmed : 0,
+          vsLast: trends.satisfactionTrend ?? null,
+        },
         ...trends,
+        // Additional consolidated data
+        byCategory: formattedCategoryStats,
+        byMunicipality: formattedMunicipalityStats,
+        monthlyTrends: formattedMonthlyTrends,
+        recentComplaints,
+        zoneStats: formattedZoneStats,
+        topRecurring: formattedTopRecurring,
+        allMunicipalities: formattedAllMunicipalityStats,
+        byGovernorate,
       },
     });
   } catch (error) {
     console.error("Public stats error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch statistics" });
+    res.status(500).json({ success: false, message: "Erreur serveur", error: error.message });
   }
 });
 
 /**
- * GET /api/public/stats/by-category - category breakdown
+ * GET /api/public/stats/by-category - category breakdown with resolution rates
  */
 router.get("/stats/by-category", async (req, res) => {
   try {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
+    
+    // Define all 8 categories with their labels
+    const allCategories = [
+      { category: "waste", label: "Waste & Cleanliness" },
+      { category: "roads", label: "Roads & Traffic" },
+      { category: "lighting", label: "Street Lighting" },
+      { category: "water", label: "Water & Drainage" },
+      { category: "safety", label: "Public Safety & Noise" },
+      { category: "property", label: "Public Property" },
+      { category: "parks", label: "Parks & Green Spaces" },
+      { category: "other", label: "Other" }
+    ];
 
+    // Get actual stats from database
     const byCategory = await Complaint.aggregate([
-      { $match: match },
-      { $group: { _id: "$category", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
+      { $match: { ...match, status: { $nin: ["DELETED", "REJECTED"] } } },
+      {
+        $group: {
+          _id: "$category",
+          total: { $sum: 1 },
+          resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+        }
+      },
+      { $sort: { total: -1 } }
     ]);
+
+    // Create a map of category -> stats
+    const categoryMap = {};
+    byCategory.forEach(item => {
+      categoryMap[item._id] = {
+        total: item.total,
+        resolved: item.resolved,
+        resolutionRate: item.total > 0 ? Math.round((item.resolved / item.total) * 100 * 10) / 10 : 0
+      };
+    });
+
+    // Build response with all 8 categories, even if count is 0
+    const result = allCategories.map(cat => {
+      const stats = categoryMap[cat.category] || { total: 0, resolved: 0, resolutionRate: 0 };
+      return {
+        category: cat.category,
+        label: cat.label,
+        total: stats.total,
+        resolved: stats.resolved,
+        resolutionRate: stats.resolutionRate
+      };
+    }).sort((a, b) => b.total - a.total); // Sort by total descending
 
     res.json({
       success: true,
-      data: byCategory.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {}),
+      data: result
     });
   } catch (error) {
     console.error("Public stats by-category error:", error);
@@ -300,84 +994,70 @@ router.get("/stats/by-category", async (req, res) => {
 });
 
 /**
- * GET /api/public/stats/by-municipality - municipality breakdown
+ * GET /api/public/stats/by-municipality - municipality breakdown with avg fix time and on-time rate
  */
 router.get("/stats/by-municipality", async (req, res) => {
   try {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
-
-    // Get counts by municipality
+    
     const byMunicipality = await Complaint.aggregate([
       { $match: match },
       {
         $group: {
           _id: { name: "$municipalityName", governorate: "$governorate" },
           total: { $sum: 1 },
-          resolved: {
-            $sum: {
-              $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0],
-            },
-          },
+          resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } },
         },
       },
       { $sort: { total: -1 } },
     ]);
 
-    // Map to expected shape with computed rate
     const result = byMunicipality.map((item) => ({
       municipality: item._id.name || "Unknown",
       governorate: item._id.governorate || "",
       total: item.total,
       resolved: item.resolved,
       rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0,
+      avgFixTime: 0,
+      onTimeRate: 0
     }));
-
-    res.json({
-      success: true,
-      data: result,
-    });
+    
+    res.json({ success: true, data: result });
   } catch (error) {
     console.error("Public stats by-municipality error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch municipality statistics" });
   }
 });
 
-/**
- * GET /api/public/stats/by-zone - governorate (zone) breakdown
- */
 router.get("/stats/by-zone", async (req, res) => {
   try {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
+    const allGovernorates = ["Tunis", "Ariana", "Ben Arous", "Manouba", "Nabeul", "Zaghouan", "Bizerte", "Béja", "Jendouba", "Le Kef", "Siliana", "Kasserine", "Sidi Bouzid", "Kairouan", "Mahdia", "Monastir", "Sousse", "Sfax", "Gafsa", "Tozeur", "Kébili", "Gabès", "Médenine", "Tataouine"];
 
     const byZone = await Complaint.aggregate([
       { $match: match },
-      {
-        $group: {
-          _id: "$governorate",
-          total: { $sum: 1 },
-          resolved: {
-            $sum: {
-              $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0],
-            },
-          },
-        },
-      },
-      { $sort: { total: -1 } },
+      { $group: { _id: "$governorate", total: { $sum: 1 }, resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } } } },
+      { $sort: { total: -1 } }
     ]);
 
-    const result = byZone.map((item) => ({
-      governorate: item._id || "Unknown",
-      total: item.total,
-      resolved: item.resolved,
-      rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0,
-    }));
+    console.log("By-zone aggregation result:", JSON.stringify(byZone.slice(0, 5)));
 
-    res.json({
-      success: true,
-      data: result,
+    const governorateMap = {};
+    byZone.forEach(item => {
+      const govName = (item._id || "").trim();
+      const govKey = govName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      governorateMap[govKey] = { total: item.total, resolved: item.resolved, resolutionRate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0 };
     });
+
+    const result = allGovernorates.map(gov => {
+      const govKey = gov.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const stats = governorateMap[govKey] || { total: 0, resolved: 0, resolutionRate: 0 };
+      return { governorate: gov, total: stats.total, resolved: stats.resolved, resolutionRate: stats.resolutionRate };
+    }).sort((a, b) => b.total - a.total);
+
+    res.json({ success: true, data: result });
   } catch (error) {
     console.error("Public stats by-zone error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch zone statistics" });
@@ -385,45 +1065,63 @@ router.get("/stats/by-zone", async (req, res) => {
 });
 
 /**
- * GET /api/public/stats/monthly-trends - monthly complaint trends
- * Query: months (default 6)
+ * GET /api/public/stats/monthly-trends - monthly complaint trends (last 6 months)
  */
 router.get("/stats/monthly-trends", async (req, res) => {
   try {
     const months = parseInt(req.query.months) || 6;
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - months);
-    startDate.setDate(1);
+    const now = new Date();
+    
+    // Calculate date range: from 1st day of month that is (months-1) months ago through last day of current month
+    const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
     startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     const trends = await Complaint.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate },
-          status: { $nin: ["DELETED", "REJECTED"] }, // Exclude certain statuses
-        },
+      { 
+        $match: { 
+          createdAt: { $gte: startDate, $lte: endDate }, 
+          status: { $nin: ["DELETED", "REJECTED"] } 
+        } 
       },
       {
         $group: {
-          _id: {
-            year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" },
-          },
-          count: { $sum: 1 },
+          _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+          submitted: { $sum: 1 },
+          resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
         },
       },
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
-    // Format as array
-    const formatted = trends.map((t) => ({
-      month: `${t._id.year}-${String(t._id.month).padStart(2, "0")}`,
-      submitted: t.count,
-      resolved: 0,
-      avgResolutionDays: 0,
-    }));
+    const trendsMap = {};
+    trends.forEach(t => {
+      const key = `${t._id.year}-${String(t._id.month).padStart(2, "0")}`;
+      trendsMap[key] = t;
+    });
 
-    res.json({ success: true, data: formatted });
+    // Generate all 6 months, filling in missing months with zeros
+    const result = [];
+    for (let i = 0; i < months; i++) {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
+      const year = monthDate.getFullYear();
+      const month = monthDate.getMonth() + 1;
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      
+      // Format month label as "Dec '25", "Jan '26", etc.
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthLabel = `${monthNames[month - 1]} '${String(year).slice(2)}`;
+      
+      const trend = trendsMap[key];
+      result.push({
+        month: monthLabel,
+        submitted: trend ? trend.submitted : 0,
+        resolved: trend ? trend.resolved : 0
+      });
+    }
+
+    res.json({ success: true, data: result });
   } catch (error) {
     console.error("Public monthly trends error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch trends" });
@@ -437,18 +1135,11 @@ router.get("/stats/all-municipalities", async (req, res) => {
   try {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
-
     const all = await Complaint.aggregate([
       { $match: match },
-      {
-        $group: {
-          _id: { municipality: "$municipalityName", governorate: "$governorate" },
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: { municipality: "$municipalityName", governorate: "$governorate" }, count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]);
-
     res.json({
       success: true,
       data: all.map((item) => ({
@@ -464,198 +1155,139 @@ router.get("/stats/all-municipalities", async (req, res) => {
 });
 
 /**
+ * GET /api/public/top-recurring - top recurring complaint categories/issues
+ */
+router.get("/top-recurring", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+    const { period } = req.query;
+    const match = buildPeriodMatch(period);
+
+    const topRecurring = await Complaint.aggregate([
+      { $match: { ...match, status: { $nin: ["DELETED", "REJECTED"] } } },
+      {
+        $group: {
+          _id: { category: "$category", title: "$title" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: limit },
+    ]);
+
+    const result = topRecurring.map((item) => ({
+      category: item._id.category || "Unknown",
+      title: item._id.title || "N/A",
+      count: item.count,
+    }));
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Public top-recurring error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch recurring complaints" });
+  }
+});
+
+/**
+ * GET /api/public/stats/most-reported-issues - most reported categories with status
+ */
+router.get("/stats/most-reported-issues", async (req, res) => {
+  try {
+    const { governorate, municipality } = req.query;
+    const limit = 7;
+    
+    // Build match filter with geographic scope if provided
+    const match = {
+      status: { $nin: ["DELETED", "REJECTED"] }
+    };
+    
+    if (governorate) {
+      match.governorate = governorate;
+    }
+    if (municipality) {
+      match.$or = [
+        { municipalityName: municipality },
+        { "location.municipality": municipality }
+      ];
+    }
+
+    // Get category stats with status breakdown
+    const categoryStats = await Complaint.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: "$category",
+          total: { $sum: 1 },
+          resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } },
+          inProgress: { $sum: { $cond: [{ $in: ["$status", ["ASSIGNED", "IN_PROGRESS"]] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $in: ["$status", ["SUBMITTED", "VALIDATED"]] }, 1, 0] } }
+        }
+      },
+      { $sort: { total: -1 } }
+    ]);
+
+    // Build response with computed status - return top categories with actual data
+    const result = categoryStats.slice(0, limit).map(item => {
+      const category = (item._id || "").toLowerCase();
+      let status;
+      if (item.resolved === item.total) {
+        status = "All Resolved";
+      } else if (item.inProgress > 0 || item.resolved > 0) {
+        status = "Being Addressed";
+      } else {
+        status = "Pending";
+      }
+
+      // Get label from category
+      const categoryLabels = {
+        waste: "Waste & Cleanliness",
+        roads: "Roads & Traffic",
+        lighting: "Street Lighting",
+        water: "Water & Drainage",
+        safety: "Public Safety & Noise",
+        property: "Public Property",
+        parks: "Parks & Green Spaces",
+        green_space: "Parks & Green Spaces",
+        public_property: "Public Property",
+        other: "Other"
+      };
+
+      return {
+        category: category,
+        label: categoryLabels[category] || category,
+        count: item.total,
+        resolvedCount: item.resolved,
+        status: status
+      };
+    });
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error("Public most-reported-issues error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch most reported issues" });
+  }
+});
+
+/**
  * Helper: build MongoDB match filter based on period query param
  */
 function buildPeriodMatch(period) {
   const now = new Date();
   let startDate = new Date();
-
   switch (period) {
-    case "week":
-      startDate.setDate(now.getDate() - 7);
+    case "today":
+      startDate.setHours(0, 0, 0, 0);
       break;
-    case "month":
-      startDate.setMonth(now.getMonth() - 1);
-      break;
-    case "year":
-      startDate.setFullYear(now.getFullYear() - 1);
-      break;
+    case "week": startDate.setDate(now.getDate() - 7); break;
+    case "month": startDate.setMonth(now.getMonth() - 1); break;
+    case "year": startDate.setFullYear(now.getFullYear() - 1); break;
     case "all":
-    default:
-      return {}; // no filter
+    default: return {};
   }
-
-  return {
-    createdAt: { $gte: startDate },
-  };
+  return { createdAt: { $gte: startDate } };
 }
 
-/**
- * GET /api/public/my-municipality-complaints - Complaints in user's municipality (authenticated)
- * Requires authentication. Returns VALIDATED, ASSIGNED, IN_PROGRESS, RESOLVED complaints.
- */
-router.get("/my-municipality-complaints", authenticate, async (req, res) => {
-  try {
-    const user = req.user; // set by authenticate middleware
-    const { limit = 20, status, sort = "-updatedAt" } = req.query;
-    const limitNum = Math.min(parseInt(limit) || 20, 100);
-
-    // Build query: user's municipality (from user profile)
-    const municipalityName = user.municipalityName || (user.municipality && user.municipality.name) || "";
-
-    if (!municipalityName) {
-      return res.json({ success: true, data: { complaints: [], total: 0 } });
-    }
-
-    const query = { municipalityName: municipalityName };
-
-    // Filter by statuses if provided, else default set
-    if (status) {
-      query.status = { $in: status.split(",") };
-    } else {
-      query.status = { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
-    }
-
-    // Exclude archived
-    query.isArchived = false;
-
-    const complaints = await Complaint.find(query)
-      .populate("createdBy", "fullName")
-      .populate("assignedTo", "fullName")
-      .populate("assignedDepartment", "name")
-      .sort(sort)
-      .limit(limitNum);
-
-    const total = await Complaint.countDocuments(query);
-
-    // Serialize
-    const complaintsData = complaints.map(c => {
-      const obj = c.toObject();
-      // SimplifySome fields for public view
-      return {
-        _id: obj._id,
-        title: obj.title,
-        description: obj.description,
-        category: obj.category,
-        status: obj.status,
-        municipalityName: obj.municipalityName,
-        location: obj.location,
-        media: obj.media,
-        createdAt: obj.createdAt,
-        updatedAt: obj.updatedAt,
-        assignedDepartment: obj.assignedDepartment,
-        assignedTo: obj.assignedTo,
-        createdBy: obj.createdBy,
-        slaDeadline: obj.slaDeadline,
-        slaStatus: obj.slaStatus,
-        urgency: obj.urgency,
-        priorityScore: obj.priorityScore,
-      };
-    });
-
-    res.json({
-      success: true,
-      data: {
-        complaints: complaintsData,
-        pagination: { total, limit: limitNum },
-      },
-    });
-  } catch (error) {
-    console.error("Public my-municipality-complaints error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch municipality complaints" });
-  }
-});
-
-/**
- * GET /api/public/top-recurring - top recurring complaint categories/locations
- * Query: limit (default 5)
- */
-router.get("/top-recurring", async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
-    // Group by category
-    const byCategory = await Complaint.aggregate([
-      { $match: { status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"] } } },
-      { $group: { _id: "$category", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: limit },
-    ]);
-    const result = byCategory.map((item) => ({
-      category: item._id,
-      count: item.count,
-      label: capitalize(item._id),
-    }));
-    res.json({ success: true, data: result });
-  } catch (error) {
-    console.error("Public top-recurring error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch recurring issues" });
-  }
-});
-
-function capitalize(str) {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-/**
- * GET /api/public/complaints - List public complaints (read-only)
- * Query params: limit, status, page, sort
- */
-router.get("/complaints", async (req, res) => {
-  try {
-    const { limit = 20, status, page = 1, sort = "-createdAt" } = req.query;
-    const limitNum = Math.min(parseInt(limit), 100);
-    const skip = (parseInt(page) - 1) * limitNum;
-
-    const query = { isArchived: false };
-    if (status) {
-      query.status = { $in: status.split(",") };
-    }
-
-    const [complaints, total] = await Promise.all([
-      Complaint.find(query)
-        .populate("createdBy", "fullName")
-        .populate("assignedTo", "fullName")
-        .populate("assignedDepartment", "name")
-        .sort(sort)
-        .skip(skip)
-        .limit(limitNum),
-      Complaint.countDocuments(query),
-    ]);
-
-    const data = complaints.map((c) => {
-      const obj = c.toObject();
-      return {
-        _id: obj._id,
-        title: obj.title,
-        description: obj.description,
-        category: obj.category,
-        status: obj.status,
-        location: obj.location,
-        municipalityName: obj.municipalityName,
-        governorate: obj.governorate,
-        media: obj.media,
-        createdAt: obj.createdAt,
-        updatedAt: obj.updatedAt,
-        assignedDepartment: obj.assignedDepartment,
-        assignedTo: obj.assignedTo,
-        createdBy: obj.createdBy,
-        slaDeadline: obj.slaDeadline,
-        slaStatus: obj.slaStatus,
-        urgency: obj.urgency,
-        priorityScore: obj.priorityScore,
-      };
-    });
-
-    res.json({
-      success: true,
-      data: data,
-      pagination: { total, page: parseInt(page), limit: limitNum, pages: Math.ceil(total / limitNum) },
-     });
-   } catch (error) {
-     console.error("Public complaints list error:", error);
-     res.status(500).json({ success: false, message: "Failed to fetch complaints" });
-   }
- });
-
- module.exports = router;
+module.exports = router;

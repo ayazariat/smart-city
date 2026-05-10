@@ -4,6 +4,7 @@ const { authenticate, authorize } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");
 
 router.get("/complaints", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.getComplaints(req, res));
+router.get("/complaints/geo", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.getComplaintsGeo(req, res));
 router.get("/stats", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.getStats(req, res));
 router.put("/complaints/:id/validate", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.validate(req, res));
 router.put("/complaints/:id/reject", authenticate, authorize("DEPARTMENT_MANAGER"), (req, res) => managerController.reject(req, res));

@@ -16,6 +16,55 @@ const ACTIVE_STATUSES = [
 const ARCHIVE_STATUSES = ["REJECTED", "CLOSED"];
 const ALL_STATUSES = [...ACTIVE_STATUSES, ...ARCHIVE_STATUSES];
 
+const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const addOrScope = (query, conditions) => {
+  const scopedConditions = conditions.filter(Boolean);
+  if (scopedConditions.length === 0) {
+    query._id = null;
+    return;
+  }
+
+  if (query.$or) {
+    query.$and = [...(query.$and || []), { $or: query.$or }, { $or: scopedConditions }];
+    delete query.$or;
+  } else {
+    query.$or = scopedConditions;
+  }
+};
+
+const municipalityScopeConditions = (user = {}) => {
+  const municipalityName = user.municipalityName || user.municipality?.name || "";
+  const normalizedMun = normalizeMunicipality(municipalityName);
+  const conditions = [];
+
+  if (user.municipality?._id) {
+    conditions.push({ municipality: user.municipality._id });
+  }
+
+  if (municipalityName) {
+    const munRegex = new RegExp(`^${escapeRegex(municipalityName)}$`, "i");
+    conditions.push(
+      { municipalityName: munRegex },
+      { "location.municipality": munRegex },
+    );
+  }
+
+  if (normalizedMun) {
+    conditions.push({ municipalityNormalized: normalizedMun });
+  }
+
+  return conditions;
+};
+
+const departmentScopeConditions = (departmentId) => {
+  if (!departmentId) return [];
+  return [
+    { "assignedDepartment.id": departmentId },
+    { assignedDepartment: departmentId },
+  ];
+};
+
 class ComplaintController {
   // Create new complaint (citizen)
   async create(req, res) {
@@ -205,10 +254,13 @@ class ComplaintController {
         }
       }
 
-      // For DEPARTMENT_MANAGER - check department access
+      // For DEPARTMENT_MANAGER - check department access OR municipality access
       if (userRole === "DEPARTMENT_MANAGER") {
         // First check if user has department assigned in user profile
-        const user = await User.findById(userId).select('department').lean();
+        const user = await User.findById(userId)
+          .select('department municipality municipalityName')
+          .populate('municipality')
+          .lean();
         let myDepartmentId = null;
         
         if (user?.department) {
@@ -224,14 +276,28 @@ class ComplaintController {
           }
         }
         
-        // If manager has no department or complaint has no department, allow access
+        // Check department access
         const complaintDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
-        if (myDepartmentId && complaintDeptId) {
-          if (complaintDeptId !== myDepartmentId) {
+        
+        // Check municipality access as fallback
+        const userMunicipalityName = normalizeMunicipality(user?.municipalityName || user?.municipality?.name || "");
+        const complaintMunicipalityName = normalizeMunicipality(
+          complaint.municipalityNormalized || complaint.municipalityName || complaint.municipality?.name || complaint.location?.municipality || ""
+        );
+        
+        // Allow access if:
+        // 1. Complaint is in manager's department, OR
+        // 2. Complaint is in manager's municipality (for RESOLVED complaints that need review), OR
+        // 3. No department assigned to either
+        const departmentMatch = myDepartmentId && complaintDeptId && complaintDeptId === myDepartmentId;
+        const municipalityMatch = userMunicipalityName && complaintMunicipalityName && userMunicipalityName === complaintMunicipalityName;
+        const resolvedNeedsReview = complaint.status === "RESOLVED" && municipalityMatch;
+        
+        if (!departmentMatch && !resolvedNeedsReview && (myDepartmentId || complaintDeptId)) {
+          if (complaintDeptId && myDepartmentId && complaintDeptId !== myDepartmentId) {
             return res.status(403).json({ success: false, message: "Access denied - This complaint is not in your department" });
           }
         }
-        // If no department assigned to either, allow manager to view (they may need to assign)
       }
 
       // For non-admin/agent/technician roles - check ownership or assignment
@@ -368,7 +434,100 @@ class ComplaintController {
     }
   }
 
-  // Get all complaints (admin/agent)
+  async applyComplaintScope(query, req) {
+    const userId = req.user.userId;
+    const role = req.user.role;
+
+    if (role === "ADMIN") return;
+
+    const user = await User.findById(userId)
+      .populate("municipality")
+      .select("department municipality municipalityName governorate")
+      .lean();
+
+    if (role === "MUNICIPAL_AGENT" || role === "CITIZEN") {
+      const municipalityConditions = municipalityScopeConditions(user);
+      if (municipalityConditions.length > 0) {
+        addOrScope(query, municipalityConditions);
+      } else if (user?.governorate) {
+        query.governorate = user.governorate;
+      } else if (role === "CITIZEN") {
+        query.createdBy = userId;
+      } else {
+        query._id = null;
+      }
+      return;
+    }
+
+    if (role === "DEPARTMENT_MANAGER") {
+      const municipalityConditions = municipalityScopeConditions(user);
+      if (municipalityConditions.length > 0) {
+        addOrScope(query, municipalityConditions);
+      } else if (user?.governorate) {
+        query.governorate = user.governorate;
+      } else {
+        let departmentId = user?.department;
+        if (!departmentId) {
+          const myDepartment = await Department.findOne({ responsable: userId }).select("_id").lean();
+          departmentId = myDepartment?._id;
+        }
+        addOrScope(query, departmentScopeConditions(departmentId));
+      }
+      return;
+    }
+
+    if (role === "TECHNICIAN") {
+      const departmentConditions = departmentScopeConditions(user?.department);
+      if (departmentConditions.length > 0) {
+        addOrScope(query, departmentConditions);
+      } else {
+        const RepairTeam = require("../models/RepairTeam");
+        const teams = await RepairTeam.find({ members: userId }).select("_id").lean();
+        addOrScope(query, [
+          { assignedTo: userId },
+          { assignedTeam: { $in: teams.map((team) => team._id) } },
+        ]);
+      }
+    }
+  }
+
+  async getRecentResolutions(req, res) {
+    try {
+      const query = {
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        resolvedAt: { $exists: true, $ne: null },
+        isArchived: { $ne: true },
+      };
+
+      await this.applyComplaintScope(query, req);
+
+      const complaints = await Complaint.find(query)
+        .select("_id title category status urgency priorityScore resolvedAt municipality municipalityName assignedDepartment location media afterPhotos proofPhotos")
+        .populate("municipality", "name governorate")
+        .sort({ resolvedAt: -1 })
+        .limit(5)
+        .lean();
+
+      res.json({
+        success: true,
+        data: complaints.map((complaint) => ({
+          _id: complaint._id,
+          title: complaint.title,
+          category: complaint.category,
+          status: complaint.status,
+          priority: complaint.urgency || complaint.priorityScore || null,
+          resolvedAt: complaint.resolvedAt,
+          municipality: complaint.municipality || complaint.municipalityName || complaint.location?.municipality || null,
+          assignedDepartment: complaint.assignedDepartment || null,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching recent resolutions:", error);
+      res.status(500).json({ success: false, message: "Failed to fetch recent resolutions" });
+    }
+  }
+
+  // Get all complaints (admin/agent/manager/technician)
   async getAllComplaints(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
@@ -390,10 +549,9 @@ class ComplaintController {
 
       const query = {};
 
-      // Filter out archived complaints by default (unless explicitly requested)
+      // Keep archived records out by default, but do not exclude any status.
       if (!includeArchived) {
         query.isArchived = { $ne: true };
-        query.status = { $in: ACTIVE_STATUSES };
       }
 
       if (requestedStatuses.length > 0) {
@@ -410,85 +568,15 @@ class ComplaintController {
         }
       }
 
-      // Role-based filtering
-      if (req.user.role === "DEPARTMENT_MANAGER") {
-        // First check if user has department assigned in their profile
-        const user = await User.findById(req.user.userId).select('department').lean();
-        let myDepartmentId = null;
-        
-        if (user?.department) {
-          myDepartmentId = user.department;
-        } else {
-          // Fallback: try to find department where user is responsible
-          const myDepartment = await Department.findOne({ 
-            responsable: req.user.userId 
-          }).select('_id').lean();
-          
-          if (myDepartment) {
-            myDepartmentId = myDepartment._id;
-          }
-        }
-        
-        if (myDepartmentId) {
-          // Filter by assigned department
-          query.assignedDepartment = myDepartmentId;
-          // Managers default to active complaints only when no explicit status filter is requested.
-          if (!status && !includeArchived) {
-            query.status = { $in: ACTIVE_STATUSES };
-          }
-        } else {
-          // Manager has no department assigned - return empty
-          query._id = null;
-        }
-      } else if (req.user.role === "MUNICIPAL_AGENT") {
-        // Municipal agents see all complaints in their municipality
-        const user = await User.findById(req.user.userId)
-          .populate('municipality')
-          .select('municipality municipalityName governorate')
-          .lean();
-        
-        if (user?.municipality?._id) {
-          // Use $or to check both municipality ID and municipalityName
-          query.$or = [
-            { municipality: user.municipality._id },
-            { municipalityName: { $regex: new RegExp(`^${user.municipalityName || user.municipality?.name}$`, 'i') } },
-            { 'location.municipality': { $regex: new RegExp(`^${user.municipalityName || user.municipality?.name}$`, 'i') } }
-          ];
-        } else if (user?.municipalityName) {
-          // Fallback to municipalityName string
-          query.$or = [
-            { municipalityName: { $regex: new RegExp(`^${user.municipalityName}$`, 'i') } },
-            { 'location.municipality': { $regex: new RegExp(`^${user.municipalityName}$`, 'i') } }
-          ];
-        } else if (user?.governorate) {
-          query.governorate = user.governorate;
-        } else {
-          // Agent has no municipality, governorate, or municipality ID — return empty
-          query._id = null;
-        }
-      } else if (req.user.role === "TECHNICIAN") {
-        // Technicians see complaints assigned to them OR as member of repair team
-        const RepairTeam = require('../models/RepairTeam');
-        const teams = await RepairTeam.find({ members: req.user.userId }).select('_id').lean();
-        const teamIds = teams.map(t => t._id);
-        
-        query.$or = [
-          { assignedTo: req.user.userId },
-          { assignedTeam: { $in: teamIds } }
-        ];
-        // Technicians see all statuses for their assigned complaints
-        if (!status) {
-          query.status = { $in: ["ASSIGNED", "IN_PROGRESS", "RESOLVED"] };
-        }
-      }
+      await this.applyComplaintScope(query, req);
 
       if (category) query.category = category;
       if (governorate && req.user.role === "ADMIN") query.governorate = governorate; // Admin can filter by governorate
       if (municipality && req.user.role === "ADMIN") {
         const normalizedMun = normalizeMunicipality(municipality);
         const muniConditions = [
-          { municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, "i") } },
-          { "location.municipality": { $regex: new RegExp(`^${normalizedMun}$`, "i") } },
+          { municipalityName: { $regex: new RegExp(`^${escapeRegex(municipality)}$`, "i") } },
+          { "location.municipality": { $regex: new RegExp(`^${escapeRegex(municipality)}$`, "i") } },
           { municipalityNormalized: normalizedMun }
         ];
         // Preserve any existing $or (role-based) using $and
@@ -501,7 +589,7 @@ class ComplaintController {
       }
       
       if (search) {
-        const safe = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const safe = escapeRegex(search);
         const searchConditions = [
           { title: { $regex: safe, $options: "i" } },
           { description: { $regex: safe, $options: "i" } },
@@ -560,8 +648,13 @@ class ComplaintController {
             limit,
             total,
             pages: Math.ceil(total / limit),
+            totalCount: total,
+            totalPages: Math.ceil(total / limit),
           },
         },
+        totalCount: total,
+        page,
+        totalPages: Math.ceil(total / limit),
       });
     } catch (error) {
       console.error("Error fetching complaints:", error);
@@ -660,13 +753,30 @@ class ComplaintController {
       // Notify citizen via Socket.IO
       try {
         const io = req.app?.get?.("io");
-        await notificationService.notifyCitizenStatusChange(
-          io,
-          complaint.createdBy.toString(),
-          complaint._id,
-          status,
-          { reason: rejectionReason }
-        );
+        if (complaint.createdBy) {
+          await notificationService.notifyCitizenStatusChange(
+            io,
+            complaint.createdBy.toString(),
+            complaint._id,
+            status,
+            { reason: rejectionReason }
+          );
+        }
+        // Notify municipal agents when complaint is validated or assigned
+        if (['VALIDATED', 'ASSIGNED'].includes(status) && complaint.municipality) {
+          const agentsInMunicipality = await User.find({ 
+            role: 'MUNICIPAL_AGENT',
+            municipality: complaint.municipality 
+          }).select('_id').lean();
+          if (agentsInMunicipality.length > 0) {
+            await notificationService.sendNotificationToMultiple(io, agentsInMunicipality.map(a => a._id.toString()), {
+              type: status.toLowerCase(),
+              title: status === 'VALIDATED' ? 'Complaint Validated' : 'Complaint Assigned',
+              message: `Complaint '${complaint.title}' has been ${status.toLowerCase()}.`,
+              complaintId: complaint._id,
+            });
+          }
+        }
       } catch (notifError) {
         console.error("Failed to create notification:", notifError);
       }
@@ -847,6 +957,21 @@ class ComplaintController {
               message: `Complaint '${complaint.title}' has been assigned to your team.`,
               complaintId: complaint._id,
             });
+          }
+          // Notify municipal agents in the same municipality
+          if (complaint.municipality) {
+            const agentsInMunicipality = await User.find({ 
+              role: 'MUNICIPAL_AGENT',
+              municipality: complaint.municipality 
+            }).select('_id').lean();
+            if (agentsInMunicipality.length > 0) {
+              await notificationService.sendNotificationToMultiple(io, agentsInMunicipality.map(a => a._id.toString()), {
+                type: 'assigned',
+                title: 'New Complaint in Your Area',
+                message: `Complaint '${complaint.title}' has been assigned to ${department.name}.`,
+                complaintId: complaint._id,
+              });
+            }
           }
         } catch (err) {
           console.error("Notification failed:", err);
@@ -1213,7 +1338,12 @@ class ComplaintController {
       };
       const historicalQuery = { ...query };
 
-       const [historicalTotal, activeTotal, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk, resolvedWithRatingCount, csatCount] = await Promise.all([
+      // For validated today: complaints validated today
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+        const [historicalTotal, activeTotal, submitted, validated, assigned, inProgress, resolved, closed, rejected, byCategory, byMonth, overdue, atRisk, resolvedWithRatingCount, csatCount, validatedToday] = await Promise.all([
          Complaint.countDocuments(historicalQuery),
          Complaint.countDocuments(activeQuery),
          Complaint.countDocuments({ ...activeQuery, status: "SUBMITTED" }),
@@ -1233,14 +1363,31 @@ class ComplaintController {
            { $sort: { _id: 1 } },
            { $limit: 6 }
          ]),
-         // Only count overdue for unresolved complaints (exclude COMPLETED status)
-         Complaint.countDocuments({ ...activeQuery, slaStatus: "OVERDUE", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
+          // Overdue calculation: different for manager vs agent
+          req.user.role === "DEPARTMENT_MANAGER"
+            ? Complaint.countDocuments({
+                ...query, // Use historicalQuery base but apply role filter
+                updatedAt: { $lt: new Date(Date.now() - 72 * 60 * 60 * 1000) },
+                status: { $nin: ["RESOLVED", "CLOSED"] },
+                isArchived: { $ne: true }
+              })
+            : Complaint.countDocuments({ ...activeQuery, slaStatus: "OVERDUE", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
          Complaint.countDocuments({ ...activeQuery, slaStatus: "AT_RISK", status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
          // Count resolved/closed complaints that have a rating
          Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
-         // Count complaints with rating score >= 4 (CSAT)
-         Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
-       ]);
+          // Count complaints with rating score >= 4 (CSAT)
+          Complaint.countDocuments({ ...historicalQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+          // Validated today: complaints where statusHistory has VALIDATED entry today
+          Complaint.countDocuments({
+            ...query, // Apply role-based filter
+            "statusHistory": {
+              $elemMatch: {
+                status: "VALIDATED",
+                updatedAt: { $gte: startOfDay, $lt: endOfDay }
+              }
+            }
+          }),
+        ]);
 
        const total = historicalTotal; // all statuses
        const resolutionRate = activeTotal > 0 ? Math.round((resolved + closed) / activeTotal * 100) : 0;
@@ -1276,11 +1423,12 @@ class ComplaintController {
            rejected,
            totalOverdue: overdue,
            totalAtRisk: atRisk,
-           resolutionRate,
-           averageResolutionTime,
-           slaComplianceRate,
-           csat,
-           totalRatings,
+            resolutionRate,
+            averageResolutionTime,
+            slaComplianceRate,
+            csat,
+            totalRatings,
+            validatedToday,
            byCategory: byCategory.reduce((acc, item) => {
              acc[item._id] = item.count;
              return acc;

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import {
   Building2, Clock, Tag, Plus, Edit2, Trash2, Save,
   AlertTriangle, CheckCircle, Loader2,
@@ -61,6 +62,7 @@ const DEFAULT_SLA_HOURS: Record<string, number> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminSettingsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuthStore();
 
@@ -108,7 +110,7 @@ export default function AdminSettingsPage() {
         setSlaRules(buildDefaultSLARules());
       }
     } catch {
-      showToast("Failed to load settings", "error");
+      showToast(t('adminSettings.loadFailed'), "error");
     } finally {
       setLoading(false);
     }
@@ -137,33 +139,33 @@ export default function AdminSettingsPage() {
   };
 
   const saveDepartment = async () => {
-    if (!deptForm.name.trim()) return showToast("Department name is required", "error");
+    if (!deptForm.name.trim()) return showToast(t('adminSettings.departments.deptNameRequired'), "error");
     setSavingDept(true);
     try {
       if (editingDept) {
         await apiClient.put(`/admin/departments/${editingDept._id}`, deptForm);
-        showToast("Department updated", "success");
+        showToast(t('adminSettings.departments.deptUpdated'), "success");
       } else {
         await apiClient.post("/admin/departments", deptForm);
-        showToast("Department created", "success");
+        showToast(t('adminSettings.departments.deptCreated'), "success");
       }
       setDeptModal(false);
       loadData();
     } catch {
-      showToast("Failed to save department", "error");
+      showToast(t('adminSettings.departments.deptSaveFailed'), "error");
     } finally {
       setSavingDept(false);
     }
   };
 
   const deleteDepartment = async (id: string) => {
-    if (!confirm("Delete this department? This cannot be undone.")) return;
+    if (!confirm(t('adminSettings.departments.deptDeleteConfirm'))) return;
     try {
       await apiClient.delete(`/admin/departments/${id}`);
-      showToast("Department deleted", "success");
+      showToast(t('adminSettings.departments.deptDeleted'), "success");
       loadData();
     } catch {
-      showToast("Failed to delete department", "error");
+      showToast(t('adminSettings.departments.deptDeleteFailed'), "error");
     }
   };
 
@@ -178,9 +180,9 @@ export default function AdminSettingsPage() {
       await apiClient.put("/admin/sla-rules", { rules: updatedRules });
       setSlaRules(updatedRules);
       setSlaEditing(null);
-      showToast("SLA rule updated", "success");
+      showToast(t('adminSettings.sla.slaUpdated'), "success");
     } catch {
-      showToast("Failed to update SLA rule", "error");
+      showToast(t('adminSettings.sla.slaUpdateFailed'), "error");
     } finally {
       setSavingSla(false);
     }
@@ -199,8 +201,8 @@ export default function AdminSettingsPage() {
     <DashboardLayout>
       <div className="min-h-screen bg-slate-50/50">
         <PageHeader
-          title="System Settings"
-          subtitle="Manage departments, SLA rules, and platform configuration"
+          title={t('adminSettings.title')}
+          subtitle={t('adminSettings.subtitle')}
           backHref="/dashboard"
         />
 
@@ -208,13 +210,13 @@ export default function AdminSettingsPage() {
           {/* Tabs */}
           <div className="flex items-center gap-2 mb-6 bg-white rounded-2xl p-2 shadow-sm border border-slate-200">
             <button onClick={() => setActiveTab("departments")} className={tabClass("departments")}>
-              <Building2 className="w-4 h-4 inline mr-2" />Departments
+              <Building2 className="w-4 h-4 inline mr-2" />{t('adminSettings.tabs.departments')}
             </button>
             <button onClick={() => setActiveTab("sla")} className={tabClass("sla")}>
-              <Clock className="w-4 h-4 inline mr-2" />SLA Rules
+              <Clock className="w-4 h-4 inline mr-2" />{t('adminSettings.tabs.sla')}
             </button>
             <button onClick={() => setActiveTab("categories")} className={tabClass("categories")}>
-              <Tag className="w-4 h-4 inline mr-2" />Categories
+              <Tag className="w-4 h-4 inline mr-2" />{t('adminSettings.tabs.categories')}
             </button>
           </div>
 
@@ -228,16 +230,16 @@ export default function AdminSettingsPage() {
               {activeTab === "departments" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-slate-800">Departments ({departments.length})</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">{t('adminSettings.departments.title')} ({departments.length})</h3>
                     <Button onClick={() => openDeptModal()} className="flex items-center gap-2">
-                      <Plus className="w-4 h-4" /> Add Department
+                      <Plus className="w-4 h-4" /> {t('adminSettings.departments.add')}
                     </Button>
                   </div>
 
                   {departments.length === 0 ? (
                     <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400">
                       <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                      <p>No departments configured yet.</p>
+                      <p>{t('adminSettings.departments.noDepartments')}</p>
                     </div>
                   ) : (
                     <div className="grid gap-4">
@@ -256,10 +258,10 @@ export default function AdminSettingsPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                              <button onClick={() => openDeptModal(dept)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors" title="Edit">
+                              <button onClick={() => openDeptModal(dept)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors" title={t('adminSettings.edit')}>
                                 <Edit2 className="w-4 h-4 text-slate-500" />
                               </button>
-                              <button onClick={() => deleteDepartment(dept._id)} className="p-2 hover:bg-red-100 rounded-lg transition-colors" title="Delete">
+                              <button onClick={() => deleteDepartment(dept._id)} className="p-2 hover:bg-red-100 rounded-lg transition-colors" title={t('adminSettings.delete')}>
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </button>
                             </div>
@@ -276,7 +278,7 @@ export default function AdminSettingsPage() {
                 <div className="space-y-4">
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-amber-800">SLA deadlines define how long each complaint can remain open before being flagged as overdue. Each category can have different deadlines per urgency level. Changes apply to new complaints only.</p>
+                    <p className="text-sm text-amber-800">{t('adminSettings.sla.description')}</p>
                   </div>
 
                   {ALL_CATEGORIES.map((cat) => (
@@ -289,10 +291,10 @@ export default function AdminSettingsPage() {
 
                         <thead>
                           <tr className="border-b border-slate-100">
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">Urgency</th>
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">Hours</th>
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">Label</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.urgency')}</th>
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.hours')}</th>
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.label')}</th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.actions')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -322,13 +324,13 @@ export default function AdminSettingsPage() {
                                   {isEditing ? (
                                     <div className="flex items-center justify-end gap-1.5">
                                       <button onClick={() => saveSlaRule(rule)} disabled={savingSla} className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
-                                        {savingSla ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
+                                        {savingSla ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} {t('adminSettings.sla.save')}
                                       </button>
-                                      <button onClick={() => setSlaEditing(null)} className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200">Cancel</button>
+                                      <button onClick={() => setSlaEditing(null)} className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200">{t('adminSettings.sla.cancel')}</button>
                                     </div>
                                   ) : (
                                     <button onClick={() => { setSlaEditing(key); setSlaForm({ deadlineHours: rule.deadlineHours }); }} className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200 ml-auto">
-                                      <Edit2 className="w-3 h-3" /> Edit
+                                      <Edit2 className="w-3 h-3" /> {t('adminSettings.sla.edit')}
                                     </button>
                                   )}
                                 </td>
@@ -388,25 +390,25 @@ export default function AdminSettingsPage() {
       <Modal
         isOpen={deptModal}
         onClose={() => setDeptModal(false)}
-        title={editingDept ? "Edit Department" : "Add Department"}
-        description="Configure department details and which complaint categories it handles."
+        title={editingDept ? t("admin.editDepartment") : t("admin.addDepartment")}
+        description={t("admin.departmentModalDescription")}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDeptModal(false)} disabled={savingDept}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setDeptModal(false)} disabled={savingDept}>{t("common.cancel")}</Button>
             <Button onClick={saveDepartment} isLoading={savingDept}>
-              {editingDept ? "Save Changes" : "Create Department"}
+              {editingDept ? t("common.saveChanges") : t("admin.createDepartment")}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Department Name *</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t("admin.departmentName")} *</label>
             <input
               value={deptForm.name}
               onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              placeholder="e.g. Roads & Infrastructure"
+              placeholder={t("admin.departmentNamePlaceholder")}
             />
           </div>
           <div>
