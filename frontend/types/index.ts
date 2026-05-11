@@ -2,7 +2,12 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
-  role: "CITIZEN" | "MUNICIPAL_AGENT" | "DEPARTMENT_MANAGER" | "TECHNICIAN" | "ADMIN";
+  role:
+    | 'CITIZEN'
+    | 'MUNICIPAL_AGENT'
+    | 'DEPARTMENT_MANAGER'
+    | 'TECHNICIAN'
+    | 'ADMIN';
   phone?: string;
   passwordLastChanged?: string;
   createdAt?: string;
@@ -14,7 +19,7 @@ export interface User {
 
 export interface RegisterData {
   fullName: string;
-  email: string; 
+  email: string;
   password: string;
   phone?: string;
   // Optional CAPTCHA token (e.g. reCAPTCHA v3)
@@ -31,7 +36,7 @@ export interface LoginData {
   captchaToken?: string;
 }
 
-export type VerificationMethod = "email" | "sms";
+export type VerificationMethod = 'email' | 'sms';
 
 export interface RequestVerificationPayload {
   email: string;
@@ -47,10 +52,25 @@ export interface VerifyCodePayload {
 }
 
 // Complaint types
-export type ComplaintCategory = "waste" | "roads" | "lighting" | "water" | "safety" | "property" | "parks" | "other";
-export type ComplaintUrgency = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-export type ComplaintStatus = "SUBMITTED" | "VALIDATED" | "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "REJECTED";
-export type MediaType = "photo" | "video";
+export type ComplaintCategory =
+  | 'waste'
+  | 'roads'
+  | 'lighting'
+  | 'water'
+  | 'safety'
+  | 'property'
+  | 'parks'
+  | 'other';
+export type ComplaintUrgency = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type ComplaintStatus =
+  | 'SUBMITTED'
+  | 'VALIDATED'
+  | 'ASSIGNED'
+  | 'IN_PROGRESS'
+  | 'RESOLVED'
+  | 'CLOSED'
+  | 'REJECTED';
+export type MediaType = 'photo' | 'video';
 
 export interface ComplaintLocation {
   // Traditional format
@@ -96,11 +116,18 @@ export interface Complaint {
   beforePhotos?: ComplaintWorkPhoto[];
   // Photos taken by technician after completing work
   afterPhotos?: ComplaintWorkPhoto[];
-  createdBy: string | { _id: string; fullName: string; email: string; phone?: string };
+  createdBy:
+    | string
+    | { _id: string; fullName: string; email: string; phone?: string };
   phone?: string;
   startedAt?: string;
   completedAt?: string;
-  citizen?: { _id: string; fullName: string; email: string; phone?: string } | null;
+  citizen?: {
+    _id: string;
+    fullName: string;
+    email: string;
+    phone?: string;
+  } | null;
   department?: { _id: string; name: string } | null;
   assignedTo?: { _id: string; fullName: string; email: string };
   comments?: Array<{
@@ -205,18 +232,18 @@ export interface Complaint {
     recommendation?: string;
     humanReviewRequired: boolean;
   } | null;
-   duplicateStatus?: string | null;
-   duplicateOf?: string | null;
-   // Final human decision (for training)
-   finalUrgencyHuman?: string | null;
-   // Citizen satisfaction rating
-   rating?: {
-     score: number;
-     comment?: string;
-     createdAt: string;
-     resolvedCorrectly?: boolean;
-   };
- }
+  duplicateStatus?: string | null;
+  duplicateOf?: string | null;
+  // Final human decision (for training)
+  finalUrgencyHuman?: string | null;
+  // Citizen satisfaction rating
+  rating?: {
+    score: number;
+    comment?: string;
+    createdAt: string;
+    resolvedCorrectly?: boolean;
+  };
+}
 
 export interface CreateComplaintData {
   title: string;
@@ -248,17 +275,17 @@ export interface Comment {
 
 export interface Notification {
   _id: string;
-  userId?: string;           // User who receives this notification
-  recipient?: string;       // legacy field, kept for compatibility
+  userId?: string; // User who receives this notification
+  recipient?: string; // legacy field, kept for compatibility
   user?: string | { _id: string; fullName: string }; // optional populated user
   type?: string;
-  title?: string;           // Optional title, defaults to "Notification"
+  title?: string; // Optional title, defaults to "Notification"
   message: string;
   complaint?: { _id: string; title: string }; // Populated complaint reference
-  complaintId?: string;     // Direct complaint ID (may not be populated)
-  relatedId?: string;       // Generic related ID (for backward compatibility)
-  isRead: boolean;          // Alias for 'read' field (frontend uses isRead)
-  read?: boolean;           // Actual DB field (optional for compatibility)
-  metadata?: Record<string, any>; // Additional context
+  complaintId?: string; // Direct complaint ID (may not be populated)
+  relatedId?: string; // Generic related ID (for backward compatibility)
+  isRead: boolean; // Alias for 'read' field (frontend uses isRead)
+  read?: boolean; // Actual DB field (optional for compatibility)
+  metadata?: Record<string, unknown>; // Additional context
   createdAt: string;
-}  
+}

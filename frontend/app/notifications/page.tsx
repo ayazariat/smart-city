@@ -1,43 +1,61 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { Bell, CheckCircle, Loader2, X, ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { useNotifications } from "@/hooks/useNotifications";
-import { useAuthStore } from "@/store/useAuthStore";
-import { useTranslation } from "react-i18next";
-import type { Notification } from "@/types";
+import { useEffect, useState } from 'react';
+import { Bell, CheckCircle, Loader2, X, ArrowLeft } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useNotifications } from '@/hooks/useNotifications';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useTranslation } from 'react-i18next';
+import type { Notification } from '@/types';
 
 function formatDate(dateString: string, short = false, t: any): string {
   const date = new Date(dateString);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
 
-  if (diff < 60000) return t("timeAgo.now");
-  if (diff < 3600000) return t("timeAgo.minutes", { n: Math.floor(diff / 60000) });
-  if (diff < 86400000) return t("timeAgo.hours", { n: Math.floor(diff / 3600000) });
-  if (short) return t("timeAgo.days", { n: Math.floor(diff / 86400000) });
+  if (diff < 60000) return t('timeAgo.now');
+  if (diff < 3600000)
+    return t('timeAgo.minutes', { n: Math.floor(diff / 60000) });
+  if (diff < 86400000)
+    return t('timeAgo.hours', { n: Math.floor(diff / 3600000) });
+  if (short) return t('timeAgo.days', { n: Math.floor(diff / 86400000) });
 
-  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  return date.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 function getNotifStyle(type: string): { color: string } {
   const t = type.toLowerCase();
-  if (t.includes("validated") || t.includes("approved") || t.includes("closed") || t.includes("resolved")) {
-    return { color: "text-emerald-600" };
+  if (
+    t.includes('validated') ||
+    t.includes('approved') ||
+    t.includes('closed') ||
+    t.includes('resolved')
+  ) {
+    return { color: 'text-emerald-600' };
   }
-  if (t.includes("rejected") || t.includes("reject")) return { color: "text-red-600" };
-  if (t.includes("assigned") || t.includes("assign")) return { color: "text-purple-600" };
-  return { color: "text-primary" };
+  if (t.includes('rejected') || t.includes('reject'))
+    return { color: 'text-red-600' };
+  if (t.includes('assigned') || t.includes('assign'))
+    return { color: 'text-purple-600' };
+  return { color: 'text-primary' };
 }
 
 function getNotifIcon(type: string) {
   const t = type.toLowerCase();
-  if (t.includes("validated") || t.includes("approved") || t.includes("resolved") || t.includes("closed")) {
+  if (
+    t.includes('validated') ||
+    t.includes('approved') ||
+    t.includes('resolved') ||
+    t.includes('closed')
+  ) {
     return CheckCircle;
   }
-  if (t.includes("rejected")) return X;
+  if (t.includes('rejected')) return X;
   return Bell;
 }
 
@@ -45,8 +63,14 @@ export default function NotificationsPage() {
   const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuthStore();
-  const { notifications, unreadCount, loading, fetchNotifications, markAsRead, markAllAsRead } =
-    useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    fetchNotifications,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications();
 
   const [groupToday, setGroupToday] = useState<Notification[]>([]);
   const [groupEarlier, setGroupEarlier] = useState<Notification[]>([]);
@@ -69,7 +93,7 @@ export default function NotificationsPage() {
     const id = notif.complaint?._id || notif.relatedId;
     if (id) {
       const dest =
-        user?.role === "CITIZEN"
+        user?.role === 'CITIZEN'
           ? `/my-complaints/${id}`
           : `/dashboard/complaints/${id}`;
       window.location.href = dest;
@@ -77,15 +101,15 @@ export default function NotificationsPage() {
   };
 
   const renderNotif = (notif: Notification) => {
-    const Icon = getNotifIcon(notif.type || "");
-    const style = getNotifStyle(notif.type || "");
+    const Icon = getNotifIcon(notif.type || '');
+    const style = getNotifStyle(notif.type || '');
     return (
       <div
         key={notif._id}
         className={`p-4 border-l-4 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors mb-2 ${
           !notif.isRead
-            ? "border-blue-500 bg-blue-50/60"
-            : "border-slate-200 bg-white"
+            ? 'border-blue-500 bg-blue-50/60'
+            : 'border-slate-200 bg-white'
         }`}
         onClick={() => handleNotifClick(notif)}
       >
@@ -129,14 +153,16 @@ export default function NotificationsPage() {
             <button
               onClick={() => router.back()}
               className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              title={t("common.back") || "Back"}
+              title={t('common.back') || 'Back'}
             >
               <ArrowLeft className="w-5 h-5 text-slate-600" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Notifications</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Notifications
+              </h1>
               <p className="text-slate-500 mt-1 text-sm">
-                {unreadCount > 0 ? `${unreadCount} non lues` : "À jour"}
+                {unreadCount > 0 ? `${unreadCount} non lues` : 'À jour'}
               </p>
             </div>
           </div>
@@ -150,18 +176,22 @@ export default function NotificationsPage() {
           )}
         </div>
 
-         {notifications.length === 0 ? (
-           <div className="text-center py-16">
-             <Bell className="w-14 h-14 text-slate-300 mx-auto mb-4" />
-             <h3 className="text-lg font-semibold text-slate-900 mb-1">{t('notifications.empty')}</h3>
-             <p className="text-slate-500 text-sm">{t('notifications.emptyHint')}</p>
-           </div>
+        {notifications.length === 0 ? (
+          <div className="text-center py-16">
+            <Bell className="w-14 h-14 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">
+              {t('notifications.empty')}
+            </h3>
+            <p className="text-slate-500 text-sm">
+              {t('notifications.emptyHint')}
+            </p>
+          </div>
         ) : (
           <div className="space-y-6">
             {groupToday.length > 0 && (
               <section>
                 <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                  {t("notifications.today")}
+                  {t('notifications.today')}
                 </h2>
                 {groupToday.map(renderNotif)}
               </section>
@@ -169,7 +199,7 @@ export default function NotificationsPage() {
             {groupEarlier.length > 0 && (
               <section>
                 <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                  {t("notifications.earlier")}
+                  {t('notifications.earlier')}
                 </h2>
                 {groupEarlier.map(renderNotif)}
               </section>

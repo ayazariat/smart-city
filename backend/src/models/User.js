@@ -76,6 +76,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Normalized municipality name for case-insensitive, accent-insensitive queries
+    municipalityNormalized: {
+      type: String,
+      index: true,
+      default: "",
+    },
+    // Normalized governorate name for case-insensitive, accent-insensitive queries
+    governorateNormalized: {
+      type: String,
+      index: true,
+      default: "",
+    },
     // User language preference for notifications
     language: {
       type: String,

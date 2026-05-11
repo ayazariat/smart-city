@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { ReactNode, useState } from "react";
-import Link from "next/link";
+import { ReactNode, useState } from 'react';
+import Link from 'next/link';
 import {
   MapPin,
   Clock,
@@ -14,13 +14,16 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
-} from "lucide-react";
-import { statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
-import { getCategoryLabel } from "@/lib/categories";
-import { getPhotoUrl } from "@/lib/photos";
-import { useAuthStore } from "@/store/useAuthStore";
-import { confirmComplaint, unconfirmComplaint } from "@/services/complaint.service";
-import { useTranslation } from "react-i18next";
+} from 'lucide-react';
+import { statusConfig, getComplaintIdDisplay } from '@/lib/complaints';
+import { getCategoryLabel } from '@/lib/categories';
+import { getPhotoUrl } from '@/lib/photos';
+import { useAuthStore } from '@/store/useAuthStore';
+import {
+  confirmComplaint,
+  unconfirmComplaint,
+} from '@/services/complaint.service';
+import { useTranslation } from 'react-i18next';
 
 export interface BaseComplaint {
   _id?: string;
@@ -37,14 +40,19 @@ export interface BaseComplaint {
   department?: { _id?: string; name: string } | null;
   assignedDepartment?: { _id?: string; name: string } | null;
   assignedTo?: { _id?: string; fullName: string };
-  assignedTeam?: { name?: string; members?: Array<{ fullName: string }> } | null;
+  assignedTeam?: {
+    name?: string;
+    members?: Array<{ fullName: string }>;
+  } | null;
   municipality?: { _id?: string; name: string; governorate?: string } | string;
   municipalityName?: string;
   confirmationCount?: number;
   upvoteCount?: number;
   confirmations?: Array<{ citizenId: string; confirmedAt: string }>;
   upvotes?: Array<{ citizenId: string; upvotedAt: string }>;
-  createdBy?: string | { _id?: string; fullName?: string; email?: string; phone?: string };
+  createdBy?:
+    | string
+    | { _id?: string; fullName?: string; email?: string; phone?: string };
   slaStatus?: string;
   slaDeadline?: string | Date | null;
   referenceId?: string;
@@ -67,9 +75,9 @@ interface ComplaintCardProps {
 }
 
 const urgencyColors: Record<string, { bg: string; text: string }> = {
-  URGENT: { bg: "bg-red-100", text: "text-red-700" },
-  HIGH: { bg: "bg-orange-100", text: "text-orange-700" },
-  MEDIUM: { bg: "bg-amber-100", text: "text-amber-700" },
+  URGENT: { bg: 'bg-red-100', text: 'text-red-700' },
+  HIGH: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  MEDIUM: { bg: 'bg-amber-100', text: 'text-amber-700' },
 };
 
 export const ComplaintCard = ({
@@ -85,34 +93,44 @@ export const ComplaintCard = ({
   onUpdate,
   index = 0,
 }: ComplaintCardProps) => {
-  const id = complaint._id || complaint.id || "";
+  const id = complaint._id || complaint.id || '';
   const { t } = useTranslation();
   const { user } = useAuthStore();
-  const userSub = typeof user === "object" && user !== null && "sub" in user && typeof (user as { sub?: unknown }).sub === "string"
-    ? (user as { sub: string }).sub
-    : undefined;
+  const userSub =
+    typeof user === 'object' &&
+    user !== null &&
+    'sub' in user &&
+    typeof (user as { sub?: unknown }).sub === 'string'
+      ? (user as { sub: string }).sub
+      : undefined;
   const userId = user?.id ?? userSub;
   const [isConfirming, setIsConfirming] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Check if this is a rejected resolution (IN_PROGRESS but with resolutionRejectionReason)
-  const isResolutionRejected = complaint.status === "IN_PROGRESS" && complaint.resolutionRejectionReason;
-  
+  const isResolutionRejected =
+    complaint.status === 'IN_PROGRESS' && complaint.resolutionRejectionReason;
+
   // Use special status for rejected resolution
-  const displayStatus = isResolutionRejected ? "RESOLUTION_REJECTED" : complaint.status;
-  
-   const statusCfg = statusConfig[displayStatus] ?? {
-     labelKey: `status.${complaint.status}`,
-     bgClass: "bg-slate-100",
-     textClass: "text-slate-600",
-     dotClass: "bg-slate-500",
-   };
+  const displayStatus = isResolutionRejected
+    ? 'RESOLUTION_REJECTED'
+    : complaint.status;
 
-  const hasConfirmed = complaint.confirmations?.some(c => c.citizenId === userId);
+  const statusCfg = statusConfig[displayStatus] ?? {
+    labelKey: `status.${complaint.status}`,
+    bgClass: 'bg-slate-100',
+    textClass: 'text-slate-600',
+    dotClass: 'bg-slate-500',
+  };
 
-  const createdById = typeof complaint.createdBy === "string" 
-    ? complaint.createdBy 
-    : complaint.createdBy?._id;
+  const hasConfirmed = complaint.confirmations?.some(
+    (c) => c.citizenId === userId
+  );
+
+  const createdById =
+    typeof complaint.createdBy === 'string'
+      ? complaint.createdBy
+      : complaint.createdBy?._id;
   const isOwnComplaint = !!userId && userId === createdById;
 
   // Keep card actions neutral; interaction buttons are handled on the detail page.
@@ -130,7 +148,9 @@ export const ComplaintCard = ({
           onUpdate({
             ...complaint,
             confirmationCount: result.confirmationCount,
-            confirmations: complaint.confirmations?.filter(c => c.citizenId !== userId),
+            confirmations: complaint.confirmations?.filter(
+              (c) => c.citizenId !== userId
+            ),
           });
         }
       } else {
@@ -153,46 +173,70 @@ export const ComplaintCard = ({
   };
 
   const getMunicipalityName = (): string => {
-    if (!complaint.municipality && !complaint.municipalityName && !complaint.location?.municipality) {
-      return "";
+    if (
+      !complaint.municipality &&
+      !complaint.municipalityName &&
+      !complaint.location?.municipality
+    ) {
+      return '';
     }
-    if (typeof complaint.municipality === "string") {
+    if (typeof complaint.municipality === 'string') {
       return complaint.municipality;
     }
     if (complaint.municipality?.name) {
       return complaint.municipality.name;
     }
-    return complaint.municipalityName || complaint.location?.municipality || "";
+    return complaint.municipalityName || complaint.location?.municipality || '';
   };
 
   const municipalityName = getMunicipalityName();
-  const isHighPriority = (complaint.confirmationCount ?? 0) >= 5 || (complaint.priorityScore ?? 0) >= 30;
+  const isHighPriority =
+    (complaint.confirmationCount ?? 0) >= 5 ||
+    (complaint.priorityScore ?? 0) >= 30;
 
   // SLA time remaining/overdue calculation
-   const getSlaTimeInfo = (): { text: string; color: string } | null => {
-     if (!complaint.slaDeadline || ["RESOLVED", "CLOSED"].includes(complaint.status)) return null;
-     const now = new Date();
-     const deadline = new Date(complaint.slaDeadline);
-     const diffMs = deadline.getTime() - now.getTime();
-     const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
-     if (diffMs < 0) {
-       const days = Math.floor(diffHours / 24);
-       const hours = Math.floor(diffHours % 24);
-       return { text: `${days > 0 ? `${days}d ${hours}h` : `${hours}h`} ${t("badges.overdue")}`, color: "text-red-600" };
-     }
-     const days = Math.floor(diffHours / 24);
-     const hours = Math.floor(diffHours % 24);
-     return { text: `${days > 0 ? `${days}d ${hours}h` : `${hours}h`} ${t("badges.atRisk")}`, color: complaint.slaStatus === "AT_RISK" ? "text-orange-600" : "text-green-600" };
-   };
-   const slaTimeInfo = hideSla ? null : getSlaTimeInfo();
-   const slaBorderColor = hideSla ? "" 
-     : complaint.slaStatus === "OVERDUE" ? "border-l-red-500" 
-     : complaint.slaStatus === "AT_RISK" ? "border-l-orange-500" 
-     : complaint.slaDeadline && !["RESOLVED", "CLOSED"].includes(complaint.status) ? "border-l-green-500" 
-     : "";
+  const getSlaTimeInfo = (): { text: string; color: string } | null => {
+    if (
+      !complaint.slaDeadline ||
+      ['RESOLVED', 'CLOSED'].includes(complaint.status)
+    )
+      return null;
+    const now = new Date();
+    const deadline = new Date(complaint.slaDeadline);
+    const diffMs = deadline.getTime() - now.getTime();
+    const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
+    if (diffMs < 0) {
+      const days = Math.floor(diffHours / 24);
+      const hours = Math.floor(diffHours % 24);
+      return {
+        text: `${days > 0 ? `${days}d ${hours}h` : `${hours}h`} ${t('badges.overdue')}`,
+        color: 'text-red-600',
+      };
+    }
+    const days = Math.floor(diffHours / 24);
+    const hours = Math.floor(diffHours % 24);
+    return {
+      text: `${days > 0 ? `${days}d ${hours}h` : `${hours}h`} ${t('badges.atRisk')}`,
+      color:
+        complaint.slaStatus === 'AT_RISK'
+          ? 'text-orange-600'
+          : 'text-green-600',
+    };
+  };
+  const slaTimeInfo = hideSla ? null : getSlaTimeInfo();
+  const slaBorderColor = hideSla
+    ? ''
+    : complaint.slaStatus === 'OVERDUE'
+      ? 'border-l-red-500'
+      : complaint.slaStatus === 'AT_RISK'
+        ? 'border-l-orange-500'
+        : complaint.slaDeadline &&
+            !['RESOLVED', 'CLOSED'].includes(complaint.status)
+          ? 'border-l-green-500'
+          : '';
 
   const cardContent = (
-    <div 
+    <div
       className={`
         bg-white rounded-2xl border border-slate-200 shadow-sm
         hover:shadow-xl hover:border-primary/20 transition-all duration-300
@@ -214,68 +258,84 @@ export const ComplaintCard = ({
         <div className="flex items-start justify-between gap-4 mb-4">
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-mono font-medium">
-                {getComplaintIdDisplay(id)}
-              </span>
-              
-               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}>
-                 <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`} />
-                 {t(statusCfg.labelKey, { defaultValue: complaint.status })}
-               </span>
-              
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                {getCategoryLabel(complaint.category)} 
-              </span>
+            <span className="inline-flex items-center px-2 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-mono font-medium">
+              {getComplaintIdDisplay(id)}
+            </span>
 
-            {complaint.urgency && complaint.urgency !== "LOW" && urgencyColors[complaint.urgency] && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${urgencyColors[complaint.urgency].bg} ${urgencyColors[complaint.urgency].text}`}>
-                <AlertCircle className="w-3 h-3" />
-                {t(`urgency.${complaint.urgency}`)}
-              </span>
-            )}
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.bgClass} ${statusCfg.textClass}`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotClass} animate-pulse-soft`}
+              />
+              {t(statusCfg.labelKey, { defaultValue: complaint.status })}
+            </span>
+
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+              {getCategoryLabel(complaint.category)}
+            </span>
+
+            {complaint.urgency &&
+              complaint.urgency !== 'LOW' &&
+              urgencyColors[complaint.urgency] && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${urgencyColors[complaint.urgency].bg} ${urgencyColors[complaint.urgency].text}`}
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  {t(`urgency.${complaint.urgency}`)}
+                </span>
+              )}
             {(complaint as any).aiPredictedUrgency && (
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                (complaint as any).aiUrgencyPrediction?.confidence > 0.8 ? 'bg-green-100 text-green-700 border border-green-300' :
-                (complaint as any).aiUrgencyPrediction?.confidence > 0.6 ? 'bg-amber-100 text-amber-700 border border-amber-300' :
-                'bg-purple-100 text-purple-700 border border-purple-300'
-              }`}>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  (complaint as any).aiUrgencyPrediction?.confidence > 0.8
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : (complaint as any).aiUrgencyPrediction?.confidence > 0.6
+                      ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                      : 'bg-purple-100 text-purple-700 border border-purple-300'
+                }`}
+              >
                 <TrendingUp className="w-3 h-3" />
                 AI: {(complaint as any).aiPredictedUrgency}
                 {(complaint as any).aiUrgencyPrediction?.confidence && (
                   <span className="text-[10px] opacity-75">
-                    ({Math.round((complaint as any).aiUrgencyPrediction.confidence * 100)}%)
+                    (
+                    {Math.round(
+                      (complaint as any).aiUrgencyPrediction.confidence * 100
+                    )}
+                    %)
                   </span>
                 )}
               </span>
             )}
 
             {/* SLA Status Badge */}
-            {!hideSla && complaint.slaStatus === "OVERDUE" && (
+            {!hideSla && complaint.slaStatus === 'OVERDUE' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 animate-pulse">
                 <AlertCircle className="w-3 h-3" />
-                {t("badges.overdue")}
+                {t('badges.overdue')}
               </span>
             )}
-            {!hideSla && complaint.slaStatus === "AT_RISK" && (
+            {!hideSla && complaint.slaStatus === 'AT_RISK' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
                 <AlertCircle className="w-3 h-3" />
-                {t("badges.atRisk")}
+                {t('badges.atRisk')}
               </span>
             )}
 
             {/* Resolution Report Badge - Show when RESOLVED status (needs agent review) - Hide on public cards */}
-            {!isPublic && complaint.status === "RESOLVED" && (
+            {!isPublic && complaint.status === 'RESOLVED' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm">
                 <AlertCircle className="w-3 h-3" />
-                {t("badges.reportPending")}
+                {t('badges.reportPending')}
               </span>
             )}
 
             {/* Resolution Approved Badge - Show when CLOSED status */}
-            {complaint.status === "CLOSED" && (
+            {complaint.status === 'CLOSED' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-sm">
                 <CheckCircle className="w-3 h-3" />
-                {t("badges.approved")}
+                {t('badges.approved')}
               </span>
             )}
 
@@ -291,13 +351,15 @@ export const ComplaintCard = ({
           <div className="flex flex-col items-end gap-1 flex-shrink-0">
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
               <Clock className="w-3.5 h-3.5" />
-              {new Date(complaint.createdAt).toLocaleDateString("en-US", {
-                day: "numeric",
-                month: "short",
+              {new Date(complaint.createdAt).toLocaleDateString('en-US', {
+                day: 'numeric',
+                month: 'short',
               })}
             </div>
             {slaTimeInfo && (
-              <span className={`text-[10px] font-semibold ${slaTimeInfo.color}`}>
+              <span
+                className={`text-[10px] font-semibold ${slaTimeInfo.color}`}
+              >
                 {slaTimeInfo.text}
               </span>
             )}
@@ -305,7 +367,9 @@ export const ComplaintCard = ({
         </div>
 
         {/* Description */}
-        <p className={`text-slate-800 text-sm leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>
+        <p
+          className={`text-slate-800 text-sm leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}
+        >
           {complaint.description}
         </p>
 
@@ -318,7 +382,7 @@ export const ComplaintCard = ({
             }}
             className="text-xs text-primary hover:text-primary-700 mt-1 font-medium"
           >
-            {isExpanded ? "Show less" : "Show more"}
+            {isExpanded ? 'Show less' : 'Show more'}
           </button>
         )}
 
@@ -327,7 +391,9 @@ export const ComplaintCard = ({
           {complaint.location?.address && (
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-slate-400" />
-              <span className="truncate max-w-[150px]">{complaint.location.address}</span>
+              <span className="truncate max-w-[150px]">
+                {complaint.location.address}
+              </span>
             </span>
           )}
           {showMunicipality && municipalityName && (
@@ -336,19 +402,26 @@ export const ComplaintCard = ({
               {municipalityName}
             </span>
           )}
-          {showDepartment && (complaint.citizen || (typeof complaint.createdBy === 'object' && complaint.createdBy?.fullName)) && (
-            <span className="inline-flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-slate-400" />
-              {complaint.citizen?.fullName || (typeof complaint.createdBy === 'object' ? complaint.createdBy?.fullName : '')}
-            </span>
-          )}
+          {showDepartment &&
+            (complaint.citizen ||
+              (typeof complaint.createdBy === 'object' &&
+                complaint.createdBy?.fullName)) && (
+              <span className="inline-flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                {complaint.citizen?.fullName ||
+                  (typeof complaint.createdBy === 'object'
+                    ? complaint.createdBy?.fullName
+                    : '')}
+              </span>
+            )}
           {/* Assigned Repair Team/Technician - Visible to ALL roles */}
           {(complaint.assignedTo || complaint.assignedTeam) && (
             <span className="inline-flex items-center gap-1.5">
               <Wrench className="w-3.5 h-3.5 text-slate-400" />
               {complaint.assignedTeam ? (
                 <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
-                  Repair team ({complaint.assignedTeam.members?.length || 1} technicians)
+                  Repair team ({complaint.assignedTeam.members?.length || 1}{' '}
+                  technicians)
                 </span>
               ) : (
                 <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-medium">
@@ -376,17 +449,20 @@ export const ComplaintCard = ({
                   className="relative w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0 group animate-gallery-item"
                   style={{ animationDelay: `${idx * 80}ms` }}
                 >
-                  {item.type === "photo" || !item.type ? (
+                  {item.type === 'photo' || !item.type ? (
                     <img
                       src={getPhotoUrl(item.url) || '/placeholder.png'}
                       alt={`Media ${idx + 1}`}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
+                        (e.target as HTMLImageElement).style.display = 'none';
                       }}
                     />
                   ) : (
-                    <video src={item.url} className="w-full h-full object-cover" />
+                    <video
+                      src={item.url}
+                      className="w-full h-full object-cover"
+                    />
                   )}
                   {idx === 3 && complaint.media!.length > 4 && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
@@ -404,8 +480,12 @@ export const ComplaintCard = ({
         {/* Community Stats (BL-28) */}
         {complaint.confirmationCount !== undefined && (
           <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
-            <div className={`flex items-center gap-1.5 text-sm ${hasConfirmed ? 'text-emerald-600' : 'text-slate-500'}`}>
-              <CheckCircle className={`w-4 h-4 ${hasConfirmed ? '' : 'opacity-50'}`} />
+            <div
+              className={`flex items-center gap-1.5 text-sm ${hasConfirmed ? 'text-emerald-600' : 'text-slate-500'}`}
+            >
+              <CheckCircle
+                className={`w-4 h-4 ${hasConfirmed ? '' : 'opacity-50'}`}
+              />
               <span className="font-medium">{complaint.confirmationCount}</span>
               <span className="text-xs text-slate-400">confirmed</span>
             </div>
@@ -416,24 +496,25 @@ export const ComplaintCard = ({
         {(actions || canConfirmUpvote) && (
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100 [&>button]:btn-action [&>a]:btn-action">
             {actions}
-            
+
             {canConfirmUpvote && (
               <button
-                  onClick={handleConfirm}
-                  disabled={isConfirming}
-                  className={`
+                onClick={handleConfirm}
+                disabled={isConfirming}
+                className={`
                     inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                     transition-all duration-200 hover:scale-105 active:scale-95
-                    ${hasConfirmed
-                      ? "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600"
-                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                    ${
+                      hasConfirmed
+                        ? 'bg-emerald-500 text-white shadow-sm hover:bg-emerald-600'
+                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
                     }
                     disabled:opacity-50 disabled:hover:scale-100
                   `}
-                >
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  {isConfirming ? "..." : hasConfirmed ? "Confirmed" : "Confirm"}
-                </button>
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                {isConfirming ? '...' : hasConfirmed ? 'Confirmed' : 'Confirm'}
+              </button>
             )}
           </div>
         )}

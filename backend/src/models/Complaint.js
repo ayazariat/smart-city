@@ -160,6 +160,11 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    governorateNormalized: {
+      type: String,
+      index: true,
+      default: "",
+    },
     municipalityNormalized: {
       type: String,
       index: true,
@@ -224,6 +229,15 @@ const complaintSchema = new mongoose.Schema(
     aiPredictedCategory: { type: String, enum: ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other", null], default: null },
     aiCategoryConfidence: { type: Number, default: null },
     categorySource: { type: String, enum: ['USER', 'AI', 'MANUAL'], default: 'USER' },
+    // Merge tracking for duplicate complaints
+    isDuplicate: { type: Boolean, default: false },
+    mergedComplaints: [{
+      complaintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Complaint' },
+      mergedAt: { type: Date, default: Date.now }
+    }],
+    mergedAt: Date,
+    mergedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    rejectionReasonText: String,
   },
   { timestamps: true }
 );

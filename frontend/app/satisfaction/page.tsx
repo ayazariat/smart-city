@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useTranslation } from "react-i18next";
-import { Star, X, Send, CheckCircle } from "lucide-react";
-import { useAuthStore } from "@/store/useAuthStore";
-import { satisfactionService } from "@/services/satisfaction.service";
-import { showToast } from "@/components/ui/Toast";
-import { Button } from "@/components/ui";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
+import { Star, X, Send, CheckCircle } from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
+import { satisfactionService } from '@/services/satisfaction.service';
+import { showToast } from '@/components/ui/Toast';
+import { Button } from '@/components/ui';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 export default function SatisfactionPage() {
   const { t } = useTranslation();
@@ -18,7 +18,7 @@ export default function SatisfactionPage() {
   const [survey, setSurvey] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
+  const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -32,11 +32,11 @@ export default function SatisfactionPage() {
         setSurvey(response.data);
       } else {
         // No pending survey, redirect to dashboard
-        router.push("/dashboard");
+        router.push('/dashboard');
       }
     } catch (error) {
-      console.error("Error fetching survey:", error);
-      router.push("/dashboard");
+      console.error('Error fetching survey:', error);
+      router.push('/dashboard');
     } finally {
       setLoading(false);
     }
@@ -44,22 +44,26 @@ export default function SatisfactionPage() {
 
   const handleSubmit = async () => {
     if (rating === 0) {
-      showToast("Please select a rating", "error");
+      showToast('Please select a rating', 'error');
       return;
     }
 
     setSubmitting(true);
     try {
-      const response = await satisfactionService.createSurvey(survey.complaint, rating, comment);
+      const response = await satisfactionService.createSurvey(
+        survey.complaint,
+        rating,
+        comment
+      );
       if (response.success) {
-        showToast("Thank you for your feedback!", "success");
-        router.push("/dashboard");
+        showToast('Thank you for your feedback!', 'success');
+        router.push('/dashboard');
       } else {
-        showToast(response.message || "Failed to submit rating", "error");
+        showToast(response.message || 'Failed to submit rating', 'error');
       }
     } catch (error) {
-      console.error("Error submitting survey:", error);
-      showToast("Failed to submit rating", "error");
+      console.error('Error submitting survey:', error);
+      showToast('Failed to submit rating', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -67,16 +71,18 @@ export default function SatisfactionPage() {
 
   const handleDismiss = async () => {
     try {
-      const response = await satisfactionService.dismissSurvey(survey.complaint);
+      const response = await satisfactionService.dismissSurvey(
+        survey.complaint
+      );
       if (response.success) {
-        showToast("Survey dismissed", "info");
-        router.push("/dashboard");
+        showToast('Survey dismissed', 'info');
+        router.push('/dashboard');
       } else {
-        showToast(response.message || "Failed to dismiss survey", "error");
+        showToast(response.message || 'Failed to dismiss survey', 'error');
       }
     } catch (error) {
-      console.error("Error dismissing survey:", error);
-      showToast("Failed to dismiss survey", "error");
+      console.error('Error dismissing survey:', error);
+      showToast('Failed to dismiss survey', 'error');
     }
   };
 
@@ -96,9 +102,15 @@ export default function SatisfactionPage() {
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">No pending surveys</h2>
-            <p className="text-slate-600 mb-4">You have no surveys to complete at this time.</p>
-            <Button onClick={() => router.push("/dashboard")}>Return to Dashboard</Button>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">
+              No pending surveys
+            </h2>
+            <p className="text-slate-600 mb-4">
+              You have no surveys to complete at this time.
+            </p>
+            <Button onClick={() => router.push('/dashboard')}>
+              Return to Dashboard
+            </Button>
           </div>
         </div>
       </DashboardLayout>
@@ -113,16 +125,17 @@ export default function SatisfactionPage() {
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {t("satisfaction.title") || "Rate Your Experience"}
+                  {t('satisfaction.title') || 'Rate Your Experience'}
                 </h1>
                 <p className="text-slate-600">
-                  {t("satisfaction.subtitle") || "How satisfied are you with how your complaint was handled?"}
+                  {t('satisfaction.subtitle') ||
+                    'How satisfied are you with how your complaint was handled?'}
                 </p>
               </div>
               <button
                 onClick={handleDismiss}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                title={t("satisfaction.dismiss") || "Dismiss"}
+                title={t('satisfaction.dismiss') || 'Dismiss'}
               >
                 <X className="w-5 h-5 text-slate-400" />
               </button>
@@ -137,8 +150,8 @@ export default function SatisfactionPage() {
                     onClick={() => setRating(star)}
                     className={`p-2 transition-all ${
                       star <= rating
-                        ? "text-yellow-400 scale-110"
-                        : "text-slate-300 hover:text-yellow-200"
+                        ? 'text-yellow-400 scale-110'
+                        : 'text-slate-300 hover:text-yellow-200'
                     }`}
                   >
                     <Star className="w-10 h-10 fill-current" />
@@ -147,28 +160,32 @@ export default function SatisfactionPage() {
               </div>
               <p className="text-center text-sm text-slate-500">
                 {rating === 0
-                  ? t("satisfaction.selectRating") || "Select a rating"
+                  ? t('satisfaction.selectRating') || 'Select a rating'
                   : rating === 1
-                    ? t("satisfaction.veryDissatisfied") || "Very Dissatisfied"
+                    ? t('satisfaction.veryDissatisfied') || 'Very Dissatisfied'
                     : rating === 2
-                      ? t("satisfaction.dissatisfied") || "Dissatisfied"
+                      ? t('satisfaction.dissatisfied') || 'Dissatisfied'
                       : rating === 3
-                        ? t("satisfaction.neutral") || "Neutral"
+                        ? t('satisfaction.neutral') || 'Neutral'
                         : rating === 4
-                          ? t("satisfaction.satisfied") || "Satisfied"
-                          : t("satisfaction.verySatisfied") || "Very Satisfied"}
+                          ? t('satisfaction.satisfied') || 'Satisfied'
+                          : t('satisfaction.verySatisfied') || 'Very Satisfied'}
               </p>
             </div>
 
             {/* Comment */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                {t("satisfaction.commentLabel") || "Additional comments (optional)"}
+                {t('satisfaction.commentLabel') ||
+                  'Additional comments (optional)'}
               </label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder={t("satisfaction.commentPlaceholder") || "Tell us more about your experience..."}
+                placeholder={
+                  t('satisfaction.commentPlaceholder') ||
+                  'Tell us more about your experience...'
+                }
                 rows={4}
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
               />
@@ -184,12 +201,14 @@ export default function SatisfactionPage() {
                 {submitting ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>{t("satisfaction.submitting") || "Submitting..."}</span>
+                    <span>
+                      {t('satisfaction.submitting') || 'Submitting...'}
+                    </span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-2">
                     <Send className="w-4 h-4" />
-                    <span>{t("satisfaction.submit") || "Submit Rating"}</span>
+                    <span>{t('satisfaction.submit') || 'Submit Rating'}</span>
                   </div>
                 )}
               </Button>
@@ -199,7 +218,7 @@ export default function SatisfactionPage() {
                 disabled={submitting}
                 className="flex-1"
               >
-                {t("satisfaction.skip") || "Skip"}
+                {t('satisfaction.skip') || 'Skip'}
               </Button>
             </div>
           </div>

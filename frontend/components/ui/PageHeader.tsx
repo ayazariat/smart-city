@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Menu, Bell } from "lucide-react";
+import { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Menu, Bell } from 'lucide-react';
 
 interface PageHeaderProps {
   title: string;
@@ -13,7 +13,7 @@ interface PageHeaderProps {
   onBackClick?: () => void;
   rightContent?: ReactNode;
   className?: string;
-  variant?: "default" | "hero" | "minimal";
+  variant?: 'default' | 'hero' | 'minimal';
 }
 
 export function PageHeader({
@@ -23,8 +23,8 @@ export function PageHeader({
   backHref,
   onBackClick,
   rightContent,
-  className = "",
-  variant = "default"
+  className = '',
+  variant = 'default',
 }: PageHeaderProps) {
   const router = useRouter();
 
@@ -39,15 +39,15 @@ export function PageHeader({
   };
 
   const variants = {
-    default: "bg-white text-slate-800 border-b border-slate-200 shadow-sm",
-    hero: "gradient-hero text-white shadow-2xl relative overflow-hidden",
-    minimal: "bg-white text-slate-800 border-b border-slate-200 shadow-sm"
+    default: 'bg-white text-slate-800 border-b border-slate-200 shadow-sm',
+    hero: 'gradient-hero text-white shadow-2xl relative overflow-hidden',
+    minimal: 'bg-white text-slate-800 border-b border-slate-200 shadow-sm',
   };
 
   return (
     <header className={`relative ${variants[variant]} ${className}`}>
       {/* Decorative animated background for hero variant */}
-      {variant === "hero" && (
+      {variant === 'hero' && (
         <>
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-float" />
@@ -69,9 +69,10 @@ export function PageHeader({
                 className={`
                   flex items-center justify-center w-10 h-10 rounded-xl
                   transition-all duration-300 hover:scale-110 active:scale-95
-                  ${variant === "hero" 
-                    ? "bg-white/20 hover:bg-white/30 text-white" 
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                  ${
+                    variant === 'hero'
+                      ? 'bg-white/20 hover:bg-white/30 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                   }
                 `}
                 aria-label="Go back"
@@ -86,9 +87,11 @@ export function PageHeader({
                 {title}
               </h1>
               {subtitle && (
-                <p className={`text-sm mt-0.5 animate-fadeIn delay-100 ${
-                  variant === "hero" ? "text-white/70" : "text-slate-500"
-                }`}>
+                <p
+                  className={`text-sm mt-0.5 animate-fadeIn delay-100 ${
+                    variant === 'hero' ? 'text-white/70' : 'text-slate-500'
+                  }`}
+                >
                   {subtitle}
                 </p>
               )}

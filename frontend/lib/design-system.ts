@@ -54,7 +54,7 @@ export const colors = {
   // Shadow
   shadow: 'rgba(0, 0, 0, 0.1)',
   shadowLg: 'rgba(0, 0, 0, 0.15)',
-}
+};
 
 export const status = {
   pending: '#94A3B8',
@@ -64,7 +64,7 @@ export const status = {
   resolved: '#22C55E',
   closed: '#6B7280',
   rejected: '#EF4444',
-}
+};
 
 export const radius = {
   sm: 6,
@@ -72,7 +72,7 @@ export const radius = {
   lg: 12,
   xl: 16,
   full: 9999,
-}
+};
 
 export const spacing = {
   xs: 4,
@@ -80,12 +80,19 @@ export const spacing = {
   md: 16,
   lg: 24,
   xl: 32,
-}
+};
 
 export const typography = {
   fontFamily: {
     sans: ['Inter', 'system-ui', 'sans-serif'],
-    mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+    mono: [
+      'ui-monospace',
+      'SFMono-Regular',
+      'Menlo',
+      'Monaco',
+      'Consolas',
+      'monospace',
+    ],
   },
   fontSize: {
     xs: '0.75rem',
@@ -104,7 +111,7 @@ export const typography = {
     semibold: 600,
     bold: 700,
   },
-}
+};
 
 export const shadow = {
   sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
@@ -112,13 +119,13 @@ export const shadow = {
   md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
   lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
   xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-}
+};
 
 export const transition = {
   fast: '150ms cubic-bezier(0.4, 0, 0.2, 1)',
   normal: '250ms cubic-bezier(0.4, 0, 0.2, 1)',
   slow: '350ms cubic-bezier(0.4, 0, 0.2, 1)',
-}
+};
 
 export const zIndex = {
   dropdown: 1000,
@@ -128,4 +135,4 @@ export const zIndex = {
   modal: 1050,
   popover: 1060,
   tooltip: 1070,
-}
+};

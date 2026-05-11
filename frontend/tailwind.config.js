@@ -1,11 +1,11 @@
-import tailwindcssAnimate from "tailwindcss-animate";
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./lib/**/*.{js,ts,tsx}",
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './lib/**/*.{js,ts,tsx}',
   ],
   theme: {
     extend: {
@@ -75,12 +75,12 @@ export default {
           700: '#E65100',
           800: '#D84315',
           900: '#BF360C',
-        }
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-      }
+      },
     },
   },
   plugins: [tailwindcssAnimate],
-}
+};

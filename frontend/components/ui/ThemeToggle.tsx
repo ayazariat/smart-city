@@ -1,24 +1,24 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { Sun, Moon } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    setDark(document.documentElement.getAttribute("data-theme") === "dark");
+    setDark(document.documentElement.getAttribute('data-theme') === 'dark');
   }, []);
 
   const toggle = () => {
     const next = !dark;
     setDark(next);
     if (next) {
-      document.documentElement.setAttribute("data-theme", "dark");
-      localStorage.setItem("smartcity-theme", "dark");
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('smartcity-theme', 'dark');
     } else {
-      document.documentElement.removeAttribute("data-theme");
-      localStorage.setItem("smartcity-theme", "light");
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('smartcity-theme', 'light');
     }
   };
 

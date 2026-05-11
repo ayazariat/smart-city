@@ -1,11 +1,11 @@
-import type { NextConfig } from "next";
-import path from "path";
+import type { NextConfig } from 'next';
+import path from 'path';
 
 const nextConfig: NextConfig = {
   experimental: {
     webpackBuildWorker: true,
     // Optimize for faster page transitions in development
-    optimizePackageImports: ["lucide-react", "recharts"],
+    optimizePackageImports: ['lucide-react', 'recharts'],
   },
   // Required in Next.js 16: declare turbopack config so the webpack block below
   // doesn't trigger the "webpack config without turbopack config" error.
@@ -15,8 +15,8 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "**" },
-      { protocol: "http",  hostname: "**" },
+      { protocol: 'https', hostname: '**' },
+      { protocol: 'http', hostname: '**' },
     ],
   },
   // Increase static page generation timeout to avoid "failed to fetch" on slow machines

@@ -1,5 +1,5 @@
 {
-   "common": {
+  "common": {
     "loading": "جاري التحميل...",
     "smartCity": "المدينة الذكية",
     "tunisia": "تونس",
@@ -27,11 +27,11 @@
     "showFilters": "إظهار الفلاتر",
     "hideFilters": "إخفاء الفلاتر",
     "timeAgo": {
-        "now": "الآن",
-        "minutes": "منذ {{n}} دقيقة",
-        "hours": "منذ {{n}} ساعة",
-        "days": "منذ {{n}} يوم"
-      }
+      "now": "الآن",
+      "minutes": "منذ {{n}} دقيقة",
+      "hours": "منذ {{n}} ساعة",
+      "days": "منذ {{n}} يوم"
+    }
   },
   "badges": {
     "overdue": "متأخر",
@@ -255,7 +255,9 @@
     "department": "القسم",
     "totalComplaints": "إجمالي الشكاوى",
     "toAssign": "للتعيين",
-    "needsTechnician": "تحتاج فني",    "allTasks": "إجمالي المهام",    "newTasks": "مهام جديدة",
+    "needsTechnician": "تحتاج فني",
+    "allTasks": "إجمالي المهام",
+    "newTasks": "مهام جديدة",
     "readyToStart": "جاهزة للبدء",
     "workingOn": "قيد العمل",
     "completed": "مكتملة",
@@ -339,17 +341,17 @@
     "filterActive": "نشطة",
     "filterResolved": "محلولة"
   },
-   "status": {
-     "SUBMITTED": "مقدمة",
-     "VALIDATED": "مصادق عليها",
-     "ASSIGNED": "معينة",
-     "IN_PROGRESS": "قيد التنفيذ",
-     "RESOLVED": "محلولة",
-     "CLOSED": "مغلقة",
-     "REJECTED": "مرفوضة",
-     "RESOLUTION_REJECTED": "تحديث مطلوب",
-     "ARCHIVED": "مؤرشفة"
-   },
+  "status": {
+    "SUBMITTED": "مقدمة",
+    "VALIDATED": "مصادق عليها",
+    "ASSIGNED": "معينة",
+    "IN_PROGRESS": "قيد التنفيذ",
+    "RESOLVED": "محلولة",
+    "CLOSED": "مغلقة",
+    "REJECTED": "مرفوضة",
+    "RESOLUTION_REJECTED": "تحديث مطلوب",
+    "ARCHIVED": "مؤرشفة"
+  },
   "categories": {
     "waste": "النفايات والنظافة",
     "wasteDesc": "القمامة، الحاويات الممتلئة، المكبات غير القانونية، تنظيف الشوارع.",
@@ -428,6 +430,7 @@
     "submitBtn": "تقديم الشكوى",
     "submitting": "جاري الإرسال...",
     "checkingDuplicates": "البحث عن شكاوى مشابهة...",
+    "notYetAssigned": "لم يتم التعيين بعد",
     "success": {
       "title": "تم تقديم الشكوى!",
       "message": "تم تقديم شكواك بنجاح.",
@@ -780,6 +783,19 @@
     "urgent": "عاجل",
     "keywords": "الكلمات المفتاحية",
     "errorNotFound": "الشكوى غير موجودة",
+    "duplicateRejectionBanner": {
+      "title": "هذه الشكوى مكررة",
+      "body": "توجد شكوى مشابهة بالفعل ويجري معالجتها. تم دمج تقريرك ونقل أصواتك إلى الشكوى الأصلية.",
+      "viewOriginal": "عرض الشكوى الأصلية {{rc}} ←",
+      "mergedOn": "تم الدمج في {{date}}"
+    },
+    "mergedReports": {
+      "title": "التقارير المدمجة",
+      "subtitle": "تم تحديد هذه الشكاوى على أنها مكررة لهذا التقرير ودُمجت فيه.",
+      "confirmedVia": "تأكيد عبر الدمج"
+    },
+    "communitySupportMergeNote": "منها {{count}} عبر تقارير مدمجة",
+    "statusRejectedDuplicate": "مكرر من {{rc}}",
     "errorOwnOnly": "تم رفض الوصول. يمكنك عرض شكاواك فقط.",
     "errorAccessDenied": "تم رفض الوصول. ليس لديك صلاحية عرض هذه الشكوى.",
     "errorSessionExpired": "انتهت الجلسة. يرجى تسجيل الدخول مجدداً.",
@@ -817,19 +833,19 @@
     "update": "تحديث",
     "techWorking": "الفني يعمل على هذه الشكوى",
     "resolutionReportSubmitted": "تم إرسال تقرير الحل",
-    "reviewResolutionReport": "راجع تقرير الحل أعلاه للموافقة أو الرفض"
-    ,"changeTechnician": "تغيير الفني"
-    ,"setPriority": "تحديد الأولوية"
-    ,"selectTechnicianHint": "اختر فنيًا لإسناد هذه المهمة"
-    ,"departmentAssigned": "تم إسناد القسم"
-    ,"waitingTechnicianAssignment": "بانتظار إسناد الفني من المدير"
-    ,"departmentStats": "إحصائيات القسم"
-    ,"viewPerformanceMetrics": "عرض مؤشرات الأداء"
-    ,"reports": "تقارير"
-    ,"generateGlobalReports": "إنشاء تقارير عامة"
-    ,"aiAnalysis": "تحليل الذكاء الاصطناعي"
-    ,"aiUrgencyPrediction": "توقع الأولوية بالذكاء الاصطناعي"
-    ,"duplicateCheck": "فحص التكرار",
+    "reviewResolutionReport": "راجع تقرير الحل أعلاه للموافقة أو الرفض",
+    "changeTechnician": "تغيير الفني",
+    "setPriority": "تحديد الأولوية",
+    "selectTechnicianHint": "اختر فنيًا لإسناد هذه المهمة",
+    "departmentAssigned": "تم إسناد القسم",
+    "waitingTechnicianAssignment": "بانتظار إسناد الفني من المدير",
+    "departmentStats": "إحصائيات القسم",
+    "viewPerformanceMetrics": "عرض مؤشرات الأداء",
+    "reports": "تقارير",
+    "generateGlobalReports": "إنشاء تقارير عامة",
+    "aiAnalysis": "تحليل الذكاء الاصطناعي",
+    "aiUrgencyPrediction": "توقع الأولوية بالذكاء الاصطناعي",
+    "duplicateCheck": "فحص التكرار",
     "checkingDuplicates": "البحث عن شكاوى مشابهة...",
     "similarComplaintsFound": "تم العثور على شكاوى مشابهة — راجع قبل التحقق",
     "differentIssuesContinue": "هذه مشاكل مختلفة — متابعة التحقق",
@@ -934,11 +950,11 @@
     "search": "بحث:",
     "status": "الحالة:"
   },
-   "publicComplaint": {
-     "loading": "جاري تحميل الشكوى...",
-     "notFound": "الشكوى غير موجودة",
-     "errorLoading": "تعذر تحميل تفاصيل الشكوى",
-     "notPublicYet": "قد لا تكون هذه الشكوى عامة بعد.",
+  "publicComplaint": {
+    "loading": "جاري تحميل الشكوى...",
+    "notFound": "الشكوى غير موجودة",
+    "errorLoading": "تعذر تحميل تفاصيل الشكوى",
+    "notPublicYet": "قد لا تكون هذه الشكوى عامة بعد.",
     "backToDashboard": "العودة إلى لوحة المعلومات",
     "complaintDetail": "تفاصيل الشكوى",
     "menu": "القائمة",
@@ -1038,6 +1054,7 @@
         "closed": "تم إغلاق الشكوى",
         "closed.desc": "تم إغلاق شكواك."
       },
+      "mergedAsDuplicate": "تم تحديد شكواك {{mergedRc}} على أنها مشابهة للشكوى {{originalRc}}: '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية.",
       "newComplaint": "شكوى جديدة",
       "newComplaint.desc": "تم تقديم شكوى جديدة.",
       "assignedToYou": "مسندة إليك",

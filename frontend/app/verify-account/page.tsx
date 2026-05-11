@@ -1,22 +1,28 @@
-"use client";
+'use client';
 
-import { Suspense, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Mail, ShieldCheck, Sparkles, CheckCircle, ArrowRight } from "lucide-react";
-import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
-import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
-import { useAuthStore } from "@/store/useAuthStore";
-import { setClientAuthTokens } from "@/lib/api";
+import { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import {
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  CheckCircle,
+  ArrowRight,
+} from 'lucide-react';
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground';
+import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
+import { useAuthStore } from '@/store/useAuthStore';
+import { setClientAuthTokens } from '@/lib/api';
 
 function VerifyAccountContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  const magicToken = searchParams.get("token");
-  const magicUserId = searchParams.get("userId");
-  const emailFromRegister = searchParams.get("email") || "";
+
+  const magicToken = searchParams.get('token');
+  const magicUserId = searchParams.get('userId');
+  const emailFromRegister = searchParams.get('email') || '';
 
   const { verifyMagicLink } = useAuthStore();
   const [isVerifying, setIsVerifying] = useState(false);
@@ -34,7 +40,10 @@ function VerifyAccountContent() {
     setErrorMessage(null);
 
     try {
-      const params = new URLSearchParams({ token: magicToken!, userId: magicUserId! });
+      const params = new URLSearchParams({
+        token: magicToken!,
+        userId: magicUserId!,
+      });
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/verify-magic-link?${params.toString()}`,
         { method: 'GET' }
@@ -43,7 +52,7 @@ function VerifyAccountContent() {
       const data = await response.json();
 
       if (!response.ok) {
-        setErrorMessage(data.message || "La vérification a échoué.");
+        setErrorMessage(data.message || 'La vérification a échoué.');
         return;
       }
 
@@ -58,28 +67,30 @@ function VerifyAccountContent() {
       if (data.token && data.refreshToken) {
         // Set tokens in cookies for API calls
         setClientAuthTokens(data.token, data.refreshToken);
-        
+
         localStorage.setItem('token', data.token);
         localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('user', JSON.stringify(data.user));
-        
+
         // Redirect to dashboard with tokens in URL for verification handling
         setIsVerified(true);
         setTimeout(() => {
-          router.push(`/dashboard?verified=true&token=${data.token}&refreshToken=${data.refreshToken}`);
+          router.push(
+            `/dashboard?verified=true&token=${data.token}&refreshToken=${data.refreshToken}`
+          );
         }, 1500);
       } else {
         // Fallback: redirect to login if no tokens
         setIsVerified(true);
         setTimeout(() => {
-          router.push("/?verified=true");
+          router.push('/?verified=true');
         }, 2000);
       }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "La vérification a échoué. Le lien peut être expiré ou invalide."
+          : 'La vérification a échoué. Le lien peut être expiré ou invalide.'
       );
     } finally {
       setIsVerifying(false);
@@ -125,7 +136,10 @@ function VerifyAccountContent() {
               ) : errorMessage ? (
                 <>
                   <div className="mb-6">
-                    <Alert variant="error" onClose={() => setErrorMessage(null)}>
+                    <Alert
+                      variant="error"
+                      onClose={() => setErrorMessage(null)}
+                    >
                       {errorMessage}
                     </Alert>
                   </div>
@@ -187,7 +201,7 @@ function VerifyAccountContent() {
                 Vous n&apos;avez pas reçu d&apos;email ?
               </p>
               <Button
-                onClick={() => router.push("/")}
+                onClick={() => router.push('/')}
                 fullWidth
                 variant="outline"
               >

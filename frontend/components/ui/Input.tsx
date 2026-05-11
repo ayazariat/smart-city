@@ -41,9 +41,10 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               ${isPassword ? 'pr-10' : ''}
               border rounded-xl
               transition-all duration-300
-              ${error 
-                ? 'border-urgent-300 focus:border-urgent-500 focus:ring-urgent-500/20 focus:shadow-lg focus:shadow-urgent-100' 
-                : 'border-slate-200 focus:border-primary focus:ring-primary/20 focus:shadow-lg focus:shadow-primary/5'
+              ${
+                error
+                  ? 'border-urgent-300 focus:border-urgent-500 focus:ring-urgent-500/20 focus:shadow-lg focus:shadow-urgent-100'
+                  : 'border-slate-200 focus:border-primary focus:ring-primary/20 focus:shadow-lg focus:shadow-primary/5'
               }
               focus:outline-none focus:ring-2
               placeholder:text-slate-400
@@ -59,7 +60,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
               tabIndex={-1}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>

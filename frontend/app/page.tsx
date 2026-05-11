@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
   const router = useRouter();
-  
+
   useEffect(() => {
     // Redirect to transparency page (public dashboard)
-    router.replace("/transparency");
+    router.replace('/transparency');
   }, [router]);
 
   return (

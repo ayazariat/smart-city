@@ -10,6 +10,18 @@ const normalizeMunicipality = (name) => {
     .trim();
 };
 
+const normalizeGovernorate = (name) => {
+  if (!name) return '';
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // remove diacritics (é→e, è→e, etc.)
+    .replace(/[-''`]/g, ' ')            // hyphens/apostrophes → space
+    .replace(/\s+/g, ' ')              // collapse multiple spaces
+    .trim();
+};
+
 // Municipality → Governorate mapping for auto-population
 const MUNICIPALITY_TO_GOVERNORATE = {
   // Ariana
@@ -49,7 +61,7 @@ const MUNICIPALITY_TO_GOVERNORATE = {
   // Sidi Bouzid
   "Sidi Bouzid": "Sidi Bouzid", "Sidi Bouzid Est": "Sidi Bouzid", "Sidi Bouzid Ouest": "Sidi Bouzid", "Bir el-Hafey": "Sidi Bouzid", "Bir El Hafey": "Sidi Bouzid", "Cebbala Ouled Asker": "Sidi Bouzid", "Jelma": "Sidi Bouzid", "Jilma": "Sidi Bouzid", "Mazzouna": "Sidi Bouzid", "Meknassy": "Sidi Bouzid", "Menzel Bouzaiane": "Sidi Bouzid", "Ouled Haffouz": "Sidi Bouzid", "Regueb": "Sidi Bouzid", "Sidi Ali Ben Aoun": "Sidi Bouzid",
   // Siliana
-  "Siliana": "Siliana", "Siliana Nord": "Siliana", "Siliana Sud": "Siliana", "Bargou": "Siliana", "Bou Arada": "Siliana", "El Aroussa": "Siliana", "El Krib": "Siliana", "Gaâfour": "Siliana", "Kesra": "Siliana", "Le Sers": "Siliana", "Makthar": "Siliana", "Rouhia": "Siliana",
+  "Siliana": "Siliana", "Siliana Nord": "Siliana", "Siliana Sud": "Siliana", "Bargou": "Siliana", "Bou Arada": "Siliana", "El Aroussa": "Siliana", "Gaâfour": "Siliana", "Kesra": "Siliana", "Le Sers": "Siliana", "Makthar": "Siliana", "Rouhia": "Siliana",
   // Sousse
   "Sousse": "Sousse", "Sousse Médina": "Sousse", "Sousse Riadh": "Sousse", "Sousse Jawhara": "Sousse", "Sousse Sidi Abdelhamid": "Sousse", "Akouda": "Sousse", "Bouficha": "Sousse", "Enfida": "Sousse", "Hammam Sousse": "Sousse", "Hergla": "Sousse", "Kalâa Kebira": "Sousse", "Kalâa Sghira": "Sousse", "Kondar": "Sousse", "Ksibet Thrayet": "Sousse", "M'saken": "Sousse", "Msaken": "Sousse", "Sidi Bou Ali": "Sousse", "Sidi el-Héni": "Sousse",
   // Tataouine
@@ -78,4 +90,4 @@ const getMunicipalityGovernorate = (municipalityName) => {
   return null;
 };
 
-module.exports = { normalizeMunicipality, getMunicipalityGovernorate, MUNICIPALITY_TO_GOVERNORATE };
+module.exports = { normalizeMunicipality, normalizeGovernorate, getMunicipalityGovernorate, MUNICIPALITY_TO_GOVERNORATE };

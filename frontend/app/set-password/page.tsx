@@ -1,52 +1,55 @@
-"use client";
+'use client';
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Lock, ShieldCheck, Sparkles, Eye, EyeOff } from "lucide-react";
-import { authService } from "@/services/auth.service";
-import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
-import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
-import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { Lock, ShieldCheck, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { authService } from '@/services/auth.service';
+import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground';
+import {
+  ReCaptchaBadge,
+  refreshRecaptchaToken,
+} from '@/components/ui/ReCaptchaBadge';
 
 function SetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
-  const token = searchParams.get("token");
-  const email = searchParams.get("email");
-  
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const token = searchParams.get('token');
+  const email = searchParams.get('email');
+
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (!token || !email) {
-      setError("Invalid activation link. Please contact your administrator.");
+      setError('Invalid activation link. Please contact your administrator.');
     }
   }, [token, email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError('');
 
     if (!password || !confirmPassword) {
-      setError("Please fill in all fields");
+      setError('Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError('Passwords do not match');
       return;
     }
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -54,24 +57,26 @@ function SetPasswordForm() {
     const hasUpperCase = /[A-Z]/.test(password);
     const hasLowerCase = /[a-z]/.test(password);
     const hasNumbers = /\d/.test(password);
-    
+
     if (!hasUpperCase || !hasLowerCase || !hasNumbers) {
-      setError("Password must contain uppercase, lowercase letters and numbers");
+      setError(
+        'Password must contain uppercase, lowercase letters and numbers'
+      );
       return;
     }
 
     setLoading(true);
-    
+
     try {
       await authService.setPassword(token!, email!, password);
       setSuccess(true);
-      
+
       // Redirect to login after 2 seconds
       setTimeout(() => {
-        router.push("/?activated=true");
+        router.push('/?activated=true');
       }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set password");
+      setError(err instanceof Error ? err.message : 'Failed to set password');
     } finally {
       setLoading(false);
     }
@@ -91,7 +96,8 @@ function SetPasswordForm() {
                 Account Activated!
               </h1>
               <p className="text-slate-600 mb-6">
-                Your password has been set successfully. You can now log in to your account.
+                Your password has been set successfully. You can now log in to
+                your account.
               </p>
               <Link
                 href="/"
@@ -109,7 +115,7 @@ function SetPasswordForm() {
   return (
     <>
       <AnimatedBackground />
-      
+
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           {/* Header */}
@@ -126,15 +132,17 @@ function SetPasswordForm() {
           </div>
 
           {/* Form Card */}
-          <form onSubmit={handleSubmit} className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200">
-            {error && (
-              <Alert variant="error">{error}</Alert>
-            )}
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 p-8 animate-scaleIn delay-200"
+          >
+            {error && <Alert variant="error">{error}</Alert>}
 
             {email && (
               <div className="mb-6 p-4 bg-slate-50 rounded-xl">
                 <p className="text-sm text-slate-600">
-                  Setting password for: <span className="font-semibold text-slate-900">{email}</span>
+                  Setting password for:{' '}
+                  <span className="font-semibold text-slate-900">{email}</span>
                 </p>
               </div>
             )}
@@ -150,7 +158,7 @@ function SetPasswordForm() {
                     <Lock className="h-5 w-5 text-slate-400" />
                   </div>
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
@@ -181,7 +189,7 @@ function SetPasswordForm() {
                     <Lock className="h-5 w-5 text-slate-400" />
                   </div>
                   <input
-                    type={showConfirmPassword ? "text" : "password"}
+                    type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
@@ -206,8 +214,12 @@ function SetPasswordForm() {
               <div className="text-sm text-slate-500 space-y-1">
                 <p>Password requirements:</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li className={password.length >= 8 ? "text-green-600" : ""}>At least 8 characters</li>
-                  <li className="text-green-600">Contains uppercase and lowercase letters</li>
+                  <li className={password.length >= 8 ? 'text-green-600' : ''}>
+                    At least 8 characters
+                  </li>
+                  <li className="text-green-600">
+                    Contains uppercase and lowercase letters
+                  </li>
                   <li className="text-green-600">Contains numbers</li>
                 </ul>
               </div>
@@ -222,7 +234,9 @@ function SetPasswordForm() {
               disabled={loading || !token || !email}
               className="group"
             >
-              {loading ? "Setting Password..." : "Set Password & Activate Account"}
+              {loading
+                ? 'Setting Password...'
+                : 'Set Password & Activate Account'}
             </Button>
           </form>
 
@@ -238,11 +252,13 @@ function SetPasswordForm() {
 
 export default function SetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-pulse">Loading...</div>
+        </div>
+      }
+    >
       <SetPasswordForm />
     </Suspense>
   );

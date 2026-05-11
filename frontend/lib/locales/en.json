@@ -1,58 +1,58 @@
 {
-   "common": {
-     "loading": "Loading...",
-     "smartCity": "Smart City",
-     "tunisia": "Tunisia",
-     "user": "User",
-     "cancel": "Cancel",
-     "submit": "Submit",
-     "save": "Save",
-     "delete": "Delete",
-     "confirm": "Confirm",
-     "close": "Close",
-     "back": "Back",
-     "next": "Next",
-     "search": "Search...",
-     "noData": "No data available",
-     "noDataYet": "No data yet",
-     "tryAdjustingFilters": "Try adjusting your search or filters.",
-     "refresh": "Refresh",
-     "processing": "Processing...",
-     "all": "All",
-     "active": "Active",
-     "resolved": "Resolved",
-     "help": "Help",
-     "unknown": "Unknown",
-     "yourComplaint": "Your complaint",
-     "showFilters": "Show Filters",
-     "hideFilters": "Hide Filters",
-      "timeAgo": {
-        "now": "Just now",
-        "minutes": "{{n}}m ago",
-        "hours": "{{n}}h ago",
-        "days": "{{n}}d ago"
-      }
-    },
-    "badges": {
-      "overdue": "Overdue",
-      "atRisk": "At Risk",
-      "reportPending": "Report Pending",
-      "approved": "Approved",
-      "popular": "Popular",
-      "reworkNeeded": "Rework Needed"
-    },
-    "errors": {
-     "loadFailed": "Failed to load data. Please try again.",
-     "generic": "Something went wrong. Please try again.",
-     "notFound": "The requested resource was not found.",
-     "invalidActivation": "Invalid activation link. Please contact your administrator.",
-     "fillAllFields": "Please fill in all fields",
-     "passwordsDoNotMatch": "Passwords do not match",
-     "passwordTooShort": "Password must be at least 8 characters",
-     "passwordComplexity": "Password must contain uppercase, lowercase letters and numbers",
-     "failedSetPassword": "Failed to set password. Please try again."
-   },
-   "sidebar": {
+  "common": {
+    "loading": "Loading...",
+    "smartCity": "Smart City",
+    "tunisia": "Tunisia",
+    "user": "User",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "save": "Save",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search...",
+    "noData": "No data available",
+    "noDataYet": "No data yet",
+    "tryAdjustingFilters": "Try adjusting your search or filters.",
+    "refresh": "Refresh",
+    "processing": "Processing...",
+    "all": "All",
+    "active": "Active",
+    "resolved": "Resolved",
+    "help": "Help",
+    "unknown": "Unknown",
+    "yourComplaint": "Your complaint",
+    "showFilters": "Show Filters",
+    "hideFilters": "Hide Filters",
+    "timeAgo": {
+      "now": "Just now",
+      "minutes": "{{n}}m ago",
+      "hours": "{{n}}h ago",
+      "days": "{{n}}d ago"
+    }
+  },
+  "badges": {
+    "overdue": "Overdue",
+    "atRisk": "At Risk",
+    "reportPending": "Report Pending",
+    "approved": "Approved",
+    "popular": "Popular",
+    "reworkNeeded": "Rework Needed"
+  },
+  "errors": {
+    "loadFailed": "Failed to load data. Please try again.",
+    "generic": "Something went wrong. Please try again.",
+    "notFound": "The requested resource was not found.",
+    "invalidActivation": "Invalid activation link. Please contact your administrator.",
+    "fillAllFields": "Please fill in all fields",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordComplexity": "Password must contain uppercase, lowercase letters and numbers",
+    "failedSetPassword": "Failed to set password. Please try again."
+  },
+  "sidebar": {
     "navigation": "Navigation",
     "dashboard": "Dashboard",
     "myComplaints": "My Complaints",
@@ -77,128 +77,128 @@
     "DEPARTMENT_MANAGER": "Dept. Manager",
     "TECHNICIAN": "Technician",
     "ADMIN": "Administrator"
-   },
-   "agent": {
-     "noAssignedComplaints": "No complaints assigned to you yet.",
-     "noAssignedComplaintsFiltered": "No complaints match your current filters."
-   },
-    "admin": {
-      "settings": {
-        "title": "System Settings",
-        "subtitle": "Manage departments, SLA rules, and platform configuration",
-        "loadFailed": "Failed to load settings",
-        "tabs": {
-          "departments": "Departments",
-          "sla": "SLA Rules",
-          "categories": "Categories"
-        },
-        "departments": {
-          "title": "Departments",
-          "add": "Add Department",
-          "addDepartment": "Add Department",
-          "editDepartment": "Edit Department",
-          "departmentModalDescription": "Configure department details and which complaint categories it handles.",
-          "departmentName": "Department Name",
-          "departmentNamePlaceholder": "e.g. Roads & Infrastructure",
-          "noDepartments": "No departments configured yet.",
-          "deptNameRequired": "Department name is required",
-          "deptUpdated": "Department updated",
-          "deptCreated": "Department created",
-          "deptSaveFailed": "Failed to save department",
-          "deptDeleteConfirm": "Delete this department? This cannot be undone.",
-          "deptDeleted": "Department deleted",
-          "deptDeleteFailed": "Failed to delete department"
-        },
-        "sla": {
-          "description": "SLA deadlines define how long each complaint can remain open before being flagged as overdue. Each category can have different deadlines per urgency level. Changes apply to new complaints only.",
-          "urgency": "Urgency",
-          "hours": "Hours",
-          "label": "Label",
-          "actions": "Actions",
-          "save": "Save",
-          "cancel": "Cancel",
-          "edit": "Edit",
-          "slaUpdated": "SLA rule updated",
-          "slaUpdateFailed": "Failed to update SLA rule"
-        },
+  },
+  "agent": {
+    "noAssignedComplaints": "No complaints assigned to you yet.",
+    "noAssignedComplaintsFiltered": "No complaints match your current filters."
+  },
+  "admin": {
+    "settings": {
+      "title": "System Settings",
+      "subtitle": "Manage departments, SLA rules, and platform configuration",
+      "loadFailed": "Failed to load settings",
+      "tabs": {
+        "departments": "Departments",
+        "sla": "SLA Rules",
+        "categories": "Categories"
+      },
+      "departments": {
+        "title": "Departments",
+        "add": "Add Department",
+        "addDepartment": "Add Department",
+        "editDepartment": "Edit Department",
+        "departmentModalDescription": "Configure department details and which complaint categories it handles.",
+        "departmentName": "Department Name",
+        "departmentNamePlaceholder": "e.g. Roads & Infrastructure",
+        "noDepartments": "No departments configured yet.",
+        "deptNameRequired": "Department name is required",
+        "deptUpdated": "Department updated",
+        "deptCreated": "Department created",
+        "deptSaveFailed": "Failed to save department",
+        "deptDeleteConfirm": "Delete this department? This cannot be undone.",
+        "deptDeleted": "Department deleted",
+        "deptDeleteFailed": "Failed to delete department"
+      },
+      "sla": {
+        "description": "SLA deadlines define how long each complaint can remain open before being flagged as overdue. Each category can have different deadlines per urgency level. Changes apply to new complaints only.",
+        "urgency": "Urgency",
+        "hours": "Hours",
+        "label": "Label",
+        "actions": "Actions",
+        "save": "Save",
+        "cancel": "Cancel",
         "edit": "Edit",
-        "delete": "Delete"
+        "slaUpdated": "SLA rule updated",
+        "slaUpdateFailed": "Failed to update SLA rule"
       },
-      "noComplaintsSubmitted": "No complaints have been submitted yet.",
-      "complaintsPageTitle": "System Supervision — Complaints",
-      "complaintsPageSubtitle": "Read-only monitoring and administrative oversight",
-      "complaintsCount": "{{total}} active · {{shown}} shown",
-      "totalComplaints": "Total Complaints",
-      "resolved": "Resolved",
-      "atRisk": "At Risk (SLA)",
-      "closeToDeadline": "Close to deadline",
-      "overdue": "Overdue",
-      "pastDeadline": "Past deadline",
-      "teamPerformance": "Team Performance",
-      "inProgress": "In Progress",
-      "currentlyWorked": "Currently being worked on",
-      "averageDays": "Average Days",
-      "timeToProcess": "Time to process",
-      "resolutionRate": "Resolution Rate",
-      "percentageResolved": "Percentage resolved",
-      "highPriority": "High Priority",
-      "urgentIssues": "Urgent issues (score 15+)",
-      "categories": "Categories:",
-      "searchPlaceholder": "Search by description or category...",
-      "filtersButton": "Filters",
-      "exportCSV": "CSV",
-      "exportPDF": "PDF",
-      "resultsCount": "{{count}} results",
-      "usersPageTitle": "User Management",
-      "usersPageSubtitle": "Manage system users and their permissions",
-      "addNewUser": "Add New User",
-      "totalUsers": "Total Users",
-      "activeUsers": "Active Users",
-      "inactiveUsers": "Inactive Users",
-      "administrators": "Administrators",
-      "searchUsersPlaceholder": "Search users by name or email...",
-      "table": {
-        "user": "User",
-        "role": "Role",
-        "commune": "Commune",
-        "phone": "Phone",
-        "status": "Status",
-        "actions": "Actions"
-      },
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "noComplaintsSubmitted": "No complaints have been submitted yet.",
+    "complaintsPageTitle": "System Supervision — Complaints",
+    "complaintsPageSubtitle": "Read-only monitoring and administrative oversight",
+    "complaintsCount": "{{total}} active · {{shown}} shown",
+    "totalComplaints": "Total Complaints",
+    "resolved": "Resolved",
+    "atRisk": "At Risk (SLA)",
+    "closeToDeadline": "Close to deadline",
+    "overdue": "Overdue",
+    "pastDeadline": "Past deadline",
+    "teamPerformance": "Team Performance",
+    "inProgress": "In Progress",
+    "currentlyWorked": "Currently being worked on",
+    "averageDays": "Average Days",
+    "timeToProcess": "Time to process",
+    "resolutionRate": "Resolution Rate",
+    "percentageResolved": "Percentage resolved",
+    "highPriority": "High Priority",
+    "urgentIssues": "Urgent issues (score 15+)",
+    "categories": "Categories:",
+    "searchPlaceholder": "Search by description or category...",
+    "filtersButton": "Filters",
+    "exportCSV": "CSV",
+    "exportPDF": "PDF",
+    "resultsCount": "{{count}} results",
+    "usersPageTitle": "User Management",
+    "usersPageSubtitle": "Manage system users and their permissions",
+    "addNewUser": "Add New User",
+    "totalUsers": "Total Users",
+    "activeUsers": "Active Users",
+    "inactiveUsers": "Inactive Users",
+    "administrators": "Administrators",
+    "searchUsersPlaceholder": "Search users by name or email...",
+    "table": {
+      "user": "User",
+      "role": "Role",
       "commune": "Commune",
       "phone": "Phone",
       "status": "Status",
-      "actions": "Actions",
-      "active": "Active",
-      "inactive": "Inactive",
-      "editUser": "Edit User",
-      "fullName": "Full Name",
-      "email": "Email",
-      "governorate": "Governorate",
-      "department": "Department",
-      "selectDepartment": "Select Department",
-      "chooseDepartment": "Choose a department...",
-      "noDepartments": "No departments available",
-      "cancel": "Cancel",
-      "save": "Save",
-      "deleteUser": "Delete User",
-      "confirmDeleteUser": "Are you sure you want to delete this user? This action cannot be undone.",
-      "loadingUsers": "Loading users..."
+      "actions": "Actions"
     },
-   "manager": {
-     "noPendingComplaints": "No complaints pending for your department.",
-     "priorityFilterAll": "All Priorities",
-     "priorityFilterHigh": "High (≥15)",
-     "priorityFilterMedium": "Medium (6-14)",
-     "priorityFilterLow": "Low (<6)",
-     "reassignTeam": "Reassign Team",
-     "assignRepairTeam": "Assign Repair Team",
-     "selectTechniciansDesc": "Select one or more technicians to form a repair team for this complaint.",
-     "assignTeam": "Assign Team ({{count}})",
-     "assign": "Assign",
-     "updatePriority": "Update Priority"
-   },
-   "topbar": {
+    "commune": "Commune",
+    "phone": "Phone",
+    "status": "Status",
+    "actions": "Actions",
+    "active": "Active",
+    "inactive": "Inactive",
+    "editUser": "Edit User",
+    "fullName": "Full Name",
+    "email": "Email",
+    "governorate": "Governorate",
+    "department": "Department",
+    "selectDepartment": "Select Department",
+    "chooseDepartment": "Choose a department...",
+    "noDepartments": "No departments available",
+    "cancel": "Cancel",
+    "save": "Save",
+    "deleteUser": "Delete User",
+    "confirmDeleteUser": "Are you sure you want to delete this user? This action cannot be undone.",
+    "loadingUsers": "Loading users..."
+  },
+  "manager": {
+    "noPendingComplaints": "No complaints pending for your department.",
+    "priorityFilterAll": "All Priorities",
+    "priorityFilterHigh": "High (≥15)",
+    "priorityFilterMedium": "Medium (6-14)",
+    "priorityFilterLow": "Low (<6)",
+    "reassignTeam": "Reassign Team",
+    "assignRepairTeam": "Assign Repair Team",
+    "selectTechniciansDesc": "Select one or more technicians to form a repair team for this complaint.",
+    "assignTeam": "Assign Team ({{count}})",
+    "assign": "Assign",
+    "updatePriority": "Update Priority"
+  },
+  "topbar": {
     "back": "Back"
   },
   "theme": {
@@ -234,11 +234,11 @@
     "didntReceive": "Didn't receive the email? Try again",
     "publicStats": "View Public Statistics"
   },
-   "dateRange": {
-     "from": "FROM",
-     "to": "TO"
-   },
-   "dashboard": {
+  "dateRange": {
+    "from": "FROM",
+    "to": "TO"
+  },
+  "dashboard": {
     "title": "Dashboard",
     "welcomeBack": "Welcome back, {{name}}",
     "subtitle": {
@@ -439,17 +439,17 @@
     "filterActive": "Active",
     "filterResolved": "Resolved"
   },
-   "status": {
-     "SUBMITTED": "Submitted",
-     "VALIDATED": "Validated",
-     "ASSIGNED": "Assigned",
-     "IN_PROGRESS": "In Progress",
-     "RESOLVED": "Resolved",
-     "CLOSED": "Closed",
-     "REJECTED": "Rejected",
-     "RESOLUTION_REJECTED": "Rework Needed",
-     "ARCHIVED": "Archived"
-   },
+  "status": {
+    "SUBMITTED": "Submitted",
+    "VALIDATED": "Validated",
+    "ASSIGNED": "Assigned",
+    "IN_PROGRESS": "In Progress",
+    "RESOLVED": "Resolved",
+    "CLOSED": "Closed",
+    "REJECTED": "Rejected",
+    "RESOLUTION_REJECTED": "Rework Needed",
+    "ARCHIVED": "Archived"
+  },
   "categories": {
     "waste": "Waste & Cleanliness",
     "wasteDesc": "Garbage, overflowing bins, illegal dumps, street cleaning.",
@@ -554,13 +554,14 @@
       "submitFailed": "We couldn't submit your complaint right now. Please try again in a moment."
     },
     "duplicateModal": {
-      "title": "Possible Duplicate Detected",
-      "cancel": "Cancel",
-      "submitAnyway": "Submit Anyway",
-      "viewDetails": "View Details",
-      "upvote": "Upvote",
-      "upvoted": "Upvoted",
-      "confirm": "Confirm"
+      "title": "Potential Duplicate Complaints",
+      "description": "We found similar complaints that may be duplicates:",
+      "viewOriginal": "View Original",
+      "viewDuplicate": "View Duplicate",
+      "merge": "Merge",
+      "keepSeparate": "Keep Separate",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
     }
   },
   "transparency": {
@@ -790,15 +791,15 @@
     "assignToDepartment": "Assign to Department",
     "selectDepartmentDescription": "Select the department responsible for handling this complaint"
   },
-   "notifications": {
-     "title": "Notifications",
-     "empty": "No notifications yet",
-     "emptyHint": "You'll be notified when your complaints are updated.",
-     "seeAll": "See all notifications",
-     "markAllRead": "Mark all as read",
-     "today": "Today",
-     "earlier": "Earlier",
-     "types": {
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet",
+    "emptyHint": "You'll be notified when your complaints are updated.",
+    "seeAll": "See all notifications",
+    "markAllRead": "Mark all as read",
+    "today": "Today",
+    "earlier": "Earlier",
+    "types": {
       "VALIDATION": "Validation",
       "VALIDATED": "Validated",
       "ASSIGNMENT": "Assignment",
@@ -904,6 +905,19 @@
     "urgent": "Urgent",
     "keywords": "Keywords",
     "errorNotFound": "Complaint not found",
+    "duplicateRejectionBanner": {
+      "title": "This complaint is a duplicate",
+      "body": "A similar complaint already exists and is being handled. Your report has been merged and your community votes have been transferred to the original complaint.",
+      "viewOriginal": "View original complaint {{rc}} →",
+      "mergedOn": "Merged on {{date}}"
+    },
+    "mergedReports": {
+      "title": "Merged Reports",
+      "subtitle": "These complaints were identified as duplicates of this report and have been merged into it.",
+      "confirmedVia": "Confirmed via merge"
+    },
+    "communitySupportMergeNote": "including {{count}} via merged reports",
+    "statusRejectedDuplicate": "Duplicate of {{rc}}",
     "errorOwnOnly": "Access denied. You can only view your own complaints.",
     "notYetAssigned": "Not assigned yet",
     "errorAccessDenied": "Access denied. You don't have permission to view this complaint.",
@@ -942,19 +956,19 @@
     "update": "Update",
     "techWorking": "Technician is working on this complaint",
     "resolutionReportSubmitted": "Resolution Report Submitted",
-    "reviewResolutionReport": "Review the resolution report above to approve or reject"
-    ,"changeTechnician": "Change Technician"
-    ,"setPriority": "Set Priority"
-    ,"selectTechnicianHint": "Select a technician to assign this task"
-    ,"departmentAssigned": "Department Assigned"
-    ,"waitingTechnicianAssignment": "Waiting for technician assignment from manager"
-    ,"departmentStats": "Department Statistics"
-    ,"viewPerformanceMetrics": "View performance metrics"
-    ,"reports": "Reports"
-    ,"generateGlobalReports": "Generate global reports"
-    ,"aiAnalysis": "AI Analysis"
-    ,"aiUrgencyPrediction": "AI Urgency Prediction"
-    ,"duplicateCheck": "Duplicate Check",
+    "reviewResolutionReport": "Review the resolution report above to approve or reject",
+    "changeTechnician": "Change Technician",
+    "setPriority": "Set Priority",
+    "selectTechnicianHint": "Select a technician to assign this task",
+    "departmentAssigned": "Department Assigned",
+    "waitingTechnicianAssignment": "Waiting for technician assignment from manager",
+    "departmentStats": "Department Statistics",
+    "viewPerformanceMetrics": "View performance metrics",
+    "reports": "Reports",
+    "generateGlobalReports": "Generate global reports",
+    "aiAnalysis": "AI Analysis",
+    "aiUrgencyPrediction": "AI Urgency Prediction",
+    "duplicateCheck": "Duplicate Check",
     "checkingDuplicates": "Checking for similar complaints...",
     "similarComplaintsFound": "Similar complaints found — review before validating",
     "differentIssuesContinue": "These are different issues — continue to validate",
@@ -1059,11 +1073,11 @@
     "search": "Search:",
     "status": "Status:"
   },
-   "publicComplaint": {
-     "loading": "Loading complaint...",
-     "notFound": "Complaint Not Found",
-     "errorLoading": "Unable to load complaint details",
-     "notPublicYet": "This complaint may not be public yet.",
+  "publicComplaint": {
+    "loading": "Loading complaint...",
+    "notFound": "Complaint Not Found",
+    "errorLoading": "Unable to load complaint details",
+    "notPublicYet": "This complaint may not be public yet.",
     "backToDashboard": "Back to Dashboard",
     "complaintDetail": "Complaint Detail",
     "menu": "Menu",
@@ -1182,6 +1196,7 @@
         "closed": "Complaint Closed",
         "closed.desc": "Your complaint has been closed."
       },
+      "mergedAsDuplicate": "Your complaint {{mergedRc}} was identified as similar to complaint {{originalRc}}: '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report.",
       "newComplaint": "New Complaint",
       "newComplaint.desc": "A new complaint has been submitted.",
       "assignedToYou": "Assigned to You",

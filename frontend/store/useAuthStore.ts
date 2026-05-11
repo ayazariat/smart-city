@@ -1,8 +1,8 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { User, LoginData, RegisterData } from "@/types";
-import { authService } from "@/services/auth.service";
-import { setClientAuthTokens, clearClientAuthTokens } from "@/lib/api";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { User, LoginData, RegisterData } from '@/types';
+import { authService } from '@/services/auth.service';
+import { setClientAuthTokens, clearClientAuthTokens } from '@/lib/api';
 
 if (typeof window !== 'undefined') {
   setTimeout(() => {
@@ -38,9 +38,16 @@ interface AuthState {
   refreshAccessToken: () => Promise<boolean>;
   fetchProfile: () => Promise<void>;
   updateProfile: (data: { fullName?: string; phone?: string }) => Promise<void>;
-  changePassword: (data: { currentPassword: string; newPassword: string }) => Promise<void>;
+  changePassword: (data: {
+    currentPassword: string;
+    newPassword: string;
+  }) => Promise<void>;
   clearError: () => void;
-  setUserAndTokens: (data: { user?: User | null; token?: string; refreshToken?: string }) => void;
+  setUserAndTokens: (data: {
+    user?: User | null;
+    token?: string;
+    refreshToken?: string;
+  }) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -138,8 +145,10 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { disconnectSocket } = await import('@/lib/socket');
           disconnectSocket();
-        } catch { /* silent */ }
-        
+        } catch {
+          /* silent */
+        }
+
         // Reset store
         useAuthStore.setState({
           user: null,
@@ -150,7 +159,7 @@ export const useAuthStore = create<AuthState>()(
           hydrated: true,
           isLoading: false,
         });
-        
+
         // Hard redirect after a brief moment
         window.location.href = '/login';
         setTimeout(() => window.location.reload(), 100);
@@ -177,7 +186,11 @@ export const useAuthStore = create<AuthState>()(
             const { authService } = await import('@/services/auth.service');
             const response = await authService.verifyToken(cookieToken);
             if (response.isAuthenticated && response.user) {
-              set({ user: response.user, token: cookieToken, isAuthenticated: true });
+              set({
+                user: response.user,
+                token: cookieToken,
+                isAuthenticated: true,
+              });
               return true;
             }
           } catch {
@@ -214,7 +227,11 @@ export const useAuthStore = create<AuthState>()(
         set({ error: null });
       },
 
-      setUserAndTokens: (data: { user?: User | null; token?: string; refreshToken?: string }) => {
+      setUserAndTokens: (data: {
+        user?: User | null;
+        token?: string;
+        refreshToken?: string;
+      }) => {
         set({
           user: data.user ?? null,
           token: data.token ?? null,
@@ -250,16 +267,19 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      changePassword: async (data: { currentPassword: string; newPassword: string }) => {
+      changePassword: async (data: {
+        currentPassword: string;
+        newPassword: string;
+      }) => {
         set({ isLoading: true, error: null });
         try {
           await authService.changePassword(data);
           // Password changed successfully, but token is now invalid
           // Clear user and token so they need to log in again
           set({ user: null, token: null, isLoading: false });
-          throw new Error("PASSWORD_CHANGED");
+          throw new Error('PASSWORD_CHANGED');
         } catch (error) {
-          if (error instanceof Error && error.message === "PASSWORD_CHANGED") {
+          if (error instanceof Error && error.message === 'PASSWORD_CHANGED') {
             throw error;
           }
           set({
@@ -271,7 +291,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "auth-storage",
+      name: 'auth-storage',
       partialize: (state) => ({
         user: state.user,
         token: state.token,
@@ -282,8 +302,9 @@ export const useAuthStore = create<AuthState>()(
         if (!error && state) {
           // Check if logout was triggered by checking if localStorage was cleared
           const storedData = localStorage.getItem('auth-storage');
-          const hasStoredData = storedData && JSON.parse(storedData)?.state?.token;
-          
+          const hasStoredData =
+            storedData && JSON.parse(storedData)?.state?.token;
+
           // Only rehydrate if there's actually stored data and tokens
           if (!hasStoredData) {
             // Force clear state on rehydration if no valid data
@@ -292,7 +313,7 @@ export const useAuthStore = create<AuthState>()(
             state.refreshToken = null;
             state.isAuthenticated = false;
           }
-          
+
           // Sync token to cookie so clientApiFetch can read it after page reload
           if (state.token) {
             try {
@@ -303,9 +324,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const hasUser = state.user !== null && state.user !== undefined;
-          useAuthStore.setState({ 
+          useAuthStore.setState({
             hydrated: true,
-            isAuthenticated: hasUser && !!state.token
+            isAuthenticated: hasUser && !!state.token,
           });
         } else {
           useAuthStore.setState({ hydrated: true });

@@ -1,20 +1,19 @@
 // Re-export unified constants (single source of truth)
-export { 
-  statusConfig, 
+export {
+  statusConfig,
   getCategoryLabel,
   categoryLabels,
   STATUS_OPTIONS,
   getComplaintIdDisplay,
-  CATEGORIES 
-} from "@/lib/complaints";
+  CATEGORIES,
+} from '@/lib/complaints';
 
-import { categoryOptions } from "@/lib/categories";
+import { categoryOptions } from '@/lib/categories';
 
 // Urgency labels
 export const urgencyLabels: Record<string, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium", 
-  HIGH: "High",
-  URGENT: "Urgent",
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+  URGENT: 'Urgent',
 };
-

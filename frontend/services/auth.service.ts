@@ -4,10 +4,10 @@ import {
   RequestVerificationPayload,
   User,
   VerifyCodePayload,
-} from "@/types";
-import { useAuthStore } from "@/store/useAuthStore";
+} from '@/types';
+import { useAuthStore } from '@/store/useAuthStore';
 
-const API_URL = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/auth`;
+const API_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth`;
 
 interface LoginResponse {
   message: string;
@@ -31,19 +31,21 @@ interface VerifyResponse {
 export const authService = {
   async refreshToken(refreshToken: string): Promise<RefreshResponse> {
     const response = await fetch(`${API_URL}/refresh-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
-      credentials: "include",
+      credentials: 'include',
     });
 
     if (!response.ok) {
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html")) {
-        throw new Error("Server error. Please ensure the backend is running.");
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        throw new Error('Server error. Please ensure the backend is running.');
       }
-      const error = await response.json().catch(() => ({ message: "Token refresh failed" }));
-      throw new Error(error.message || "Token refresh failed");
+      const error = await response
+        .json()
+        .catch(() => ({ message: 'Token refresh failed' }));
+      throw new Error(error.message || 'Token refresh failed');
     }
 
     return response.json();
@@ -51,15 +53,15 @@ export const authService = {
 
   async register(data: RegisterData): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-      credentials: "include",
+      credentials: 'include',
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Registration failed");
+      throw new Error(error.message || 'Registration failed');
     }
 
     return response.json();
@@ -67,20 +69,22 @@ export const authService = {
 
   async login(data: LoginData): Promise<LoginResponse> {
     const url = `${API_URL}/login`;
-    
+
     const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
-      credentials: "include",
+      credentials: 'include',
     });
 
     if (!response.ok) {
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("text/html")) {
-        throw new Error("Server error. Please ensure the backend is running.");
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        throw new Error('Server error. Please ensure the backend is running.');
       }
-      const error = await response.json().catch(() => ({ message: "Network error" }));
+      const error = await response
+        .json()
+        .catch(() => ({ message: 'Network error' }));
       throw new Error(error.message || `Login failed (${response.status})`);
     }
 
@@ -89,29 +93,29 @@ export const authService = {
 
   async verifyToken(token: string): Promise<VerifyResponse> {
     const { refreshToken } = useAuthStore.getState();
-    
+
     const response = await fetch(`${API_URL}/me`, {
-      method: "GET",
+      method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!response.ok && response.status === 401 && refreshToken) {
       try {
         const refreshResponse = await fetch(`${API_URL}/refresh-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
-        
+
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           if (data.token) {
             useAuthStore.setState({ token: data.token });
             const retryResponse = await fetch(`${API_URL}/me`, {
-              method: "GET",
+              method: 'GET',
               headers: { Authorization: `Bearer ${data.token}` },
             });
-            
+
             if (retryResponse.ok) {
               return retryResponse.json();
             }
@@ -127,16 +131,16 @@ export const authService = {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Token verification failed");
+      throw new Error(error.message || 'Token verification failed');
     }
 
     return response.json();
   },
 
   async logout(): Promise<void> {
-    await fetch(`${API_URL}/logout`, { 
-      method: "POST",
-      credentials: "include",
+    await fetch(`${API_URL}/logout`, {
+      method: 'POST',
+      credentials: 'include',
     });
   },
 
@@ -144,14 +148,14 @@ export const authService = {
     data: RequestVerificationPayload
   ): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/request-verification`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Verification request failed");
+      throw new Error(error.message || 'Verification request failed');
     }
 
     return response.json();
@@ -159,14 +163,14 @@ export const authService = {
 
   async verifyCode(data: VerifyCodePayload): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/verify-code`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Code verification failed");
+      throw new Error(error.message || 'Code verification failed');
     }
 
     return response.json();
@@ -174,27 +178,30 @@ export const authService = {
 
   async deletePendingRegistration(email: string): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/pending-registration`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to delete pending registration");
+      throw new Error(error.message || 'Failed to delete pending registration');
     }
 
     return response.json();
   },
 
   async verifyMagicLink(token: string, userId: string): Promise<LoginResponse> {
-    const response = await fetch(`${API_URL}/verify-magic-link?token=${token}&userId=${userId}`, {
-      method: "GET",
-    });
+    const response = await fetch(
+      `${API_URL}/verify-magic-link?token=${token}&userId=${userId}`,
+      {
+        method: 'GET',
+      }
+    );
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Magic link verification failed");
+      throw new Error(error.message || 'Magic link verification failed');
     }
 
     return response.json();
@@ -202,30 +209,30 @@ export const authService = {
 
   async getProfile(): Promise<User> {
     const { token, refreshToken } = useAuthStore.getState();
-    if (!token) throw new Error("No authentication token found");
+    if (!token) throw new Error('No authentication token found');
 
     const response = await fetch(`${API_URL}/me`, {
-      method: "GET",
+      method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!response.ok && response.status === 401 && refreshToken) {
       try {
         const refreshResponse = await fetch(`${API_URL}/refresh-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
-        
+
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           if (data.token) {
             useAuthStore.setState({ token: data.token });
             const retryResponse = await fetch(`${API_URL}/me`, {
-              method: "GET",
+              method: 'GET',
               headers: { Authorization: `Bearer ${data.token}` },
             });
-            
+
             if (retryResponse.ok) {
               return retryResponse.json();
             }
@@ -233,29 +240,32 @@ export const authService = {
         }
       } catch {
         useAuthStore.setState({ user: null, token: null, refreshToken: null });
-        throw new Error("Session expired. Please log in again.");
+        throw new Error('Session expired. Please log in again.');
       }
       useAuthStore.setState({ user: null, token: null, refreshToken: null });
-      throw new Error("Session expired. Please log in again.");
+      throw new Error('Session expired. Please log in again.');
     }
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to fetch profile");
+      throw new Error(error.message || 'Failed to fetch profile');
     }
 
     return response.json();
   },
 
-  async updateProfile(data: { fullName?: string; phone?: string }): Promise<User> {
+  async updateProfile(data: {
+    fullName?: string;
+    phone?: string;
+  }): Promise<User> {
     const { token, refreshToken } = useAuthStore.getState();
-    if (!token) throw new Error("No authentication token found");
+    if (!token) throw new Error('No authentication token found');
 
     const makeRequest = async (authToken: string) => {
       const response = await fetch(`${API_URL}/profile`, {
-        method: "PUT",
+        method: 'PUT',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify(data),
@@ -268,11 +278,11 @@ export const authService = {
     if (!response.ok && response.status === 401 && refreshToken) {
       try {
         const refreshResponse = await fetch(`${API_URL}/refresh-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
-        
+
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           if (data.token) {
@@ -288,26 +298,29 @@ export const authService = {
         }
       } catch {
         useAuthStore.setState({ user: null, token: null, refreshToken: null });
-        throw new Error("Session expired. Please log in again.");
+        throw new Error('Session expired. Please log in again.');
       }
     }
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to update profile");
+      throw new Error(error.message || 'Failed to update profile');
     }
 
     return response.json();
   },
 
-  async changePassword(data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> {
+  async changePassword(data: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<{ message: string }> {
     const { token } = useAuthStore.getState();
-    if (!token) throw new Error("No authentication token found");
+    if (!token) throw new Error('No authentication token found');
 
     const response = await fetch(`${API_URL}/change-password`, {
-      method: "PUT",
+      method: 'PUT',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(data),
@@ -315,23 +328,27 @@ export const authService = {
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to change password");
+      throw new Error(error.message || 'Failed to change password');
     }
 
     return response.json();
   },
 
   // Set password for admin-created users
-  async setPassword(token: string, email: string, password: string): Promise<{ message: string }> {
+  async setPassword(
+    token: string,
+    email: string,
+    password: string
+  ): Promise<{ message: string }> {
     const response = await fetch(`${API_URL}/set-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, email, password }),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || "Failed to set password");
+      throw new Error(error.message || 'Failed to set password');
     }
 
     return response.json();

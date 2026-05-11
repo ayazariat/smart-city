@@ -156,9 +156,9 @@ class Complaint {
               .toList() ??
           [],
       location: json['location'] is Map<String, dynamic>
-          ? json['location'] as Map<String, dynamic>
+          ? _parseLocation(json['location'] as Map<String, dynamic>)
           : json['location'] is Map
-              ? Map<String, dynamic>.from(json['location'] as Map)
+              ? _parseLocation(Map<String, dynamic>.from(json['location'] as Map))
               : null,
       slaDeadline: json['slaDeadline'] != null
           ? DateTime.tryParse(json['slaDeadline'].toString())
@@ -175,6 +175,35 @@ class Complaint {
       duplicateStatus: json['duplicateStatus'],
       phone: json['phone'],
     );
+  }
+
+  /// Parse location from various formats:
+  /// - GeoJSON: {type: 'Point', coordinates: [lng, lat]}
+  /// - Flat: {lat, lng} or {latitude, longitude}
+  /// - Mixed: {coordinates: [lng, lat], address: '...'}
+  static Map<String, dynamic>? _parseLocation(Map<String, dynamic> raw) {
+    final result = Map<String, dynamic>.from(raw);
+
+    // Handle GeoJSON format: coordinates: [lng, lat]
+    final coords = raw['coordinates'];
+    if (coords is List && coords.length >= 2) {
+      final lng = coords[0];
+      final lat = coords[1];
+      if (lng is num && lat is num) {
+        result['lng'] = lng.toDouble();
+        result['lat'] = lat.toDouble();
+        result['longitude'] = lng.toDouble();
+        result['latitude'] = lat.toDouble();
+      }
+    }
+
+    // Also normalize flat lat/lng fields
+    final lat = raw['lat'] ?? raw['latitude'];
+    final lng = raw['lng'] ?? raw['longitude'];
+    if (lat != null) result['lat'] = lat is num ? lat.toDouble() : double.tryParse(lat.toString());
+    if (lng != null) result['lng'] = lng is num ? lng.toDouble() : double.tryParse(lng.toString());
+
+    return result;
   }
 
   Map<String, dynamic> toJson() {

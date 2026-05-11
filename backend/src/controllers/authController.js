@@ -11,7 +11,7 @@ const {
 } = require("../utils/jwt");
 const { sendMagicLinkEmail, sendPasswordResetEmail } = require("../utils/mailer");
 const { verifyRecaptcha } = require("../utils/recaptcha");
-const { normalizeMunicipality } = require("../utils/normalize");
+const { normalizeMunicipality, normalizeGovernorate } = require("../utils/normalize");
 const notificationService = require("../services/notification.service");
 
 // Simple reusable validators
@@ -226,15 +226,19 @@ class AuthController {
 
       // Create verified user - for citizens, activate immediately; for admins, require activation
       const isAdminRole = user.role && user.role !== 'CITIZEN';
-      
+      const normalizedMunicipality = normalizeMunicipality(user.municipality || "");
+      const normalizedGovernorate = normalizeGovernorate(user.governorate || "");
+
       await User.create({
         fullName: user.fullName,
         email: user.email,
         password: user.password,
         phone: user.phone,
         governorate: user.governorate || "",
+        governorateNormalized: normalizedGovernorate,
         municipality: user.municipality || "",
         municipalityName: user.municipality || "",
+        municipalityNormalized: normalizedMunicipality,
         role: user.role || 'CITIZEN',
         isVerified: true,
         isActive: isAdminRole ? false : true, // Citizens active immediately
@@ -278,15 +282,19 @@ class AuthController {
 
         // Create verified user - for citizens, activate immediately; for admins, require activation
         const isAdminRole = pendingUser.role && pendingUser.role !== 'CITIZEN';
-        
+        const normalizedMunicipality = normalizeMunicipality(pendingUser.municipalityName || pendingUser.municipality || "");
+        const normalizedGovernorate = normalizeGovernorate(pendingUser.governorate || "");
+
         const newUser = await User.create({
           fullName: pendingUser.fullName,
           email: pendingUser.email,
           password: pendingUser.password,
           phone: pendingUser.phone,
           governorate: pendingUser.governorate || "",
+          governorateNormalized: normalizedGovernorate,
           municipality: null,
           municipalityName: pendingUser.municipalityName || pendingUser.municipality || "",
+          municipalityNormalized: normalizedMunicipality,
           role: pendingUser.role || 'CITIZEN',
           isVerified: true,
           isActive: isAdminRole ? false : true, // Citizens active immediately, admins need activation

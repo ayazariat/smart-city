@@ -156,7 +156,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                       childAspectRatio: 1.4,
                       children: [
                         _buildStatCard('Total', '${stats?.total ?? 0}', Icons.summarize, AppTheme.primary),
-                        _buildStatCard('Assignées', '${stats?.submitted ?? 0}', Icons.assignment, const Color(0xFF8B5CF6)),
+                        _buildStatCard('Assignées', '${stats?.assigned ?? 0}', Icons.assignment, const Color(0xFF8B5CF6)),
                         _buildStatCard('En cours', '${stats?.inProgress ?? 0}', Icons.engineering, const Color(0xFFF97316)),
                         _buildStatCard('Résolues', '${stats?.resolved ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
                       ],
@@ -514,9 +514,15 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                                     selectedPhotos.map((f) => f.path).toList(),
                                     fieldName: 'media',
                                   );
-                                  if (uploadResult != null && uploadResult['data'] != null) {
-                                    for (final item in uploadResult['data']) {
-                                      if (item['url'] != null) photoUrls.add(item['url'].toString());
+                                  // Response: {success: true, data: [{type, url, ...}]}
+                                  if (uploadResult != null) {
+                                    final dataList = uploadResult['data'] as List?;
+                                    if (dataList != null) {
+                                      for (final item in dataList) {
+                                        if (item is Map && item['url'] != null) {
+                                          photoUrls.add(item['url'].toString());
+                                        }
+                                      }
                                     }
                                   }
                                 } catch (_) {}

@@ -22,6 +22,47 @@ transporter.verify((error) => {
 
 const from = process.env.MAIL_FROM || process.env.SMTP_USER;
 
+// Department name translation mapping (French to English)
+const departmentTranslations = {
+  "Déchets et Propreté": "Waste and Cleanliness",
+  "Déchets": "Waste",
+  "Propreté": "Cleanliness",
+  "Routes et Circulation": "Roads and Traffic",
+  "Routes": "Roads",
+  "Circulation": "Traffic",
+  "Éclairage Public": "Public Lighting",
+  "Éclairage": "Lighting",
+  "Eau et Drainage": "Water and Drainage",
+  "Eau": "Water",
+  "Drainage": "Drainage",
+  "Sécurité et Bruit": "Safety and Noise",
+  "Sécurité": "Safety",
+  "Propriété Publique": "Public Property",
+  "Parcs et Espaces Verts": "Parks and Green Spaces",
+  "Parcs": "Parks",
+  "Urbanisme": "Urban Planning",
+  "Équipement Public": "Public Equipment",
+  "Autre": "Other",
+  "Technical Department": "Technical Department"
+};
+
+const translateDepartmentName = (departmentName, language = 'en') => {
+  if (!departmentName) return 'Technical Department';
+  
+  // If language is not English, return as-is
+  if (language !== 'en') {
+    return departmentName;
+  }
+  
+  // If already in English, return as-is
+  if (Object.values(departmentTranslations).includes(departmentName)) {
+    return departmentName;
+  }
+  
+  // Translate French to English
+  return departmentTranslations[departmentName] || departmentName;
+};
+
 // Send account verification email
 const sendMagicLinkEmail = async (to, userId, token, fullName) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -285,11 +326,14 @@ const sendAssignmentEmails = async (complaint, departmentName, technicianEmails 
 const sendNotificationEmail = async (type, recipientUser, complaintData = {}, extras = {}) => {
   const emailTemplates = require('./emailTemplates.js');
   const { FRONTEND_URL = 'http://localhost:3000' } = process.env;
-  const { role, firstName = 'User', email, municipalityName, department } = recipientUser;
+  const { role, fullName, email, municipalityName, department, language } = recipientUser;
   const { title = 'Complaint', municipalityName: complaintMunicipality, location } = complaintData;
   
+  // Fallback for fullName to prevent "undefined" in emails
+  const displayName = fullName || recipientUser?.name || recipientUser?.firstName || recipientUser?.username || email?.split('@')[0] || 'User';
   const zone = location?.zone || location?.municipality || complaintMunicipality || 'your area';
-  const departmentName = extras.departmentName || department?.name || 'Technical Department';
+  const rawDepartmentName = extras.departmentName || department?.name || 'Technical Department';
+  const departmentName = translateDepartmentName(rawDepartmentName, language || 'en');
 
   try {
     let template;
@@ -297,56 +341,56 @@ const sendNotificationEmail = async (type, recipientUser, complaintData = {}, ex
     switch (type) {
       case 'complaint_submitted':
         if (role === 'AGENT') {
-          template = emailTemplates.newComplaintAgent(firstName, title, zone, municipalityName);
+          template = emailTemplates.newComplaintAgent(displayName, title, zone, municipalityName);
         }
         break;
       case 'validated':
         if (role === 'CITIZEN') {
-          template = emailTemplates.complaintValidatedCitizen(firstName, title);
+          template = emailTemplates.complaintValidatedCitizen(displayName, title);
         }
         break;
       case 'rejected':
         if (role === 'CITIZEN') {
-          template = emailTemplates.complaintRejectedCitizen(firstName, title, extras.reason || 'Not specified');
+          template = emailTemplates.complaintRejectedCitizen(displayName, title, extras.reason || 'Not specified');
         }
         break;
       case 'assigned':
         if (role === 'CITIZEN') {
-          template = emailTemplates.complaintAssignedCitizen(firstName, title, departmentName);
+          template = emailTemplates.complaintAssignedCitizen(displayName, title, departmentName);
         } else if (role === 'TECHNICIAN') {
-          template = emailTemplates.complaintAssignedTechnician(firstName, title, departmentName, zone);
+          template = emailTemplates.complaintAssignedTechnician(displayName, title, departmentName, zone);
         }
         break;
       case 'assigned_department':
         if (role === 'CITIZEN') {
-          template = emailTemplates.complaintAssignedCitizen(firstName, title, departmentName);
+          template = emailTemplates.complaintAssignedCitizen(displayName, title, departmentName);
         } else if (role === 'TECHNICIAN') {
-          template = emailTemplates.complaintAssignedTechnician(firstName, title, departmentName, zone);
+          template = emailTemplates.complaintAssignedTechnician(displayName, title, departmentName, zone);
         }
         break;
       case 'priority_changed':
         if (role === 'AGENT') {
-          template = emailTemplates.priorityChangedAgent(firstName, title, extras.newPriority, extras.managerName || 'Manager');
+          template = emailTemplates.priorityChangedAgent(displayName, title, extras.newPriority, extras.managerName || 'Manager');
         }
         break;
       case 'status_in_progress':
         if (role === 'CITIZEN') {
-          template = emailTemplates.statusInProgressCitizen(firstName, title);
+          template = emailTemplates.statusInProgressCitizen(displayName, title);
         }
         break;
       case 'resolved':
         if (role === 'CITIZEN') {
-          template = emailTemplates.complaintResolvedCitizen(firstName, title);
+          template = emailTemplates.complaintResolvedCitizen(displayName, title);
         }
         break;
       case 'closed':
         if (role === 'CITIZEN') {
-          template = emailTemplates.complaintClosedCitizen(firstName, title);
+          template = emailTemplates.complaintClosedCitizen(displayName, title);
         }
         break;
       case 'upvoted':
         if (role === 'AGENT') {
-          template = emailTemplates.complaintUpvotedAgent(firstName, title);
+          template = emailTemplates.complaintUpvotedAgent(displayName, title);
         }
         break;
       default:

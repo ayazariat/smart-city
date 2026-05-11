@@ -26,15 +26,32 @@ class ComplaintService {
   }
 
   Future<Complaint> getComplaintById(String id) async {
-    try {
-      final response = await _apiClient.get('/citizen/complaints/$id');
-      return Complaint.fromJson(response['complaint'] ?? response['data'] ?? {});
-    } catch (_) {
-      final publicResponse = await _apiClient.get('/public/complaints/$id');
-      return Complaint.fromJson(
-        publicResponse['complaint'] ?? publicResponse['data'] ?? {},
-      );
+    // Try multiple endpoints based on what's available
+    final endpoints = [
+      '/complaints/$id',           // general (admin/agent)
+      '/citizen/complaints/$id',   // citizen
+      '/technician/complaints/$id', // technician
+      '/public/complaints/$id',    // public fallback
+    ];
+
+    for (final endpoint in endpoints) {
+      try {
+        final response = await _apiClient.get(endpoint);
+        if (response is Map) {
+          final data = response['complaint'] ?? response['data'] ?? response;
+          if (data is Map<String, dynamic> && (data['_id'] != null || data['id'] != null)) {
+            return Complaint.fromJson(data);
+          }
+          if (data is Map) {
+            final m = Map<String, dynamic>.from(data);
+            if (m['_id'] != null || m['id'] != null) return Complaint.fromJson(m);
+          }
+        }
+      } catch (_) {
+        continue;
+      }
     }
+    throw Exception('Complaint not found');
   }
 
   Future<Map<String, dynamic>> createComplaint(
@@ -105,31 +122,71 @@ class ComplaintService {
   }
 
   Future<void> upvoteComplaint(String id) async {
-    await _apiClient.post('/public/complaints/$id/upvote', {});
+    // Backend route: POST /complaints/:id/upvote (not /public/complaints/:id/upvote)
+    await _apiClient.post('/complaints/$id/upvote', {});
+  }
+
+  Future<void> removeUpvote(String id) async {
+    await _apiClient.delete('/complaints/$id/upvote');
+  }
+
+  Future<void> removeConfirmation(String id) async {
+    await _apiClient.delete('/complaints/$id/confirm');
   }
 
   Future<List<dynamic>> getPublicComments(String id) async {
-    final response = await _apiClient.get('/public/complaints/$id/comments');
-    return response['data'] ?? response['comments'] ?? [];
+    try {
+      // Try the authenticated complaints endpoint first
+      final response = await _apiClient.get('/complaints/$id/comments');
+      if (response is Map) {
+        final data = response['data'] ?? response['comments'] ?? [];
+        if (data is List) return data;
+      }
+      return [];
+    } catch (_) {
+      // Fallback to public endpoint
+      try {
+        final response = await _apiClient.get('/public/complaints/$id/comments');
+        return response['data'] ?? response['comments'] ?? [];
+      } catch (_) {
+        return [];
+      }
+    }
   }
 
   Future<void> addPublicComment(String id, String text, {bool anonymous = false}) async {
-    await _apiClient.post('/public/complaints/$id/comment', {
+    // Backend route: POST /complaints/:id/comments (authenticated, plural)
+    await _apiClient.post('/complaints/$id/comments', {
       'text': text,
       'anonymous': anonymous,
     });
   }
 
   Future<void> submitRating(String id, int rating, String comment, bool resolvedCorrectly) async {
-    await _apiClient.post('/citizen/complaints/$id/rating', {
+    // Backend route: PUT /complaints/:id/rating (not POST /citizen/complaints/:id/rating)
+    await _apiClient.put('/complaints/$id/rating', {
       'rating': rating,
       'comment': comment,
       'resolvedCorrectly': resolvedCorrectly,
     });
   }
 
+  Future<void> submitSatisfaction(String complaintId, int rating, {String? comment}) async {
+    // Backend route: POST /satisfaction with complaintId in body
+    await _apiClient.post('/satisfaction', {
+      'complaintId': complaintId,
+      'rating': rating,
+      if (comment != null && comment.isNotEmpty) 'comment': comment,
+    });
+  }
+
+  Future<void> dismissSatisfaction(String complaintId) async {
+    await _apiClient.post('/satisfaction/dismiss', {'complaintId': complaintId});
+  }
+
   Future<void> confirmResolution(String id) async {
-    await _apiClient.post('/citizen/complaints/$id/confirm-resolution', {});
+    // Backend route: POST /complaints/:id/confirm (not /citizen/complaints/:id/confirm-resolution)
+    await _apiClient.post('/complaints/$id/confirm', {});
   }
 
   Future<Map<String, dynamic>> predictCategory(String description) async {
@@ -224,7 +281,12 @@ class ComplaintService {
 
   Future<Complaint> getTaskById(String id) async {
     final response = await _apiClient.get('/technician/complaints/$id');
-    return Complaint.fromJson(response['data'] ?? {});
+    if (response is Map) {
+      final data = response['data'] ?? response['complaint'] ?? response;
+      if (data is Map<String, dynamic>) return Complaint.fromJson(data);
+      if (data is Map) return Complaint.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw Exception('Task not found');
   }
 
   Future<void> startTask(String id) async {
@@ -232,6 +294,7 @@ class ComplaintService {
   }
 
   Future<void> completeTask(String id, Map<String, dynamic> data) async {
+    // Backend accepts: notes/resolutionNotes, beforePhotos, afterPhotos/proofPhotos
     await _apiClient.put('/technician/complaints/$id/complete', data);
   }
 

@@ -1,6 +1,7 @@
-import { useAuthStore } from "@/store/useAuthStore";
+import { useAuthStore } from '@/store/useAuthStore';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 interface RequestOptions extends RequestInit {
   requiresAuth?: boolean;
@@ -8,23 +9,23 @@ interface RequestOptions extends RequestInit {
 
 export const apiClient = {
   async extractErrorMessage(response: Response): Promise<string> {
-    const contentType = response.headers.get("content-type") || "";
+    const contentType = response.headers.get('content-type') || '';
     const status = response.status;
-    
+
     // Default messages per status (used as fallbacks)
     const defaultMessages: Record<number, string> = {
-      401: "Session expired",
-      403: "Access denied",
-      404: "Resource not found",
+      401: 'Session expired',
+      403: 'Access denied',
+      404: 'Resource not found',
     };
-    
-    if (contentType.includes("text/html")) {
+
+    if (contentType.includes('text/html')) {
       return defaultMessages[status] || `Request failed (${status})`;
     }
-    
+
     const text = await response.text();
     if (!text) return defaultMessages[status] || `Request failed (${status})`;
-    
+
     try {
       const errorData = JSON.parse(text);
       if (errorData && errorData.message) {
@@ -46,7 +47,7 @@ export const apiClient = {
     endpoint: string,
     options?: RequestOptions
   ): Promise<T> {
-    return apiClient.request<T>(endpoint, { ...options, method: "GET" });
+    return apiClient.request<T>(endpoint, { ...options, method: 'GET' });
   },
 
   async post<T = unknown>(
@@ -56,7 +57,7 @@ export const apiClient = {
   ): Promise<T> {
     return apiClient.request<T>(endpoint, {
       ...options,
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify(body),
     });
   },
@@ -68,7 +69,7 @@ export const apiClient = {
   ): Promise<T> {
     return apiClient.request<T>(endpoint, {
       ...options,
-      method: "PUT",
+      method: 'PUT',
       body: JSON.stringify(body),
     });
   },
@@ -77,7 +78,7 @@ export const apiClient = {
     endpoint: string,
     options?: RequestOptions
   ): Promise<T> {
-    return apiClient.request<T>(endpoint, { ...options, method: "DELETE" });
+    return apiClient.request<T>(endpoint, { ...options, method: 'DELETE' });
   },
 
   async patch<T = unknown>(
@@ -87,7 +88,7 @@ export const apiClient = {
   ): Promise<T> {
     return apiClient.request<T>(endpoint, {
       ...options,
-      method: "PATCH",
+      method: 'PATCH',
       body: JSON.stringify(body),
     });
   },
@@ -100,20 +101,22 @@ export const apiClient = {
     while (attempts < 10) {
       const state = useAuthStore.getState();
       if (state.hydrated || state.token) break;
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
       attempts++;
     }
 
     const { token, refreshToken, hydrated, user } = useAuthStore.getState();
 
     if (!hydrated && requiresAuth) {
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
       const freshState = useAuthStore.getState();
       if (!freshState.hydrated || !freshState.token) {
-        throw new Error("Session not ready. Please refresh page or login again.");
+        throw new Error(
+          'Session not ready. Please refresh page or login again.'
+        );
       }
     }
-    
+
     if (requiresAuth && (!token || !user)) {
       // Allow request to proceed without auth header so callers can
       // handle 401/403 gracefully or fallback to public endpoints.
@@ -121,28 +124,35 @@ export const apiClient = {
     }
 
     const requestHeaders: HeadersInit = {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       ...headers,
     };
 
     if (token) {
-      (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      (requestHeaders as Record<string, string>)['Authorization'] =
+        `Bearer ${token}`;
     }
 
     const makeRequest = async (authToken?: string): Promise<Response> => {
       const finalHeaders = { ...requestHeaders };
       if (authToken) {
-        (finalHeaders as Record<string, string>)["Authorization"] = `Bearer ${authToken}`;
+        (finalHeaders as Record<string, string>)['Authorization'] =
+          `Bearer ${authToken}`;
       }
       try {
         return await fetch(`${API_BASE_URL}${endpoint}`, {
           ...rest,
-          credentials: "include",
+          credentials: 'include',
           headers: finalHeaders,
         });
       } catch (networkError) {
-        const errorMessage = networkError instanceof Error ? networkError.message : "Network error";
-        throw new Error(`Failed to connect to server: ${errorMessage}. Please check if the backend is running.`);
+        const errorMessage =
+          networkError instanceof Error
+            ? networkError.message
+            : 'Network error';
+        throw new Error(
+          `Failed to connect to server: ${errorMessage}. Please check if the backend is running.`
+        );
       }
     };
 
@@ -150,19 +160,22 @@ export const apiClient = {
 
     if (response.status === 401 && requiresAuth && refreshToken) {
       try {
-        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+        const refreshResponse = await fetch(
+          `${API_BASE_URL}/auth/refresh-token`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          }
+        );
 
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           const newToken = data.accessToken || data.token;
           if (newToken) {
-            useAuthStore.setState({ 
-              token: newToken, 
-              refreshToken: data.refreshToken || refreshToken 
+            useAuthStore.setState({
+              token: newToken,
+              refreshToken: data.refreshToken || refreshToken,
             });
             response = await makeRequest(newToken);
           }
@@ -174,31 +187,38 @@ export const apiClient = {
 
     if (response.status === 403) {
       const message = await apiClient.extractErrorMessage(response);
-      throw new Error(message || "Access denied - You don't have permission for this action");
+      throw new Error(
+        message || "Access denied - You don't have permission for this action"
+      );
     }
 
     if (response.status === 401) {
-      useAuthStore.setState({ user: null, token: null, refreshToken: null, isAuthenticated: false });
+      useAuthStore.setState({
+        user: null,
+        token: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      });
       // Redirect to login so the user knows they need to re-authenticate
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname + window.location.search;
         window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
       }
-      throw new Error("Session expired. Please log in again.");
+      throw new Error('Session expired. Please log in again.');
     }
 
     if (!response.ok) {
       const message = await apiClient.extractErrorMessage(response);
-      throw new Error(message || "Request failed");
+      throw new Error(message || 'Request failed');
     }
 
     const text = await response.text();
-    
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json") && text) {
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json') && text) {
       return text as unknown as T;
     }
-    
+
     return text ? (JSON.parse(text) as T) : ({} as T);
   },
 };

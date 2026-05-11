@@ -5,7 +5,7 @@
  */
 
 const User = require('../models/User');
-const { t, formatRelativeTime } = require('../utils/i18n');
+const { t } = require('../utils/i18n');
 
 /**
  * Normalize user ID to string
@@ -246,14 +246,18 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, ext
     const Complaint = require('../models/Complaint');
     const complaint = await Complaint.findById(complaintId).select('title').lean();
     if (complaint?.title) complaintTitle = complaint.title;
-  } catch (e) { /* non-blocking */ }
+  } catch {
+    /* non-blocking */
+  }
 
   // Get user language preference
   let locale = 'en';
   try {
     const user = await User.findById(citizenId).select('language').lean();
     if (user?.language) locale = user.language;
-  } catch (e) { /* fallback to en */ }
+  } catch {
+    /* fallback to en */
+  }
 
   const deptName = extras.departmentName || t('notifications.complaintAssigned.department', locale) || 'a department';
   const reason = extras.reason ? ` ${t('notifications.complaintRejected.reason', locale) || 'Reason:'} ${extras.reason}.` : '';
@@ -278,7 +282,6 @@ const notifyCitizenStatusChange = async (io, citizenId, complaintId, status, ext
  */
 const notifyResolutionSubmitted = async (io, complaintId, resolutionNotes) => {
   const Complaint = require('../models/Complaint');
-  const Department = require('../models/Department');
   const User = require('../models/User');
 
   const complaint = await Complaint.findById(complaintId)
@@ -362,12 +365,16 @@ const notifyDuplicateDetected = async (io, complaintId, duplicateOf) => {
       .lean();
     if (complaint?.title) complaintTitle = complaint.title;
     if (complaint?.createdBy?.language) locale = complaint.createdBy.language;
-  } catch (e) {}
+  } catch {
+    // Silently ignore errors
+  }
 
   try {
     const dup = await Complaint.findById(duplicateOf).select('title').lean();
     if (dup?.title) duplicateTitle = dup.title;
-  } catch (e) {}
+  } catch {
+    // Silently ignore errors
+  }
 
   const title = t('notifications.duplicateDetected.title', locale);
   const message = t('notifications.duplicateDetected.message', locale, { complaintTitle, duplicateTitle });

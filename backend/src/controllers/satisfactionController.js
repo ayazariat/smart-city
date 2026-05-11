@@ -1,6 +1,5 @@
 const Complaint = require("../models/Complaint");
 const SatisfactionSurvey = require("../models/SatisfactionSurvey");
-const User = require("../models/User");
 
 class SatisfactionController {
   async createSurvey(req, res) {

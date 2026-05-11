@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
 // Admin complaint creation removed per spec — redirect to list
 export default function AdminNewComplaintRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/admin/complaints");
+    router.replace('/admin/complaints');
   }, [router]);
 
   return (

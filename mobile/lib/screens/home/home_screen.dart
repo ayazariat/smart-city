@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
+import 'package:smart_city_app/providers/notifications_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/screens/home/new_complaint_screen.dart';
@@ -24,6 +25,43 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _connectNotifications();
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(notificationsProvider.notifier).disconnectSocket();
+    super.dispose();
+  }
+
+  Future<void> _connectNotifications() async {
+    final api = ApiClient();
+    await api.loadTokens();
+    final token = api.token;
+    if (token == null) return;
+
+    // Load notifications immediately
+    ref.read(notificationsProvider.notifier).load();
+
+    // Get user ID for socket room
+    try {
+      final me = await api.get('/auth/me');
+      if (me is Map) {
+        final id = (me['id'] ?? me['_id'] ?? '').toString();
+        if (id.isNotEmpty) {
+          ref.read(notificationsProvider.notifier).connectSocket(token, id);
+        }
+      }
+    } catch (_) {
+      // Socket connection is optional — polling fallback is active
+    }
+  }
 
   List<Widget> _buildScreens(String role) {
     switch (role) {
@@ -159,6 +197,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final role = ref.watch(authProvider).user?.role ?? 'CITIZEN';
     final screens = _buildScreens(role);
+    final notifState = ref.watch(notificationsProvider);
+    final unreadCount = notifState.unreadCount;
+
+    // Build nav items with notification badge on profile tab
+    final navItems = _buildNavItems(role);
 
     return Scaffold(
       body: IndexedStack(
@@ -171,8 +214,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         selectedItemColor: AppTheme.primary,
         unselectedItemColor: AppTheme.textMuted,
         type: BottomNavigationBarType.fixed,
-        items: _buildNavItems(role),
+        items: navItems.asMap().entries.map((entry) {
+          // Add notification badge to the notifications icon in the header
+          // The badge is shown on the dashboard tab's notification bell
+          return entry.value;
+        }).toList(),
       ),
+      // Floating notification badge overlay on the app bar notification icon
     );
   }
 }
@@ -284,13 +332,23 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).user;
+    final role = user?.role ?? 'CITIZEN';
     final hour = DateTime.now().hour;
     final greeting = hour < 12
         ? 'Bonjour'
         : hour < 18
         ? 'Bon après-midi'
         : 'Bonsoir';
-    final firstName = (user?.fullName ?? 'Citoyen').split(' ').first;
+    final firstName = (user?.fullName ?? 'Utilisateur').split(' ').first;
+
+    // Role-specific subtitle
+    final subtitle = role == 'TECHNICIAN'
+        ? 'Gérez vos tâches assignées'
+        : role == 'MUNICIPAL_AGENT'
+        ? 'Gérez les signalements de votre municipalité'
+        : role == 'DEPARTMENT_MANAGER'
+        ? 'Gérez votre département'
+        : 'Gérez vos signalements et suivez leur évolution';
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -316,9 +374,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.radiusXl,
-                          ),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                           boxShadow: [
                             BoxShadow(
                               color: AppTheme.primary.withOpacity(0.3),
@@ -333,50 +389,32 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '$greeting, $firstName!',
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.textInverse,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '$greeting, $firstName!',
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textInverse,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      'Gérez vos signalements et suivez leur évolution',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 14,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        subtitle,
+                                        style: const TextStyle(color: Colors.white70, fontSize: 13),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                                 Row(
                                   children: [
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.notifications_outlined,
-                                        color: Colors.white,
-                                      ),
-                                      onPressed: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const NotificationsScreen(),
-                                        ),
-                                      ),
-                                    ),
+                                    _buildNotificationBell(),
                                     PopupMenuButton<String>(
-                                      icon: const Icon(
-                                        Icons.person_outline,
-                                        color: Colors.white,
-                                      ),
-                                      onSelected: (v) => ref
-                                          .read(authProvider.notifier)
-                                          .logout(),
+                                      icon: const Icon(Icons.person_outline, color: Colors.white),
+                                      onSelected: (v) => ref.read(authProvider.notifier).logout(),
                                       itemBuilder: (_) => [
                                         const PopupMenuItem(
                                           value: 'logout',
@@ -395,8 +433,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                               ],
                             ),
                             const SizedBox(height: 20),
-                            // Priorities Section (from web)
-                            _buildPrioritiesSection(),
+                            _buildPrioritiesSection(role),
                           ],
                         ),
                       ),
@@ -406,28 +443,30 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _buildStatsGrid(),
+                        child: _buildStatsGrid(role),
                       ),
                     ),
 
-                    // Quick Actions
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: _buildQuickActions(),
+                    // Quick Actions — CITIZEN only
+                    if (role == 'CITIZEN')
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: _buildCitizenQuickActions(),
+                        ),
                       ),
-                    ),
 
-                    // Recent Activities (from web)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _buildRecentActivities(),
+                    // Recent Activities — CITIZEN only (not technician)
+                    if (role == 'CITIZEN' && _recentComplaints.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildRecentActivities(),
+                        ),
                       ),
-                    ),
 
-                    // Municipality Complaints (from web)
-                    if (_municipalityComplaints.isNotEmpty)
+                    // Municipality Complaints — CITIZEN only
+                    if (role == 'CITIZEN' && _municipalityComplaints.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -435,8 +474,8 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                         ),
                       ),
 
-                    // Recent Resolutions (from web)
-                    if (_recentResolutions.isNotEmpty)
+                    // Recent Resolutions — CITIZEN only
+                    if (role == 'CITIZEN' && _recentResolutions.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -444,8 +483,8 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                         ),
                       ),
 
-                    // Trend Alerts (from web BL-37)
-                    if (_trendAlerts.isNotEmpty)
+                    // Trend Alerts — AGENT/MANAGER/ADMIN only
+                    if (['MUNICIPAL_AGENT', 'DEPARTMENT_MANAGER', 'ADMIN'].contains(role) && _trendAlerts.isNotEmpty)
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -476,11 +515,92 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
     );
   }
 
-  Widget _buildPrioritiesSection() {
+  Widget _buildNotificationBell() {
+    final notifState = ref.watch(notificationsProvider);
+    final unread = notifState.unreadCount;
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+          ).then((_) => ref.read(notificationsProvider.notifier).load()),
+        ),
+        if (unread > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              child: Text(
+                unread > 99 ? '99+' : '$unread',
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPrioritiesSection(String role) {
     final inProgress = _stats['inProgress'] ?? 0;
     final resolved = _stats['resolved'] ?? 0;
+    final assigned = _stats['assigned'] ?? 0;
+    final totalOverdue = _stats['totalOverdue'] ?? _stats['overdue'] ?? 0;
     final total = _stats['total'] ?? 0;
 
+    // Technician priorities
+    if (role == 'TECHNICIAN') {
+      if (assigned == 0 && inProgress == 0) {
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          ),
+          child: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white70, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Aucune tâche en attente. Bonne journée !',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_awesome, color: Colors.white70, size: 18),
+              SizedBox(width: 8),
+              Text('Priorités du jour', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (totalOverdue > 0)
+            _buildPriorityItem('$totalOverdue tâche(s) en retard — action requise', Icons.warning_amber, Colors.red.shade100, Colors.red.shade700),
+          if (assigned > 0)
+            _buildPriorityItem('$assigned tâche(s) assignée(s) à démarrer', Icons.play_circle, Colors.blue.shade100, Colors.blue.shade700),
+          if (inProgress > 0)
+            _buildPriorityItem('$inProgress tâche(s) en cours', Icons.engineering, Colors.orange.shade100, Colors.orange.shade700),
+        ],
+      );
+    }
+
+    // Citizen priorities
     if (inProgress == 0 && resolved == 0 && total == 0) {
       return Container(
         padding: const EdgeInsets.all(12),
@@ -495,10 +615,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
             Expanded(
               child: Text(
                 'Aucun signalement. Soumettez votre premier signalement !',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
               ),
             ),
           ],
@@ -513,31 +630,14 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
           children: [
             Icon(Icons.auto_awesome, color: Colors.white70, size: 18),
             SizedBox(width: 8),
-            Text(
-              'Priorités du jour',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Text('Priorités du jour', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
           ],
         ),
         const SizedBox(height: 12),
         if (inProgress > 0)
-          _buildPriorityItem(
-            '$inProgress en cours de traitement',
-            Icons.engineering,
-            Colors.blue.shade100,
-            Colors.blue.shade700,
-          ),
+          _buildPriorityItem('$inProgress en cours de traitement', Icons.engineering, Colors.blue.shade100, Colors.blue.shade700),
         if (resolved > 0)
-          _buildPriorityItem(
-            '$resolved signalements résolus',
-            Icons.check_circle,
-            Colors.green.shade100,
-            Colors.green.shade700,
-          ),
+          _buildPriorityItem('$resolved signalements résolus', Icons.check_circle, Colors.green.shade100, Colors.green.shade700),
       ],
     );
   }
@@ -576,18 +676,49 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
     );
   }
 
-  Widget _buildStatsGrid() {
+  Widget _buildStatsGrid(String role) {
+    final String title;
+    final List<Widget> cards;
+
+    if (role == 'TECHNICIAN') {
+      title = 'Mes tâches';
+      cards = [
+        _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppTheme.primary),
+        _buildStatCard('Assignées', '${_stats['assigned'] ?? 0}', Icons.assignment, const Color(0xFF8B5CF6)),
+        _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+        _buildStatCard('Résolues', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+      ];
+    } else if (role == 'MUNICIPAL_AGENT') {
+      title = 'Statistiques Agent';
+      cards = [
+        _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppTheme.primary),
+        _buildStatCard('À valider', '${_stats['submitted'] ?? 0}', Icons.pending, const Color(0xFFF59E0B)),
+        _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+        _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+      ];
+    } else if (role == 'DEPARTMENT_MANAGER') {
+      title = 'Statistiques Département';
+      cards = [
+        _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppTheme.primary),
+        _buildStatCard('À assigner', '${_stats['assigned'] ?? 0}', Icons.assignment, const Color(0xFF8B5CF6)),
+        _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+        _buildStatCard('Résolus', '${_stats['resolved'] ?? 0}', Icons.check_circle, const Color(0xFF22C55E)),
+      ];
+    } else {
+      // CITIZEN / ADMIN
+      title = 'Mes signalements';
+      cards = [
+        _buildStatCard('Total', '${_stats['total'] ?? 0}', Icons.summarize, AppTheme.primary),
+        _buildStatCard('En attente', '${_stats['submitted'] ?? 0}', Icons.pending_actions, const Color(0xFFF59E0B)),
+        _buildStatCard('En cours', '${_stats['inProgress'] ?? 0}', Icons.engineering, const Color(0xFFF97316)),
+        _buildStatCard('Résolus', '${(_stats['resolved'] ?? 0) + (_stats['closed'] ?? 0)}', Icons.check_circle, const Color(0xFF22C55E)),
+      ];
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Mes signalements',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
-        ),
+        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 2,
@@ -596,32 +727,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
           childAspectRatio: 1.5,
-          children: [
-            _buildStatCard(
-              'Total',
-              '${_stats['total'] ?? 0}',
-              Icons.summarize,
-              AppTheme.primary,
-            ),
-            _buildStatCard(
-              'En attente',
-              '${_stats['submitted'] ?? 0}',
-              Icons.pending_actions,
-              const Color(0xFFF59E0B),
-            ),
-            _buildStatCard(
-              'En cours',
-              '${_stats['inProgress'] ?? 0}',
-              Icons.engineering,
-              const Color(0xFFF97316),
-            ),
-            _buildStatCard(
-              'Résolus',
-              '${(_stats['resolved'] ?? 0) + (_stats['closed'] ?? 0)}',
-              Icons.check_circle,
-              const Color(0xFF22C55E),
-            ),
-          ],
+          children: cards,
         ),
       ],
     );
@@ -672,17 +778,13 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
     );
   }
 
-  Widget _buildQuickActions() {
+  Widget _buildCitizenQuickActions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Actions rapides',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.textPrimary,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
         const SizedBox(height: 12),
         Row(
@@ -695,8 +797,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        NewComplaintScreen(onComplaintSubmitted: _loadData),
+                    builder: (_) => NewComplaintScreen(onComplaintSubmitted: _loadData),
                   ),
                 ),
               ),
@@ -704,7 +805,7 @@ class _DashboardTabState extends ConsumerState<DashboardTab> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildActionCard(
-                'Voir tous',
+                'Mes signalements',
                 Icons.list_alt,
                 AppTheme.accent,
                 () => Navigator.push(

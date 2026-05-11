@@ -1,18 +1,28 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { useAuthStore } from "@/store/useAuthStore";
+import { useEffect, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useAuthStore } from '@/store/useAuthStore';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: string[];
 }
 
-export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  children,
+  allowedRoles,
+}: ProtectedRouteProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, token, refreshToken, verifySession, refreshAccessToken, hydrated } = useAuthStore();
+  const {
+    user,
+    token,
+    refreshToken,
+    verifySession,
+    refreshAccessToken,
+    hydrated,
+  } = useAuthStore();
   const [isVerifying, setIsVerifying] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -32,7 +42,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       // CRITICAL: Always verify the token with the server
       // Don't trust localStorage blindly - the token might be expired
       setIsVerifying(true);
-      
+
       // Try to refresh token first if we have a refresh token
       if (refreshToken) {
         const refreshed = await refreshAccessToken();
@@ -40,7 +50,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
           const { user: refreshedUser } = useAuthStore.getState();
           if (refreshedUser) {
             if (allowedRoles && !allowedRoles.includes(refreshedUser.role)) {
-              router.push("/unauthorized");
+              router.push('/unauthorized');
               return;
             }
             setIsReady(true);
@@ -54,7 +64,9 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       try {
         const isValid = await verifySession();
         if (!isValid) {
-          router.push(`/?expired=true&redirect=${encodeURIComponent(pathname)}`);
+          router.push(
+            `/?expired=true&redirect=${encodeURIComponent(pathname)}`
+          );
           return;
         }
       } catch {
@@ -66,7 +78,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       const { user: verifiedUser } = useAuthStore.getState();
       if (verifiedUser) {
         if (allowedRoles && !allowedRoles.includes(verifiedUser.role)) {
-          router.push("/unauthorized");
+          router.push('/unauthorized');
           return;
         }
       } else {
@@ -82,7 +94,17 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     // Small delay to allow zustand persistence to hydrate
     const timer = setTimeout(checkAuth, 50);
     return () => clearTimeout(timer);
-  }, [token, user, router, pathname, verifySession, refreshAccessToken, allowedRoles, hydrated, refreshToken]);
+  }, [
+    token,
+    user,
+    router,
+    pathname,
+    verifySession,
+    refreshAccessToken,
+    allowedRoles,
+    hydrated,
+    refreshToken,
+  ]);
 
   // Show loading while waiting for hydration
   if (!hydrated) {

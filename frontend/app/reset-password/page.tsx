@@ -1,38 +1,50 @@
-"use client";
+'use client';
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Lock, Sparkles, ArrowLeft, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
-import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import {
+  Lock,
+  Sparkles,
+  ArrowLeft,
+  CheckCircle,
+  AlertCircle,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground';
 
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const userId = searchParams.get("userId") || searchParams.get("id");
-  const isSetup = searchParams.get("isSetup") === "true";
+  const token = searchParams.get('token');
+  const userId = searchParams.get('userId') || searchParams.get('id');
+  const isSetup = searchParams.get('isSetup') === 'true';
 
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<{ password?: string; confirmPassword?: string }>({});
+  const [validationErrors, setValidationErrors] = useState<{
+    password?: string;
+    confirmPassword?: string;
+  }>({});
 
   // Password validation
   const validatePassword = (value: string): string | undefined => {
-    if (!value) return "Password is required";
-    if (value.length < 12) return "Password must be at least 12 characters";
-    if (!/[a-z]/.test(value)) return "Password must include lowercase letter";
-    if (!/[A-Z]/.test(value)) return "Password must include uppercase letter";
-    if (!/\d/.test(value)) return "Password must include a number";
-    if (!/[^A-Za-z0-9]/.test(value)) return "Password must include a special character";
+    if (!value) return 'Password is required';
+    if (value.length < 12) return 'Password must be at least 12 characters';
+    if (!/[a-z]/.test(value)) return 'Password must include lowercase letter';
+    if (!/[A-Z]/.test(value)) return 'Password must include uppercase letter';
+    if (!/\d/.test(value)) return 'Password must include a number';
+    if (!/[^A-Za-z0-9]/.test(value))
+      return 'Password must include a special character';
     return undefined;
   };
 
@@ -48,40 +60,50 @@ function ResetPasswordForm() {
     }
 
     if (password !== confirmPassword) {
-      setValidationErrors({ confirmPassword: "Passwords do not match" });
+      setValidationErrors({ confirmPassword: 'Passwords do not match' });
       return;
     }
 
     if (!token || !userId) {
-      setError(isSetup ? "Invalid setup link." : "Invalid reset link. Please request a new password reset.");
+      setError(
+        isSetup
+          ? 'Invalid setup link.'
+          : 'Invalid reset link. Please request a new password reset.'
+      );
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/reset-password`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          userId,
-          token,
-          newPassword: password,
-          isSetup: isSetup 
-        }),
-      });
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/reset-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            token,
+            newPassword: password,
+            isSetup: isSetup,
+          }),
+        }
+      );
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || (isSetup ? "Failed to set up password" : "Failed to reset password"));
+        throw new Error(
+          data.message ||
+            (isSetup ? 'Failed to set up password' : 'Failed to reset password')
+        );
       }
 
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setIsLoading(false);
     }
@@ -99,17 +121,17 @@ function ResetPasswordForm() {
                   <CheckCircle className="w-8 h-8 text-success" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {isSetup ? "Account Activated!" : "Password Reset!"}
+                  {isSetup ? 'Account Activated!' : 'Password Reset!'}
                 </h1>
                 <p className="text-slate-600">
-                  {isSetup 
-                    ? "Your password has been set successfully. You can now sign in."
-                    : "Your password has been reset successfully. You can now sign in."}
+                  {isSetup
+                    ? 'Your password has been set successfully. You can now sign in.'
+                    : 'Your password has been reset successfully. You can now sign in.'}
                 </p>
               </div>
 
               <Button
-                onClick={() => router.push("/")}
+                onClick={() => router.push('/')}
                 fullWidth
                 size="lg"
                 icon={<Sparkles className="w-5 h-5" />}
@@ -135,28 +157,22 @@ function ResetPasswordForm() {
                   <AlertCircle className="w-8 h-8 text-red-500" />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 mb-2">
-                  {isSetup ? "Invalid Activation Link" : "Invalid Reset Link"}
+                  {isSetup ? 'Invalid Activation Link' : 'Invalid Reset Link'}
                 </h1>
                 <p className="text-slate-600">
-                  {isSetup 
-                    ? "This activation link is invalid or has expired."
-                    : "This reset link is invalid or has expired. Please request a new one."}
+                  {isSetup
+                    ? 'This activation link is invalid or has expired.'
+                    : 'This reset link is invalid or has expired. Please request a new one.'}
                 </p>
               </div>
 
               <div className="space-y-3">
-                <Link
-                  href="/forgot-password"
-                  className="block w-full"
-                >
+                <Link href="/forgot-password" className="block w-full">
                   <Button fullWidth size="lg">
                     Request New Reset Link
                   </Button>
                 </Link>
-                <Link
-                  href="/"
-                  className="block w-full"
-                >
+                <Link href="/" className="block w-full">
                   <Button fullWidth size="lg" variant="outline">
                     Back to Login
                   </Button>
@@ -172,7 +188,7 @@ function ResetPasswordForm() {
   return (
     <>
       <AnimatedBackground />
-      
+
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           {/* Header */}
@@ -181,12 +197,12 @@ function ResetPasswordForm() {
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              {isSetup ? "Set Your Password" : "New Password"}
+              {isSetup ? 'Set Your Password' : 'New Password'}
             </h1>
             <p className="text-slate-600">
-              {isSetup 
-                ? "Create a secure password to activate your account."
-                : "Your password must be different from previously used passwords."}
+              {isSetup
+                ? 'Create a secure password to activate your account.'
+                : 'Your password must be different from previously used passwords.'}
             </p>
           </div>
 
@@ -207,14 +223,17 @@ function ResetPasswordForm() {
               <div className="animate-slideInLeft delay-300">
                 <div className="relative">
                   <Input
-                    label={isSetup ? "Password" : "New Password"}
-                    type={showPassword ? "text" : "password"}
+                    label={isSetup ? 'Password' : 'New Password'}
+                    type={showPassword ? 'text' : 'password'}
                     name="password"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
                       if (validationErrors.password) {
-                        setValidationErrors({ ...validationErrors, password: undefined });
+                        setValidationErrors({
+                          ...validationErrors,
+                          password: undefined,
+                        });
                       }
                     }}
                     error={validationErrors.password}
@@ -227,25 +246,35 @@ function ResetPasswordForm() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-[38px] text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Must contain uppercase, lowercase, numbers and special characters
+                  Must contain uppercase, lowercase, numbers and special
+                  characters
                 </p>
               </div>
 
               <div className="animate-slideInLeft delay-400">
                 <div className="relative">
                   <Input
-                    label={isSetup ? "Confirm Password" : "Confirm New Password"}
-                    type={showConfirmPassword ? "text" : "password"}
+                    label={
+                      isSetup ? 'Confirm Password' : 'Confirm New Password'
+                    }
+                    type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     value={confirmPassword}
                     onChange={(e) => {
                       setConfirmPassword(e.target.value);
                       if (validationErrors.confirmPassword) {
-                        setValidationErrors({ ...validationErrors, confirmPassword: undefined });
+                        setValidationErrors({
+                          ...validationErrors,
+                          confirmPassword: undefined,
+                        });
                       }
                     }}
                     error={validationErrors.confirmPassword}
@@ -258,7 +287,11 @@ function ResetPasswordForm() {
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-[38px] text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -272,14 +305,14 @@ function ResetPasswordForm() {
                   className="group"
                   icon={<Lock className="w-5 h-5" />}
                 >
-                  {isSetup ? "Activate Account" : "Reset Password"}
+                  {isSetup ? 'Activate Account' : 'Reset Password'}
                 </Button>
               </div>
             </form>
 
             <div className="mt-6 pt-6 border-t border-slate-100 animate-fadeIn delay-500">
-              <Link 
-                href="/" 
+              <Link
+                href="/"
                 className="flex items-center justify-center gap-2 text-slate-600 hover:text-slate-900 font-medium transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -295,11 +328,13 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-pulse">Loading...</div>
+        </div>
+      }
+    >
       <ResetPasswordForm />
     </Suspense>
   );

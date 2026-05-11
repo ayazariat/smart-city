@@ -7,17 +7,23 @@ class DashboardStats {
   final int total;
   final int submitted;
   final int pending;
+  final int assigned;
   final int inProgress;
   final int resolved;
   final int closed;
+  final int totalOverdue;
+  final int resolutionRate;
 
   DashboardStats({
     this.total = 0,
     this.submitted = 0,
     this.pending = 0,
+    this.assigned = 0,
     this.inProgress = 0,
     this.resolved = 0,
     this.closed = 0,
+    this.totalOverdue = 0,
+    this.resolutionRate = 0,
   });
 
   factory DashboardStats.fromJson(Map<String, dynamic> json) {
@@ -25,9 +31,12 @@ class DashboardStats {
       total: json['total'] ?? 0,
       submitted: json['submitted'] ?? 0,
       pending: json['pending'] ?? 0,
+      assigned: json['assigned'] ?? 0,
       inProgress: json['inProgress'] ?? 0,
       resolved: json['resolved'] ?? 0,
       closed: json['closed'] ?? 0,
+      totalOverdue: json['totalOverdue'] ?? json['overdue'] ?? 0,
+      resolutionRate: json['resolutionRate'] ?? 0,
     );
   }
 

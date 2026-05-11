@@ -1,14 +1,31 @@
-import { Complaint, CreateComplaintData, ComplaintCategory, ComplaintUrgency, ComplaintLocation, ComplaintMedia, Comment } from "@/types";
-import { apiClient } from "./api.client";
+import {
+  Complaint,
+  CreateComplaintData,
+  ComplaintCategory,
+  ComplaintUrgency,
+  ComplaintLocation,
+  ComplaintMedia,
+  Comment,
+} from '@/types';
+import { apiClient } from './api.client';
 
 const getAiServiceUrl = (): string => {
-  const raw = (process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000").trim();
-  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  const raw = (
+    process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000'
+  ).trim();
+  return raw.endsWith('/') ? raw.slice(0, -1) : raw;
 };
 
-const fetchAi = async (path: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response | null> => {
+const fetchAi = async (
+  path: string,
+  options: RequestInit = {},
+  timeoutMs = 5000
+): Promise<Response | null> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error('Request timeout')), timeoutMs);
+  const timeout = setTimeout(
+    () => controller.abort(new Error('Request timeout')),
+    timeoutMs
+  );
   try {
     const aiUrl = getAiServiceUrl();
     return await fetch(`${aiUrl}${path}`, {
@@ -28,24 +45,24 @@ const fetchAi = async (path: string, options: RequestInit = {}, timeoutMs = 5000
  * Otherwise, check if it's a Cloudinary public ID and construct the URL
  */
 export function getFullMediaUrl(url: string | undefined): string {
-  if (!url) return "";
-  
+  if (!url) return '';
+
   // If already a full URL, return as-is
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  
+
   // If it's a relative path (starts with /), return as-is
   // The backend should return full URLs after upload
-  if (url.startsWith("/")) {
+  if (url.startsWith('/')) {
     // Could prepend API base URL if needed
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
     return `${apiUrl}${url}`;
   }
-  
+
   // If it's a Cloudinary public ID (no slashes), construct URL
   // This assumes the backend stores just the public ID
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "demo";
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'demo';
   return `https://res.cloudinary.com/${cloudName}/image/upload/${url}`;
 }
 
@@ -55,37 +72,37 @@ export function getFullMediaUrl(url: string | undefined): string {
  */
 export function processComplaintMedia(complaint: Complaint): Complaint {
   if (!complaint) return complaint;
-  
+
   // Process media array
   if (complaint.media) {
-    complaint.media = complaint.media.map(item => ({
+    complaint.media = complaint.media.map((item) => ({
       ...item,
-      url: getFullMediaUrl(item.url)
+      url: getFullMediaUrl(item.url),
     }));
   }
-  
+
   // Process before photos
   if (complaint.beforePhotos) {
-    complaint.beforePhotos = complaint.beforePhotos.map(photo => ({
+    complaint.beforePhotos = complaint.beforePhotos.map((photo) => ({
       ...photo,
-      url: getFullMediaUrl(photo.url)
+      url: getFullMediaUrl(photo.url),
     }));
   }
-  
+
   // Process after photos
   if (complaint.afterPhotos) {
-    complaint.afterPhotos = complaint.afterPhotos.map(photo => ({
+    complaint.afterPhotos = complaint.afterPhotos.map((photo) => ({
       ...photo,
-      url: getFullMediaUrl(photo.url)
+      url: getFullMediaUrl(photo.url),
     }));
   }
-  
+
   return complaint;
 }
 
 /**
-  * Upload media files to Cloudinary
-  */
+ * Upload media files to Cloudinary
+ */
 export const uploadMedia = async (
   files: File[]
 ): Promise<{ success: boolean; data?: ComplaintMedia[]; message?: string }> => {
@@ -95,16 +112,27 @@ export const uploadMedia = async (
   });
 
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-    
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+    // Get token from useAuthStore
+    const { useAuthStore } = await import('@/store/useAuthStore');
+    const { token } = useAuthStore.getState();
+
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(`${apiUrl}/upload`, {
       method: 'POST',
       body: formData,
       credentials: 'include',
+      headers,
     });
 
     const result = await response.json();
-    
+
     if (!response.ok) {
       return { success: false, message: result.message || 'Upload failed' };
     }
@@ -112,7 +140,11 @@ export const uploadMedia = async (
     return { success: true, data: result.data };
   } catch (error) {
     console.error('Upload error:', error);
-    return { success: false, message: 'Failed to upload files. Please check your internet connection and try again.' };
+    return {
+      success: false,
+      message:
+        'Failed to upload files. Please check your internet connection and try again.',
+    };
   }
 };
 
@@ -123,7 +155,10 @@ export const submitComplaint = async (
   data: CreateComplaintData
 ): Promise<{ message: string; complaint: Complaint }> => {
   // apiClient gère déjà le token (useAuthStore) + refresh
-  return apiClient.post<{ message: string; complaint: Complaint }>("/citizen/complaints", data);
+  return apiClient.post<{ message: string; complaint: Complaint }>(
+    '/citizen/complaints',
+    data
+  );
 };
 
 /**
@@ -145,13 +180,13 @@ export const getMyComplaints = async (params?: {
   };
 }> => {
   const searchParams = new URLSearchParams();
-  if (params?.status) searchParams.set("status", params.status);
-  if (params?.category) searchParams.set("category", params.category);
-  if (params?.page) searchParams.set("page", params.page.toString());
-  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.category) searchParams.set('category', params.category);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
 
   const queryString = searchParams.toString();
-  const endpoint = `/citizen/complaints${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/citizen/complaints${queryString ? `?${queryString}` : ''}`;
 
   const result = await apiClient.get<{
     message: string;
@@ -174,7 +209,9 @@ export const getMyComplaints = async (params?: {
 export const getComplaintById = async (
   id: string
 ): Promise<{ message: string; complaint: Complaint }> => {
-  return apiClient.get<{ message: string; complaint: Complaint }>(`/citizen/complaints/${id}`);
+  return apiClient.get<{ message: string; complaint: Complaint }>(
+    `/citizen/complaints/${id}`
+  );
 };
 
 /**
@@ -192,7 +229,10 @@ export const updateComplaint = async (
     phone: string;
   }>
 ): Promise<{ message: string; complaint: Complaint }> => {
-  return apiClient.put<{ message: string; complaint: Complaint }>(`/citizen/complaints/${id}`, data);
+  return apiClient.put<{ message: string; complaint: Complaint }>(
+    `/citizen/complaints/${id}`,
+    data
+  );
 };
 
 /**
@@ -252,17 +292,18 @@ export const getAllComplaints = async (params?: {
   };
 }> => {
   const searchParams = new URLSearchParams();
-  if (params?.status) searchParams.set("status", params.status);
-  if (params?.category) searchParams.set("category", params.category);
-  if (params?.governorate) searchParams.set("governorate", params.governorate);
-  if (params?.municipality) searchParams.set("municipality", params.municipality);
-  if (params?.search) searchParams.set("search", params.search);
-  if (params?.page) searchParams.set("page", params.page.toString());
-  if (params?.limit) searchParams.set("limit", params.limit.toString());
-  if (params?.includeArchived) searchParams.set("includeArchived", "true");
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.category) searchParams.set('category', params.category);
+  if (params?.governorate) searchParams.set('governorate', params.governorate);
+  if (params?.municipality)
+    searchParams.set('municipality', params.municipality);
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
+  if (params?.includeArchived) searchParams.set('includeArchived', 'true');
 
   const queryString = searchParams.toString();
-  const endpoint = `/complaints${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/complaints${queryString ? `?${queryString}` : ''}`;
 
   return apiClient.get<{
     success: boolean;
@@ -288,10 +329,11 @@ export const updateComplaintStatus = async (
   status: string,
   rejectionReason?: string
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/status`,
-    { status, rejectionReason }
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/status`, { status, rejectionReason });
 };
 
 /**
@@ -301,10 +343,11 @@ export const assignComplaint = async (
   id: string,
   assignedToId: string
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/assign`,
-    { assignedToId }
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/assign`, { assignedToId });
 };
 
 /**
@@ -314,10 +357,11 @@ export const updateComplaintDepartment = async (
   id: string,
   departmentId: string
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/department`,
-    { departmentId }
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/department`, { departmentId });
 };
 
 /**
@@ -328,10 +372,11 @@ export const updateComplaintPriority = async (
   urgency: string,
   priorityScore?: number
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/priority`,
-    { urgency, priorityScore }
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/priority`, { urgency, priorityScore });
 };
 
 /**
@@ -355,10 +400,11 @@ export const addComplaintComment = async (
 export const confirmResolution = async (
   id: string
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/status`,
-    { status: "CLOSED" }
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/status`, { status: 'CLOSED' });
 };
 
 /**
@@ -367,10 +413,11 @@ export const confirmResolution = async (
 export const archiveComplaint = async (
   id: string
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/archive`,
-    {}
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/archive`, {});
 };
 
 /**
@@ -379,10 +426,11 @@ export const archiveComplaint = async (
 export const unarchiveComplaint = async (
   id: string
 ): Promise<{ success: boolean; data: Complaint; message?: string }> => {
-  return apiClient.patch<{ success: boolean; data: Complaint; message?: string }>(
-    `/complaints/${id}/unarchive`,
-    {}
-  );
+  return apiClient.patch<{
+    success: boolean;
+    data: Complaint;
+    message?: string;
+  }>(`/complaints/${id}/unarchive`, {});
 };
 
 /**
@@ -421,27 +469,29 @@ export const getArchivedComplaints = async (params?: {
 /**
  * Predict category using AI
  */
-export const predictCategory = async (text: string): Promise<{
+export const predictCategory = async (
+  text: string
+): Promise<{
   predicted: string;
   confidence: number;
   alternatives: string[];
   reasoning: string;
 }> => {
   try {
-    const { clientPost } = await import("@/lib/api");
+    const { clientPost } = await import('@/lib/api');
     const data = await clientPost<{
       predicted: string;
       confidence: number;
       alternatives: string[];
       reasoning: string;
-    }>("/ai/predict-category", { text }, { requiresAuth: false });
+    }>('/ai/predict-category', { text }, { requiresAuth: false });
     return data;
   } catch {
     return {
-      predicted: "AUTRE",
+      predicted: 'AUTRE',
       confidence: 0,
       alternatives: [],
-      reasoning: "AI service unavailable",
+      reasoning: 'AI service unavailable',
     };
   }
 };
@@ -469,9 +519,9 @@ export const predictUrgency = async (
 } | null> => {
   try {
     const response = await fetchAi(`/ai/urgency/predict`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         title,
@@ -497,26 +547,32 @@ export const predictUrgency = async (
 /**
  * Extract keywords using AI
  */
-export const extractKeywords = async (text: string): Promise<{
+export const extractKeywords = async (
+  text: string
+): Promise<{
   keywords: string[];
   locationKeywords: string[];
   urgencyKeywords: string[];
   similarityHash: string;
 }> => {
-  const response = await fetchAi(`/extract-keywords`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetchAi(
+    `/extract-keywords`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
     },
-    body: JSON.stringify({ text }),
-  }, 4000);
+    4000
+  );
 
   if (!response || !response.ok) {
     return {
       keywords: [],
       locationKeywords: [],
       urgencyKeywords: [],
-      similarityHash: "",
+      similarityHash: '',
     };
   }
 
@@ -529,11 +585,16 @@ export const extractKeywords = async (text: string): Promise<{
  */
 export const confirmComplaint = async (
   id: string
-): Promise<{ success: boolean; confirmationCount: number; message: string }> => {
-  return apiClient.post<{ success: boolean; confirmationCount: number; message: string }>(
-    `/complaints/${id}/confirm`,
-    {}
-  );
+): Promise<{
+  success: boolean;
+  confirmationCount: number;
+  message: string;
+}> => {
+  return apiClient.post<{
+    success: boolean;
+    confirmationCount: number;
+    message: string;
+  }>(`/complaints/${id}/confirm`, {});
 };
 
 /**
@@ -542,10 +603,16 @@ export const confirmComplaint = async (
  */
 export const unconfirmComplaint = async (
   id: string
-): Promise<{ success: boolean; confirmationCount: number; message: string }> => {
-  return apiClient.delete<{ success: boolean; confirmationCount: number; message: string }>(
-    `/complaints/${id}/confirm`
-  );
+): Promise<{
+  success: boolean;
+  confirmationCount: number;
+  message: string;
+}> => {
+  return apiClient.delete<{
+    success: boolean;
+    confirmationCount: number;
+    message: string;
+  }>(`/complaints/${id}/confirm`);
 };
 
 /**
@@ -555,10 +622,11 @@ export const unconfirmComplaint = async (
 export const upvoteComplaint = async (
   id: string
 ): Promise<{ success: boolean; upvoteCount: number; message: string }> => {
-  return apiClient.post<{ success: boolean; upvoteCount: number; message: string }>(
-    `/complaints/${id}/upvote`,
-    {}
-  );
+  return apiClient.post<{
+    success: boolean;
+    upvoteCount: number;
+    message: string;
+  }>(`/complaints/${id}/upvote`, {});
 };
 
 /**
@@ -568,9 +636,11 @@ export const upvoteComplaint = async (
 export const removeUpvote = async (
   id: string
 ): Promise<{ success: boolean; upvoteCount: number; message: string }> => {
-  return apiClient.delete<{ success: boolean; upvoteCount: number; message: string }>(
-    `/complaints/${id}/upvote`
-  );
+  return apiClient.delete<{
+    success: boolean;
+    upvoteCount: number;
+    message: string;
+  }>(`/complaints/${id}/upvote`);
 };
 
 export const getPublicComments = async (
@@ -598,11 +668,16 @@ export const addPublicComment = async (
 export const submitRating = async (
   id: string,
   data: { score: number; resolvedCorrectly?: boolean; comment?: string }
-): Promise<{ success: boolean; message: string; data: { score: number; comment?: string; createdAt: string } }> => {
-  return apiClient.put<{ success: boolean; message: string; data: { score: number; comment?: string; createdAt: string } }>(
-    `/complaints/${id}/rating`,
-    data
-  );
+): Promise<{
+  success: boolean;
+  message: string;
+  data: { score: number; comment?: string; createdAt: string };
+}> => {
+  return apiClient.put<{
+    success: boolean;
+    message: string;
+    data: { score: number; comment?: string; createdAt: string };
+  }>(`/complaints/${id}/rating`, data);
 };
 
 export const complaintService = {
@@ -652,7 +727,7 @@ export const getTrendForecast = async (
   try {
     const response = await fetchAi(
       `/ai/trend/forecast?municipality=${encodeURIComponent(municipality)}&category=${encodeURIComponent(category)}&period=${period}`,
-      { method: "GET" },
+      { method: 'GET' },
       4000
     );
 
@@ -670,14 +745,16 @@ export const getTrendForecast = async (
 /**
  * Get all trend alerts (BL-37)
  */
-export const getTrendAlerts = async (): Promise<{
-  type: string;
-  severity: string;
-  message: string;
-  recommendation: string;
-}[]> => {
+export const getTrendAlerts = async (): Promise<
+  {
+    type: string;
+    severity: string;
+    message: string;
+    recommendation: string;
+  }[]
+> => {
   try {
-    const response = await fetchAi(`/ai/trend/alerts`, { method: "GET" }, 3000);
+    const response = await fetchAi(`/ai/trend/alerts`, { method: 'GET' }, 3000);
 
     if (!response || !response.ok) {
       return [];
@@ -714,24 +791,30 @@ export const checkDuplicate = async (
   humanReviewRequired: boolean;
 } | null> => {
   try {
-    const response = await fetchAi(`/ai/duplicate/check`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        complaintId: "new",
-        title,
-        description,
-        category,
-        municipality,
-        latitude,
-        longitude,
-        submittedAt: new Date().toISOString(),
-      }),
-    }, 5000);
+    const response = await fetchAi(
+      `/ai/duplicate/check`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          complaintId: 'new',
+          title,
+          description,
+          category,
+          municipality,
+          latitude,
+          longitude,
+          submittedAt: new Date().toISOString(),
+        }),
+      },
+      5000
+    );
 
     if (!response || !response.ok) return null;
 
     const result = await response.json();
+    console.log('[checkDuplicate] Full response:', result);
+    console.log('[checkDuplicate] Result data:', result.data);
     return result.data || null;
   } catch {
     return null;
@@ -747,17 +830,21 @@ export const getDuplicateStats = async (): Promise<{
   merge_rate: number;
 } | null> => {
   try {
-    const { clientGet } = await import("@/lib/api");
+    const { clientGet } = await import('@/lib/api');
     const data = await clientGet<{
       total_checked: number;
       duplicates_found_today: number;
       merge_rate: number;
-    }>("/api/stats/duplicates/today", { requiresAuth: true });
+    }>('/api/stats/duplicates/today', { requiresAuth: true });
     return data;
   } catch (error) {
     // Fallback to AI service if endpoint fails
     try {
-      const response = await fetchAi(`/ai/duplicate/stats`, { method: "GET" }, 3000);
+      const response = await fetchAi(
+        `/ai/duplicate/stats`,
+        { method: 'GET' },
+        3000
+      );
       if (!response || !response.ok) return null;
       const result = await response.json();
       return result.data || result;

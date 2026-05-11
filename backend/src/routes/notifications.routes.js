@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
-const notificationService = require('../services/notification.service');
 
 /**
  * GET /api/notifications
@@ -132,7 +131,7 @@ router.patch('/:id/read', authenticate, async (req, res) => {
  * PUT /api/notifications/:id/read
  * Alternate endpoint for marking as read
  */
-router.put('/:id/read', authenticate, async (req, res) => {
+router.put('/:id/read', authenticate, async (req) => {
   return req.patch('/' + req.params.id + '/read'); // delegate to PATCH handler
 });
 
@@ -165,7 +164,7 @@ router.patch('/read-all', authenticate, async (req, res) => {
  * PUT /api/notifications/read-all
  * Alternate endpoint for marking all as read
  */
-router.put('/read-all', authenticate, async (req, res) => {
+router.put('/read-all', authenticate, async (req) => {
   return req.patch('/read-all'); // delegate to PATCH handler
 });
 

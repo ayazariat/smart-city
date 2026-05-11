@@ -1,6 +1,6 @@
 /**
  * Technician Service
- * 
+ *
  * Handles technician-specific operations:
  * - GET /technician/complaints (assigned complaints)
  * - PUT /technician/complaints/:id/start
@@ -9,11 +9,11 @@
  * - PUT /technician/complaints/:id/location (GPS tracking)
  */
 
-import { apiClient } from "./api.client";
-import { Complaint } from "@/types";
+import { apiClient } from './api.client';
+import { Complaint } from '@/types';
 
 // Task status types
-export type TaskStatus = "ASSIGNED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+export type TaskStatus = 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
 
 // Task response type
 interface TasksResponse {
@@ -47,7 +47,7 @@ interface CommentResponse {
   data: {
     _id: string;
     text: string;
-    type: "NOTE" | "BLOCAGE";
+    type: 'NOTE' | 'BLOCAGE';
     author: { _id: string; fullName: string };
     createdAt: string;
   };
@@ -68,12 +68,12 @@ export async function getTechnicianTasks(params?: {
   limit?: number;
 }): Promise<TasksResponse> {
   const searchParams = new URLSearchParams();
-  if (params?.status) searchParams.set("status", params.status);
-  if (params?.page) searchParams.set("page", params.page.toString());
-  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
 
   const queryString = searchParams.toString();
-  const endpoint = `/technician/complaints${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/technician/complaints${queryString ? `?${queryString}` : ''}`;
 
   return apiClient.get<TasksResponse>(endpoint);
 }
@@ -81,7 +81,9 @@ export async function getTechnicianTasks(params?: {
 /**
  * Get single task detail
  */
-export async function getTaskDetail(taskId: string): Promise<TaskDetailResponse> {
+export async function getTaskDetail(
+  taskId: string
+): Promise<TaskDetailResponse> {
   return apiClient.get<TaskDetailResponse>(`/technician/complaints/${taskId}`);
 }
 
@@ -94,27 +96,39 @@ export async function updateTaskStatus(
   notes?: string
 ): Promise<StatusUpdateResponse> {
   // Use the correct endpoints based on status
-  if (status === "IN_PROGRESS") {
-    return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/start`, {
-      notes,
-    });
+  if (status === 'IN_PROGRESS') {
+    return apiClient.put<StatusUpdateResponse>(
+      `/technician/complaints/${taskId}/start`,
+      {
+        notes,
+      }
+    );
   }
-  if (status === "RESOLVED") {
-    return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/complete`, {
-      notes,
-    });
+  if (status === 'RESOLVED') {
+    return apiClient.put<StatusUpdateResponse>(
+      `/technician/complaints/${taskId}/complete`,
+      {
+        notes,
+      }
+    );
   }
-  return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/status`, {
-    status,
-    notes,
-  });
+  return apiClient.put<StatusUpdateResponse>(
+    `/technician/complaints/${taskId}/status`,
+    {
+      status,
+      notes,
+    }
+  );
 }
 
 /**
  * Start work on a task
  */
 export async function startWork(taskId: string): Promise<StatusUpdateResponse> {
-  return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/start`, {});
+  return apiClient.put<StatusUpdateResponse>(
+    `/technician/complaints/${taskId}/start`,
+    {}
+  );
 }
 
 /**
@@ -125,10 +139,13 @@ export async function resolveTask(
   resolutionNotes: string,
   proofPhotos?: string[]
 ): Promise<StatusUpdateResponse> {
-  return apiClient.put<StatusUpdateResponse>(`/technician/complaints/${taskId}/complete`, {
-    notes: resolutionNotes,
-    afterPhotos: proofPhotos?.map(url => ({ type: "photo", url })),
-  });
+  return apiClient.put<StatusUpdateResponse>(
+    `/technician/complaints/${taskId}/complete`,
+    {
+      notes: resolutionNotes,
+      afterPhotos: proofPhotos?.map((url) => ({ type: 'photo', url })),
+    }
+  );
 }
 
 /**
@@ -138,12 +155,15 @@ export async function resolveTask(
 export async function addTaskComment(
   taskId: string,
   content: string,
-  type: "NOTE" | "BLOCAGE" = "NOTE"
+  type: 'NOTE' | 'BLOCAGE' = 'NOTE'
 ): Promise<CommentResponse> {
-  return apiClient.post<CommentResponse>(`/technician/complaints/${taskId}/comments`, {
-    content,
-    type,
-  });
+  return apiClient.post<CommentResponse>(
+    `/technician/complaints/${taskId}/comments`,
+    {
+      content,
+      type,
+    }
+  );
 }
 
 /**
@@ -153,7 +173,7 @@ export async function reportBlocker(
   taskId: string,
   reason: string
 ): Promise<CommentResponse> {
-  return addTaskComment(taskId, reason, "BLOCAGE");
+  return addTaskComment(taskId, reason, 'BLOCAGE');
 }
 
 /**
@@ -197,8 +217,7 @@ export function startLocationTracking(
         updateLocation(taskId, location);
         onLocationUpdate?.(location);
       },
-      (error) => {
-      },
+      (error) => {},
       { enableHighAccuracy: true }
     );
 
@@ -214,8 +233,7 @@ export function startLocationTracking(
         updateLocation(taskId, location);
         onLocationUpdate?.(location);
       },
-      (error) => {
-      },
+      (error) => {},
       {
         enableHighAccuracy: true,
         timeout: 10000,
@@ -236,8 +254,7 @@ export function startLocationTracking(
           updateLocation(taskId, location);
           onLocationUpdate?.(location);
         },
-        (error) => {
-        },
+        (error) => {},
         { enableHighAccuracy: true, timeout: 10000 }
       );
     }, 30000);
@@ -272,9 +289,23 @@ export async function getTechnicianStats(): Promise<{
     totalOverdue?: number;
     totalAtRisk?: number;
     resolutionRate?: number;
-    avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
-    resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
-    citizenSatisfaction: { value: number | null; totalRated: number; notConfirmed: number; vsLast: number | null };
+    avgFixTime: {
+      value: number | null;
+      unit: string;
+      vsLast: number | null;
+      trend: string;
+    };
+    resolvedOnTime: {
+      value: number | null;
+      vsLast: number | null;
+      trend: string;
+    };
+    citizenSatisfaction: {
+      value: number | null;
+      totalRated: number;
+      notConfirmed: number;
+      vsLast: number | null;
+    };
     csat?: number;
     totalRatings?: number;
   };
@@ -291,13 +322,27 @@ export async function getTechnicianStats(): Promise<{
       totalOverdue?: number;
       totalAtRisk?: number;
       resolutionRate?: number;
-      avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
-      resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
-      citizenSatisfaction: { value: number | null; totalRated: number; notConfirmed: number; vsLast: number | null };
+      avgFixTime: {
+        value: number | null;
+        unit: string;
+        vsLast: number | null;
+        trend: string;
+      };
+      resolvedOnTime: {
+        value: number | null;
+        vsLast: number | null;
+        trend: string;
+      };
+      citizenSatisfaction: {
+        value: number | null;
+        totalRated: number;
+        notConfirmed: number;
+        vsLast: number | null;
+      };
       csat?: number;
       totalRatings?: number;
     };
-  }>("/technician/stats");
+  }>('/technician/stats');
 }
 
 // Export as service object

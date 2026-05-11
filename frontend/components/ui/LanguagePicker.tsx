@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Globe } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Globe } from 'lucide-react';
 
 const LANGS = [
-  { code: "fr", label: "Français", flag: "🇫🇷" },
-  { code: "en", label: "English", flag: "🇬🇧" },
-  { code: "ar", label: "العربية", flag: "🇹🇳" },
+  { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { code: 'en', label: 'English', flag: '🇬🇧' },
+  { code: 'ar', label: 'العربية', flag: '🇹🇳' },
 ] as const;
 
 export default function LanguagePicker() {
@@ -17,15 +17,12 @@ export default function LanguagePicker() {
   const current = LANGS.find((l) => l.code === i18n.language) || LANGS[0];
 
   useEffect(() => {
-    document.documentElement.dir = i18n.language === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = i18n.language === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
 
   const change = (code: string) => {
     i18n.changeLanguage(code);
-    // Immediately update dir/lang so sidebar reacts without waiting for React effect
-    document.documentElement.dir = code === "ar" ? "rtl" : "ltr";
-    document.documentElement.lang = code;
     setOpen(false);
   };
 
@@ -52,8 +49,8 @@ export default function LanguagePicker() {
                 onClick={() => change(lang.code)}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 transition-colors ${
                   lang.code === i18n.language
-                    ? "text-primary font-semibold bg-primary/5"
-                    : "text-slate-700"
+                    ? 'text-primary font-semibold bg-primary/5'
+                    : 'text-slate-700'
                 }`}
               >
                 <span>{lang.flag}</span>

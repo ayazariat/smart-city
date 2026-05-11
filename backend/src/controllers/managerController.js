@@ -4,7 +4,6 @@ const RepairTeam = require("../models/RepairTeam");
 const Department = require("../models/Department");
 const notificationService = require("../services/notification.service");
 const { sendAssignmentEmails } = require("../utils/mailer");
-const emailTemplates = require("../utils/emailTemplates.js");
 
 const MANAGER_ACTIVE_STATUSES = [
   "VALIDATED",
@@ -280,12 +279,9 @@ async assignTechnician(req, res) {
         });
       }
 
-      // Get technician & citizen emails
-      const [technicianUser, citizenUser] = await Promise.all([
-        User.findById(technicianId).select('email').lean(),
-        complaint.createdBy ? User.findById(complaint.createdBy).select('email').lean() : null
-      ]);
-      
+      // Get technician email
+      const technicianUser = await User.findById(technicianId).select('email').lean();
+
       const technicianEmails = technicianUser?.email ? [technicianUser.email] : [];
       const managerUser = { email: req.user.email, fullName: req.user.fullName };
 
@@ -861,10 +857,9 @@ async assignTechnician(req, res) {
       if (search) {
         query.fullName = { $regex: search, $options: "i" };
       }
-      
+
       let technicians;
-      let departmentId = null;
-      
+
       if (req.user.role === "ADMIN") {
         technicians = await User.find(query)
           .select("fullName email phone department")

@@ -1,5 +1,5 @@
-import { Complaint } from "@/types";
-import { apiClient } from "./api.client";
+import { Complaint } from '@/types';
+import { apiClient } from './api.client';
 
 /**
  * Get agent's complaints (filtered by municipality)
@@ -24,13 +24,13 @@ export const getAgentComplaints = async (params?: {
   };
 }> => {
   const searchParams = new URLSearchParams();
-  if (params?.status) searchParams.set("status", params.status);
-  if (params?.category) searchParams.set("category", params.category);
-  if (params?.page) searchParams.set("page", params.page.toString());
-  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.category) searchParams.set('category', params.category);
+  if (params?.page) searchParams.set('page', params.page.toString());
+  if (params?.limit) searchParams.set('limit', params.limit.toString());
 
   const queryString = searchParams.toString();
-  const endpoint = `/agent/complaints${queryString ? `?${queryString}` : ""}`;
+  const endpoint = `/agent/complaints${queryString ? `?${queryString}` : ''}`;
 
   return apiClient.get<{
     success: boolean;
@@ -94,7 +94,7 @@ export const getAgentDepartments = async (): Promise<{
   return apiClient.get<{
     success: boolean;
     data: Array<{ _id: string; name: string; email?: string; phone?: string }>;
-  }>("/agent/departments");
+  }>('/agent/departments');
 };
 
 /**
@@ -127,8 +127,17 @@ export const getAgentStats = async (): Promise<{
     totalOverdue: number;
     totalAtRisk: number;
     resolutionRate: number;
-    avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
-    resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
+    avgFixTime: {
+      value: number | null;
+      unit: string;
+      vsLast: number | null;
+      trend: string;
+    };
+    resolvedOnTime: {
+      value: number | null;
+      vsLast: number | null;
+      trend: string;
+    };
     citizenSatisfaction: {
       value: number | null;
       totalRated: number;
@@ -139,7 +148,7 @@ export const getAgentStats = async (): Promise<{
     byMonth: Record<string, number>;
   };
 }> => {
-  return apiClient.get("/complaints/stats");
+  return apiClient.get('/complaints/stats');
 };
 
 /**
@@ -181,7 +190,11 @@ export const agentService = {
 };
 
 // AI Department Prediction
-export async function predictDepartment(category: string, description: string, municipality?: string): Promise<{
+export async function predictDepartment(
+  category: string,
+  description: string,
+  municipality?: string
+): Promise<{
   success: boolean;
   data?: {
     suggestedDepartment: string;
@@ -190,5 +203,9 @@ export async function predictDepartment(category: string, description: string, m
     message: string;
   };
 }> {
-  return apiClient.post("/public/ai/predict-department", { category, description, municipality });
+  return apiClient.post('/public/ai/predict-department', {
+    category,
+    description,
+    municipality,
+  });
 }

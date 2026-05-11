@@ -222,7 +222,7 @@ async function calculatePriorityAndSLAAsync(complaintData) {
     locationType = 'NORMAL',
     createdAt
   } = complaintData;
-  
+
   const { priorityScore } = calculatePriorityScore({
     category,
     aiUrgencyPrediction,
@@ -231,18 +231,14 @@ async function calculatePriorityAndSLAAsync(complaintData) {
     upvotes,
     locationType
   });
-  
+
   const urgencyLevel = getUrgencyLevel(priorityScore);
-  
-  const slaFinal = await calculateSLAFromDB({
-    category,
-    urgency: urgencyLevel
-  });
-  
+  const slaFinal = calculateSLA(category, urgencyLevel);
+
   const elapsedTime = createdAt ? calculateElapsedTime(createdAt) : 0;
   const progress = getSLAProgress(elapsedTime, slaFinal);
   const status = getSLAStatus(elapsedTime, slaFinal);
-  
+
   return {
     priorityScore,
     urgencyLevel,

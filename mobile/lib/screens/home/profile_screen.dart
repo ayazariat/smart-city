@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
+import 'package:smart_city_app/services/auth_service.dart';
 import 'package:smart_city_app/widgets/toast.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -79,11 +80,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
       Toast.error(context, 'Les mots de passe ne correspondent pas');
       return;
     }
+    if (_newPasswordController.text.length < 8) {
+      Toast.error(context, 'Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
     
     setState(() => _isSaving = true);
     try {
-      // Password change functionality not implemented in auth provider yet
-      Toast.info(context, 'Changement de mot de passe non disponible');
+      final service = ref.read(authServiceProvider);
+      await service.changePassword(
+        currentPassword: _currentPasswordController.text,
+        newPassword: _newPasswordController.text,
+      );
+      Toast.success(context, 'Mot de passe changé avec succès');
       _currentPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
@@ -274,6 +283,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
               label: 'Gouvernorat',
               value: user?.governorate ?? '-',
             ),
+            if (user?.department != null) ...[
+              const SizedBox(height: 16),
+              _buildInfoField(
+                icon: Icons.business,
+                label: 'Département',
+                value: user!.department!,
+              ),
+            ],
             if (_isEditing) ...[
               const SizedBox(height: 24),
               Row(
@@ -313,10 +330,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
               ),
             ],
             const SizedBox(height: 32),
+            // Logout with confirmation
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => ref.read(authProvider.notifier).logout(),
+                onPressed: () => _showLogoutDialog(),
                 icon: const Icon(Icons.logout),
                 label: const Text('Déconnexion'),
                 style: ElevatedButton.styleFrom(
@@ -510,5 +528,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
       default:
         return 'Utilisateur';
     }
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Déconnexion'),
+        content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(authProvider.notifier).logout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Déconnexion'),
+          ),
+        ],
+      ),
+    );
   }
 }

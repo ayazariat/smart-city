@@ -1,6 +1,6 @@
-import { Search, Filter, X } from "lucide-react";
-import { STATUS_OPTIONS } from "@/lib/complaints";
-import { useTranslation } from "react-i18next";
+import { Search, Filter, X } from 'lucide-react';
+import { STATUS_OPTIONS } from '@/lib/complaints';
+import { useTranslation } from 'react-i18next';
 
 interface FilterBarProps {
   searchTerm: string;
@@ -17,12 +17,12 @@ export const FilterBar = ({
   onSearchChange,
   statusFilter,
   onStatusChange,
-  searchPlaceholder = "",
+  searchPlaceholder = '',
   statusOptions = [...STATUS_OPTIONS],
   count,
 }: FilterBarProps) => {
   const { t } = useTranslation();
-  const placeholder = searchPlaceholder || t("filterBar.searchPlaceholder");
+  const placeholder = searchPlaceholder || t('filterBar.searchPlaceholder');
   return (
     <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200 animate-fadeIn">
       <div className="flex flex-col md:flex-row gap-3 items-center">
@@ -43,7 +43,7 @@ export const FilterBar = ({
           />
           {searchTerm && (
             <button
-              onClick={() => onSearchChange("")}
+              onClick={() => onSearchChange('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full 
                          bg-slate-200 hover:bg-slate-300 text-slate-500 flex items-center justify-center
                          transition-colors"
@@ -59,7 +59,7 @@ export const FilterBar = ({
             <Filter className="w-4 h-4" />
             <span className="text-sm font-medium hidden sm:inline">Filter</span>
           </div>
-          
+
           <select
             value={statusFilter}
             onChange={(e) => onStatusChange(e.target.value)}
@@ -68,7 +68,7 @@ export const FilterBar = ({
                        bg-white transition-all hover:border-primary/50 cursor-pointer
                        shadow-sm font-medium"
           >
-            <option value="">{t("filterBar.allStatuses")}</option>
+            <option value="">{t('filterBar.allStatuses')}</option>
             {statusOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -80,20 +80,22 @@ export const FilterBar = ({
           {(searchTerm || statusFilter) && (
             <button
               onClick={() => {
-                onSearchChange("");
-                onStatusChange("");
+                onSearchChange('');
+                onStatusChange('');
               }}
               className="px-3 py-2.5 text-xs font-medium text-primary hover:bg-primary/10 
                          rounded-xl transition-colors border border-primary/20"
             >
-              {t("filterBar.clear")}
+              {t('filterBar.clear')}
             </button>
           )}
 
           {count !== undefined && (
-            <span className="hidden lg:inline-flex items-center px-3 py-1.5 rounded-full 
-                           text-xs font-semibold bg-primary text-white shadow-sm">
-              {t("filterBar.found", { count })}
+            <span
+              className="hidden lg:inline-flex items-center px-3 py-1.5 rounded-full 
+                           text-xs font-semibold bg-primary text-white shadow-sm"
+            >
+              {t('filterBar.found', { count })}
             </span>
           )}
         </div>
@@ -102,17 +104,23 @@ export const FilterBar = ({
       {/* Active Filters Indicator */}
       {(searchTerm || statusFilter) && (
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-          <span className="text-xs text-slate-500">{t("filterBar.activeFilters")}</span>
+          <span className="text-xs text-slate-500">
+            {t('filterBar.activeFilters')}
+          </span>
           {searchTerm && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary 
-                           rounded-full text-xs font-medium">
-              {t("filterBar.search")} "{searchTerm}"
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary 
+                           rounded-full text-xs font-medium"
+            >
+              {t('filterBar.search')} &quot;{searchTerm}&quot;
             </span>
           )}
           {statusFilter && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary 
-                           rounded-full text-xs font-medium">
-              {t("filterBar.status")} {statusFilter}
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary 
+                           rounded-full text-xs font-medium"
+            >
+              {t('filterBar.status')} {statusFilter}
             </span>
           )}
         </div>

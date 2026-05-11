@@ -71,8 +71,9 @@ from utils.text_preprocessor import clean_text, combine_fields
 from utils.geo_utils import calculate_geo_score
 from config.settings import (
     DUPLICATE_WEIGHTS,
-    DUPLICATE_THRESHOLD_REVIEW,
-    DUPLICATE_THRESHOLD_PROBABLE,
+    DUPLICATE_THRESHOLD,
+    DUPLICATE_THRESHOLD_REVIEW,  # Deprecated but kept for compatibility
+    DUPLICATE_THRESHOLD_PROBABLE,  # Deprecated but kept for compatibility
     RELATED_CATEGORIES,
     TEMPORAL_PROXIMITY
 )
@@ -158,35 +159,57 @@ class DuplicateDetector:
     def _calculate_temporal_score(self, new_date: datetime, 
                                    candidate_date: datetime) -> float:
         """Calculate temporal proximity score."""
-        days_diff = abs((new_date - candidate_date).days)
+        if new_date is None or candidate_date is None:
+            return 0.0
         
-        if days_diff == 0:
-            return 1.0
-        elif days_diff <= TEMPORAL_PROXIMITY["veryClose"]:
-            return 0.7
-        elif days_diff <= TEMPORAL_PROXIMITY["close"]:
-            return 0.4
-        elif days_diff <= TEMPORAL_PROXIMITY["near"]:
-            return 0.2
+        time_diff = abs((new_date - candidate_date).total_seconds())
+        
+        if time_diff < TEMPORAL_PROXIMITY * 3600:  # Within configured hours
+            return 1.0 - (time_diff / (TEMPORAL_PROXIMITY * 3600))
         else:
             return 0.0
     
+    def _calculate_photo_score(self, new_photos: List[str], 
+                                candidate_photos: List[str]) -> float:
+        """
+        Calculate photo similarity score.
+        Compares presence of photos and photo URLs for potential duplicates.
+        """
+        # If neither has photos, neutral score
+        if not new_photos and not candidate_photos:
+            return 0.5
+        
+        # If both have photos, higher likelihood of being related
+        if new_photos and candidate_photos:
+            # Check for exact URL matches (same photo uploaded)
+            new_urls = set(new_photos)
+            candidate_urls = set(candidate_photos)
+            common_urls = new_urls & candidate_urls
+            
+            if common_urls:
+                return 1.0  # Same photo uploaded - strong duplicate indicator
+            
+            # Different photos but both have images - moderate boost
+            return 0.6
+        
+        # Only one has photos - slight penalty (could be same issue reported differently)
+        return 0.34
+    
     def _calculate_final_score(self, text_score: float, geo_score: float,
-                                category_score: float, temporal_score: float) -> float:
+                                category_score: float, temporal_score: float, photo_score: float = 0.5) -> float:
         """Calculate weighted final score."""
         return (
             text_score * DUPLICATE_WEIGHTS["textSimilarity"] +
             geo_score * DUPLICATE_WEIGHTS["geographicProximity"] +
             category_score * DUPLICATE_WEIGHTS["categoryMatch"] +
-            temporal_score * DUPLICATE_WEIGHTS["temporalProximity"]
+            temporal_score * DUPLICATE_WEIGHTS["temporalProximity"] +
+            photo_score * DUPLICATE_WEIGHTS.get("photoMatch", 0.1)  # Default 10% weight for photos
         )
     
     def _determine_duplicate_level(self, score: float) -> str:
-        """Determine duplicate level based on score."""
-        if score >= DUPLICATE_THRESHOLD_PROBABLE:
+        """Determine duplicate level based on unified threshold."""
+        if score >= DUPLICATE_THRESHOLD:
             return "PROBABLE_DUPLICATE"
-        elif score >= DUPLICATE_THRESHOLD_REVIEW:
-            return "POSSIBLE_DUPLICATE"
         else:
             return "NOT_DUPLICATE"
     
@@ -221,6 +244,7 @@ class DuplicateDetector:
         new_lng = new_complaint.get("longitude")
         new_category = new_complaint.get("category", "")
         new_date = new_complaint.get("submittedAt")
+        new_photos = new_complaint.get("media", []) or new_complaint.get("photos", []) or []
         
         if isinstance(new_date, str):
             try:
@@ -271,29 +295,38 @@ class DuplicateDetector:
             
             temporal_score = self._calculate_temporal_score(new_date, cand_date)
             
+            # Photo score
+            candidate_photos = candidate.get("media", []) or candidate.get("photos", []) or []
+            photo_score = self._calculate_photo_score(new_photos, candidate_photos)
+            
             # Calculate final score
             final_score = self._calculate_final_score(
-                text_score + title_bonus, geo_score, category_score, temporal_score
+                text_score + title_bonus, geo_score, category_score, temporal_score, photo_score
             )
             
             matches.append({
                 "complaintId": str(candidate.get("_id", "")),
                 "referenceId": candidate.get("referenceId", ""),
                 "title": candidate.get("title", ""),
+                "description": candidate.get("description", ""),
                 "overallScore": round(final_score, 2),
                 "textScore": round(text_score, 2),
                 "geoScore": round(geo_score, 2),
                 "categoryScore": round(category_score, 2),
                 "temporalScore": round(temporal_score, 2),
+                "photoScore": round(photo_score, 2),
                 "submittedAt": candidate.get("submittedAt"),
-                "status": candidate.get("status", "UNKNOWN")
+                "status": candidate.get("status", "UNKNOWN"),
+                "category": candidate.get("category", ""),
+                "latitude": candidate.get("latitude"),
+                "longitude": candidate.get("longitude")
             })
         
         # Sort by score descending
         matches.sort(key=lambda x: x["overallScore"], reverse=True)
         
-        # Take top 3
-        top_matches = matches[:3]
+        # Take top 10 to give agents more options to review
+        top_matches = matches[:10]
         
         # Determine duplicate level
         if top_matches and top_matches[0]["overallScore"] > 0:

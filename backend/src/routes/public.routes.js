@@ -14,9 +14,9 @@ router.get("/complaints", async (req, res) => {
     const requestedStatuses =
       typeof req.query.status === "string"
         ? req.query.status
-            .split(",")
-            .map((status) => status.trim().toUpperCase())
-            .filter(Boolean)
+          .split(",")
+          .map((status) => status.trim().toUpperCase())
+          .filter(Boolean)
         : [];
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "CLOSED"];
     const statuses = requestedStatuses.length > 0
@@ -66,7 +66,7 @@ router.get("/complaints", async (req, res) => {
 router.get("/complaints/:id", async (req, res) => {
   try {
     const { id } = req.params;
-        
+
     const complaint = await Complaint.findOne({ _id: id, isArchived: { $ne: true } })
       .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
       .populate("municipality", "name governorate")
@@ -102,7 +102,7 @@ router.get("/complaints/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
     const Comment = require("../models/Comment");
-    
+
     const comments = await Comment.find({ complaint: id })
       .populate("author", "name role")
       .sort({ createdAt: -1 })
@@ -173,6 +173,19 @@ router.post("/complaints/:id/comment", async (req, res) => {
 
     await comment.save();
 
+    // Also add to complaint's publicComments array
+    await Complaint.findByIdAndUpdate(id, {
+      $push: {
+        publicComments: {
+          _id: comment._id,
+          text: comment.text,
+          author: { fullName: comment.isAnonymous ? "Anonymous" : authorName },
+          date: comment.createdAt,
+          createdAt: comment.createdAt
+        }
+      }
+    });
+
     res.json({
       success: true,
       message: "Comment posted successfully",
@@ -196,7 +209,7 @@ router.post("/complaints/:id/upvote", async (req, res) => {
   try {
     const { id } = req.params;
     const { token } = req.headers;
-    
+
     if (!token) {
       return res.status(401).json({ success: false, message: "Authentication required" });
     }
@@ -246,7 +259,7 @@ router.get("/my-municipality-complaints", async (req, res) => {
     const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : req.headers.token;
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
     const status = req.query.status;
-    
+
     if (!token) {
       return res.status(401).json({ success: false, message: "Authentication required" });
     }
@@ -257,7 +270,8 @@ router.get("/my-municipality-complaints", async (req, res) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
       user = await User.findById(decoded.userId || decoded.id || decoded._id);
-    } catch {
+    } catch (err) {
+      console.error("Token verification error:", err);
       return res.status(401).json({ success: false, message: "Invalid token" });
     }
 
@@ -266,12 +280,19 @@ router.get("/my-municipality-complaints", async (req, res) => {
     }
 
     const userMunicipality = user.municipalityName || (typeof user.municipality === 'object' ? user.municipality?.name : user.municipality);
+    console.log("User municipality:", userMunicipality, "User role:", user.role, "User ID:", user._id);
+    
     if (!userMunicipality) {
+      console.error("User municipality not set for user:", user._id);
       return res.status(400).json({ success: false, message: "User municipality not set" });
     }
 
+    const normalizeMunicipality = require("../utils/normalize").normalizeMunicipality;
+    const normalizedUserMunicipality = normalizeMunicipality(userMunicipality);
+    console.log("Normalized municipality:", normalizedUserMunicipality);
+
     const query = {
-      municipalityName: userMunicipality,
+      municipalityNormalized: normalizedUserMunicipality,
       status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
       isArchived: { $ne: true },
     };
@@ -283,6 +304,8 @@ router.get("/my-municipality-complaints", async (req, res) => {
       }
     }
 
+    console.log("Query:", JSON.stringify(query, null, 2));
+
     const complaints = await Complaint.find(query)
       .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId")
       .populate("municipality", "name governorate")
@@ -290,6 +313,8 @@ router.get("/my-municipality-complaints", async (req, res) => {
       .limit(limit)
       .lean();
 
+    console.log("Found complaints:", complaints.length);
+    
     res.json({
       success: true,
       complaints,
@@ -308,7 +333,7 @@ router.post("/complaints/:id/rate", async (req, res) => {
     const { id } = req.params;
     const { token } = req.headers;
     const { rating, comment } = req.body;
-    
+
     if (!token) {
       return res.status(401).json({ success: false, message: "Authentication required" });
     }
@@ -390,9 +415,6 @@ router.get("/stats", async (req, res) => {
       overdue,
       pending,
       resolvedComplaints,
-      byCategory,
-      byMonth,
-      atRisk,
       totalResolvedForSatisfaction,
       resolvedWithConfirmation,
       resolvedWithRatings,
@@ -418,20 +440,12 @@ router.get("/stats", async (req, res) => {
         status: { $in: ["RESOLVED", "CLOSED"] },
         createdAt: { $exists: true },
       }).select("resolvedAt createdAt updatedAt slaDeadline urgency category"),
-      Complaint.aggregate([
-        { $match: { ...match, status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] } } },
-        { $group: { _id: "$category", count: { $sum: 1 } } },
-        { $sort: { count: -1 } }
-      ]),
-      Complaint.aggregate([
-        { $match: { ...match, createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
-        { $group: { _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] }, count: { $sum: 1 } } },
-        { $sort: { _id: 1 } },
-        { $limit: 6 }
-      ]),
       Complaint.countDocuments({
         ...match,
-        slaStatus: "AT_RISK",
+        status: { $in: ["RESOLVED", "CLOSED"] },
+        resolvedAt: { $exists: true },
+      }),
+      Complaint.countDocuments({
         status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] }
       }),
       Complaint.countDocuments({ ...match, status: { $in: ["RESOLVED", "CLOSED"] } }),
@@ -493,7 +507,8 @@ router.get("/stats", async (req, res) => {
     let totalRated = 0;
     let totalRatingSum = 0;
     let ratingCount = 0;
-    for (const complaint of resolvedWithRatings) {
+    const resolvedWithRatingsArray = Array.isArray(resolvedWithRatings) ? resolvedWithRatings : [];
+    for (const complaint of resolvedWithRatingsArray) {
       if (complaint.averageRating) {
         totalRatingSum += complaint.averageRating;
         ratingCount++;
@@ -503,7 +518,7 @@ router.get("/stats", async (req, res) => {
         ratingCount++;
       }
     }
-    satisfactionValue = ratingCount > 0 ? (totalRatingSum / ratingCount) * 20 : null; // Convert 1-5 scale to 0-100
+    satisfactionValue = ratingCount > 0 ? Math.min((totalRatingSum / ratingCount) * 20, 100) : null; // Convert 1-5 scale to 0-100, cap at 100
     totalRated = ratingCount;
     // Fallback to confirmation-based calculation if no ratings
     let notConfirmed = 0;
@@ -705,7 +720,7 @@ router.get("/stats", async (req, res) => {
         { $match: { createdAt: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
         {
           $group: {
-            _id: { $substr: [{$dateToString: { format: "%Y-%m", date: "$createdAt" }}, 0, 7] },
+            _id: { $substr: [{ $dateToString: { format: "%Y-%m", date: "$createdAt" } }, 0, 7] },
             submitted: { $sum: 1 },
             resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
           }
@@ -809,11 +824,11 @@ router.get("/stats", async (req, res) => {
       const year = monthDate.getFullYear();
       const month = monthDate.getMonth() + 1;
       const key = `${year}-${String(month).padStart(2, "0")}`;
-      
+
       // Format month label as "Dec '25", "Jan '26", etc.
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthLabel = `${monthNames[month - 1]} '${String(year).slice(2)}`;
-      
+
       const trend = monthlyTrends.find(t => t._id === key);
       months.push({
         month: monthLabel,
@@ -842,7 +857,7 @@ router.get("/stats", async (req, res) => {
         count: item.count,
         resolvedCount: item.resolved,
         status: item.resolved > 0 && item.resolved === item.count ? 'All Resolved' :
-               item.resolved > 0 ? 'Being Addressed' : 'Pending'
+          item.resolved > 0 ? 'Being Addressed' : 'Pending'
       }));
 
     // Format all municipalities
@@ -886,22 +901,22 @@ router.get("/stats", async (req, res) => {
         resolutionRate,
         avgFixTime: avgFixTime !== null
           ? {
-              value: avgFixTime,
-              unit: "days",
-              vsLast: trends.avgFixTimeTrend ?? null,
-              trend: trends.avgFixTimeTrend !== null
-                ? (trends.avgFixTimeTrend > 0 ? "up" : trends.avgFixTimeTrend < 0 ? "down" : "no_change")
-                : "no_change",
-            }
+            value: avgFixTime,
+            unit: "days",
+            vsLast: trends.avgFixTimeTrend ?? null,
+            trend: trends.avgFixTimeTrend !== null
+              ? (trends.avgFixTimeTrend > 0 ? "up" : trends.avgFixTimeTrend < 0 ? "down" : "no_change")
+              : "no_change",
+          }
           : { value: null, unit: "days", vsLast: null, trend: "no_change" },
         resolvedOnTime: resolvedOnTime !== null
           ? {
-              value: resolvedOnTime,
-              vsLast: trends.resolvedOnTimeTrend ?? null,
-              trend: trends.resolvedOnTimeTrend !== null
-                ? (trends.resolvedOnTimeTrend > 0 ? "up" : trends.resolvedOnTimeTrend < 0 ? "down" : "no_change")
-                : "no_change",
-            }
+            value: resolvedOnTime,
+            vsLast: trends.resolvedOnTimeTrend ?? null,
+            trend: trends.resolvedOnTimeTrend !== null
+              ? (trends.resolvedOnTimeTrend > 0 ? "up" : trends.resolvedOnTimeTrend < 0 ? "down" : "no_change")
+              : "no_change",
+          }
           : { value: null, vsLast: null, trend: "no_change" },
         byGovernorate,
         citizenSatisfaction: {
@@ -919,7 +934,6 @@ router.get("/stats", async (req, res) => {
         zoneStats: formattedZoneStats,
         topRecurring: formattedTopRecurring,
         allMunicipalities: formattedAllMunicipalityStats,
-        byGovernorate,
       },
     });
   } catch (error) {
@@ -935,7 +949,7 @@ router.get("/stats/by-category", async (req, res) => {
   try {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
-    
+
     // Define all 8 categories with their labels
     const allCategories = [
       { category: "waste", label: "Waste & Cleanliness" },
@@ -1000,7 +1014,7 @@ router.get("/stats/by-municipality", async (req, res) => {
   try {
     const { period } = req.query;
     const match = buildPeriodMatch(period);
-    
+
     const byMunicipality = await Complaint.aggregate([
       { $match: match },
       {
@@ -1008,6 +1022,8 @@ router.get("/stats/by-municipality", async (req, res) => {
           _id: { name: "$municipalityName", governorate: "$governorate" },
           total: { $sum: 1 },
           resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } },
+          avgFixTime: { $avg: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, { $divide: [{ $subtract: ["$resolvedAt", "$createdAt"] }, 86400000] }, null] } },
+          onTimeCount: { $sum: { $cond: [{ $and: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, { $eq: ["$slaStatus", "ON_TRACK"] }] }, 1, 0] } },
         },
       },
       { $sort: { total: -1 } },
@@ -1019,10 +1035,10 @@ router.get("/stats/by-municipality", async (req, res) => {
       total: item.total,
       resolved: item.resolved,
       rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0,
-      avgFixTime: 0,
-      onTimeRate: 0
+      avgFixTime: item.avgFixTime ? Math.round(item.avgFixTime * 10) / 10 : 0,
+      slaCompliance: item.resolved > 0 ? Math.round((item.onTimeCount / item.resolved) * 100) : 0
     }));
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     console.error("Public stats by-municipality error:", error);
@@ -1071,7 +1087,7 @@ router.get("/stats/monthly-trends", async (req, res) => {
   try {
     const months = parseInt(req.query.months) || 6;
     const now = new Date();
-    
+
     // Calculate date range: from 1st day of month that is (months-1) months ago through last day of current month
     const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
     startDate.setHours(0, 0, 0, 0);
@@ -1079,11 +1095,11 @@ router.get("/stats/monthly-trends", async (req, res) => {
     endDate.setHours(23, 59, 59, 999);
 
     const trends = await Complaint.aggregate([
-      { 
-        $match: { 
-          createdAt: { $gte: startDate, $lte: endDate }, 
-          status: { $nin: ["DELETED", "REJECTED"] } 
-        } 
+      {
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          status: { $nin: ["DELETED", "REJECTED"] }
+        }
       },
       {
         $group: {
@@ -1108,11 +1124,11 @@ router.get("/stats/monthly-trends", async (req, res) => {
       const year = monthDate.getFullYear();
       const month = monthDate.getMonth() + 1;
       const key = `${year}-${String(month).padStart(2, "0")}`;
-      
+
       // Format month label as "Dec '25", "Jan '26", etc.
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthLabel = `${monthNames[month - 1]} '${String(year).slice(2)}`;
-      
+
       const trend = trendsMap[key];
       result.push({
         month: monthLabel,
@@ -1195,12 +1211,12 @@ router.get("/stats/most-reported-issues", async (req, res) => {
   try {
     const { governorate, municipality } = req.query;
     const limit = 7;
-    
+
     // Build match filter with geographic scope if provided
     const match = {
       status: { $nin: ["DELETED", "REJECTED"] }
     };
-    
+
     if (governorate) {
       match.governorate = governorate;
     }

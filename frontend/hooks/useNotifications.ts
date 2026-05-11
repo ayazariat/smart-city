@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
-import { notificationService } from "@/services/notification.service";
-import { Notification } from "@/types";
-import { useAuthStore } from "@/store/useAuthStore";
-import { subscribeToNotifications, connectSocket } from "@/lib/socket";
-import { showToast } from "@/components/ui/Toast";
+import { useEffect, useState, useCallback } from 'react';
+import { notificationService } from '@/services/notification.service';
+import { Notification } from '@/types';
+import { useAuthStore } from '@/store/useAuthStore';
+import { subscribeToNotifications, connectSocket } from '@/lib/socket';
+import { showToast } from '@/components/ui/Toast';
 
 interface UseNotificationsReturn {
   notifications: Notification[];
@@ -46,10 +46,12 @@ export function useNotifications(): UseNotificationsReturn {
       if (notificationsResult.success) {
         setNotifications(notificationsResult.data || []);
       } else {
-        setError(notificationsResult.message || "Failed to fetch notifications");
+        setError(
+          notificationsResult.message || 'Failed to fetch notifications'
+        );
       }
     } catch {
-      setError("Failed to fetch notifications");
+      setError('Failed to fetch notifications');
     } finally {
       setLoading(false);
     }
@@ -57,26 +59,29 @@ export function useNotifications(): UseNotificationsReturn {
 
   const handleNewNotification = useCallback((notification: unknown) => {
     const notif = notification as Notification;
-    setNotifications(prev => [notif, ...prev]);
-    setUnreadCount(prev => prev + 1);
-    showToast(notif.message || "New notification", "info");
+    setNotifications((prev) => [notif, ...prev]);
+    setUnreadCount((prev) => prev + 1);
+    showToast(notif.message || 'New notification', 'info');
   }, []);
 
-  const markAsRead = useCallback(async (id: string) => {
-    if (!token) return;
+  const markAsRead = useCallback(
+    async (id: string) => {
+      if (!token) return;
 
-    try {
-      const result = await notificationService.markNotificationAsRead(id);
-      if (result.success) {
-        setNotifications((prev) =>
-          prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
-        );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
+      try {
+        const result = await notificationService.markNotificationAsRead(id);
+        if (result.success) {
+          setNotifications((prev) =>
+            prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
+          );
+          setUnreadCount((prev) => Math.max(0, prev - 1));
+        }
+      } catch {
+        // Silent fail
       }
-    } catch {
-      // Silent fail
-    }
-  }, [token]);
+    },
+    [token]
+  );
 
   const markAllAsRead = useCallback(async () => {
     if (!token) return;

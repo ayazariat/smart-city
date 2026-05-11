@@ -1,6 +1,6 @@
 declare module 'react-leaflet-heatmap-layer-v3' {
   import { FC } from 'react';
-  
+
   interface HeatmapLayerProps<T = Record<string, unknown>> {
     points: T[];
     longitudeExtractor: (point: T) => number;
@@ -10,19 +10,19 @@ declare module 'react-leaflet-heatmap-layer-v3' {
     maxOpacity?: number;
     gradient?: Record<number, string>;
   }
-  
+
   const HeatmapLayer: FC<HeatmapLayerProps>;
   export default HeatmapLayer;
 }
 
 declare module 'react-leaflet-markercluster' {
   import { FC, ReactNode } from 'react';
-  
+
   interface MarkerClusterGroupProps {
     chunkedLoading?: boolean;
     children?: ReactNode;
   }
-  
+
   const MarkerClusterGroup: FC<MarkerClusterGroupProps>;
   export default MarkerClusterGroup;
 }

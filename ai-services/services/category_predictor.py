@@ -6,8 +6,121 @@ import re
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import unicodedata
 
 app = FastAPI(title="Category Predictor Service")
+
+
+def normalize_text(text: str) -> str:
+    """
+    Normalize text for multilingual matching:
+    - Remove accents (é -> e, à -> a)
+    - Convert to lowercase
+    - Remove repeated letters (dechetssssss -> dechets)
+    - Remove extra whitespace
+    - Handle Arabic diacritics
+    - Handle common misspellings
+    - Handle phonetic variations
+    """
+    # Normalize unicode (remove accents)
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join([c for c in text if not unicodedata.combining(c)])
+    
+    # Convert to lowercase
+    text = text.lower()
+    
+    # Remove repeated letters (max 2 consecutive)
+    text = re.sub(r'(.)\1{2,}', r'\1\1', text)
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Common misspellings and phonetic variations (French/Arabic/English)
+    replacements = {
+        # French variations
+        'dechet': 'waste',
+        'ordure': 'waste',
+        'poubelle': 'waste',
+        'sale': 'dirty',
+        'propete': 'clean',
+        'proprete': 'clean',
+        'eclairage': 'light',
+        'lampe': 'light',
+        'lumiere': 'light',
+        'route': 'road',
+        'rue': 'road',
+        'chaussée': 'road',
+        'trottoir': 'sidewalk',
+        'nid de poule': 'pothole',
+        'bitume': 'asphalt',
+        'eau': 'water',
+        'fuite': 'leak',
+        'inondation': 'flood',
+        'canalisation': 'pipe',
+        'securite': 'safety',
+        'danger': 'danger',
+        'bruit': 'noise',
+        'batiment': 'building',
+        'parc': 'park',
+        'jardin': 'garden',
+        'arbre': 'tree',
+        'circulation': 'traffic',
+        'embouteillage': 'congestion',
+        'stationnement': 'parking',
+        
+        # Arabic transliterations and variations
+        'قمامة': 'waste',
+        'نفايات': 'waste',
+        'قذارة': 'waste',
+        'وسخ': 'dirty',
+        'انارة': 'light',
+        'مصباح': 'light',
+        'ضوء': 'light',
+        'طريق': 'road',
+        'شارع': 'road',
+        'حفرة': 'pothole',
+        'رصيف': 'sidewalk',
+        'اسفلت': 'asphalt',
+        'ماء': 'water',
+        'تسرب': 'leak',
+        'فيضان': 'flood',
+        'مجاري': 'sewer',
+        'سلامة': 'safety',
+        'خطر': 'danger',
+        'مبنى': 'building',
+        'حديقة': 'park',
+        'شجرة': 'tree',
+        'مرور': 'traffic',
+        'زحمة': 'congestion',
+        
+        # English variations
+        'trash': 'waste',
+        'garbage': 'waste',
+        'rubbish': 'waste',
+        'litter': 'waste',
+        'lighting': 'light',
+        'streetlight': 'light',
+        'street light': 'light',
+        'traffic light': 'light',
+        'pothole': 'pothole',
+        'sidewalk': 'sidewalk',
+        'pavement': 'sidewalk',
+        'asphalt': 'asphalt',
+        'leaking': 'leak',
+        'flooded': 'flood',
+        'flooding': 'flood',
+        'dangerous': 'danger',
+        'unsafe': 'danger',
+        'traffic jam': 'congestion',
+        'congestion': 'traffic',
+        'parking': 'parking',
+    }
+    
+    # Apply replacements
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    
+    return text
 
 # Try to import transformers for free zero-shot classification
 try:
@@ -62,14 +175,32 @@ VALID_CATEGORIES = [
 SYSTEM_PROMPT = """You are an expert in categorizing citizen complaints for a municipal government in Tunisia.
 
 Your task is to analyze complaint descriptions and predict the most appropriate category from this list:
-- waste: Déchets et Propreté (Poubelles, bennes débordantes, décharges illégales, nettoyage des rues)
-- roads: Routes et Circulation (Routes endommagées, trottoirs, stationnement, signalisation)
-- lighting: Éclairage public (Lampadaires cassés, rues sombres, éclairage instable)
-- water: Eau et Drainage (Fuites, zones inondées, canalisations bouchées, eaux usées)
-- safety: Sécurité et Bruit (Situations dangereuses, accidents, bruit, zones à risque)
-- property: Propriété publique (Bâtiments municipaux, mobilier urbain, monuments)
-- parks: Parcs et Espaces verts (Parcs, jardins, arbres, entretien des espaces verts)
-- other: Autre (Tout ce qui ne correspond pas aux autres catégories)
+- waste: Déchets et Propreté (Poubelles, bennes débordantes, décharges illégales, nettoyage des rues, garbage, trash, نفايات، قمامة)
+- roads: Routes et Circulation (Routes endommagées, trottoirs, stationnement, signalisation, road damage, potholes, sidewalks, traffic, طرق، طرق تالفة، حفر)
+- lighting: Éclairage public (Lampadaires cassés, rues sombres, éclairage instable, street lights, broken lights, إنارة، مصابيح، إضاءة)
+- water: Eau et Drainage (Fuites, zones inondées, canalisations bouchées, eaux usées, water leaks, flooding, drainage, مياه، تسرب، فيضانات)
+- safety: Sécurité et Bruit (Situations dangereuses, accidents, bruit, zones à risque, safety, dangerous conditions, noise, danger, سلامة، خطر، ضوضاء)
+- property: Propriété publique (Bâtiments municipaux, mobilier urbain, monuments, public buildings, facilities, مباني عامة، ممتلكات عامة)
+- parks: Parcs et Espaces verts (Parcs, jardins, arbres, entretien des espaces verts, parks, green spaces, trees, حدائق، مساحات خضراء، أشجار)
+- other: Autre (Tout ce qui ne correspond pas aux autres catégories, only use this as last resort)
+
+IMPORTANT CONTEXT ANALYSIS RULES:
+1. Consider the main subject/action in the complaint, not just keywords
+2. Look for contextual clues about what needs to be fixed or addressed
+3. Different languages describe the same issue differently - understand the intent
+4. Writing variations (misspellings, repeated letters, slang) should not affect classification
+5. Use the title and description together for better context
+
+Examples:
+- "dechetssssssss" → waste (repeated letters, same meaning)
+- "poubelle pleine" → waste (French: full trash can)
+- "قمامة" → waste (Arabic: garbage)
+- "street has big hole" → roads (English description)
+- "no light at night" → lighting (context: darkness)
+- "water everywhere" → water (context: flooding/leak)
+- "dangerous for kids" → safety (context: safety concern)
+- "broken bench in park" → parks (context: park equipment)
+- "building wall falling" → property (context: public building)
 
 Respond with a JSON object containing:
 {
@@ -96,12 +227,57 @@ class PredictionResponse(BaseModel):
 
 def predict_category(description: str, title: Optional[str] = None) -> PredictionResponse:
     """
-    Predict complaint category using free HuggingFace zero-shot classification.
-    Falls back to Claude API if available, then to keyword-based matching.
+    Predict complaint category using Claude API (if available) for best accuracy.
+    Falls back to HuggingFace zero-shot classification, then to keyword-based matching.
     """
     text_to_analyze = f"{title}. {description}" if title else description
     
-    # Strategy 1: Free HuggingFace zero-shot classification (local, no API key needed)
+    # Strategy 1: Claude API (highest accuracy, used first when available)
+    if anthropic_client:
+        try:
+            message = anthropic_client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=256,
+                system=SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Analyze this complaint and predict its category:\n\n{text_to_analyze}"
+                    }
+                ]
+            )
+            
+            response_text = message.content[0].text if message.content else ""
+            
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError:
+                json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                else:
+                    raise ValueError("Could not parse JSON from response")
+            
+            predicted = result.get("predicted", "AUTRE").upper()
+            if predicted not in VALID_CATEGORIES:
+                predicted = "AUTRE"
+            
+            confidence = float(result.get("confidence", 0.0))
+            confidence = max(0.0, min(1.0, confidence))
+            
+            alternatives = result.get("alternatives", [])
+            alternatives = [a.upper() for a in alternatives if a.upper() in VALID_CATEGORIES][:3]
+            
+            return PredictionResponse(
+                predicted=predicted,
+                confidence=confidence,
+                alternatives=alternatives,
+                reasoning=result.get("reasoning", "Claude API prediction")
+            )
+        except Exception as e:
+            print(f"Claude API error: {e}")
+    
+    # Strategy 2: Free HuggingFace zero-shot classification (local, no API key needed)
     if TRANSFORMERS_AVAILABLE:
         try:
             classifier = get_classifier()
@@ -156,90 +332,52 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
         except Exception as e:
             print(f"HuggingFace classification error: {e}")
     
-    # Strategy 2: Claude API (if key is set)
-    if anthropic_client:
-        try:
-            message = anthropic_client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=256,
-                system=SYSTEM_PROMPT,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"Analyze this complaint and predict its category:\n\n{text_to_analyze}"
-                    }
-                ]
-            )
-            
-            response_text = message.content[0].text if message.content else ""
-            
-            try:
-                result = json.loads(response_text)
-            except json.JSONDecodeError:
-                json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
-                if json_match:
-                    result = json.loads(json_match.group())
-                else:
-                    raise ValueError("Could not parse JSON from response")
-            
-            predicted = result.get("predicted", "AUTRE").upper()
-            if predicted not in VALID_CATEGORIES:
-                predicted = "AUTRE"
-            
-            confidence = float(result.get("confidence", 0.0))
-            confidence = max(0.0, min(1.0, confidence))
-            
-            alternatives = result.get("alternatives", [])
-            alternatives = [a.upper() for a in alternatives if a.upper() in VALID_CATEGORIES][:3]
-            
-            return PredictionResponse(
-                predicted=predicted,
-                confidence=confidence,
-                alternatives=alternatives,
-                reasoning=result.get("reasoning", "Claude API prediction")
-            )
-        except Exception as e:
-            print(f"Claude API error: {e}")
-    
     # Strategy 3: Keyword-based fallback (always free, no dependencies)
-    text_lower = text_to_analyze.lower()
+    text_normalized = normalize_text(text_to_analyze)
+    text_lower = text_normalized.lower()
     
     keyword_map = {
-        "ROAD": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussée", "nid de poule", "bitume", "asphalt",
-                 # Arabic keywords
-                 "طريق", "شارع", "حفرة", "نفق", "إسفلت", "رصيف", "طريق معطل", "تلف الطريق"],
-        "LIGHTING": ["éclairage", "lampadaire", "light", "ampoule", "feu", "traffic light", "lumière",
-                     # Arabic keywords
-                     "إنارة", "عمود إنارة", "مصباح", "ضوء", "ظلام", "إنارة معطلة", "مصباح مكسور"],
-        "WASTE": ["déchet", "poubelle", "garbage", "ordure", "waste", "dump", "sale", "dirty",
-                  # Arabic keywords
+        "ROAD": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussee", "nid de poule", "bitume", "asphalt",
+                 # Arabic keywords (normalized)
+                 "طريق", "شارع", "حفرة", "نفق", "اسفلت", "رصيف", "طريق معطل", "تلف الطريق"],
+        "LIGHTING": ["eclairage", "lampadaire", "light", "ampoule", "feu", "traffic light", "lumiere",
+                     # Arabic keywords (normalized)
+                     "انارة", "عمود انارة", "مصباح", "ضوء", "ظلام", "انارة معطلة", "مصباح مكسور"],
+        "WASTE": ["dechet", "poubelle", "garbage", "ordure", "waste", "dump", "sale", "dirty",
+                  # Arabic keywords (normalized)
                   "قمامة", "نفايات", "قارورة", "وسخ", "قذارة", "قذارة الطريق", "نفايات غير مرمى"],
         "WATER": ["eau", "water", "fuite", "leak", "drainage", "inondation", "flood", "canalisation",
-                  # Arabic keywords
+                  # Arabic keywords (normalized)
                   "ماء", "تسرب", "فيضان", "تصريف", "مجاري", "سائل", "مياه راكدة", "مياه ملوثة"],
-        "SAFETY": ["sécurité", "safety", "danger", "vol", "theft", "agression", "crime", "insécurité",
-                   # Arabic keywords
-                   "سلامة", "خطر", "سرقة", "اعتداء", "جريمة", "تهديد", "عدم أمان", "منطقة خطر"],
-        "PUBLIC_PROPERTY": ["bâtiment", "building", "playground", "aire de jeu", "propriété publique", "école", "school",
-                            # Arabic keywords
-                            "مبنى", "ملعب", "ممتلكات عامة", "مدرسة", "مرافق عامة", "مجمع سكني", "أثاث عام"],
+        "SAFETY": ["securite", "safety", "danger", "vol", "theft", "agression", "crime", "insecurite",
+                   # Arabic keywords (normalized)
+                   "سلامة", "خطر", "سرقة", "اعتداء", "جريمة", "تهديد", "عدم امان", "منطقة خطر"],
+        "PUBLIC_PROPERTY": ["batiment", "building", "playground", "aire de jeu", "propriete publique", "ecole", "school",
+                            # Arabic keywords (normalized)
+                            "مبنى", "ملعب", "ممتلكات عامة", "مدرسة", "مرافق عامة", "مجمع سكني", "اثاث عام"],
         "GREEN_SPACE": ["parc", "park", "arbre", "tree", "jardin", "garden", "espace vert", "pelouse",
-                       # Arabic keywords
+                       # Arabic keywords (normalized)
                        "حديقة", "شجرة", "مساحة خضراء", "عشب", "منتزه", "حديقة عامة", "نباتات"],
         "TRAFFIC": ["circulation", "traffic", "stationnement", "parking", "embouteillage", "signal",
-                    # Arabic keywords
-                    "مرور", "انتظار", "زحمة", "إشارة مرور", "توقيف", "ازدحام", "سير"],
-        "URBAN_PLANNING": ["construction", "permis", "permit", "urbanisme", "bâtir", "violation",
-                            # Arabic keywords
+                    # Arabic keywords (normalized)
+                    "مرور", "انتظار", "زحمة", "اشارة مرور", "توقيف", "ازدحام", "سير"],
+        "URBAN_PLANNING": ["construction", "permis", "permit", "urbanisme", "batir", "violation",
+                            # Arabic keywords (normalized)
                             "بناء", "رخصة", "تعمير", "هدم", "انتهاك", "تشيد", "مشروع بناء"],
-        "EQUIPMENT": ["banc", "bench", "bus", "kiosque", "kiosk", "arrêt", "stop", "équipement",
-                      # Arabic keywords
-                      "مقعد", "حافلة", "كيشك", "محطة", "توقف", "معدات", "أثاث شارع"],
+        "EQUIPMENT": ["banc", "bench", "bus", "kiosque", "kiosk", "arret", "stop", "equipement",
+                      # Arabic keywords (normalized)
+                      "مقعد", "حافلة", "كيشك", "محطة", "توقف", "معدات", "اثاث شارع"],
     }
     
-    scores = {}
+    # Normalize keywords for matching
+    normalized_keyword_map = {}
     for category, keywords in keyword_map.items():
-        score = sum(1 for kw in keywords if kw in text_lower)
+        normalized_keywords = [normalize_text(kw) for kw in keywords]
+        normalized_keyword_map[category] = normalized_keywords
+    
+    scores = {}
+    for category, normalized_keywords in normalized_keyword_map.items():
+        score = sum(1 for kw in normalized_keywords if kw in text_lower)
         if score > 0:
             scores[category] = score
     

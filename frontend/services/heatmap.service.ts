@@ -1,4 +1,4 @@
-import { apiClient } from "./api.client";
+import { apiClient } from './api.client';
 
 export interface HeatmapPoint {
   lat: number;
@@ -22,18 +22,27 @@ export const heatmapService = {
     department?: string;
   }): Promise<HeatmapResponse> => {
     const queryParams = new URLSearchParams();
-    
+
     if (params.category) queryParams.append('category', params.category);
     if (params.status) queryParams.append('status', params.status);
-    if (params.municipality) queryParams.append('municipality', params.municipality);
+    if (params.municipality)
+      queryParams.append('municipality', params.municipality);
     if (params.department) queryParams.append('department', params.department);
-    
-    const response = await apiClient.get<HeatmapResponse>(`/heatmap?${queryParams.toString()}`);
+
+    const response = await apiClient.get<HeatmapResponse>(
+      `/heatmap?${queryParams.toString()}`
+    );
     return response;
   },
-  
-  getCategories: async (): Promise<{ success: boolean; categories: string[] }> => {
-    const response = await apiClient.get<{ success: boolean; categories: string[] }>('/heatmap/categories');
+
+  getCategories: async (): Promise<{
+    success: boolean;
+    categories: string[];
+  }> => {
+    const response = await apiClient.get<{
+      success: boolean;
+      categories: string[];
+    }>('/heatmap/categories');
     return response;
-  }
+  },
 };

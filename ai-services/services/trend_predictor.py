@@ -7,7 +7,7 @@ Runs as a nightly batch job.
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from collections import defaultdict
 
@@ -305,7 +305,7 @@ class TrendPredictor:
         Returns:
             Batch results summary
         """
-        start_time = datetime.now()
+        start_time = datetime.now(timezone.utc)
         
         # Group data by municipality + category
         grouped = defaultdict(lambda: defaultdict(list))
@@ -340,7 +340,7 @@ class TrendPredictor:
                     results.append(prediction)
                     alerts.extend(prediction.get("alerts", []))
         
-        end_time = datetime.now()
+        end_time = datetime.now(timezone.utc)
         duration_ms = int((end_time - start_time).total_seconds() * 1000)
         
         # Cache results

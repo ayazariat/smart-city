@@ -148,15 +148,31 @@
 }
 
 /* ===== Utility Classes ===== */
-.text-primary { @apply text-primary; }
-.text-success { @apply text-green-600; }
-.text-warning { @apply text-orange-600; }
-.text-danger { @apply text-red-600; }
+.text-primary {
+  @apply text-primary;
+}
+.text-success {
+  @apply text-green-600;
+}
+.text-warning {
+  @apply text-orange-600;
+}
+.text-danger {
+  @apply text-red-600;
+}
 
-.bg-primary { @apply bg-primary; }
-.bg-success { @apply bg-green-500; }
-.bg-warning { @apply bg-orange-500; }
-.bg-danger { @apply bg-red-500; }
+.bg-primary {
+  @apply bg-primary;
+}
+.bg-success {
+  @apply bg-green-500;
+}
+.bg-warning {
+  @apply bg-orange-500;
+}
+.bg-danger {
+  @apply bg-red-500;
+}
 
 /* ===== Timeline ===== */
 .timeline-container {

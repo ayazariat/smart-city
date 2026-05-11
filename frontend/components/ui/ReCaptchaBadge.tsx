@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react';
 
 declare global {
   interface Window {
@@ -11,7 +11,7 @@ declare global {
 }
 
 interface ReCaptchaBadgeProps {
-  action: "register" | "login" | "setPassword" | "resetPassword";
+  action: 'register' | 'login' | 'setPassword' | 'resetPassword';
   onTokenChange?: (token: string | null) => void;
 }
 
@@ -43,7 +43,7 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
       setError(null);
       return token;
     } catch (_err) {
-      setError("reCAPTCHA failed");
+      setError('reCAPTCHA failed');
       onTokenChange?.(null);
       return null;
     } finally {
@@ -55,7 +55,7 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
     const initRecaptcha = () => {
       const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
       if (!siteKey) {
-        setError("reCAPTCHA not configured");
+        setError('reCAPTCHA not configured');
         return;
       }
 
@@ -65,7 +65,7 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
       }
 
       // Load script
-      const script = document.createElement("script");
+      const script = document.createElement('script');
       script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`;
       script.async = true;
       script.defer = true;
@@ -77,7 +77,7 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
       };
 
       script.onerror = () => {
-        setError("Failed to load reCAPTCHA");
+        setError('Failed to load reCAPTCHA');
       };
 
       document.head.appendChild(script);
@@ -102,11 +102,11 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
       <div className="flex items-center gap-1">
         <span
           className={`inline-flex h-2 w-2 rounded-full ${
-            error ? "bg-urgent-400" : ready ? "bg-success-400" : "bg-slate-300"
+            error ? 'bg-urgent-400' : ready ? 'bg-success-400' : 'bg-slate-300'
           }`}
         />
         <span>
-          Protected by{" "}
+          Protected by{' '}
           <span className="font-semibold text-slate-500">reCAPTCHA v3</span>
         </span>
         {loading && <span className="text-attention-500">(refreshing...)</span>}
@@ -135,7 +135,7 @@ export const ReCaptchaBadge: React.FC<ReCaptchaBadgeProps> = ({
 
 // Export a helper function to get fresh token
 export const refreshRecaptchaToken = async (): Promise<string | null> => {
-  if (typeof window !== "undefined" && window.refreshRecaptchaToken) {
+  if (typeof window !== 'undefined' && window.refreshRecaptchaToken) {
     return await window.refreshRecaptchaToken();
   }
   return null;

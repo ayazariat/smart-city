@@ -1,20 +1,28 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useTranslation } from "react-i18next";
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import {
-  Building2, Clock, Tag, Plus, Edit2, Trash2, Save,
-  AlertTriangle, CheckCircle, Loader2,
-} from "lucide-react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { useAuthStore } from "@/store/useAuthStore";
-import { apiClient } from "@/services/api.client";
-import { showToast } from "@/components/ui/Toast";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
-import { getDepartmentLabel } from "@/lib/categories";
+  Building2,
+  Clock,
+  Tag,
+  Plus,
+  Edit2,
+  Trash2,
+  Save,
+  AlertTriangle,
+  CheckCircle,
+  Loader2,
+} from 'lucide-react';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useAuthStore } from '@/store/useAuthStore';
+import { apiClient } from '@/services/api.client';
+import { showToast } from '@/components/ui/Toast';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { getDepartmentLabel } from '@/lib/categories';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,31 +40,38 @@ interface SLARule {
 }
 
 const ALL_CATEGORIES = [
-  "waste", "roads", "lighting", "water", "safety",
-  "property", "parks", "other",
+  'waste',
+  'roads',
+  'lighting',
+  'water',
+  'safety',
+  'property',
+  'parks',
+  'other',
 ];
 
-
-const URGENCY_LEVELS = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const URGENCY_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 // Use i18n - static labels deprecated
 const getCategoryLabel = (cat: string) => {
   const labels = {
-    waste: "Déchets et Propreté",
-    roads: "Routes et Circulation",
-    lighting: "Éclairage public",
-    water: "Eau et Drainage",
-    safety: "Sécurité et Bruit",
-    property: "Propriété publique",
-    parks: "Parcs et Espaces verts",
-    other: "Autre"
+    waste: 'Déchets et Propreté',
+    roads: 'Routes et Circulation',
+    lighting: 'Éclairage public',
+    water: 'Eau et Drainage',
+    safety: 'Sécurité et Bruit',
+    property: 'Propriété publique',
+    parks: 'Parcs et Espaces verts',
+    other: 'Autre',
   };
   return labels[cat as keyof typeof labels] || cat;
 };
 
-
 const DEFAULT_SLA_HOURS: Record<string, number> = {
-  LOW: 168, MEDIUM: 72, HIGH: 48, URGENT: 24,
+  LOW: 168,
+  MEDIUM: 72,
+  HIGH: 48,
+  URGENT: 24,
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -66,7 +81,9 @@ export default function AdminSettingsPage() {
   const router = useRouter();
   const { user } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<"departments" | "sla" | "categories">("departments");
+  const [activeTab, setActiveTab] = useState<
+    'departments' | 'sla' | 'categories'
+  >('departments');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [slaRules, setSlaRules] = useState<SLARule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +91,11 @@ export default function AdminSettingsPage() {
   // Department modal state
   const [deptModal, setDeptModal] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
-  const [deptForm, setDeptForm] = useState({ name: "", description: "", categories: [] as string[] });
+  const [deptForm, setDeptForm] = useState({
+    name: '',
+    description: '',
+    categories: [] as string[],
+  });
   const [savingDept, setSavingDept] = useState(false);
 
   // SLA form
@@ -83,8 +104,8 @@ export default function AdminSettingsPage() {
   const [savingSla, setSavingSla] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role !== "ADMIN") {
-      router.replace("/dashboard");
+    if (!user || user.role !== 'ADMIN') {
+      router.replace('/dashboard');
       return;
     }
     loadData();
@@ -95,22 +116,30 @@ export default function AdminSettingsPage() {
     setLoading(true);
     try {
       const [deptRes, slaRes] = await Promise.allSettled([
-        apiClient.get<{ success: boolean; departments?: Department[]; data?: Department[] }>("/admin/departments"),
-        apiClient.get<{ success: boolean; rules?: SLARule[]; data?: SLARule[] }>("/admin/sla-rules"),
+        apiClient.get<{
+          success: boolean;
+          departments?: Department[];
+          data?: Department[];
+        }>('/admin/departments'),
+        apiClient.get<{
+          success: boolean;
+          rules?: SLARule[];
+          data?: SLARule[];
+        }>('/admin/sla-rules'),
       ]);
 
-      if (deptRes.status === "fulfilled") {
+      if (deptRes.status === 'fulfilled') {
         const d = deptRes.value;
         setDepartments(d.departments || d.data || []);
       }
-      if (slaRes.status === "fulfilled") {
+      if (slaRes.status === 'fulfilled') {
         const s = slaRes.value;
         setSlaRules(s.rules || s.data || buildDefaultSLARules());
       } else {
         setSlaRules(buildDefaultSLARules());
       }
     } catch {
-      showToast(t('adminSettings.loadFailed'), "error");
+      showToast(t('adminSettings.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -130,29 +159,37 @@ export default function AdminSettingsPage() {
   const openDeptModal = (dept?: Department) => {
     if (dept) {
       setEditingDept(dept);
-      setDeptForm({ name: dept.name, description: dept.description || "", categories: dept.categories || [] });
+      setDeptForm({
+        name: dept.name,
+        description: dept.description || '',
+        categories: dept.categories || [],
+      });
     } else {
       setEditingDept(null);
-      setDeptForm({ name: "", description: "", categories: [] });
+      setDeptForm({ name: '', description: '', categories: [] });
     }
     setDeptModal(true);
   };
 
   const saveDepartment = async () => {
-    if (!deptForm.name.trim()) return showToast(t('adminSettings.departments.deptNameRequired'), "error");
+    if (!deptForm.name.trim())
+      return showToast(
+        t('adminSettings.departments.deptNameRequired'),
+        'error'
+      );
     setSavingDept(true);
     try {
       if (editingDept) {
         await apiClient.put(`/admin/departments/${editingDept._id}`, deptForm);
-        showToast(t('adminSettings.departments.deptUpdated'), "success");
+        showToast(t('adminSettings.departments.deptUpdated'), 'success');
       } else {
-        await apiClient.post("/admin/departments", deptForm);
-        showToast(t('adminSettings.departments.deptCreated'), "success");
+        await apiClient.post('/admin/departments', deptForm);
+        showToast(t('adminSettings.departments.deptCreated'), 'success');
       }
       setDeptModal(false);
       loadData();
     } catch {
-      showToast(t('adminSettings.departments.deptSaveFailed'), "error");
+      showToast(t('adminSettings.departments.deptSaveFailed'), 'error');
     } finally {
       setSavingDept(false);
     }
@@ -162,10 +199,10 @@ export default function AdminSettingsPage() {
     if (!confirm(t('adminSettings.departments.deptDeleteConfirm'))) return;
     try {
       await apiClient.delete(`/admin/departments/${id}`);
-      showToast(t('adminSettings.departments.deptDeleted'), "success");
+      showToast(t('adminSettings.departments.deptDeleted'), 'success');
       loadData();
     } catch {
-      showToast(t('adminSettings.departments.deptDeleteFailed'), "error");
+      showToast(t('adminSettings.departments.deptDeleteFailed'), 'error');
     }
   };
 
@@ -175,26 +212,28 @@ export default function AdminSettingsPage() {
     setSavingSla(true);
     try {
       const updatedRules = slaRules.map((r) =>
-        r.category === rule.category && r.urgency === rule.urgency ? { ...r, ...slaForm } : r
+        r.category === rule.category && r.urgency === rule.urgency
+          ? { ...r, ...slaForm }
+          : r
       );
-      await apiClient.put("/admin/sla-rules", { rules: updatedRules });
+      await apiClient.put('/admin/sla-rules', { rules: updatedRules });
       setSlaRules(updatedRules);
       setSlaEditing(null);
-      showToast(t('adminSettings.sla.slaUpdated'), "success");
+      showToast(t('adminSettings.sla.slaUpdated'), 'success');
     } catch {
-      showToast(t('adminSettings.sla.slaUpdateFailed'), "error");
+      showToast(t('adminSettings.sla.slaUpdateFailed'), 'error');
     } finally {
       setSavingSla(false);
     }
   };
 
-  if (!user || user.role !== "ADMIN") return null;
+  if (!user || user.role !== 'ADMIN') return null;
 
   const tabClass = (tab: string) =>
     `px-4 py-2.5 text-sm font-medium rounded-xl transition-all ${
       activeTab === tab
-        ? "bg-primary text-white shadow-md"
-        : "text-slate-600 hover:bg-slate-100"
+        ? 'bg-primary text-white shadow-md'
+        : 'text-slate-600 hover:bg-slate-100'
     }`;
 
   return (
@@ -209,14 +248,26 @@ export default function AdminSettingsPage() {
         <main className="max-w-6xl mx-auto px-4 py-6">
           {/* Tabs */}
           <div className="flex items-center gap-2 mb-6 bg-white rounded-2xl p-2 shadow-sm border border-slate-200">
-            <button onClick={() => setActiveTab("departments")} className={tabClass("departments")}>
-              <Building2 className="w-4 h-4 inline mr-2" />{t('adminSettings.tabs.departments')}
+            <button
+              onClick={() => setActiveTab('departments')}
+              className={tabClass('departments')}
+            >
+              <Building2 className="w-4 h-4 inline mr-2" />
+              {t('adminSettings.tabs.departments')}
             </button>
-            <button onClick={() => setActiveTab("sla")} className={tabClass("sla")}>
-              <Clock className="w-4 h-4 inline mr-2" />{t('adminSettings.tabs.sla')}
+            <button
+              onClick={() => setActiveTab('sla')}
+              className={tabClass('sla')}
+            >
+              <Clock className="w-4 h-4 inline mr-2" />
+              {t('adminSettings.tabs.sla')}
             </button>
-            <button onClick={() => setActiveTab("categories")} className={tabClass("categories")}>
-              <Tag className="w-4 h-4 inline mr-2" />{t('adminSettings.tabs.categories')}
+            <button
+              onClick={() => setActiveTab('categories')}
+              className={tabClass('categories')}
+            >
+              <Tag className="w-4 h-4 inline mr-2" />
+              {t('adminSettings.tabs.categories')}
             </button>
           </div>
 
@@ -227,12 +278,19 @@ export default function AdminSettingsPage() {
           ) : (
             <>
               {/* ── Departments Tab ─────────────────────────── */}
-              {activeTab === "departments" && (
+              {activeTab === 'departments' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-slate-800">{t('adminSettings.departments.title')} ({departments.length})</h3>
-                    <Button onClick={() => openDeptModal()} className="flex items-center gap-2">
-                      <Plus className="w-4 h-4" /> {t('adminSettings.departments.add')}
+                    <h3 className="text-lg font-semibold text-slate-800">
+                      {t('adminSettings.departments.title')} (
+                      {departments.length})
+                    </h3>
+                    <Button
+                      onClick={() => openDeptModal()}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />{' '}
+                      {t('adminSettings.departments.add')}
                     </Button>
                   </div>
 
@@ -244,24 +302,44 @@ export default function AdminSettingsPage() {
                   ) : (
                     <div className="grid gap-4">
                       {departments.map((dept) => (
-                        <div key={dept._id} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                        <div
+                          key={dept._id}
+                          className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5"
+                        >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-semibold text-slate-900">{getDepartmentLabel(dept.name)}</h4>
-                              {dept.description && <p className="text-sm text-slate-500 mt-1">{dept.description}</p>}
+                              <h4 className="font-semibold text-slate-900">
+                                {getDepartmentLabel(dept.name)}
+                              </h4>
+                              {dept.description && (
+                                <p className="text-sm text-slate-500 mt-1">
+                                  {dept.description}
+                                </p>
+                              )}
                               <div className="flex flex-wrap gap-1.5 mt-3">
                                 {(dept.categories || []).map((cat) => (
-                                <span key={cat} className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                                  {getCategoryLabel(cat)}
-                                </span>
+                                  <span
+                                    key={cat}
+                                    className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium"
+                                  >
+                                    {getCategoryLabel(cat)}
+                                  </span>
                                 ))}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                              <button onClick={() => openDeptModal(dept)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors" title={t('adminSettings.edit')}>
+                              <button
+                                onClick={() => openDeptModal(dept)}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                                title={t('adminSettings.edit')}
+                              >
                                 <Edit2 className="w-4 h-4 text-slate-500" />
                               </button>
-                              <button onClick={() => deleteDepartment(dept._id)} className="p-2 hover:bg-red-100 rounded-lg transition-colors" title={t('adminSettings.delete')}>
+                              <button
+                                onClick={() => deleteDepartment(dept._id)}
+                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                title={t('adminSettings.delete')}
+                              >
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </button>
                             </div>
@@ -274,63 +352,141 @@ export default function AdminSettingsPage() {
               )}
 
               {/* ── SLA Rules Tab ────────────────────────────── */}
-              {activeTab === "sla" && (
+              {activeTab === 'sla' && (
                 <div className="space-y-4">
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-amber-800">{t('adminSettings.sla.description')}</p>
+                    <p className="text-sm text-amber-800">
+                      {t('adminSettings.sla.description')}
+                    </p>
                   </div>
 
                   {ALL_CATEGORIES.map((cat) => (
-                    <div key={cat} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div
+                      key={cat}
+                      className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+                    >
                       <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded">{cat}</span>
-                        <span className="text-sm font-semibold text-slate-700">{getCategoryLabel(cat)}</span>
+                        <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded">
+                          {cat}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-700">
+                          {getCategoryLabel(cat)}
+                        </span>
                       </div>
                       <table className="w-full text-sm">
-
                         <thead>
                           <tr className="border-b border-slate-100">
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.urgency')}</th>
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.hours')}</th>
-                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.label')}</th>
-                            <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500 uppercase">{t('adminSettings.sla.actions')}</th>
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              {t('adminSettings.sla.urgency')}
+                            </th>
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              {t('adminSettings.sla.hours')}
+                            </th>
+                            <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              {t('adminSettings.sla.label')}
+                            </th>
+                            <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              {t('adminSettings.sla.actions')}
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                           {URGENCY_LEVELS.map((urgency) => {
-                            const rule = slaRules.find((r) => r.category === cat && r.urgency === urgency) || { category: cat, urgency, deadlineHours: DEFAULT_SLA_HOURS[urgency] };
+                            const rule = slaRules.find(
+                              (r) => r.category === cat && r.urgency === urgency
+                            ) || {
+                              category: cat,
+                              urgency,
+                              deadlineHours: DEFAULT_SLA_HOURS[urgency],
+                            };
                             const key = `${cat}__${urgency}`;
                             const isEditing = slaEditing === key;
-                            const urgencyColor = urgency === "URGENT" ? "text-red-700 bg-red-100" : urgency === "HIGH" ? "text-orange-700 bg-orange-100" : urgency === "MEDIUM" ? "text-amber-700 bg-amber-100" : "text-green-700 bg-green-100";
+                            const urgencyColor =
+                              urgency === 'URGENT'
+                                ? 'text-red-700 bg-red-100'
+                                : urgency === 'HIGH'
+                                  ? 'text-orange-700 bg-orange-100'
+                                  : urgency === 'MEDIUM'
+                                    ? 'text-amber-700 bg-amber-100'
+                                    : 'text-green-700 bg-green-100';
                             return (
-                              <tr key={urgency} className="hover:bg-slate-50 transition-colors">
+                              <tr
+                                key={urgency}
+                                className="hover:bg-slate-50 transition-colors"
+                              >
                                 <td className="px-4 py-2.5">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${urgencyColor}`}>{urgency}</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${urgencyColor}`}
+                                  >
+                                    {urgency}
+                                  </span>
                                 </td>
                                 <td className="px-4 py-2.5">
                                   {isEditing ? (
-                                    <input type="number" min="1" max="8760" value={slaForm.deadlineHours ?? rule.deadlineHours}
-                                      onChange={(e) => setSlaForm({ deadlineHours: parseInt(e.target.value) || 24 })}
-                                      className="w-24 px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      max="8760"
+                                      value={
+                                        slaForm.deadlineHours ??
+                                        rule.deadlineHours
+                                      }
+                                      onChange={(e) =>
+                                        setSlaForm({
+                                          deadlineHours:
+                                            parseInt(e.target.value) || 24,
+                                        })
+                                      }
+                                      className="w-24 px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                                    />
                                   ) : (
-                                    <span className="font-mono font-semibold text-slate-800">{rule.deadlineHours}h</span>
+                                    <span className="font-mono font-semibold text-slate-800">
+                                      {rule.deadlineHours}h
+                                    </span>
                                   )}
                                 </td>
                                 <td className="px-4 py-2.5 text-slate-500 text-xs">
-                                  {rule.deadlineHours >= 168 ? `${Math.round(rule.deadlineHours / 24)} days` : rule.deadlineHours >= 24 ? `${Math.round(rule.deadlineHours / 24)}d` : `${rule.deadlineHours}h`}
+                                  {rule.deadlineHours >= 168
+                                    ? `${Math.round(rule.deadlineHours / 24)} days`
+                                    : rule.deadlineHours >= 24
+                                      ? `${Math.round(rule.deadlineHours / 24)}d`
+                                      : `${rule.deadlineHours}h`}
                                 </td>
                                 <td className="px-4 py-2.5 text-right">
                                   {isEditing ? (
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <button onClick={() => saveSlaRule(rule)} disabled={savingSla} className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
-                                        {savingSla ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} {t('adminSettings.sla.save')}
+                                      <button
+                                        onClick={() => saveSlaRule(rule)}
+                                        disabled={savingSla}
+                                        className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
+                                      >
+                                        {savingSla ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Save className="w-3 h-3" />
+                                        )}{' '}
+                                        {t('adminSettings.sla.save')}
                                       </button>
-                                      <button onClick={() => setSlaEditing(null)} className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200">{t('adminSettings.sla.cancel')}</button>
+                                      <button
+                                        onClick={() => setSlaEditing(null)}
+                                        className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200"
+                                      >
+                                        {t('adminSettings.sla.cancel')}
+                                      </button>
                                     </div>
                                   ) : (
-                                    <button onClick={() => { setSlaEditing(key); setSlaForm({ deadlineHours: rule.deadlineHours }); }} className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200 ml-auto">
-                                      <Edit2 className="w-3 h-3" /> {t('adminSettings.sla.edit')}
+                                    <button
+                                      onClick={() => {
+                                        setSlaEditing(key);
+                                        setSlaForm({
+                                          deadlineHours: rule.deadlineHours,
+                                        });
+                                      }}
+                                      className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200 ml-auto"
+                                    >
+                                      <Edit2 className="w-3 h-3" />{' '}
+                                      {t('adminSettings.sla.edit')}
                                     </button>
                                   )}
                                 </td>
@@ -345,25 +501,45 @@ export default function AdminSettingsPage() {
               )}
 
               {/* ── Categories Tab ───────────────────────────── */}
-              {activeTab === "categories" && (
+              {activeTab === 'categories' && (
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-                    Complaint categories are built-in and fixed across the app. Assign categories to departments in the <button onClick={() => setActiveTab("departments")} className="underline font-medium">Departments tab</button>.
+                    Complaint categories are built-in and fixed across the app.
+                    Assign categories to departments in the{' '}
+                    <button
+                      onClick={() => setActiveTab('departments')}
+                      className="underline font-medium"
+                    >
+                      Departments tab
+                    </button>
+                    .
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {ALL_CATEGORIES.map((cat) => {
-                      const deptHandling = departments.filter((d) => d.categories?.includes(cat));
+                      const deptHandling = departments.filter((d) =>
+                        d.categories?.includes(cat)
+                      );
                       return (
-                        <div key={cat} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+                        <div
+                          key={cat}
+                          className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4"
+                        >
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-semibold text-slate-800 text-sm">{getCategoryLabel(cat)}</span>
-                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded-lg">{cat}</span>
+                            <span className="font-semibold text-slate-800 text-sm">
+                              {getCategoryLabel(cat)}
+                            </span>
+                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded-lg">
+                              {cat}
+                            </span>
                           </div>
 
                           <div className="space-y-1">
                             {deptHandling.length > 0 ? (
                               deptHandling.map((d) => (
-                                <div key={d._id} className="flex items-center gap-1.5 text-xs text-slate-500">
+                                <div
+                                  key={d._id}
+                                  className="flex items-center gap-1.5 text-xs text-slate-500"
+                                >
                                   <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
                                   <span>{d.name}</span>
                                 </div>
@@ -390,52 +566,91 @@ export default function AdminSettingsPage() {
       <Modal
         isOpen={deptModal}
         onClose={() => setDeptModal(false)}
-        title={editingDept ? t("admin.editDepartment") : t("admin.addDepartment")}
-        description={t("admin.departmentModalDescription")}
+        title={
+          editingDept ? t('admin.editDepartment') : t('admin.addDepartment')
+        }
+        description={t('admin.departmentModalDescription')}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDeptModal(false)} disabled={savingDept}>{t("common.cancel")}</Button>
+            <Button
+              variant="ghost"
+              onClick={() => setDeptModal(false)}
+              disabled={savingDept}
+            >
+              {t('common.cancel')}
+            </Button>
             <Button onClick={saveDepartment} isLoading={savingDept}>
-              {editingDept ? t("common.saveChanges") : t("admin.createDepartment")}
+              {editingDept
+                ? t('common.saveChanges')
+                : t('admin.createDepartment')}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t("admin.departmentName")} *</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              {t('admin.departmentName')} *
+            </label>
             <input
               value={deptForm.name}
-              onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
+              onChange={(e) =>
+                setDeptForm({ ...deptForm, name: e.target.value })
+              }
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              placeholder={t("admin.departmentNamePlaceholder")}
+              placeholder={t('admin.departmentNamePlaceholder')}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Description
+            </label>
             <textarea
               value={deptForm.description}
-              onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })}
+              onChange={(e) =>
+                setDeptForm({ ...deptForm, description: e.target.value })
+              }
               rows={2}
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
               placeholder="Optional description..."
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Handles Categories (Default Assignment)</label>
-            <p className="text-xs text-slate-500 mb-2">When a citizen submits a complaint with these categories, this department will be suggested as the default assignment.</p>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Handles Categories (Default Assignment)
+            </label>
+            <p className="text-xs text-slate-500 mb-2">
+              When a citizen submits a complaint with these categories, this
+              department will be suggested as the default assignment.
+            </p>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
               {ALL_CATEGORIES.map((cat) => {
                 const checked = deptForm.categories.includes(cat);
                 return (
-                  <label key={cat} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-xs transition-colors ${checked ? "bg-primary/10 border border-primary/30" : "border border-slate-200 hover:bg-slate-50"}`}>
+                  <label
+                    key={cat}
+                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-xs transition-colors ${checked ? 'bg-primary/10 border border-primary/30' : 'border border-slate-200 hover:bg-slate-50'}`}
+                  >
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => setDeptForm({ ...deptForm, categories: checked ? deptForm.categories.filter((c) => c !== cat) : [...deptForm.categories, cat] })}
+                      onChange={() =>
+                        setDeptForm({
+                          ...deptForm,
+                          categories: checked
+                            ? deptForm.categories.filter((c) => c !== cat)
+                            : [...deptForm.categories, cat],
+                        })
+                      }
                       className="w-3.5 h-3.5 accent-primary"
                     />
-                    <span className={checked ? "text-primary font-medium" : "text-slate-600"}>{getCategoryLabel(cat)}</span>
+                    <span
+                      className={
+                        checked ? 'text-primary font-medium' : 'text-slate-600'
+                      }
+                    >
+                      {getCategoryLabel(cat)}
+                    </span>
                   </label>
                 );
               })}
@@ -446,4 +661,3 @@ export default function AdminSettingsPage() {
     </DashboardLayout>
   );
 }
-

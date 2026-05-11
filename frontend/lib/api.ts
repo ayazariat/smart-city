@@ -1,6 +1,6 @@
 /**
  * API Client with Cookie-based Token Storage
- * 
+ *
  * This module provides a centralized API client that:
  * - Stores accessToken and refreshToken in cookies
  * - Automatically attaches Bearer token to every request
@@ -9,11 +9,12 @@
  */
 
 // API Base URL - configure per environment
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 // Cookie names
-const ACCESS_TOKEN_COOKIE = "accessToken";
-const REFRESH_TOKEN_COOKIE = "refreshToken";
+const ACCESS_TOKEN_COOKIE = 'accessToken';
+const REFRESH_TOKEN_COOKIE = 'refreshToken';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
 /**
@@ -28,7 +29,7 @@ export interface ApiRequestOptions extends RequestInit {
  */
 export async function getAccessToken(): Promise<string | undefined> {
   try {
-    const { cookies } = await import("next/headers");
+    const { cookies } = await import('next/headers');
     const cookieStore = await cookies();
     return cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   } catch {
@@ -41,7 +42,7 @@ export async function getAccessToken(): Promise<string | undefined> {
  */
 export async function getRefreshToken(): Promise<string | undefined> {
   try {
-    const { cookies } = await import("next/headers");
+    const { cookies } = await import('next/headers');
     const cookieStore = await cookies();
     return cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
   } catch {
@@ -52,26 +53,29 @@ export async function getRefreshToken(): Promise<string | undefined> {
 /**
  * Set auth cookies (server-side)
  */
-export async function setAuthCookies(accessToken: string, refreshToken?: string): Promise<void> {
+export async function setAuthCookies(
+  accessToken: string,
+  refreshToken?: string
+): Promise<void> {
   try {
-    const { cookies } = await import("next/headers");
+    const { cookies } = await import('next/headers');
     const cookieStore = await cookies();
-    
+
     cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE,
-      path: "/",
+      path: '/',
     });
 
     if (refreshToken) {
       cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
         maxAge: COOKIE_MAX_AGE,
-        path: "/",
+        path: '/',
       });
     }
   } catch {
@@ -84,9 +88,9 @@ export async function setAuthCookies(accessToken: string, refreshToken?: string)
  */
 export async function clearAuthCookies(): Promise<void> {
   try {
-    const { cookies } = await import("next/headers");
+    const { cookies } = await import('next/headers');
     const cookieStore = await cookies();
-    
+
     cookieStore.delete(ACCESS_TOKEN_COOKIE);
     cookieStore.delete(REFRESH_TOKEN_COOKIE);
   } catch {
@@ -104,7 +108,7 @@ export class ApiError extends Error {
     public code?: string
   ) {
     super(message);
-    this.name = "ApiError";
+    this.name = 'ApiError';
   }
 }
 
@@ -115,17 +119,17 @@ export async function apiFetch<T = unknown>(
   endpoint: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const { 
-    headers = {}, 
-    method = "GET",
+  const {
+    headers = {},
+    method = 'GET',
     body,
     requiresAuth = true,
-    ...rest 
+    ...rest
   } = options;
 
   // Build request headers
   const requestHeaders: HeadersInit = {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     ...headers,
   };
 
@@ -133,7 +137,8 @@ export async function apiFetch<T = unknown>(
   if (requiresAuth) {
     const token = await getAccessToken();
     if (token) {
-      (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      (requestHeaders as Record<string, string>)['Authorization'] =
+        `Bearer ${token}`;
     }
   }
 
@@ -158,26 +163,30 @@ export async function apiFetch<T = unknown>(
   // Handle 401 - try to refresh token
   if (response.status === 401 && requiresAuth) {
     const refreshToken = await getRefreshToken();
-    
+
     if (refreshToken) {
       try {
-        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-        });
+        const refreshResponse = await fetch(
+          `${API_BASE_URL}/auth/refresh-token`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          }
+        );
 
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           const newToken = data.accessToken || data.token;
-          
+
           if (newToken) {
             // Set new tokens in cookies
             await setAuthCookies(newToken, data.refreshToken || refreshToken);
-            
+
             // Retry original request with new token
-            (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${newToken}`;
-            
+            (requestHeaders as Record<string, string>)['Authorization'] =
+              `Bearer ${newToken}`;
+
             const retryFetchOptions: RequestInit = {
               method,
               headers: requestHeaders,
@@ -188,15 +197,21 @@ export async function apiFetch<T = unknown>(
               retryFetchOptions.body = JSON.stringify(body);
             }
 
-            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, retryFetchOptions);
+            const retryResponse = await fetch(
+              `${API_BASE_URL}${endpoint}`,
+              retryFetchOptions
+            );
 
             if (retryResponse.ok) {
               // Detect HTML response in retry
-              const retryContentType = retryResponse.headers.get('content-type') || '';
+              const retryContentType =
+                retryResponse.headers.get('content-type') || '';
               if (retryContentType.includes('text/html')) {
-                throw new Error('API returned HTML. Check NEXT_PUBLIC_API_URL is correct.');
+                throw new Error(
+                  'API returned HTML. Check NEXT_PUBLIC_API_URL is correct.'
+                );
               }
-              
+
               const text = await retryResponse.text();
               return text ? JSON.parse(text) : ({} as T);
             }
@@ -210,7 +225,7 @@ export async function apiFetch<T = unknown>(
             const errorText = await retryResponse.text();
             const errorData = errorText ? JSON.parse(errorText) : {};
             throw new ApiError(
-              errorData.message || "Request failed",
+              errorData.message || 'Request failed',
               retryResponse.status,
               errorData.code
             );
@@ -232,9 +247,9 @@ export async function apiFetch<T = unknown>(
   if (!response.ok) {
     const errorText = await response.text();
     const errorData = errorText ? JSON.parse(errorText) : {};
-    
+
     throw new ApiError(
-      errorData.message || "Request failed",
+      errorData.message || 'Request failed',
       response.status,
       errorData.code
     );
@@ -248,16 +263,22 @@ export async function apiFetch<T = unknown>(
  * Redirect to auth page - ONLY call this on explicit logout
  */
 export function redirectToAuth(): void {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined') return;
 
-  const { pathname } = window.location
-  const publicPaths = ['/', '/register', '/forgot-password',
-                       '/reset-password', '/verify-account', '/set-password']
+  const { pathname } = window.location;
+  const publicPaths = [
+    '/',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-account',
+    '/set-password',
+  ];
 
   // Already on public page → do nothing
-  if (publicPaths.some(p => pathname === p)) return
+  if (publicPaths.some((p) => pathname === p)) return;
 
-  window.location.href = '/'
+  window.location.href = '/';
 }
 
 /**
@@ -267,7 +288,7 @@ export async function apiGet<T = unknown>(
   endpoint: string,
   options?: ApiRequestOptions
 ): Promise<T> {
-  return apiFetch<T>(endpoint, { ...options, method: "GET" });
+  return apiFetch<T>(endpoint, { ...options, method: 'GET' });
 }
 
 /**
@@ -278,7 +299,11 @@ export async function apiPost<T = unknown>(
   body?: unknown,
   options?: ApiRequestOptions
 ): Promise<T> {
-  return apiFetch<T>(endpoint, { ...options, method: "POST", body: body as BodyInit | undefined });
+  return apiFetch<T>(endpoint, {
+    ...options,
+    method: 'POST',
+    body: body as BodyInit | undefined,
+  });
 }
 
 /**
@@ -289,7 +314,11 @@ export async function apiPut<T = unknown>(
   body?: unknown,
   options?: ApiRequestOptions
 ): Promise<T> {
-  return apiFetch<T>(endpoint, { ...options, method: "PUT", body: body as BodyInit | undefined });
+  return apiFetch<T>(endpoint, {
+    ...options,
+    method: 'PUT',
+    body: body as BodyInit | undefined,
+  });
 }
 
 /**
@@ -300,7 +329,11 @@ export async function apiPatch<T = unknown>(
   body?: unknown,
   options?: ApiRequestOptions
 ): Promise<T> {
-  return apiFetch<T>(endpoint, { ...options, method: "PATCH", body: body as BodyInit | undefined });
+  return apiFetch<T>(endpoint, {
+    ...options,
+    method: 'PATCH',
+    body: body as BodyInit | undefined,
+  });
 }
 
 /**
@@ -310,7 +343,7 @@ export async function apiDelete<T = unknown>(
   endpoint: string,
   options?: ApiRequestOptions
 ): Promise<T> {
-  return apiFetch<T>(endpoint, { ...options, method: "DELETE" });
+  return apiFetch<T>(endpoint, { ...options, method: 'DELETE' });
 }
 
 // ============================================
@@ -320,7 +353,7 @@ export async function apiDelete<T = unknown>(
 
 // Cookie helpers for client-side
 function getCookie(name: string): string | undefined {
-  if (typeof document === "undefined") return undefined;
+  if (typeof document === 'undefined') return undefined;
   // Simple and reliable cookie reading
   const cookies = document.cookie.split(';');
   for (const cookie of cookies) {
@@ -332,25 +365,29 @@ function getCookie(name: string): string | undefined {
   return undefined;
 }
 
-function setCookie(name: string, value: string, maxAge: number = 7 * 24 * 60 * 60): void {
-  if (typeof document === "undefined") return;
+function setCookie(
+  name: string,
+  value: string,
+  maxAge: number = 7 * 24 * 60 * 60
+): void {
+  if (typeof document === 'undefined') return;
   const expires = new Date(Date.now() + maxAge * 1000).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
 }
 
 function deleteCookie(name: string): void {
-  if (typeof document === "undefined") return;
-  
+  if (typeof document === 'undefined') return;
+
   // Delete with multiple path combinations to ensure complete cleanup
   const paths = ['/', ''];
   const sameSites = ['', '; SameSite=Lax'];
-  
-  paths.forEach(path => {
-    sameSites.forEach(sameSite => {
+
+  paths.forEach((path) => {
+    sameSites.forEach((sameSite) => {
       document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}${sameSite}`;
     });
   });
-  
+
   // Also try to clear any other possible variations
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
   document.cookie = `${name}=; max-age=0; path=/`;
@@ -363,17 +400,17 @@ export async function clientApiFetch<T = unknown>(
   endpoint: string,
   options: ApiRequestOptions = {}
 ): Promise<T> {
-  const { 
-    headers = {}, 
-    method = "GET",
+  const {
+    headers = {},
+    method = 'GET',
     body,
     requiresAuth = true,
-    ...rest 
+    ...rest
   } = options;
 
   // Build request headers
   const requestHeaders: HeadersInit = {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     ...headers,
   };
 
@@ -382,7 +419,8 @@ export async function clientApiFetch<T = unknown>(
   if (requiresAuth) {
     const token = getCookie(ACCESS_TOKEN_COOKIE);
     if (token) {
-      (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+      (requestHeaders as Record<string, string>)['Authorization'] =
+        `Bearer ${token}`;
     }
   }
 
@@ -400,31 +438,35 @@ export async function clientApiFetch<T = unknown>(
   let response = await fetch(`${API_BASE_URL}${endpoint}`, fetchOptions);
 
   // Handle 401 - try to refresh token
-   if (response.status === 401 && requiresAuth) {
-     const refreshToken = getCookie(REFRESH_TOKEN_COOKIE);
-     
-     if (refreshToken) {
-       try {
-         const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-           method: "POST",
-           headers: { "Content-Type": "application/json" },
-           body: JSON.stringify({ refreshToken }),
-           credentials: 'include',
-         });
+  if (response.status === 401 && requiresAuth) {
+    const refreshToken = getCookie(REFRESH_TOKEN_COOKIE);
+
+    if (refreshToken) {
+      try {
+        const refreshResponse = await fetch(
+          `${API_BASE_URL}/auth/refresh-token`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+            credentials: 'include',
+          }
+        );
 
         if (refreshResponse.ok) {
           const data = await refreshResponse.json();
           const newToken = data.accessToken || data.token;
-          
+
           if (newToken) {
             setCookie(ACCESS_TOKEN_COOKIE, newToken);
             if (data.refreshToken) {
               setCookie(REFRESH_TOKEN_COOKIE, data.refreshToken);
             }
-            
+
             // Retry with new token
-            (requestHeaders as Record<string, string>)["Authorization"] = `Bearer ${newToken}`;
-            
+            (requestHeaders as Record<string, string>)['Authorization'] =
+              `Bearer ${newToken}`;
+
             const retryFetchOptions: RequestInit = {
               method,
               headers: requestHeaders,
@@ -436,7 +478,10 @@ export async function clientApiFetch<T = unknown>(
               retryFetchOptions.body = JSON.stringify(body);
             }
 
-            response = await fetch(`${API_BASE_URL}${endpoint}`, retryFetchOptions);
+            response = await fetch(
+              `${API_BASE_URL}${endpoint}`,
+              retryFetchOptions
+            );
 
             if (response.ok) {
               const text = await response.text();
@@ -444,10 +489,10 @@ export async function clientApiFetch<T = unknown>(
             }
 
             if (response.status === 401) {
-              const isBackgroundRequest = 
+              const isBackgroundRequest =
                 endpoint.includes('/notifications') ||
                 endpoint.includes('/count');
-              
+
               if (!isBackgroundRequest) {
                 deleteCookie(ACCESS_TOKEN_COOKIE);
                 deleteCookie(REFRESH_TOKEN_COOKIE);
@@ -469,13 +514,13 @@ export async function clientApiFetch<T = unknown>(
   if (!response.ok) {
     const errorText = await response.text();
     const errorData = errorText ? JSON.parse(errorText) : {};
-    
+
     if (response.status === 403) {
       return {} as T;
     }
-    
+
     throw new ApiError(
-      errorData.message || "Request failed",
+      errorData.message || 'Request failed',
       response.status,
       errorData.code
     );
@@ -488,37 +533,68 @@ export async function clientApiFetch<T = unknown>(
 /**
  * Client-side GET
  */
-export const clientGet = <T = unknown>(endpoint: string, options?: ApiRequestOptions) =>
-  clientApiFetch<T>(endpoint, { ...options, method: "GET" });
+export const clientGet = <T = unknown>(
+  endpoint: string,
+  options?: ApiRequestOptions
+) => clientApiFetch<T>(endpoint, { ...options, method: 'GET' });
 
 /**
  * Client-side POST
  */
-export const clientPost = <T = unknown>(endpoint: string, body?: unknown, options?: ApiRequestOptions) =>
-  clientApiFetch<T>(endpoint, { ...options, method: "POST", body: body as BodyInit | undefined });
+export const clientPost = <T = unknown>(
+  endpoint: string,
+  body?: unknown,
+  options?: ApiRequestOptions
+) =>
+  clientApiFetch<T>(endpoint, {
+    ...options,
+    method: 'POST',
+    body: body as BodyInit | undefined,
+  });
 
 /**
  * Client-side PUT
  */
-export const clientPut = <T = unknown>(endpoint: string, body?: unknown, options?: ApiRequestOptions) =>
-  clientApiFetch<T>(endpoint, { ...options, method: "PUT", body: body as BodyInit | undefined });
+export const clientPut = <T = unknown>(
+  endpoint: string,
+  body?: unknown,
+  options?: ApiRequestOptions
+) =>
+  clientApiFetch<T>(endpoint, {
+    ...options,
+    method: 'PUT',
+    body: body as BodyInit | undefined,
+  });
 
 /**
  * Client-side PATCH
  */
-export const clientPatch = <T = unknown>(endpoint: string, body?: unknown, options?: ApiRequestOptions) =>
-  clientApiFetch<T>(endpoint, { ...options, method: "PATCH", body: body as BodyInit | undefined });
+export const clientPatch = <T = unknown>(
+  endpoint: string,
+  body?: unknown,
+  options?: ApiRequestOptions
+) =>
+  clientApiFetch<T>(endpoint, {
+    ...options,
+    method: 'PATCH',
+    body: body as BodyInit | undefined,
+  });
 
 /**
  * Client-side DELETE
  */
-export const clientDelete = <T = unknown>(endpoint: string, options?: ApiRequestOptions) =>
-  clientApiFetch<T>(endpoint, { ...options, method: "DELETE" });
+export const clientDelete = <T = unknown>(
+  endpoint: string,
+  options?: ApiRequestOptions
+) => clientApiFetch<T>(endpoint, { ...options, method: 'DELETE' });
 
 /**
  * Set auth tokens on client
  */
-export function setClientAuthTokens(accessToken: string, refreshToken?: string): void {
+export function setClientAuthTokens(
+  accessToken: string,
+  refreshToken?: string
+): void {
   setCookie(ACCESS_TOKEN_COOKIE, accessToken);
   if (refreshToken) {
     setCookie(REFRESH_TOKEN_COOKIE, refreshToken);
@@ -533,10 +609,10 @@ export function clearClientAuthTokens(): void {
 
   const cookieNames = ['accessToken', 'refreshToken'];
   const paths = ['/', '/dashboard', ''];
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  cookieNames.forEach(name => {
-    paths.forEach(path => {
+  cookieNames.forEach((name) => {
+    paths.forEach((path) => {
       const base = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}`;
       document.cookie = base;
       document.cookie = `${base}; SameSite=Lax`;
@@ -546,7 +622,7 @@ export function clearClientAuthTokens(): void {
       }
     });
   });
-  
+
   document.cookie = `accessToken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
   document.cookie = `refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=localhost`;
 }
@@ -558,8 +634,4 @@ export function getClientAccessToken(): string | undefined {
   return getCookie(ACCESS_TOKEN_COOKIE);
 }
 
-export {
-  API_BASE_URL,
-  ACCESS_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE,
-};
+export { API_BASE_URL, ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE };

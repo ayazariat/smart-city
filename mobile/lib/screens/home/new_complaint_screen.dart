@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,6 +57,11 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
   String? _aiPredictedUrgency;
   int? _aiUrgencyConfidence;
 
+  // Debounce timers for AI calls
+  Timer? _categoryDebounce;
+  Timer? _duplicateDebounce;
+  Timer? _urgencyDebounce;
+
   final List<String> _tunisiaGovernorates = TunisiaGeography.governorateNames;
 
   // Categories with icons
@@ -100,6 +106,9 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
 
   @override
   void dispose() {
+    _categoryDebounce?.cancel();
+    _duplicateDebounce?.cancel();
+    _urgencyDebounce?.cancel();
     _titleController.dispose();
     _descriptionController.removeListener(_onDescriptionChanged);
     _descriptionController.dispose();
@@ -110,62 +119,108 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
 
   void _onDescriptionChanged() {
     final description = _descriptionController.text;
-    if (description.length >= 30 && !_isAiLoadingCategory) {
-      _predictCategory(description);
+    // Trigger AI category prediction after 800ms debounce, min 20 chars
+    if (description.length >= 20) {
+      _categoryDebounce?.cancel();
+      _categoryDebounce = Timer(const Duration(milliseconds: 800), () {
+        if (!_isAiLoadingCategory && mounted) {
+          _predictCategory(description);
+        }
+      });
+    }
+    // Trigger duplicate check after 800ms debounce
+    if (description.length >= 20 && _titleController.text.length >= 5) {
+      _duplicateDebounce?.cancel();
+      _duplicateDebounce = Timer(const Duration(milliseconds: 800), () {
+        if (mounted) _checkDuplicates();
+      });
     }
   }
 
   Future<void> _predictCategory(String description) async {
+    if (!mounted) return;
     setState(() => _isAiLoadingCategory = true);
     try {
-      // Call AI category prediction API
-      final prediction = await _complaintService.predictCategory(description);
+      final prediction = await _complaintService.predictCategory(description)
+          .timeout(const Duration(seconds: 5));
+      if (!mounted) return;
       setState(() {
-        _aiPredictedCategory = prediction['category'];
-        _aiCategoryConfidence = prediction['confidence'];
-        if (_selectedCategory.isEmpty) {
-          _selectedCategory = _aiPredictedCategory ?? '';
+        _aiPredictedCategory = prediction['category']?.toString();
+        final conf = prediction['confidence'];
+        _aiCategoryConfidence = conf is int ? conf : (conf is double ? conf.round() : null);
+        // Auto-select if no category chosen yet
+        if (_selectedCategory.isEmpty && _aiPredictedCategory != null) {
+          _selectedCategory = _aiPredictedCategory!;
         }
       });
-    } catch (e) {
-      // Silently skip if AI service fails
+    } catch (_) {
+      // Fail silently — never block form
     } finally {
-      setState(() => _isAiLoadingCategory = false);
+      if (mounted) setState(() => _isAiLoadingCategory = false);
     }
   }
 
   Future<void> _checkDuplicates() async {
-    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty) return;
+    if (_titleController.text.trim().length < 5 || _descriptionController.text.trim().length < 20) return;
     try {
-      final duplicate = await _complaintService.checkDuplicates({
-        'title': _titleController.text,
-        'description': _descriptionController.text,
-      });
-      if (duplicate != null && duplicate['similarity'] > 75) {
-        setState(() {
-          _hasDuplicateWarning = true;
-          _duplicateComplaint = duplicate;
-        });
+      final body = <String, dynamic>{
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
+      };
+      if (_selectedCategory.isNotEmpty) body['category'] = _selectedCategory;
+      if (_selectedMunicipality != null) body['municipality'] = _selectedMunicipality;
+      if (_latitude != null) body['latitude'] = _latitude;
+      if (_longitude != null) body['longitude'] = _longitude;
+
+      final result = await _complaintService.checkDuplicate(
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        category: _selectedCategory.isNotEmpty ? _selectedCategory : 'OTHER',
+        municipality: _selectedMunicipality ?? '',
+        latitude: _latitude,
+        longitude: _longitude,
+      ).timeout(const Duration(seconds: 5));
+
+      if (!mounted) return;
+      final topMatches = result['topMatches'] as List?;
+      if (topMatches != null && topMatches.isNotEmpty) {
+        final first = topMatches[0] as Map<String, dynamic>?;
+        final score = (first?['overallScore'] ?? first?['similarity'] ?? 0);
+        final scoreDouble = score is num ? score.toDouble() : 0.0;
+        if (scoreDouble >= 0.65) {
+          setState(() {
+            _hasDuplicateWarning = true;
+            _duplicateComplaint = first;
+          });
+        }
       }
-    } catch (e) {
-      // Silently skip if duplicate check fails
+    } catch (_) {
+      // Fail silently
     }
   }
 
   Future<void> _predictUrgency(String category) async {
-    try {
-      final prediction = await _complaintService.predictUrgency({
-        'category': category,
-        'description': _descriptionController.text,
-      });
-      setState(() {
-        _aiPredictedUrgency = prediction['urgency'];
-        _aiUrgencyConfidence = prediction['confidence'];
-        _selectedUrgency = _aiPredictedUrgency ?? 'LOW';
-      });
-    } catch (e) {
-      // Silently skip if AI service fails
-    }
+    if (!mounted) return;
+    _urgencyDebounce?.cancel();
+    _urgencyDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final prediction = await _complaintService.predictUrgency({
+          'category': category,
+          'description': _descriptionController.text,
+        }).timeout(const Duration(seconds: 5));
+        if (!mounted) return;
+        setState(() {
+          _aiPredictedUrgency = prediction['urgency']?.toString();
+          final conf = prediction['confidence'];
+          _aiUrgencyConfidence = conf is int ? conf : (conf is double ? conf.round() : null);
+          if (_aiPredictedUrgency != null) {
+            _selectedUrgency = _aiPredictedUrgency!;
+          }
+        });
+      } catch (_) {
+        // Fail silently
+      }
+    });
   }
 
   Future<void> _reverseGeocode(double lat, double lng) async {
@@ -253,18 +308,33 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(source: source);
-      if (image != null && _photos.length < 5) {
+      if (_photos.length >= 5) {
+        Toast.error(context, 'Maximum 5 photos autorisées');
+        return;
+      }
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1200,
+      );
+      if (image != null) {
         final file = File(image.path);
-        final fileSize = await file.length() / (1024 * 1024);
-        if (fileSize > 10) {
-          Toast.error(context, 'L\'image ne doit pas dépasser 10MB');
+        final fileSizeMB = await file.length() / (1024 * 1024);
+        if (fileSizeMB > 10) {
+          if (mounted) Toast.error(context, 'L\'image ne doit pas dépasser 10MB');
           return;
         }
-        setState(() => _photos.add(file));
+        if (mounted) setState(() => _photos.add(file));
       }
     } catch (e) {
-      Toast.error(context, 'Erreur lors de la sélection de l\'image');
+      if (mounted) {
+        final msg = e.toString().toLowerCase();
+        if (msg.contains('permission') || msg.contains('denied')) {
+          Toast.error(context, 'Permission refusée. Veuillez l\'activer dans les paramètres de votre appareil.');
+        } else {
+          Toast.error(context, 'Erreur lors de la sélection de l\'image');
+        }
+      }
     }
   }
 
@@ -292,14 +362,24 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
       List<Map<String, String>> mediaUrls = [];
       if (_photos.isNotEmpty) {
         try {
+          // Backend expects field name "media" (not "photos")
           final uploadResult = await ApiClient().uploadFiles(
             '/upload',
             _photos.map((f) => f.path).toList(),
-            fieldName: 'photos',
+            fieldName: 'media',
           );
-          if (uploadResult != null && uploadResult['urls'] != null) {
-            for (final url in uploadResult['urls']) {
-              mediaUrls.add({'url': url.toString(), 'type': 'photo'});
+          // Response: {success: true, data: [{type, url, publicId, ...}]}
+          if (uploadResult != null) {
+            final dataList = uploadResult['data'] as List?;
+            if (dataList != null) {
+              for (final item in dataList) {
+                if (item is Map && item['url'] != null) {
+                  mediaUrls.add({
+                    'url': item['url'].toString(),
+                    'type': (item['type'] ?? 'photo').toString(),
+                  });
+                }
+              }
             }
           }
         } catch (e) {
@@ -309,18 +389,26 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
       }
 
       final body = <String, dynamic>{
-        'title': _titleController.text,
-        'description': _descriptionController.text,
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
         'category': _selectedCategory,
         'urgency': _selectedUrgency,
         'governorate': _selectedGovernorate ?? '',
         'municipality': _selectedMunicipality ?? '',
-        'phone': _phoneController.text,
+        'phone': _phoneController.text.trim(),
         'isAnonymous': _isAnonymous,
         'incidentDate': _selectedDateTime?.toIso8601String(),
         if (mediaUrls.isNotEmpty) 'media': mediaUrls,
-        if (_latitude != null) 'latitude': _latitude,
-        if (_longitude != null) 'longitude': _longitude,
+        // Send location as both flat fields and nested object for backend compatibility
+        if (_latitude != null && _longitude != null) 'latitude': _latitude,
+        if (_latitude != null && _longitude != null) 'longitude': _longitude,
+        if (_latitude != null && _longitude != null) 'location': {
+          'latitude': _latitude,
+          'longitude': _longitude,
+          if (_locationAddress != null) 'address': _locationAddress,
+          if (_selectedMunicipality != null) 'municipality': _selectedMunicipality,
+          if (_selectedGovernorate != null) 'governorate': _selectedGovernorate,
+        },
       };
 
       await _complaintService.createComplaint(body);
@@ -368,14 +456,21 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                 controller: _titleController,
                 decoration: const InputDecoration(
                   labelText: 'Titre *',
-                  hintText: 'Min 10 caractères, max 100',
+                  hintText: 'Min 5 caractères, max 100',
                   border: OutlineInputBorder(),
                 ),
                 maxLength: 100,
-                onChanged: (_) => _checkDuplicates(),
+                onChanged: (_) {
+                  if (_titleController.text.length >= 5 && _descriptionController.text.length >= 20) {
+                    _duplicateDebounce?.cancel();
+                    _duplicateDebounce = Timer(const Duration(milliseconds: 800), () {
+                      if (mounted) _checkDuplicates();
+                    });
+                  }
+                },
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Ce champ est requis';
-                  if (value.length < 10) return 'Minimum 10 caractères requis';
+                  if (value.length < 5) return 'Minimum 5 caractères requis';
                   return null;
                 },
               ),
@@ -389,14 +484,14 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                     controller: _descriptionController,
                     decoration: const InputDecoration(
                       labelText: 'Description *',
-                      hintText: 'Min 30 caractères, max 1000',
+                      hintText: 'Min 20 caractères, max 1000',
                       border: OutlineInputBorder(),
                     ),
                     maxLines: 5,
                     maxLength: 1000,
                     validator: (value) {
                       if (value == null || value.isEmpty) return 'Ce champ est requis';
-                      if (value.length < 30) return 'Minimum 30 caractères requis';
+                      if (value.length < 20) return 'Minimum 20 caractères requis';
                       return null;
                     },
                   ),

@@ -1,10 +1,8 @@
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
-const Department = require("../models/Department");
 const SatisfactionSurvey = require("../models/SatisfactionSurvey");
 const RepairTeam = require("../models/RepairTeam");
 const notificationService = require("../services/notification.service");
-const { calculateSLA } = require("../utils/slaConfig");
 
 const TECHNICIAN_ACTIVE_STATUSES = [
   "ASSIGNED",
@@ -17,29 +15,62 @@ class TechnicianController {
     try {
       const { status, category, page = 1, limit = 50 } = req.query;
       const technicianId = req.user.userId;
-      
-      const teams = await RepairTeam.find({ members: technicianId }).select("_id name members").lean();
-      const teamIds = teams.map(t => t._id);
-      
-      const query = {
+      const mongoose = require("mongoose");
+
+      // Convert string ID to ObjectId for proper MongoDB comparison
+      let technicianObjectId;
+      try {
+        technicianObjectId = new mongoose.Types.ObjectId(technicianId);
+      } catch {
+        technicianObjectId = technicianId;
+      }
+
+      // Find teams where this technician is a member (using ObjectId)
+      const teams = await RepairTeam.find({
         $or: [
-          { assignedTo: technicianId },
-          { assignedTeam: { $in: teamIds } }
+          { members: technicianObjectId },
+          { members: technicianId }
         ]
-      };
-      
+      }).select("_id name members").lean();
+      const teamIds = teams.map(t => t._id);
+
+      // Also get the technician's department for fallback query
+      const techUser = await User.findById(technicianObjectId)
+        .select("department departmentId")
+        .lean();
+      const departmentId = techUser?.department || techUser?.departmentId;
+
+      // Build query: match by assignedTo (ObjectId OR string), team membership, OR department
+      const orConditions = [
+        { assignedTo: technicianObjectId },
+        { assignedTo: technicianId },
+      ];
+
+      if (teamIds.length > 0) {
+        orConditions.push({ assignedTeam: { $in: teamIds } });
+      }
+
+      if (departmentId) {
+        // Include complaints assigned to the technician's department
+        orConditions.push({ assignedDepartment: departmentId });
+      }
+
+      const query = { $or: orConditions };
+
       if (status && status !== "ALL") {
-        query.status = status;
+        // Support comma-separated statuses
+        const statuses = status.split(",").map(s => s.trim());
+        query.status = statuses.length === 1 ? statuses[0] : { $in: statuses };
       } else {
         query.status = { $in: TECHNICIAN_ACTIVE_STATUSES };
       }
-      
+
       if (category) {
         query.category = category;
       }
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      
+
       const [complaints, total] = await Promise.all([
         Complaint.find(query)
           .populate("createdBy", "fullName email phone")
@@ -72,8 +103,9 @@ class TechnicianController {
           }
         }
       });
-    } catch {
-      res.status(500).json({ success: false, message: "Failed to retrieve complaints" });
+    } catch (err) {
+      console.error("Technician getComplaints error:", err);
+      res.status(500).json({ success: false, message: "Failed to retrieve complaints", error: err.message });
     }
   }
 
@@ -92,22 +124,34 @@ class TechnicianController {
         .populate("beforePhotos.takenBy", "fullName")
         .populate("afterPhotos.takenBy", "fullName")
         .populate("statusHistory.updatedBy", "fullName");
-      
+
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
 
       const technicianId = req.user.userId;
-      const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+      const mongoose = require("mongoose");
+      let technicianObjectId;
+      try { technicianObjectId = new mongoose.Types.ObjectId(technicianId); } catch { technicianObjectId = technicianId; }
+
+      const teams = await RepairTeam.find({
+        $or: [{ members: technicianObjectId }, { members: technicianId }]
+      }).select("_id").lean();
       const teamIds = teams.map(t => t._id.toString());
-      
+
       const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
       const assignedTeamId = complaint.assignedTeam?._id?.toString() || complaint.assignedTeam?.toString();
-      
-      const isAssigned = 
+
+      // Also check department
+      const techUser = await User.findById(technicianObjectId).select("department").lean();
+      const deptId = techUser?.department?.toString();
+      const complaintDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
+
+      const isAssigned =
         assignedToId === technicianId ||
-        (assignedTeamId && teamIds.includes(assignedTeamId));
-      
+        (assignedTeamId && teamIds.includes(assignedTeamId)) ||
+        (deptId && complaintDeptId && deptId === complaintDeptId);
+
       if (!isAssigned) {
         return res.status(403).json({ success: false, message: "Complaint not assigned to you" });
       }
@@ -117,7 +161,8 @@ class TechnicianController {
         message: "Complaint retrieved successfully",
         data: complaint
       });
-    } catch {
+    } catch (err) {
+      console.error("Technician getComplaintById error:", err);
       res.status(500).json({ success: false, message: "Failed to retrieve complaint" });
     }
   }
@@ -125,39 +170,51 @@ class TechnicianController {
   async start(req, res) {
     try {
       const complaint = await Complaint.findById(req.params.id);
-      
+
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
 
       const technicianId = req.user.userId;
-      const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+      const mongoose = require("mongoose");
+      let technicianObjectId;
+      try { technicianObjectId = new mongoose.Types.ObjectId(technicianId); } catch { technicianObjectId = technicianId; }
+
+      const teams = await RepairTeam.find({
+        $or: [{ members: technicianObjectId }, { members: technicianId }]
+      }).select("_id").lean();
       const teamIds = teams.map(t => t._id.toString());
-      
+
       const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
       const assignedTeamId = complaint.assignedTeam?._id?.toString() || complaint.assignedTeam?.toString();
-      
-      const isAssigned = 
+
+      // Also check department assignment
+      const techUser = await User.findById(technicianObjectId).select("department").lean();
+      const deptId = techUser?.department?.toString();
+      const complaintDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
+
+      const isAssigned =
         assignedToId === technicianId ||
-        (assignedTeamId && teamIds.includes(assignedTeamId));
-      
+        (assignedTeamId && teamIds.includes(assignedTeamId)) ||
+        (deptId && complaintDeptId && deptId === complaintDeptId);
+
       if (!isAssigned) {
-        return res.status(403).json({ 
-          success: false, 
+        return res.status(403).json({
+          success: false,
           message: `Not assigned. assignedTo: ${assignedToId}, yourId: ${technicianId}`
         });
       }
 
       if (complaint.status !== "ASSIGNED") {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Wrong status: ${complaint.status}. Need ASSIGNED.` 
+        return res.status(400).json({
+          success: false,
+          message: `Wrong status: ${complaint.status}. Need ASSIGNED.`
         });
       }
 
       complaint.status = "IN_PROGRESS";
       complaint.startedAt = new Date();
-      
+
       if (!complaint.statusHistory) complaint.statusHistory = [];
       complaint.statusHistory.push({
         status: "IN_PROGRESS",
@@ -165,7 +222,7 @@ class TechnicianController {
         updatedAt: new Date(),
         notes: "Work started by technician"
       });
-      
+
       await complaint.save();
 
       const io = req.app?.get?.('io');
@@ -178,8 +235,8 @@ class TechnicianController {
             complaintId: complaint._id.toString(),
             metadata: { startedBy: req.user.userId, technicianId: req.user.userId },
           });
-        } catch (notifError) {
-        // Silent fail: notifications non-critical
+        } catch {
+          // Silent fail: notifications non-critical
         }
       }
 
@@ -193,7 +250,7 @@ class TechnicianController {
             metadata: { startedBy: req.user.userId, technicianId: req.user.userId },
           });
         } catch {
-        // Silent fail: notifications non-critical
+          // Silent fail: notifications non-critical
         }
       }
 
@@ -209,52 +266,67 @@ class TechnicianController {
 
   async complete(req, res) {
     try {
-      const { notes, beforePhotos, afterPhotos } = req.body;
-      
+      const { notes, beforePhotos, afterPhotos, proofPhotos, resolutionNotes } = req.body;
+      const resolveNotes = notes || resolutionNotes || '';
+
       const complaint = await Complaint.findById(req.params.id);
-      
+
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
 
       const technicianId = req.user.userId;
-      const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+      const mongoose = require("mongoose");
+      let technicianObjectId;
+      try { technicianObjectId = new mongoose.Types.ObjectId(technicianId); } catch { technicianObjectId = technicianId; }
+
+      const teams = await RepairTeam.find({
+        $or: [{ members: technicianObjectId }, { members: technicianId }]
+      }).select("_id").lean();
       const teamIds = teams.map(t => t._id.toString());
-      
+
       const assignedToId = complaint.assignedTo?._id?.toString() || complaint.assignedTo?.toString();
       const assignedTeamId = complaint.assignedTeam?._id?.toString() || complaint.assignedTeam?.toString();
-      
-      const isAssigned = 
+
+      // Also check department
+      const techUser = await User.findById(technicianObjectId).select("department").lean();
+      const deptId = techUser?.department?.toString();
+      const complaintDeptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
+
+      const isAssigned =
         assignedToId === technicianId ||
-        (assignedTeamId && teamIds.includes(assignedTeamId));
-      
+        (assignedTeamId && teamIds.includes(assignedTeamId)) ||
+        (deptId && complaintDeptId && deptId === complaintDeptId);
+
       if (!isAssigned) {
-        return res.status(403).json({ 
-          success: false, 
+        return res.status(403).json({
+          success: false,
           message: `Not assigned. assignedTo: ${assignedToId}, yourId: ${technicianId}`
         });
       }
 
       if (complaint.status !== "IN_PROGRESS") {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Wrong status: ${complaint.status}. Need IN_PROGRESS.` 
+        return res.status(400).json({
+          success: false,
+          message: `Wrong status: ${complaint.status}. Need IN_PROGRESS.`
         });
       }
 
       if (beforePhotos && Array.isArray(beforePhotos)) {
         complaint.beforePhotos = beforePhotos.map(photo => ({
           type: photo.type || "photo",
-          url: photo.url,
+          url: photo.url || photo,
           takenAt: new Date(),
           takenBy: technicianId
         }));
       }
 
-      if (afterPhotos && Array.isArray(afterPhotos)) {
-        complaint.afterPhotos = afterPhotos.map(photo => ({
-          type: photo.type || "photo",
-          url: photo.url,
+      // Handle afterPhotos and proofPhotos (mobile sends proofPhotos)
+      const resolvePhotos = afterPhotos || proofPhotos;
+      if (resolvePhotos && Array.isArray(resolvePhotos)) {
+        complaint.afterPhotos = resolvePhotos.map(photo => ({
+          type: (photo && photo.type) || "photo",
+          url: (photo && photo.url) || (typeof photo === 'string' ? photo : ''),
           takenAt: new Date(),
           takenBy: technicianId
         }));
@@ -263,7 +335,8 @@ class TechnicianController {
       complaint.status = "RESOLVED";
       complaint.resolvedAt = new Date();
       complaint.resolvedBy = req.user.userId;
-      complaint.resolutionNote = notes || "";
+      complaint.resolutionNote = resolveNotes;
+      complaint.resolutionNotes = resolveNotes;
 
       // Trigger satisfaction survey for the citizen
       try {
@@ -298,9 +371,9 @@ class TechnicianController {
         status: "RESOLVED",
         updatedBy: req.user.userId,
         updatedAt: new Date(),
-        notes: notes || "Resolved by technician"
+        notes: resolveNotes || "Resolved by technician"
       });
-      
+
       await complaint.save();
 
       const io = req.app?.get?.('io');
@@ -311,10 +384,10 @@ class TechnicianController {
             title: "Task Resolved",
             message: `Technician resolved complaint "${complaint.title}".`,
             complaintId: complaint._id.toString(),
-            metadata: { resolvedBy: req.user.userId, resolutionNotes: notes || '' },
+            metadata: { resolvedBy: req.user.userId, resolutionNotes: resolveNotes },
           });
         } catch {
-        // Silent fail: notifications non-critical
+          // Silent fail: notifications non-critical
         }
       }
 
@@ -325,7 +398,7 @@ class TechnicianController {
             title: "Complaint Resolved",
             message: `Your complaint '${complaint.title}' has been resolved! Please confirm if the issue is fixed.`,
             complaintId: complaint._id.toString(),
-            metadata: { resolvedBy: req.user.userId, resolutionNotes: notes || '' },
+            metadata: { resolvedBy: req.user.userId, resolutionNotes: resolveNotes },
           });
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
@@ -360,9 +433,9 @@ class TechnicianController {
   async addBeforePhoto(req, res) {
     try {
       const { photoUrl, photoType = "photo" } = req.body;
-      
+
       const complaint = await Complaint.findById(req.params.id);
-      
+
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
@@ -372,9 +445,9 @@ class TechnicianController {
       }
 
       if (!["ASSIGNED", "IN_PROGRESS"].includes(complaint.status)) {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Cannot add photos to complaint in current status" 
+        return res.status(400).json({
+          success: false,
+          message: "Cannot add photos to complaint in current status"
         });
       }
 
@@ -444,9 +517,9 @@ class TechnicianController {
   async addAfterPhoto(req, res) {
     try {
       const { photoUrl, photoType = "photo" } = req.body;
-      
+
       const complaint = await Complaint.findById(req.params.id);
-      
+
       if (!complaint) {
         return res.status(404).json({ success: false, message: "Complaint not found" });
       }
@@ -456,9 +529,9 @@ class TechnicianController {
       }
 
       if (complaint.status !== "IN_PROGRESS") {
-        return res.status(400).json({ 
-          success: false, 
-          message: "Only in-progress complaints can have after photos added" 
+        return res.status(400).json({
+          success: false,
+          message: "Only in-progress complaints can have after photos added"
         });
       }
 
@@ -574,72 +647,88 @@ class TechnicianController {
   async getStats(req, res) {
     try {
       const technicianId = req.user.userId;
-      
-      const teams = await RepairTeam.find({ members: technicianId }).select("_id").lean();
+      const mongoose = require("mongoose");
+
+      let technicianObjectId;
+      try {
+        technicianObjectId = new mongoose.Types.ObjectId(technicianId);
+      } catch {
+        technicianObjectId = technicianId;
+      }
+
+      const teams = await RepairTeam.find({
+        $or: [{ members: technicianObjectId }, { members: technicianId }]
+      }).select("_id").lean();
       const teamIds = teams.map(t => t._id);
-      
-      const historicalBaseQuery = {
-        $or: [
-          { assignedTo: technicianId },
-          { assignedTeam: { $in: teamIds } }
-        ],
-      };
+
+      // Get department for fallback
+      const techUser = await User.findById(technicianObjectId).select("department").lean();
+      const departmentId = techUser?.department;
+
+      const orConditions = [
+        { assignedTo: technicianObjectId },
+        { assignedTo: technicianId },
+      ];
+      if (teamIds.length > 0) orConditions.push({ assignedTeam: { $in: teamIds } });
+      if (departmentId) orConditions.push({ assignedDepartment: departmentId });
+
+      const historicalBaseQuery = { $or: orConditions };
       const activeBaseQuery = {
         ...historicalBaseQuery,
         isArchived: false,
         status: { $in: TECHNICIAN_ACTIVE_STATUSES },
       };
 
-       const [historicalTotal, total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, resolvedWithRatingCount, csatCount] = await Promise.all([
-         Complaint.countDocuments(historicalBaseQuery),
-         Complaint.countDocuments(activeBaseQuery),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: "ASSIGNED" }),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: "IN_PROGRESS" }),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: "RESOLVED" }),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
-         Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "OVERDUE", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
-         Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "AT_RISK", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
-         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
-       ]);
+      const [historicalTotal, total, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, resolvedWithRatingCount, csatCount] = await Promise.all([
+        Complaint.countDocuments(historicalBaseQuery),
+        Complaint.countDocuments(activeBaseQuery),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "ASSIGNED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "IN_PROGRESS" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "RESOLVED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
+        Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "OVERDUE", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "AT_RISK", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
+        Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
+      ]);
 
-       const resolvedCount = resolved + closed;
-       const resolutionRate = historicalTotal > 0 ? Math.round((resolvedCount / historicalTotal) * 100) : 0;
+      const resolvedCount = resolved + closed;
+      const resolutionRate = historicalTotal > 0 ? Math.round((resolvedCount / historicalTotal) * 100) : 0;
 
-       const avgTimeResult = await Complaint.aggregate([
-         { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
-         { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
-       ]);
-       const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
+      const avgTimeResult = await Complaint.aggregate([
+        { $match: { ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, resolvedAt: { $exists: true } } },
+        { $group: { _id: null, avgTime: { $avg: { $subtract: ["$resolvedAt", "$createdAt"] } } } }
+      ]);
+      const averageResolutionTime = avgTimeResult[0] ? Math.round(avgTimeResult[0].avgTime / (1000 * 60 * 60)) : 0;
 
-       // SLA compliance rate
-       const onTimeCountResult = await Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
-       const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
+      // SLA compliance rate
+      const onTimeCountResult = await Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, slaStatus: "COMPLETED" });
+      const slaComplianceRate = resolvedCount > 0 ? Math.round((onTimeCountResult / resolvedCount) * 100) : 0;
 
-       // CSAT
-       const totalRatings = resolvedWithRatingCount;
-       const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
+      // CSAT
+      const totalRatings = resolvedWithRatingCount;
+      const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
 
-       res.json({
-         success: true,
-         data: {
-           total,
-           historicalTotal,
-           assigned,
-           inProgress,
-           resolved,
-           closed,
-           rejected,
-           totalOverdue: overdue,
-           totalAtRisk: atRisk,
-           resolutionRate,
-           averageResolutionTime,
-           slaComplianceRate,
-           csat,
-           totalRatings,
-         }
-       });
+      res.json({
+        success: true,
+        data: {
+          total,
+          historicalTotal,
+          assigned,
+          inProgress,
+          resolved,
+          closed,
+          rejected,
+          totalOverdue: overdue,
+          totalAtRisk: atRisk,
+          resolutionRate,
+          averageResolutionTime,
+          slaComplianceRate,
+          csat,
+          totalRatings,
+        }
+      });
     } catch (error) {
       console.error("Technician get stats error:", error);
       res.json({

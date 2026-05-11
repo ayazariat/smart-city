@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -11,7 +11,7 @@ interface ConfirmationModalProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: "danger" | "warning" | "success";
+  variant?: 'danger' | 'warning' | 'success';
   isLoading?: boolean;
   requireReason?: boolean;
   reasonPlaceholder?: string;
@@ -25,10 +25,10 @@ export function ConfirmationModal({
   message,
   confirmText,
   cancelText,
-  variant = "danger",
+  variant = 'danger',
   isLoading = false,
   requireReason = false,
-  reasonPlaceholder = "Enter reason...",
+  reasonPlaceholder = 'Enter reason...',
 }: ConfirmationModalProps) {
   const { t } = useTranslation();
   const resolvedConfirmText = confirmText || t('common.confirm');
@@ -37,22 +37,22 @@ export function ConfirmationModal({
 
   const styles = {
     danger: {
-      button: "bg-red-600 hover:bg-red-700 text-white",
-      icon: "text-red-600",
-      bg: "bg-red-50",
-      border: "border-red-200",
+      button: 'bg-red-600 hover:bg-red-700 text-white',
+      icon: 'text-red-600',
+      bg: 'bg-red-50',
+      border: 'border-red-200',
     },
     warning: {
-      button: "bg-orange-500 hover:bg-orange-600 text-white",
-      icon: "text-orange-500",
-      bg: "bg-orange-50",
-      border: "border-orange-200",
+      button: 'bg-orange-500 hover:bg-orange-600 text-white',
+      icon: 'text-orange-500',
+      bg: 'bg-orange-50',
+      border: 'border-orange-200',
     },
     success: {
-      button: "bg-green-600 hover:bg-green-700 text-white",
-      icon: "text-green-600",
-      bg: "bg-green-50",
-      border: "border-green-200",
+      button: 'bg-green-600 hover:bg-green-700 text-white',
+      icon: 'text-green-600',
+      bg: 'bg-green-50',
+      border: 'border-green-200',
     },
   }[variant];
 
@@ -64,17 +64,29 @@ export function ConfirmationModal({
       }}
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn">
-        <div className={`h-1 ${styles.button.split(" ")[0].replace("bg-", "from-").replace("-600", "-500").replace("-700", "-600")} bg-gradient-to-r from-primary via-primary-600 to-primary rounded-t-2xl`} />
-        
+        <div
+          className={`h-1 ${styles.button.split(' ')[0].replace('bg-', 'from-').replace('-600', '-500').replace('-700', '-600')} bg-gradient-to-r from-primary via-primary-600 to-primary rounded-t-2xl`}
+        />
+
         <div className="p-6">
           <div className="flex items-start gap-4">
-            <div className={`w-12 h-12 rounded-full ${styles.bg} flex items-center justify-center flex-shrink-0`}>
-              {variant === "danger" && <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />}
-              {variant === "warning" && <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />}
-              {variant === "success" && <CheckCircle className={`w-6 h-6 ${styles.icon}`} />}
+            <div
+              className={`w-12 h-12 rounded-full ${styles.bg} flex items-center justify-center flex-shrink-0`}
+            >
+              {variant === 'danger' && (
+                <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />
+              )}
+              {variant === 'warning' && (
+                <AlertTriangle className={`w-6 h-6 ${styles.icon}`} />
+              )}
+              {variant === 'success' && (
+                <CheckCircle className={`w-6 h-6 ${styles.icon}`} />
+              )}
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                {title}
+              </h3>
               <p className="text-slate-600">{message}</p>
             </div>
           </div>

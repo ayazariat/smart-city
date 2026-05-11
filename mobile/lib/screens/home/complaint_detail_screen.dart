@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
+import 'package:smart_city_app/providers/auth_provider.dart';
 import 'package:smart_city_app/services/complaint_service.dart';
 import 'package:smart_city_app/services/api_client.dart';
 import 'package:smart_city_app/widgets/status_badge.dart';
@@ -8,26 +13,31 @@ import 'package:smart_city_app/widgets/priority_badge.dart';
 import 'package:smart_city_app/widgets/toast.dart';
 import 'package:smart_city_app/widgets/confirmation_dialog.dart';
 
-class ComplaintDetailScreen extends StatefulWidget {
+class ComplaintDetailScreen extends ConsumerStatefulWidget {
   final String complaintId;
   const ComplaintDetailScreen({super.key, required this.complaintId});
 
   @override
-  State<ComplaintDetailScreen> createState() => _ComplaintDetailScreenState();
+  ConsumerState<ComplaintDetailScreen> createState() => _ComplaintDetailScreenState();
 }
 
-class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
+class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
   final ComplaintService _complaintService = ComplaintService();
   Complaint? _complaint;
   List<dynamic> _comments = [];
   bool _isLoading = true;
+  bool _isAnonymousComment = false;
   final TextEditingController _commentController = TextEditingController();
 
-  // Rating state
+  // Rating / satisfaction state
   int _selectedRating = 0;
   String _ratingComment = '';
   bool _resolvedCorrectly = true;
   bool _isSubmittingRating = false;
+  bool _satisfactionSubmitted = false;
+
+  // Upvote state
+  bool _isUpvoting = false;
 
   @override
   void initState() {
@@ -71,16 +81,17 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
     setState(() => _isSubmittingRating = true);
     try {
-      await _complaintService.submitRating(
+      // Use satisfaction survey endpoint
+      await _complaintService.submitSatisfaction(
         widget.complaintId,
         _selectedRating,
-        _ratingComment,
-        _resolvedCorrectly,
+        comment: _ratingComment.isNotEmpty ? _ratingComment : null,
       );
       Toast.success(context, 'Merci pour votre évaluation !');
       setState(() {
         _selectedRating = 0;
         _ratingComment = '';
+        _satisfactionSubmitted = true;
       });
       _loadData();
     } catch (e) {
@@ -90,11 +101,28 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     }
   }
 
+  Future<void> _upvoteComplaint() async {
+    setState(() => _isUpvoting = true);
+    try {
+      await _complaintService.upvoteComplaint(widget.complaintId);
+      Toast.success(context, 'Vote ajouté !');
+      _loadData();
+    } catch (e) {
+      Toast.error(context, 'Erreur: $e');
+    } finally {
+      setState(() => _isUpvoting = false);
+    }
+  }
+
   Future<void> _addComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
+    if (text.length < 5) {
+      Toast.error(context, 'Le commentaire doit contenir au moins 5 caractères');
+      return;
+    }
     try {
-      await _complaintService.addPublicComment(widget.complaintId, text);
+      await _complaintService.addPublicComment(widget.complaintId, text, anonymous: _isAnonymousComment);
       _commentController.clear();
       Toast.success(context, 'Commentaire ajouté');
       _loadData();
@@ -193,10 +221,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                 color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                 boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                  ),
+                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8),
                 ],
               ),
               child: Column(
@@ -209,6 +234,14 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                     'Adresse',
                     c.location?['address'] ?? c.municipalityName ?? '-',
                   ),
+                  if (c.municipalityName != null) ...[
+                    const SizedBox(height: 12),
+                    _buildInfoRow(Icons.location_city, 'Municipalité', c.municipalityName!),
+                  ],
+                  if (c.governorate != null) ...[
+                    const SizedBox(height: 12),
+                    _buildInfoRow(Icons.map, 'Gouvernorat', c.governorate!),
+                  ],
                   const SizedBox(height: 12),
                   _buildInfoRow(
                     Icons.calendar_today,
@@ -223,6 +256,83 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                       '${c.resolvedAt!.day}/${c.resolvedAt!.month}/${c.resolvedAt!.year}',
                     ),
                   ],
+                  if (c.slaDeadline != null) ...[
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      Icons.timer,
+                      'Délai SLA',
+                      '${c.slaDeadline!.day}/${c.slaDeadline!.month}/${c.slaDeadline!.year}',
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Location Map
+            if (_hasLocation(c))
+              _buildLocationMap(c),
+            if (_hasLocation(c)) const SizedBox(height: 16),
+
+            // Community stats (upvote + confirm)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+              ),
+              child: Row(
+                children: [
+                  // Upvote
+                  Expanded(
+                    child: InkWell(
+                      onTap: _isUpvoting ? null : _upvoteComplaint,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _isUpvoting
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                : const Icon(Icons.thumb_up_outlined, color: AppTheme.primary, size: 20),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${c.upvoteCount} vote${c.upvoteCount != 1 ? 's' : ''}',
+                              style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Confirmations
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 20),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${c.confirmationCount} confirmation${c.confirmationCount != 1 ? 's' : ''}',
+                            style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -354,84 +464,81 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Rating Section (for resolved complaints)
-            if (c.status == 'RESOLVED')
+            // Satisfaction Survey (for resolved complaints, not yet rated)
+            if (c.status == 'RESOLVED' && !_satisfactionSubmitted)
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppTheme.surface,
+                  color: const Color(0xFFF0FDF4),
                   borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 8,
-                    ),
-                  ],
+                  border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.3)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Évaluez la résolution',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    const Row(
+                      children: [
+                        Icon(Icons.star, color: Color(0xFF22C55E), size: 20),
+                        SizedBox(width: 8),
+                        Text('Comment s\'est passée la résolution ?', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Row(
-                      children: List.generate(5, (index) {
-                        return IconButton(
-                          icon: Icon(
-                            index < _selectedRating ? Icons.star : Icons.star_border,
-                            color: Colors.amber,
+                      children: [
+                        Expanded(
+                          child: _buildSatisfactionButton('😊', 'Satisfait', 5, const Color(0xFF22C55E)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSatisfactionButton('😐', 'Neutre', 3, const Color(0xFFF59E0B)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildSatisfactionButton('😞', 'Insatisfait', 1, const Color(0xFFEF4444)),
+                        ),
+                      ],
+                    ),
+                    if (_selectedRating > 0) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Commentaire optionnel...',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        maxLines: 2,
+                        onChanged: (v) => _ratingComment = v,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _isSubmittingRating ? null : _submitRating,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF22C55E),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: _isSubmittingRating
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Text('Soumettre'),
+                            ),
                           ),
-                          onPressed: () => setState(() => _selectedRating = index + 1),
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      title: const Text('Résolu correctement'),
-                      value: _resolvedCorrectly,
-                      onChanged: (value) => setState(() => _resolvedCorrectly = value),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'Commentaire (optionnel)',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () => setState(() => _satisfactionSubmitted = true),
+                            child: const Text('Ignorer'),
+                          ),
+                        ],
                       ),
-                      maxLines: 3,
-                      onChanged: (value) => _ratingComment = value,
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isSubmittingRating ? null : _submitRating,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: _isSubmittingRating
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('Soumettre l\'évaluation'),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),
-            if (c.status == 'RESOLVED') const SizedBox(height: 16),
+            if (c.status == 'RESOLVED' && !_satisfactionSubmitted) const SizedBox(height: 16),
 
             // Confirm Resolution Button
             if (c.status == 'RESOLVED')
@@ -445,9 +552,7 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                     backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
                   ),
                 ),
               ),
@@ -459,42 +564,50 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Commentaires',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Commentaires (${_comments.length})',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   if (_comments.isEmpty)
-                    const Text(
-                      'Aucun commentaire',
-                      style: TextStyle(color: AppTheme.textMuted),
-                    )
+                    const Text('Aucun commentaire', style: TextStyle(color: AppTheme.textMuted))
                   else
                     ..._comments.map((comment) => _buildCommentItem(comment)),
                   const SizedBox(height: 12),
+                  // Anonymous toggle
+                  Row(
+                    children: [
+                      const Text('Anonyme', style: TextStyle(fontSize: 13)),
+                      const SizedBox(width: 8),
+                      Switch(
+                        value: _isAnonymousComment,
+                        onChanged: (v) => setState(() => _isAnonymousComment = v),
+                        activeColor: AppTheme.primary,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _commentController,
                           decoration: const InputDecoration(
-                            hintText: 'Ajouter un commentaire...',
+                            hintText: 'Ajouter un commentaire... (min 5 caractères)',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           ),
+                          maxLength: 500,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -519,6 +632,142 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => FullscreenPhotoView(url: url),
+      ),
+    );
+  }
+
+  bool _hasLocation(Complaint c) {
+    final lat = c.location?['lat'] ?? c.location?['latitude'];
+    final lng = c.location?['lng'] ?? c.location?['longitude'];
+    if (lat == null || lng == null) return false;
+    final latD = lat is num ? lat.toDouble() : double.tryParse(lat.toString());
+    final lngD = lng is num ? lng.toDouble() : double.tryParse(lng.toString());
+    return latD != null && lngD != null && latD != 0 && lngD != 0;
+  }
+
+  double? _getLat(Complaint c) {
+    final v = c.location?['lat'] ?? c.location?['latitude'];
+    if (v == null) return null;
+    return v is num ? v.toDouble() : double.tryParse(v.toString());
+  }
+
+  double? _getLng(Complaint c) {
+    final v = c.location?['lng'] ?? c.location?['longitude'];
+    if (v == null) return null;
+    return v is num ? v.toDouble() : double.tryParse(v.toString());
+  }
+
+  Widget _buildLocationMap(Complaint c) {
+    final lat = _getLat(c)!;
+    final lng = _getLng(c)!;
+    final address = c.location?['address'] as String? ?? c.municipalityName ?? '';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8)],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 220,
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: LatLng(lat, lng),
+                initialZoom: 15,
+                interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.smart_city',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(lat, lng),
+                      width: 40,
+                      height: 40,
+                      child: const Icon(Icons.location_pin, color: AppTheme.primary, size: 40),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (address.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 16, color: AppTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          address,
+                          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _navigateToLocation(lat, lng),
+                    icon: const Icon(Icons.navigation, size: 18),
+                    label: const Text('Naviguer vers ce lieu'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primary,
+                      side: const BorderSide(color: AppTheme.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _navigateToLocation(double lat, double lng) async {
+    final uri = Uri.parse('https://maps.google.com?q=$lat,$lng');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) Toast.error(context, 'Impossible d\'ouvrir la carte');
+    }
+  }
+
+  Widget _buildSatisfactionButton(String emoji, String label, int rating, Color color) {
+    final isSelected = _selectedRating == rating;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedRating = rating),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: isSelected ? color : Colors.grey.shade300, width: isSelected ? 2 : 1),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 24)),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? color : AppTheme.textSecondary)),
+          ],
+        ),
       ),
     );
   }

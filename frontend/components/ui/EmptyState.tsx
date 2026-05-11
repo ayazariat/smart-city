@@ -1,11 +1,11 @@
-import { FileText, Inbox, Search, AlertCircle } from "lucide-react";
-import { ReactNode } from "react";
+import { FileText, Inbox, Search, AlertCircle } from 'lucide-react';
+import { ReactNode } from 'react';
 
 interface EmptyStateProps {
   title?: string;
   message: string;
   action?: ReactNode;
-  icon?: "file" | "inbox" | "search" | "alert" | ReactNode;
+  icon?: 'file' | 'inbox' | 'search' | 'alert' | ReactNode;
 }
 
 const icons = {
@@ -16,12 +16,13 @@ const icons = {
 };
 
 export const EmptyState = ({
-  title = "No items found",
+  title = 'No items found',
   message,
   action,
-  icon = "inbox",
+  icon = 'inbox',
 }: EmptyStateProps) => {
-  const IconComponent = typeof icon === "string" ? icons[icon as keyof typeof icons] : null;
+  const IconComponent =
+    typeof icon === 'string' ? icons[icon as keyof typeof icons] : null;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-slate-200 animate-fadeInUp">
@@ -36,7 +37,7 @@ export const EmptyState = ({
             icon
           )}
         </div>
-        
+
         {/* Decorative elements */}
         <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary/10 rounded-full animate-bounce-soft" />
         <div className="absolute -bottom-1 -left-3 w-4 h-4 bg-primary/10 rounded-full animate-bounce-soft delay-200" />

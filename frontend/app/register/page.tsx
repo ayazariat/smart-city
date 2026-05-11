@@ -1,18 +1,32 @@
-"use client";
+'use client';
 
-import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Mail, Lock, User, Sparkles, MapPin, Navigation, BarChart3 } from "lucide-react";
-import { useAuthStore } from "@/store/useAuthStore";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Alert } from "@/components/ui/Alert";
-import { AnimatedBackground } from "@/components/ui/AnimatedBackground";
-import { ReCaptchaBadge, refreshRecaptchaToken } from "@/components/ui/ReCaptchaBadge";
-import { TUNISIA_GEOGRAPHY, getMunicipalitiesByGovernorate } from "@/data/tunisia-geography";
-import { getLocationWithDetails, LocationData } from "@/services/geo.service";
-import { useTranslation } from "react-i18next";
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import {
+  Mail,
+  Lock,
+  User,
+  Sparkles,
+  MapPin,
+  Navigation,
+  BarChart3,
+} from 'lucide-react';
+import { useAuthStore } from '@/store/useAuthStore';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
+import { AnimatedBackground } from '@/components/ui/AnimatedBackground';
+import {
+  ReCaptchaBadge,
+  refreshRecaptchaToken,
+} from '@/components/ui/ReCaptchaBadge';
+import {
+  TUNISIA_GEOGRAPHY,
+  getMunicipalitiesByGovernorate,
+} from '@/data/tunisia-geography';
+import { getLocationWithDetails, LocationData } from '@/services/geo.service';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Registration Page - Smart City Tunisia
@@ -22,24 +36,27 @@ import { useTranslation } from "react-i18next";
 export default function RegisterPage() {
   const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-  const mt = (key: string, fallback?: string) => mounted ? t(key) : (fallback ?? '');
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const mt = (key: string, fallback?: string) =>
+    mounted ? t(key) : (fallback ?? '');
   const router = useRouter();
   const { register, isLoading, error } = useAuthStore();
   const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    phone: "",
-    governorate: "",
-    municipality: "",
+    fullName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    phone: '',
+    governorate: '',
+    municipality: '',
   });
-  const [localError, setLocalError] = useState("");
+  const [localError, setLocalError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [, setCaptchaToken] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState("");
+  const [locationError, setLocationError] = useState('');
 
   // Get municipalities based on selected governorate
   const municipalities = useMemo(() => {
@@ -47,29 +64,41 @@ export default function RegisterPage() {
     return getMunicipalitiesByGovernorate(formData.governorate);
   }, [formData.governorate]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-    setLocalError("");
-    
+    setLocalError('');
+
     // Clear error for modified field
     if (fieldErrors[name]) {
-      setFieldErrors({ ...fieldErrors, [name]: "" });
+      setFieldErrors({ ...fieldErrors, [name]: '' });
     }
 
     // Clear municipality when governorate changes
-    if (name === "governorate") {
-      setFormData(prev => ({ ...prev, municipality: "" }));
+    if (name === 'governorate') {
+      setFormData((prev) => ({ ...prev, municipality: '' }));
     }
 
     // Real-time password match validation
-    if (name === "confirmPassword" || name === "password") {
-      if (name === "confirmPassword" && value !== formData.password) {
-        setFieldErrors({ ...fieldErrors, confirmPassword: "Passwords do not match" });
-      } else if (name === "password" && formData.confirmPassword && value !== formData.confirmPassword) {
-        setFieldErrors({ ...fieldErrors, confirmPassword: "Passwords do not match" });
+    if (name === 'confirmPassword' || name === 'password') {
+      if (name === 'confirmPassword' && value !== formData.password) {
+        setFieldErrors({
+          ...fieldErrors,
+          confirmPassword: 'Passwords do not match',
+        });
+      } else if (
+        name === 'password' &&
+        formData.confirmPassword &&
+        value !== formData.confirmPassword
+      ) {
+        setFieldErrors({
+          ...fieldErrors,
+          confirmPassword: 'Passwords do not match',
+        });
       } else {
-        setFieldErrors({ ...fieldErrors, confirmPassword: "" });
+        setFieldErrors({ ...fieldErrors, confirmPassword: '' });
       }
     }
   };
@@ -113,22 +142,26 @@ export default function RegisterPage() {
 
   const handleUseMyLocation = async () => {
     setLocationLoading(true);
-    setLocationError("");
-    
+    setLocationError('');
+
     try {
       const location: LocationData | null = await getLocationWithDetails();
-      
+
       if (location) {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           governorate: location.governorate,
           municipality: location.municipality,
         }));
       } else {
-        setLocationError("Could not determine your location in Tunisia. Please select manually.");
+        setLocationError(
+          'Could not determine your location in Tunisia. Please select manually.'
+        );
       }
     } catch (err) {
-      setLocationError(err instanceof Error ? err.message : "Failed to get location");
+      setLocationError(
+        err instanceof Error ? err.message : 'Failed to get location'
+      );
     } finally {
       setLocationLoading(false);
     }
@@ -136,7 +169,7 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLocalError("");
+    setLocalError('');
 
     if (!validateForm()) {
       return;
@@ -147,7 +180,9 @@ export default function RegisterPage() {
     if (recaptchaEnabled) {
       const freshToken = await refreshRecaptchaToken();
       if (!freshToken) {
-        setLocalError("Failed to complete security check. Please refresh and try again.");
+        setLocalError(
+          'Failed to complete security check. Please refresh and try again.'
+        );
         return;
       }
       captchaToken = freshToken;
@@ -166,15 +201,17 @@ export default function RegisterPage() {
         governorate: formData.governorate || undefined,
         municipality: formData.municipality || undefined,
       });
-      router.push(`/verify-account?email=${encodeURIComponent(formData.email)}`);
+      router.push(
+        `/verify-account?email=${encodeURIComponent(formData.email)}`
+      );
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Registration failed");
+      setLocalError(err instanceof Error ? err.message : 'Registration failed');
     }
   };
 
   const getPasswordStrength = (password: string) => {
     if (!password) return { strength: 0, label: '', color: '' };
-    
+
     let strength = 0;
     if (password.length >= 6) strength++;
     if (password.length >= 10) strength++;
@@ -183,11 +220,31 @@ export default function RegisterPage() {
     if (/[^a-zA-Z\d]/.test(password)) strength++;
 
     const configs = [
-      { strength: 1, label: mt('register.strengthWeak'), color: 'bg-urgent-500' },
-      { strength: 2, label: mt('register.strengthFair'), color: 'bg-attention-500' },
-      { strength: 3, label: mt('register.strengthGood'), color: 'bg-attention-400' },
-      { strength: 4, label: mt('register.strengthStrong'), color: 'bg-success-500' },
-      { strength: 5, label: mt('register.strengthVeryStrong'), color: 'bg-success-600' },
+      {
+        strength: 1,
+        label: mt('register.strengthWeak'),
+        color: 'bg-urgent-500',
+      },
+      {
+        strength: 2,
+        label: mt('register.strengthFair'),
+        color: 'bg-attention-500',
+      },
+      {
+        strength: 3,
+        label: mt('register.strengthGood'),
+        color: 'bg-attention-400',
+      },
+      {
+        strength: 4,
+        label: mt('register.strengthStrong'),
+        color: 'bg-success-500',
+      },
+      {
+        strength: 5,
+        label: mt('register.strengthVeryStrong'),
+        color: 'bg-success-600',
+      },
     ];
 
     return configs[Math.min(strength, 5) - 1] || configs[0];
@@ -198,13 +255,13 @@ export default function RegisterPage() {
   return (
     <>
       <AnimatedBackground />
-      
+
       <div className="min-h-screen flex items-center justify-center p-4 py-6">
         <div className="w-full max-w-xl">
           {/* Header */}
           <div className="text-center mb-5 animate-fadeIn">
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-primary to-primary-700 rounded-xl mb-3 shadow-lg shadow-primary/25 hover-lift transition-all duration-300"
             >
               <Sparkles className="w-6 h-6 text-white" />
@@ -212,12 +269,10 @@ export default function RegisterPage() {
             <h1 className="text-2xl font-bold text-slate-900 mb-1 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-primary-900">
               {mt('register.title')}
             </h1>
-            <p className="text-sm text-slate-600">
-              {mt('register.subtitle')}
-            </p>
+            <p className="text-sm text-slate-600">{mt('register.subtitle')}</p>
             <div className="mt-2">
-              <Link 
-                href="/transparency" 
+              <Link
+                href="/transparency"
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-green-50/80 text-green-700 border border-green-200/60 hover:bg-green-100 transition-colors text-xs font-medium shadow-sm"
               >
                 <BarChart3 className="w-3.5 h-3.5" />
@@ -272,15 +327,21 @@ export default function RegisterPage() {
                     disabled={locationLoading}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Navigation className={`w-4 h-4 ${locationLoading ? 'animate-pulse' : ''}`} />
-                    {locationLoading ? mt('register.gettingLocation') : mt('register.useMyLocation')}
+                    <Navigation
+                      className={`w-4 h-4 ${locationLoading ? 'animate-pulse' : ''}`}
+                    />
+                    {locationLoading
+                      ? mt('register.gettingLocation')
+                      : mt('register.useMyLocation')}
                   </button>
                 </div>
-                
+
                 {locationError && (
-                  <p className="text-sm text-urgent-600 mb-2">{locationError}</p>
+                  <p className="text-sm text-urgent-600 mb-2">
+                    {locationError}
+                  </p>
                 )}
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative">
                     <input
@@ -306,7 +367,11 @@ export default function RegisterPage() {
                       name="municipality"
                       value={formData.municipality}
                       onChange={handleChange}
-                      placeholder={formData.governorate ? mt('register.communePlaceholder') : mt('register.selectGovernorateFirst')}
+                      placeholder={
+                        formData.governorate
+                          ? mt('register.communePlaceholder')
+                          : mt('register.selectGovernorateFirst')
+                      }
                       list="municipality-list"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all bg-slate-50/50"
                       autoComplete="off"
@@ -325,21 +390,30 @@ export default function RegisterPage() {
                 <div className="animate-slideInLeft delay-400">
                   <div className="w-full">
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                      {mt('register.phone')} <span className="text-red-500">*</span>
+                      {mt('register.phone')}{' '}
+                      <span className="text-red-500">*</span>
                     </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                      <span style={{
-                        padding: '0 12px',
-                        height: 42,
-                        display: 'flex', alignItems: 'center',
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRight: 'none',
-                        borderRadius: '8px 0 0 8px',
-                        fontSize: 13, color: '#64748b',
-                        fontFamily: 'DM Mono, monospace',
-                        flexShrink: 0
-                      }}>TN</span>
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 0 }}
+                    >
+                      <span
+                        style={{
+                          padding: '0 12px',
+                          height: 42,
+                          display: 'flex',
+                          alignItems: 'center',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRight: 'none',
+                          borderRadius: '8px 0 0 8px',
+                          fontSize: 13,
+                          color: '#64748b',
+                          fontFamily: 'DM Mono, monospace',
+                          flexShrink: 0,
+                        }}
+                      >
+                        TN
+                      </span>
                       <input
                         type="tel"
                         className="w-full px-3 py-2.5 border rounded-r-lg focus:outline-none focus:ring-4 focus:border-primary focus:ring-primary/20 transition-all placeholder:text-slate-400"
@@ -349,9 +423,12 @@ export default function RegisterPage() {
                         required
                         value={formData.phone}
                         onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                          const digits = e.target.value
+                            .replace(/\D/g, '')
+                            .slice(0, 8);
                           setFormData({ ...formData, phone: digits });
-                          if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
+                          if (fieldErrors.phone)
+                            setFieldErrors({ ...fieldErrors, phone: '' });
                         }}
                       />
                     </div>
@@ -381,15 +458,21 @@ export default function RegisterPage() {
                 {formData.password && (
                   <div className="mt-2 space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-600">{mt('register.passwordStrength')}</span>
-                      <span className={`font-medium ${passwordStrength.strength >= 3 ? 'text-success-700' : 'text-attention-700'}`}>
+                      <span className="text-slate-600">
+                        {mt('register.passwordStrength')}
+                      </span>
+                      <span
+                        className={`font-medium ${passwordStrength.strength >= 3 ? 'text-success-700' : 'text-attention-700'}`}
+                      >
                         {passwordStrength.label}
                       </span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className={`h-full transition-all duration-500 ${passwordStrength.color}`}
-                        style={{ width: `${(passwordStrength.strength / 5) * 100}%` }}
+                        style={{
+                          width: `${(passwordStrength.strength / 5) * 100}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -412,7 +495,10 @@ export default function RegisterPage() {
 
               {/* Invisible reCAPTCHA v3 badge (UX-friendly) */}
               <div className="animate-fadeIn delay-500">
-                <ReCaptchaBadge action="register" onTokenChange={setCaptchaToken} />
+                <ReCaptchaBadge
+                  action="register"
+                  onTokenChange={setCaptchaToken}
+                />
               </div>
 
               <div className="pt-2 animate-fadeIn delay-500">
@@ -430,7 +516,7 @@ export default function RegisterPage() {
               {/* Error display at bottom of form */}
               {(error || localError) && (
                 <div className="mt-4 animate-slideInLeft">
-                  <Alert variant="error" onClose={() => setLocalError("")}>
+                  <Alert variant="error" onClose={() => setLocalError('')}>
                     {error || localError}
                   </Alert>
                 </div>
@@ -439,9 +525,9 @@ export default function RegisterPage() {
 
             <div className="mt-5 pt-5 border-t border-slate-100 animate-fadeIn delay-500">
               <p className="text-center text-sm text-slate-600">
-                {mt('register.alreadyHaveAccount')}{" "}
-                <Link 
-                  href="/" 
+                {mt('register.alreadyHaveAccount')}{' '}
+                <Link
+                  href="/"
                   className="text-primary hover:text-primary-700 font-semibold transition-all duration-200 hover:underline"
                 >
                   {mt('register.signIn')}

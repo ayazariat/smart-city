@@ -62,8 +62,8 @@ class UserService {
   // Update user profile
   async updateProfile(userId, updateData) {
     const { fullName, phone } = updateData;
-    
-    const user = await User.findById(userId);
+
+    const user = await userRepository.findById(userId);
     if (!user) {
       throw new Error('User not found');
     }
@@ -76,7 +76,7 @@ class UserService {
 
   // Change password
   async changePassword(userId, newPassword) {
-    const user = await User.findById(userId);
+    const user = await userRepository.findById(userId);
     if (!user) {
       throw new Error('User not found');
     }
@@ -91,7 +91,7 @@ class UserService {
 
   // Toggle user active status
   async toggleActiveStatus(userId, isActive) {
-    const user = await User.findById(userId);
+    const user = await userRepository.findById(userId);
     if (!user) {
       throw new Error('User not found');
     }

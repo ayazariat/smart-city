@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { ReactNode, useEffect } from "react";
-import { X } from "lucide-react";
+import { ReactNode, useEffect } from 'react';
+import { X } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface ModalProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export const Modal = ({
@@ -20,33 +20,37 @@ export const Modal = ({
   description,
   children,
   footer,
-  size = "md",
+  size = 'md',
 }: ModalProps) => {
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
     };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   const sizes = {
-    sm: "max-w-sm",
-    md: "max-w-lg",
-    lg: "max-w-2xl",
+    sm: 'max-w-sm',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
   };
 
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div 
+      <div
         className={`
           bg-white rounded-2xl shadow-2xl w-full ${sizes[size]}
           animate-scaleIn
@@ -57,7 +61,7 @@ export const Modal = ({
       >
         {/* Decorative top border */}
         <div className="h-1 bg-gradient-to-r from-primary via-primary-600 to-primary rounded-t-2xl" />
-        
+
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4">
           <div className="pr-8">

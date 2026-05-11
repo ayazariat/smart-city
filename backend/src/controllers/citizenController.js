@@ -4,7 +4,7 @@ const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const notificationService = require("../services/notification.service");
 const { calculatePriorityAndSLA } = require("../utils/priorityCalculator");
-const { normalizeMunicipality } = require("../utils/normalize");
+const { normalizeMunicipality, normalizeGovernorate } = require("../utils/normalize");
 
 const CITIZEN_ACTIVE_STATUSES = [
   "SUBMITTED",
@@ -174,11 +174,12 @@ class CitizenController {
       const user = await User.findById(req.user.userId).select('municipalityName municipality').lean();
       const userMunicipalityName = user?.municipalityName || location?.municipality || location?.commune || "";
       const governorate = municipalityToGovernorate[userMunicipalityName] || municipalityToGovernorate[location?.municipality] || municipalityToGovernorate[location?.commune] || null;
+      const normalizedGovernorate = normalizeGovernorate(governorate);
 
       const complaint = new Complaint({
         title: title.trim(), description: description.trim(), category: predictedCategory || "OTHER", urgency: urgencyLevel, priorityScore,
         location: Object.keys(geoLocation).length ? geoLocation : {}, municipalityName: userMunicipalityName,
-        municipalityNormalized: normalizeMunicipality(userMunicipalityName), governorate, media: media || [],
+        municipalityNormalized: normalizeMunicipality(userMunicipalityName), governorate, governorateNormalized: normalizedGovernorate, media: media || [],
         isAnonymous: !!isAnonymous, ownerName: !isAnonymous ? ownerName : undefined, phone: phone || undefined,
         keywords, createdBy: req.user.userId, assignedDepartment, status: "SUBMITTED",
         slaDeadline: new Date(Date.now() + slaFinal * 60 * 60 * 1000),

@@ -1,4 +1,4 @@
-import { apiClient } from "./api.client";
+import { apiClient } from './api.client';
 
 // Define response types
 interface ManagerComplaintsResponse {
@@ -53,8 +53,17 @@ interface ManagerStatsResponse {
     totalOverdue?: number;
     totalAtRisk?: number;
     resolutionRate?: number;
-    avgFixTime: { value: number | null; unit: string; vsLast: number | null; trend: string };
-    resolvedOnTime: { value: number | null; vsLast: number | null; trend: string };
+    avgFixTime: {
+      value: number | null;
+      unit: string;
+      vsLast: number | null;
+      trend: string;
+    };
+    resolvedOnTime: {
+      value: number | null;
+      vsLast: number | null;
+      trend: string;
+    };
     citizenSatisfaction: {
       value: number | null;
       totalRated: number;
@@ -80,53 +89,82 @@ export const managerService = {
   /**
    * Get complaints for manager's department
    */
-  async getManagerComplaints(params: {
-    status?: string;
-    category?: string;
-    page?: number;
-    limit?: number;
-  } = {}) {
+  async getManagerComplaints(
+    params: {
+      status?: string;
+      category?: string;
+      page?: number;
+      limit?: number;
+    } = {}
+  ) {
     const queryParams = new URLSearchParams();
-    if (params.status) queryParams.append("status", params.status);
-    if (params.category) queryParams.append("category", params.category);
-    if (params.page) queryParams.append("page", params.page.toString());
-    if (params.limit) queryParams.append("limit", params.limit.toString());
+    if (params.status) queryParams.append('status', params.status);
+    if (params.category) queryParams.append('category', params.category);
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
 
-    return apiClient.get<ManagerComplaintsResponse>(`/manager/complaints?${queryParams.toString()}`);
+    return apiClient.get<ManagerComplaintsResponse>(
+      `/manager/complaints?${queryParams.toString()}`
+    );
   },
 
   /**
    * Get complaints with location data for map display
    */
   async getManagerComplaintsGeo() {
-    return apiClient.get<{ success: boolean; data: Array<{ _id: string; title: string; description?: string; category: string; status: string; priorityScore?: number; urgency?: string; referenceId?: string; createdAt: string; location: { lat: number; lng: number; address?: string }; municipalityName?: string }>; count: number }>(`/manager/complaints/geo`);
+    return apiClient.get<{
+      success: boolean;
+      data: Array<{
+        _id: string;
+        title: string;
+        description?: string;
+        category: string;
+        status: string;
+        priorityScore?: number;
+        urgency?: string;
+        referenceId?: string;
+        createdAt: string;
+        location: { lat: number; lng: number; address?: string };
+        municipalityName?: string;
+      }>;
+      count: number;
+    }>(`/manager/complaints/geo`);
   },
 
   /**
    * Assign complaint to a technician
    */
   async assignTechnician(complaintId: string, technicianId: string) {
-    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/assign-technician`, {
-      technicianId,
-    });
+    return apiClient.put<AssignResponse>(
+      `/manager/complaints/${complaintId}/assign-technician`,
+      {
+        technicianId,
+      }
+    );
   },
 
   /**
    * Reassign technician (only when ASSIGNED status)
    */
   async reassignTechnician(complaintId: string, technicianId: string) {
-    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/reassign-technician`, {
-      technicianId,
-    });
+    return apiClient.put<AssignResponse>(
+      `/manager/complaints/${complaintId}/reassign-technician`,
+      {
+        technicianId,
+      }
+    );
   },
 
   /**
    * Assign multiple technicians and create a repair team
    */
   async assignTeam(complaintId: string, technicianIds: string[]) {
-    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/assign-team`, {
-      technicianIds,
-    });
+    return apiClient.put<AssignResponse>(
+      `/manager/complaints/${complaintId}/assign-team`,
+      {
+        technicianIds,
+      }
+    );
   },
 
   /**
@@ -136,35 +174,46 @@ export const managerService = {
     complaintId: string,
     data: { urgency?: string; priorityScore?: number }
   ) {
-    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/priority`, data);
+    return apiClient.put<AssignResponse>(
+      `/manager/complaints/${complaintId}/priority`,
+      data
+    );
   },
 
   /**
    * Get technicians in manager's department
    */
   async getTechnicians() {
-    return apiClient.get<{ success: boolean; data: Technician[] }>("/manager/technicians");
+    return apiClient.get<{ success: boolean; data: Technician[] }>(
+      '/manager/technicians'
+    );
   },
 
   /**
    * Get department statistics
    */
   async getStats() {
-    return apiClient.get<ManagerStatsResponse>("/manager/stats");
+    return apiClient.get<ManagerStatsResponse>('/manager/stats');
   },
 
   /**
    * Validate a submitted complaint (Manager only)
    */
   async validateComplaint(complaintId: string) {
-    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/validate`, {});
+    return apiClient.put<AssignResponse>(
+      `/manager/complaints/${complaintId}/validate`,
+      {}
+    );
   },
 
   /**
    * Reject a submitted complaint (Manager only)
    */
   async rejectComplaint(complaintId: string, reason: string) {
-    return apiClient.put<AssignResponse>(`/manager/complaints/${complaintId}/reject`, { reason });
+    return apiClient.put<AssignResponse>(
+      `/manager/complaints/${complaintId}/reject`,
+      { reason }
+    );
   },
 
   /**
@@ -172,7 +221,10 @@ export const managerService = {
    * Transitions complaint from RESOLVED → CLOSED
    */
   async approveResolution(complaintId: string) {
-    return apiClient.post<AssignResponse>(`/manager/complaints/${complaintId}/approve-resolution`, {});
+    return apiClient.post<AssignResponse>(
+      `/manager/complaints/${complaintId}/approve-resolution`,
+      {}
+    );
   },
 
   /**
@@ -180,6 +232,9 @@ export const managerService = {
    * Returns complaint to IN_PROGRESS with reason
    */
   async rejectResolution(complaintId: string, rejectionReason: string) {
-    return apiClient.post<AssignResponse>(`/manager/complaints/${complaintId}/reject-resolution`, { rejectionReason });
+    return apiClient.post<AssignResponse>(
+      `/manager/complaints/${complaintId}/reject-resolution`,
+      { rejectionReason }
+    );
   },
 };

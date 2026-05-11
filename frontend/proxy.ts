@@ -1,39 +1,39 @@
 /**
  * Next.js Proxy for Authentication (formerly Middleware)
- * 
+ *
  * Protects routes based on authentication status and user role.
  * Allows public access to specific paths.
  */
 
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 // Paths that don't require authentication
 const PUBLIC_PATHS = [
-  "/",
-  "/login",
-  "/auth",
-  "/register",
-  "/forgot-password",
-  "/reset-password",
-  "/verify-account",
-  "/set-password",
-  "/transparency",
-  "/api/auth",
-  "/api/upload",
-  "/api/public",
-  "/public",
-  "/_next",
-  "/favicon.ico",
-  "/static",
+  '/',
+  '/login',
+  '/auth',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-account',
+  '/set-password',
+  '/transparency',
+  '/api/auth',
+  '/api/upload',
+  '/api/public',
+  '/public',
+  '/_next',
+  '/favicon.ico',
+  '/static',
 ];
 
 // Paths that require specific roles
 const ROLE_BASED_PATHS = {
-  "/admin": ["ADMIN"],
-  "/manager": ["DEPARTMENT_MANAGER", "ADMIN"],
-  "/agent": ["MUNICIPAL_AGENT", "DEPARTMENT_MANAGER", "ADMIN"],
-  "/technician": ["TECHNICIAN", "DEPARTMENT_MANAGER", "ADMIN"],
+  '/admin': ['ADMIN'],
+  '/manager': ['DEPARTMENT_MANAGER', 'ADMIN'],
+  '/agent': ['MUNICIPAL_AGENT', 'DEPARTMENT_MANAGER', 'ADMIN'],
+  '/technician': ['TECHNICIAN', 'DEPARTMENT_MANAGER', 'ADMIN'],
 };
 
 /**
@@ -41,11 +41,11 @@ const ROLE_BASED_PATHS = {
  */
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
-    (publicPath) => 
-      pathname === publicPath || 
-      pathname.startsWith(publicPath + "/") ||
-      pathname.includes("/api/auth/") ||
-      pathname.includes("/_next/")
+    (publicPath) =>
+      pathname === publicPath ||
+      pathname.startsWith(publicPath + '/') ||
+      pathname.includes('/api/auth/') ||
+      pathname.includes('/_next/')
   );
 }
 
@@ -54,13 +54,13 @@ function isPublicPath(pathname: string): boolean {
  */
 function getToken(request: NextRequest): string | undefined {
   // Check Authorization header
-  const authHeader = request.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
     return authHeader.substring(7);
   }
 
   // Check cookie
-  return request.cookies.get("accessToken")?.value;
+  return request.cookies.get('accessToken')?.value;
 }
 
 /**
@@ -69,13 +69,13 @@ function getToken(request: NextRequest): string | undefined {
 function getUserRoleFromToken(token: string): string | null {
   try {
     // JWT format: header.payload.signature
-    const payload = token.split(".")[1];
+    const payload = token.split('.')[1];
     if (!payload) return null;
 
     // Decode base64
-    const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
     const json = JSON.parse(decoded);
-    
+
     return json.role || null;
   } catch {
     return null;
@@ -94,20 +94,29 @@ function hasRequiredRole(userRole: string, requiredRoles: string[]): boolean {
  */
 function handleExpiredToken(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
-  
+
   // Don't redirect if already on public path
-  const publicPaths = ['/', '/login', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password'];
-  if (publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+  const publicPaths = [
+    '/',
+    '/login',
+    '/auth',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-account',
+    '/set-password',
+  ];
+  if (publicPaths.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }
-  
+
   // Check if already has expired param - don't add it again
   if (request.nextUrl.searchParams.get('expired') === 'true') {
     return NextResponse.next();
   }
-  
-  const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set("expired", "true");
+
+  const loginUrl = new URL('/login', request.url);
+  loginUrl.searchParams.set('expired', 'true');
   return NextResponse.redirect(loginUrl);
 }
 
@@ -119,16 +128,16 @@ export function proxy(request: NextRequest) {
 }
 
 // Also export as default for compatibility
-export default function(request: NextRequest) {
+export default function (request: NextRequest) {
   return proxyHandler(request);
 }
 
 function proxyHandler(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
+
   // Check token from cookie OR Authorization header
   let token = request.cookies.get('accessToken')?.value;
-  
+
   // If no cookie, check Authorization header
   if (!token) {
     const authHeader = request.headers.get('authorization');
@@ -139,14 +148,38 @@ function proxyHandler(request: NextRequest) {
 
   // CRITICAL: Never redirect if already on login page with expired=true
   // This prevents infinite redirect loops
-  if ((pathname === '/' || pathname === '/login') && request.nextUrl.searchParams.get('expired') === 'true') {
+  if (
+    (pathname === '/' || pathname === '/login') &&
+    request.nextUrl.searchParams.get('expired') === 'true'
+  ) {
     return NextResponse.next();
   }
 
   // Public paths - never redirect these (include API routes)
-  const publicPaths = ['/', '/login', '/auth', '/register', '/forgot-password', '/reset-password', '/verify-account', '/set-password', '/transparency', '/public', '/api/auth', '/api/upload', '/api/public'];
-  
-  const isPublic = publicPaths.some(p => pathname === p || pathname.startsWith(p + '/') || pathname.includes('/api/auth/') || pathname.includes('/api/upload/') || pathname.includes('/api/public/'));
+  const publicPaths = [
+    '/',
+    '/login',
+    '/auth',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-account',
+    '/set-password',
+    '/transparency',
+    '/public',
+    '/api/auth',
+    '/api/upload',
+    '/api/public',
+  ];
+
+  const isPublic = publicPaths.some(
+    (p) =>
+      pathname === p ||
+      pathname.startsWith(p + '/') ||
+      pathname.includes('/api/auth/') ||
+      pathname.includes('/api/upload/') ||
+      pathname.includes('/api/public/')
+  );
 
   // Already on public page - never redirect (breaks loop)
   if (isPublic) return NextResponse.next();
@@ -165,8 +198,8 @@ function proxyHandler(request: NextRequest) {
   if (!userRole) {
     // Invalid token - clear and redirect
     const response = handleExpiredToken(request);
-    response.cookies.delete("accessToken");
-    response.cookies.delete("refreshToken");
+    response.cookies.delete('accessToken');
+    response.cookies.delete('refreshToken');
     return response;
   }
 
@@ -175,7 +208,7 @@ function proxyHandler(request: NextRequest) {
     if (pathname.startsWith(basePath)) {
       if (!hasRequiredRole(userRole, allowedRoles)) {
         // Redirect to dashboard if user doesn't have required role
-        const dashboardUrl = new URL("/dashboard", request.url);
+        const dashboardUrl = new URL('/dashboard', request.url);
         return NextResponse.redirect(dashboardUrl);
       }
     }
@@ -196,6 +229,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|public).*)",
+    '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
 };

@@ -30,11 +30,14 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
             "createdAt": {"$gte": cutoff}
         }
         
-        if municipality:
+        # Only add municipality filter if it's provided and not empty
+        # If no municipality provided, search across ALL municipalities
+        if municipality and municipality.strip():
             # Remove accents and use regex for flexible matching
             import unicodedata
             normalized_mun = ''.join(c for c in unicodedata.normalize('NFD', municipality) 
                                     if unicodedata.category(c) != 'Mn')
+            # Use contains regex to match partial municipality names
             query["municipalityName"] = {"$regex": normalized_mun, "$options": "i"}
             
         print(f"[DUPLICATE] Query: {query}")
@@ -120,7 +123,7 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
             candidates = await _fetch_candidates_from_db(
                 municipality=request.municipality or "",
                 category=request.category or "",
-                days_back=90,
+                days_back=365,  # Increased from 90 to 365 days to find more duplicates
                 limit=500
             )
         except Exception as db_err:
@@ -147,7 +150,9 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
         
         result = check_duplicate(new_complaint_data, candidates)
         
-        print(f"[DUPLICATE] Real result: isDuplicate={result['isDuplicate']}, topScore={result['topMatches'][0]['overallScore'] if result['topMatches'] else 0}")
+        print(f"[DUPLICATE] Real result: isDuplicate={result['isDuplicate']}, topMatches count={len(result['topMatches'])}, topScore={result['topMatches'][0]['overallScore'] if result['topMatches'] else 0}")
+        if result['topMatches']:
+            print(f"[DUPLICATE] Top match details: {result['topMatches'][0]}")
         
         return {
             "success": True,
