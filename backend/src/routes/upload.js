@@ -25,7 +25,10 @@ const storage = multer.diskStorage({
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "video/mp4", "video/quicktime", "video/webm"];
-  if (allowedTypes.includes(file.mimetype)) {
+  // Also check file extension for .jfif files which are JPEG but may have different mimetype
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = [".jpg", ".jpeg", ".jfif", ".png", ".gif", ".webp", ".mp4", ".mov", ".webm"];
+  if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
     cb(new Error("Invalid file type. Only images and videos are allowed."), false);
@@ -43,14 +46,34 @@ const upload = multer({
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 // POST /api/upload - Upload media
-router.post("/", authenticate, upload.array("media", 5), async (req, res) => {
+router.post("/", (req, res, next) => {
+  console.log('[Upload] Route hit');
+  console.log('[Upload] Headers:', req.headers['content-type']);
+  console.log('[Upload] Auth:', req.headers['authorization'] ? 'Present' : 'Missing');
+  next();
+}, authenticate, (req, res, next) => {
+  console.log('[Upload] After auth, before multer');
+  upload.array("media", 5)(req, res, (err) => {
+    if (err) {
+      console.error('[Upload] Multer error:', err);
+      return res.status(500).json({ success: false, message: "Upload error: " + err.message });
+    }
+    console.log('[Upload] Multer success, files:', req.files ? req.files.length : 0);
+    next();
+  });
+}, async (req, res) => {
   try {
+    console.log('[Upload] Request received after middleware');
+    console.log('[Upload] Files:', req.files ? req.files.length : 0);
+    
     if (!req.files || req.files.length === 0) {
+      console.log('[Upload] No files in request');
       return res.status(400).json({ success: false, message: "No files uploaded" });
     }
 
     const uploadedFiles = req.files.map((file) => {
       const fileUrl = `${API_BASE_URL}/uploads/${file.filename}`;
+      console.log('[Upload] File uploaded:', file.filename, file.mimetype, file.size);
       return {
         type: file.mimetype.startsWith("video/") ? "video" : "photo",
         url: fileUrl,
@@ -60,13 +83,15 @@ router.post("/", authenticate, upload.array("media", 5), async (req, res) => {
       };
     });
 
+    console.log('[Upload] Sending success response');
     res.json({
       success: true,
       message: "Files uploaded successfully",
       data: uploadedFiles,
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("[Upload] Error:", error);
+    console.error("[Upload] Error stack:", error.stack);
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({ success: false, message: "File size exceeds 10MB limit" });
     }

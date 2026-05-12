@@ -655,8 +655,8 @@ export const addPublicComment = async (
   id: string,
   text: string,
   anonymous: boolean = false
-): Promise<{ success: boolean; message: string }> => {
-  return apiClient.post<{ success: boolean; message: string }>(
+): Promise<{ success: boolean; message: string; data?: Comment }> => {
+  return apiClient.post<{ success: boolean; message: string; data?: Comment }>(
     `/public/complaints/${id}/comment`,
     { text, anonymous }
   );
@@ -776,7 +776,8 @@ export const checkDuplicate = async (
   category: string,
   municipality: string,
   latitude?: number,
-  longitude?: number
+  longitude?: number,
+  imageUrls: string[] = []
 ): Promise<{
   isDuplicate: boolean;
   duplicateLevel: string;
@@ -804,6 +805,7 @@ export const checkDuplicate = async (
           municipality,
           latitude,
           longitude,
+          imageUrls,
           submittedAt: new Date().toISOString(),
         }),
       },
@@ -813,9 +815,16 @@ export const checkDuplicate = async (
     if (!response || !response.ok) return null;
 
     const result = await response.json();
-    console.log('[checkDuplicate] Full response:', result);
-    console.log('[checkDuplicate] Result data:', result.data);
-    return result.data || null;
+    const data = result.data || null;
+    if (data?.topMatches) {
+      data.topMatches = data.topMatches
+        .filter((match: { status?: string; overallScore?: number }) =>
+          match.status !== 'REJECTED' && (match.overallScore || 0) >= 0.65
+        )
+        .slice(0, 3);
+      data.isDuplicate = data.topMatches.length > 0;
+    }
+    return data;
   } catch {
     return null;
   }

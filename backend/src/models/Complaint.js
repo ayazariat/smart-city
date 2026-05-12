@@ -233,7 +233,8 @@ const complaintSchema = new mongoose.Schema(
     isDuplicate: { type: Boolean, default: false },
     mergedComplaints: [{
       complaintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Complaint' },
-      mergedAt: { type: Date, default: Date.now }
+      mergedAt: { type: Date, default: Date.now },
+      similarityScore: { type: Number, default: null }
     }],
     mergedAt: Date,
     mergedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

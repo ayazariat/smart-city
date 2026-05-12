@@ -59,6 +59,12 @@
     "statusUpdated": {
       "title": "تم تحديث الحالة",
       "message": "تم تحديث حالة الشكوى '{{complaintTitle}}' إلى {{status}}"
+    },
+    "mergedAsDuplicate": "تم تحديد شكواك {{mergedRc}} على أنها مشابهة للشكوى {{originalRc}}: '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية."
+  },
+  "complaint": {
+    "duplicateModal": {
+      "confirmFailed": "تعذّر إتمام هذا الإجراء. يرجى المحاولة مجدداً."
     }
   },
   "timeAgo": {

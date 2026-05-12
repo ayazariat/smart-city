@@ -26,7 +26,7 @@ const NOTIFICATION_TYPES = [
   "assignment", "assigned_department", "unassigned", "new_complaint_municipality", "department_assigned",
   
   // Duplicate detection
-  "duplicate_detected", "duplicate_resolved", "duplicate_merged",
+  "duplicate_detected", "duplicate_resolved", "duplicate_merged", "complaint_merged_as_duplicate",
   
   // Technician/Manager communication
   "technician_message", "manager_warning",
@@ -74,6 +74,16 @@ const notificationSchema = new mongoose.Schema(
     metadata: {
       type: mongoose.Schema.Types.Mixed,
       default: {},
+    },
+    messageKey: String,
+    messageVariables: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    mergedComplaintId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Complaint",
+      index: true,
     },
     read: {
       type: Boolean,

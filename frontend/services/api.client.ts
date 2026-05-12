@@ -202,7 +202,15 @@ export const apiClient = {
       // Redirect to login so the user knows they need to re-authenticate
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname + window.location.search;
-        window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+        if (
+          currentPath.startsWith('/') &&
+          !currentPath.startsWith('/login') &&
+          currentPath !== '/dashboard' &&
+          !sessionStorage.getItem('returnAfterLogin')
+        ) {
+          sessionStorage.setItem('returnAfterLogin', currentPath);
+        }
+        window.location.href = '/login';
       }
       throw new Error('Session expired. Please log in again.');
     }

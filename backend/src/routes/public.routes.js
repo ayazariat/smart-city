@@ -3,6 +3,7 @@ const router = express.Router();
 const Complaint = require("../models/Complaint");
 const Department = require("../models/Department");
 const { getSlaHours, getSlaHoursByCategory } = require("../utils/slaConfig");
+const { authenticate, optionalAuth } = require("../middleware/auth");
 
 /**
  * GET /api/public/complaints - public complaint feed for transparency pages
@@ -18,7 +19,7 @@ router.get("/complaints", async (req, res) => {
           .map((status) => status.trim().toUpperCase())
           .filter(Boolean)
         : [];
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "CLOSED"];
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
     const statuses = requestedStatuses.length > 0
       ? requestedStatuses.filter((status) => publicStatuses.includes(status))
       : publicStatuses;
@@ -63,12 +64,12 @@ router.get("/complaints", async (req, res) => {
 /**
  * GET /api/public/complaints/:id - get single complaint details for public view
  */
-router.get("/complaints/:id", async (req, res) => {
+router.get("/complaints/:id", optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
     const complaint = await Complaint.findOne({ _id: id, isArchived: { $ne: true } })
-      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
+      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
       .populate("municipality", "name governorate")
       .lean();
 
@@ -80,14 +81,22 @@ router.get("/complaints/:id", async (req, res) => {
     await Complaint.findByIdAndUpdate(id, { $inc: { viewsCount: 1 } });
 
     // Only show complaints that are in public statuses
-    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "CLOSED"];
+    const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
     if (!publicStatuses.includes(complaint.status)) {
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
+    const response = {
+      ...complaint,
+      isOwnComplaint: Boolean(
+        req.user?.userId &&
+        complaint.createdBy?.toString?.() === req.user.userId?.toString()
+      ),
+    };
+
     res.json({
       success: true,
-      data: complaint,
+      data: response,
     });
   } catch (error) {
     console.error("Public complaint detail error:", error);
@@ -104,14 +113,14 @@ router.get("/complaints/:id/comments", async (req, res) => {
     const Comment = require("../models/Comment");
 
     const comments = await Comment.find({ complaint: id })
-      .populate("author", "name role")
+      .populate("author", "fullName name role")
       .sort({ createdAt: -1 })
       .lean();
 
     const formattedComments = comments.map(comment => ({
       _id: comment._id,
-      text: comment.text,
-      authorName: comment.isAnonymous ? "Anonymous" : (comment.author?.name || "Unknown"),
+      text: comment.content || comment.text || "",
+      authorName: comment.isAnonymous ? "Anonymous" : (comment.author?.fullName || comment.author?.name || "Unknown"),
       authorRoleLabel: comment.isAnonymous ? undefined : (comment.author?.role || "User"),
       createdAt: comment.createdAt,
     }));
@@ -129,29 +138,17 @@ router.get("/complaints/:id/comments", async (req, res) => {
 /**
  * POST /api/public/complaints/:id/comment - post a public comment (requires authentication)
  */
-router.post("/complaints/:id/comment", async (req, res) => {
+router.post("/complaints/:id/comment", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { token } = req.headers;
     const { text, anonymous } = req.body;
-
-    if (!token) {
-      return res.status(401).json({ success: false, message: "Authentication required" });
-    }
 
     if (!text || text.trim().length === 0) {
       return res.status(400).json({ success: false, message: "Comment text is required" });
     }
 
-    const jwt = require("jsonwebtoken");
     const User = require("../models/User");
-    let userId;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-      userId = decoded.userId || decoded.id || decoded._id;
-    } catch {
-      return res.status(401).json({ success: false, message: "Invalid token" });
-    }
+    const userId = req.user.userId || req.user.id || req.user._id;
 
     const complaint = await Complaint.findById(id);
     if (!complaint) {
@@ -164,23 +161,25 @@ router.post("/complaints/:id/comment", async (req, res) => {
     const Comment = require("../models/Comment");
     const comment = new Comment({
       complaint: id,
-      text: text.trim(),
+      content: text.trim(),
       author: userId,
-      authorName: authorName,
+      authorName,
       isAnonymous: !!anonymous,
       createdAt: new Date(),
     });
 
     await comment.save();
 
-    // Also add to complaint's publicComments array
+    // Also add to complaint's embedded comments array used by authenticated detail views.
     await Complaint.findByIdAndUpdate(id, {
       $push: {
-        publicComments: {
-          _id: comment._id,
-          text: comment.text,
-          author: { fullName: comment.isAnonymous ? "Anonymous" : authorName },
-          date: comment.createdAt,
+        comments: {
+          text: comment.content,
+          author: userId,
+          authorName: anonymous ? "Anonymous" : authorName,
+          authorRole: req.user.role || "CITIZEN",
+          type: "PUBLIC",
+          isInternal: false,
           createdAt: comment.createdAt
         }
       }
@@ -191,8 +190,8 @@ router.post("/complaints/:id/comment", async (req, res) => {
       message: "Comment posted successfully",
       data: {
         _id: comment._id,
-        text: comment.text,
-        authorName: comment.isAnonymous ? "Anonymous" : authorName,
+        text: comment.content,
+        authorName: anonymous ? "Anonymous" : authorName,
         createdAt: comment.createdAt,
       },
     });
@@ -205,38 +204,28 @@ router.post("/complaints/:id/comment", async (req, res) => {
 /**
  * POST /api/public/complaints/:id/upvote - upvote a complaint (requires authentication)
  */
-router.post("/complaints/:id/upvote", async (req, res) => {
+router.post("/complaints/:id/upvote", authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const { token } = req.headers;
-
-    if (!token) {
-      return res.status(401).json({ success: false, message: "Authentication required" });
-    }
-
-    const jwt = require("jsonwebtoken");
-    const User = require("../models/User");
-    let userId;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-      userId = decoded.userId || decoded.id || decoded._id;
-    } catch {
-      return res.status(401).json({ success: false, message: "Invalid token" });
-    }
+    const userId = req.user.userId || req.user.id || req.user._id;
 
     const complaint = await Complaint.findById(id);
     if (!complaint) {
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
+    if (complaint.createdBy?.toString?.() === userId?.toString()) {
+      return res.status(400).json({ success: false, message: "You cannot like your own complaint" });
+    }
+
     // Check if user already upvoted
-    if (!complaint.upvotedBy) complaint.upvotedBy = [];
-    if (complaint.upvotedBy.includes(userId)) {
-      return res.status(400).json({ success: false, message: "Already upvoted" });
+    if (!complaint.upvotes) complaint.upvotes = [];
+    if (complaint.upvotes.some((vote) => vote.citizenId?.toString() === userId?.toString())) {
+      return res.json({ success: true, upvoteCount: complaint.upvoteCount || complaint.upvotes.length, message: "Already liked" });
     }
 
     // Add upvote
-    complaint.upvotedBy.push(userId);
+    complaint.upvotes.push({ citizenId: userId, upvotedAt: new Date() });
     complaint.upvoteCount = (complaint.upvoteCount || 0) + 1;
     await complaint.save();
 
@@ -253,27 +242,14 @@ router.post("/complaints/:id/upvote", async (req, res) => {
 /**
  * GET /api/public/my-municipality-complaints - get complaints for citizen's municipality
  */
-router.get("/my-municipality-complaints", async (req, res) => {
+router.get("/my-municipality-complaints", authenticate, async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : req.headers.token;
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
     const status = req.query.status;
 
-    if (!token) {
-      return res.status(401).json({ success: false, message: "Authentication required" });
-    }
-
-    const jwt = require("jsonwebtoken");
     const User = require("../models/User");
-    let user;
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key");
-      user = await User.findById(decoded.userId || decoded.id || decoded._id);
-    } catch (err) {
-      console.error("Token verification error:", err);
-      return res.status(401).json({ success: false, message: "Invalid token" });
-    }
+    const user = await User.findById(req.user.userId || req.user.id || req.user._id)
+      .populate("municipality", "name governorate");
 
     if (!user) {
       return res.status(401).json({ success: false, message: "User not found" });
@@ -283,17 +259,53 @@ router.get("/my-municipality-complaints", async (req, res) => {
     console.log("User municipality:", userMunicipality, "User role:", user.role, "User ID:", user._id);
     
     if (!userMunicipality) {
-      console.error("User municipality not set for user:", user._id);
-      return res.status(400).json({ success: false, message: "User municipality not set" });
+      const fallbackQuery = {
+        status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
+        isArchived: { $ne: true },
+      };
+
+      if (user.role === "TECHNICIAN") {
+        fallbackQuery.$or = [
+          { assignedTo: user._id },
+          { "assignedTeam.members": user._id },
+        ];
+      } else if (user.role === "DEPARTMENT_MANAGER" && user.department) {
+        fallbackQuery.$or = [
+          { assignedDepartment: user.department },
+          { "assignedDepartment.id": user.department },
+        ];
+      } else {
+        console.error("User municipality not set for user:", user._id);
+        return res.status(400).json({ success: false, message: "User municipality not set" });
+      }
+
+      if (status) {
+        const statuses = status.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        if (statuses.length > 0) fallbackQuery.status = { $in: statuses };
+      }
+
+      const complaints = await Complaint.find(fallbackQuery)
+        .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmations upvotes confirmationCount upvoteCount referenceId")
+        .populate("municipality", "name governorate")
+        .sort({ createdAt: -1, updatedAt: -1 })
+        .limit(limit)
+        .lean();
+
+      return res.json({ success: true, complaints });
     }
 
     const normalizeMunicipality = require("../utils/normalize").normalizeMunicipality;
     const normalizedUserMunicipality = normalizeMunicipality(userMunicipality);
     console.log("Normalized municipality:", normalizedUserMunicipality);
 
+    const munRegex = new RegExp(userMunicipality.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     const query = {
-      municipalityNormalized: normalizedUserMunicipality,
-      status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
+      $or: [
+        { municipalityNormalized: normalizedUserMunicipality },
+        { municipalityName: munRegex },
+        { "location.municipality": munRegex },
+      ],
+      status: { $in: ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
       isArchived: { $ne: true },
     };
 
@@ -307,7 +319,7 @@ router.get("/my-municipality-complaints", async (req, res) => {
     console.log("Query:", JSON.stringify(query, null, 2));
 
     const complaints = await Complaint.find(query)
-      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId")
+      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmations upvotes confirmationCount upvoteCount referenceId")
       .populate("municipality", "name governorate")
       .sort({ createdAt: -1, updatedAt: -1 })
       .limit(limit)
@@ -331,7 +343,8 @@ router.get("/my-municipality-complaints", async (req, res) => {
 router.post("/complaints/:id/rate", async (req, res) => {
   try {
     const { id } = req.params;
-    const { token } = req.headers;
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : req.headers.token;
     const { rating, comment } = req.body;
 
     if (!token) {
@@ -510,15 +523,18 @@ router.get("/stats", async (req, res) => {
     const resolvedWithRatingsArray = Array.isArray(resolvedWithRatings) ? resolvedWithRatings : [];
     for (const complaint of resolvedWithRatingsArray) {
       if (complaint.averageRating) {
-        totalRatingSum += complaint.averageRating;
+        totalRatingSum += Math.min(Math.max(Number(complaint.averageRating) || 0, 0), 5);
         ratingCount++;
       } else if (complaint.ratings && complaint.ratings.length > 0) {
-        const sum = complaint.ratings.reduce((acc, r) => acc + r.rating, 0);
-        totalRatingSum += sum / complaint.ratings.length;
+        const safeRatings = complaint.ratings
+          .map((r) => Math.min(Math.max(Number(r.rating) || 0, 0), 5))
+          .filter((rating) => rating > 0);
+        const sum = safeRatings.reduce((acc, rating) => acc + rating, 0);
+        totalRatingSum += safeRatings.length > 0 ? sum / safeRatings.length : 0;
         ratingCount++;
       }
     }
-    satisfactionValue = ratingCount > 0 ? Math.min((totalRatingSum / ratingCount) * 20, 100) : null; // Convert 1-5 scale to 0-100, cap at 100
+    satisfactionValue = ratingCount > 0 ? Math.min(Math.round((totalRatingSum / ratingCount) * 20), 100) : null; // Convert 1-5 scale to 0-100, cap at 100
     totalRated = ratingCount;
     // Fallback to confirmation-based calculation if no ratings
     let notConfirmed = 0;
@@ -618,7 +634,7 @@ router.get("/stats", async (req, res) => {
         : null;
 
       const satisfactionTrend = (prevSatisfactionRate !== null && satisfactionValue !== null && prevSatisfactionRate > 0)
-        ? Math.round(((satisfactionValue - prevSatisfactionRate) / prevSatisfactionRate) * 100)
+        ? Math.max(-100, Math.min(100, Math.round(((satisfactionValue - prevSatisfactionRate) / prevSatisfactionRate) * 100)))
         : null;
 
       trends = { totalTrend, resolvedTrend, resolutionRateTrend, avgFixTimeTrend, resolvedOnTimeTrend, satisfactionTrend };
@@ -920,7 +936,7 @@ router.get("/stats", async (req, res) => {
           : { value: null, vsLast: null, trend: "no_change" },
         byGovernorate,
         citizenSatisfaction: {
-          value: satisfactionValue,
+          value: satisfactionValue !== null ? Math.min(Math.max(satisfactionValue, 0), 100) : null,
           totalRated: totalRated,
           notConfirmed: notConfirmed >= 0 ? notConfirmed : 0,
           vsLast: trends.satisfactionTrend ?? null,

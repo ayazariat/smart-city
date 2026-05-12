@@ -194,10 +194,11 @@ SENSITIVE_ZONES = {
 
 # Duplicate Detection Weights
 DUPLICATE_WEIGHTS = {
-    "textSimilarity": 0.70,
-    "geographicProximity": 0.15,
+    "textSimilarity": 0.58,
+    "geographicProximity": 0.18,
     "categoryMatch": 0.10,
-    "temporalProximity": 0.05
+    "temporalProximity": 0.04,
+    "photoMatch": 0.10
 }
 
 # Geographic Proximity Scoring (in meters)

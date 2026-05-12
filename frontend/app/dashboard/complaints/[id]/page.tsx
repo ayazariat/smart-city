@@ -30,11 +30,13 @@ import {
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
+import { apiClient } from "@/services/api.client";
 import { adminService } from "@/services/admin.service";
 import { managerService } from "@/services/manager.service";
 import { agentService } from "@/services/agent.service";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Button, PageHeader } from "@/components/ui";
+import { showToast } from "@/components/ui/Toast";
 import Timeline from "@/components/complaints/Timeline";
 import InternalNotes from "@/components/complaints/InternalNotes";
 import { categoryOptions, categoryLabels, statusConfig, getComplaintIdDisplay } from "@/lib/complaints";
@@ -120,6 +122,7 @@ export default function ComplaintDetailPage() {
   const [showDuplicateResults, setShowDuplicateResults] = useState(false);
   const [duplicateLoading, setDuplicateLoading] = useState(false);
   const [duplicateDismissed, setDuplicateDismissed] = useState(false);
+  const [duplicateCheckPerformed, setDuplicateCheckPerformed] = useState(false);
   const [mergingWith, setMergingWith] = useState<string | null>(null);
   const [publicCommentText, setPublicCommentText] = useState("");
   const [postingPublicComment, setPostingPublicComment] = useState(false);
@@ -230,42 +233,43 @@ export default function ComplaintDetailPage() {
     
     setMergingWith(existingComplaintId);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const response = await fetch(`${apiUrl}/ai/duplicate/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          newComplaintId: complaint._id || complaint.id || "",
-          existingComplaintId: existingComplaintId,
-          action: "merge"
-        }),
-      });
-      const result = await response.json();
+      const result = await apiClient.post<any>(
+        `/complaints/${complaint._id || complaint.id}/merge`,
+        {
+          originalComplaintId: existingComplaintId,
+        }
+      );
       
       if (result.success) {
-        // Update local state immediately without page refresh
-        setComplaint(prev => ({
-          ...prev,
+        const updatedMergedComplaint = result.mergedComplaint || {};
+        setComplaint(prev => processComplaintMedia({
+          ...(prev || complaint),
+          ...updatedMergedComplaint,
           status: "REJECTED",
           rejectionReason: "duplicate",
           isDuplicate: true,
-          duplicateOf: existingComplaintId,
-          mergedAt: new Date().toISOString(),
+          duplicateOf: updatedMergedComplaint.duplicateOf || existingComplaintId,
+          duplicateOfReferenceId: updatedMergedComplaint.duplicateOfReferenceId || result.originalComplaint?.referenceId,
+          mergedAt: updatedMergedComplaint.mergedAt || new Date().toISOString(),
+          mergedBy: updatedMergedComplaint.mergedBy || user?.fullName || user?.id || null,
           duplicateStatus: "CONFIRMED_DUPLICATE"
-        }));
+        } as Complaint));
         
-        // Hide duplicate detection UI
+        setActionModal(null);
         setShowDuplicateResults(false);
         setDuplicateResults([]);
         setDuplicateDismissed(true);
+        setDuplicateCheckPerformed(true);
         
-        alert(t('complaintDetail.mergedSuccess'));
+        showToast(t('agent.mergeSuccess'), 'success');
       } else {
+        console.error('[handleMergeDuplicate] Backend error:', result);
         alert(result.message || t('complaintDetail.mergeFailed'));
       }
-    } catch {
-      alert(t('complaintDetail.mergeFailed'));
+    } catch (err) {
+      console.error('[handleMergeDuplicate] Error:', err);
+      const errorMessage = err instanceof Error ? err.message : t('complaintDetail.mergeFailed');
+      alert(errorMessage);
     } finally {
       setMergingWith(null);
     }
@@ -276,29 +280,15 @@ export default function ComplaintDetailPage() {
     setDuplicateLoading(true);
     setDuplicateResults([]);
     setShowDuplicateResults(true);
+    setDuplicateCheckPerformed(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
       const lat = complaint.location?.coordinates?.[1] ?? complaint.location?.latitude;
       const lng = complaint.location?.coordinates?.[0] ?? complaint.location?.longitude;
       const imageUrls = (complaint.media || []).map(m => m.url).filter(Boolean).slice(0, 3);
 
-      console.log("Checking duplicates with data:", {
-        complaintId: complaint._id || complaint.id || "new",
-        title: complaint.title,
-        description: complaint.description,
-        category: complaint.category,
-        municipality: complaint.municipalityName,
-        latitude: lat,
-        longitude: lng,
-        imageUrls,
-        submittedAt: complaint.createdAt,
-      });
-
-      const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
+      const result = await apiClient.post<any>(
+        "/ai/duplicate/check",
+        {
           complaintId: complaint._id || complaint.id || "new",
           title: complaint.title,
           description: complaint.description,
@@ -308,12 +298,9 @@ export default function ComplaintDetailPage() {
           longitude: lng,
           imageUrls,
           submittedAt: complaint.createdAt,
-        }),
-      });
-      
-      console.log("Duplicate check response status:", response.status);
-      const result = await response.json();
-      console.log("Duplicate check result:", result);
+        },
+        { requiresAuth: false }
+      );
       
       // Handle different response formats
       const data = result.data || result;
@@ -322,24 +309,24 @@ export default function ComplaintDetailPage() {
       // Try to get matches from different possible response structures
       if (data && data.topMatches && Array.isArray(data.topMatches)) {
         matches = data.topMatches;
-        console.log("Setting duplicate results from topMatches:", matches);
       } else if (data && data.matches && Array.isArray(data.matches)) {
         matches = data.matches;
-        console.log("Setting duplicate results from matches:", matches);
       } else if (data && Array.isArray(data)) {
         matches = data;
-        console.log("Setting duplicate results from data array:", matches);
       } else if (result && result.topMatches && Array.isArray(result.topMatches)) {
         matches = result.topMatches;
-        console.log("Setting duplicate results from result.topMatches:", matches);
       } else if (result && result.matches && Array.isArray(result.matches)) {
         matches = result.matches;
-        console.log("Setting duplicate results from result.matches:", matches);
-      } else {
-        console.log("No duplicate matches found in response structure");
       }
       
-      setDuplicateResults(matches);
+      const reviewableMatches = matches
+        .filter((match: any) => match.status !== "REJECTED" && (match.overallScore || 0) >= 0.65)
+        .slice(0, 3);
+      setDuplicateResults(reviewableMatches);
+      setShowDuplicateResults(reviewableMatches.length > 0);
+      if (reviewableMatches.length === 0) {
+        showToast(t("complaintDetail.noSimilarFound", { defaultValue: "No similar complaints found." }), "info");
+      }
     } catch (error) {
       console.error("Error checking duplicates:", error);
       setDuplicateResults([]);
@@ -361,55 +348,8 @@ export default function ComplaintDetailPage() {
           // Process media URLs to ensure they are full URLs
           const processedComplaint = processComplaintMedia(response.data);
           setComplaint(processedComplaint);
-          // Only auto-check duplicates for agents when not dismissed
-          if (user?.role === "MUNICIPAL_AGENT" && !duplicateDismissed) {
-            setDuplicateLoading(true);
-            setDuplicateResults([]);
-            setShowDuplicateResults(true);
-            // Perform duplicate check inline
-            try {
-              const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-              const lat = processedComplaint.location?.coordinates?.[1] ?? processedComplaint.location?.latitude;
-              const lng = processedComplaint.location?.coordinates?.[0] ?? processedComplaint.location?.longitude;
-              const imageUrls = (processedComplaint.media || []).map(m => m.url).filter(Boolean).slice(0, 3);
-
-              const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({
-                  complaintId: processedComplaint._id || processedComplaint.id || "new",
-                  title: processedComplaint.title,
-                  description: processedComplaint.description,
-                  category: processedComplaint.category,
-                  municipality: processedComplaint.municipalityName,
-                  latitude: lat,
-                  longitude: lng,
-                  imageUrls,
-                  submittedAt: processedComplaint.createdAt,
-                }),
-              });
-              const result = await response.json();
-              
-              const data = result.data || result;
-              if (data && data.topMatches && data.topMatches.length > 0) {
-                // Filter by similarity >= 0.65 (unified threshold) and exclude REJECTED complaints
-                const highSimilarity = data.topMatches.filter((d: any) => 
-                  (d.overallScore || 0) >= 0.65 && d.status !== 'REJECTED'
-                );
-                setDuplicateResults(highSimilarity);
-                setShowDuplicateResults(highSimilarity.length > 0);
-              } else {
-                setDuplicateResults([]);
-                setShowDuplicateResults(false);
-              }
-            } catch {
-              setDuplicateResults([]);
-              setShowDuplicateResults(false);
-            } finally {
-              setDuplicateLoading(false);
-            }
-          }
+          setDuplicateResults([]);
+          setShowDuplicateResults(false);
           // Load internal notes if available
           if (processedComplaint.internalNotes) {
             setInternalNotes(processedComplaint.internalNotes as InternalNoteItem[]);
@@ -502,6 +442,12 @@ export default function ComplaintDetailPage() {
     setMediaErrors((prev) => ({ ...prev, [index]: true }));
   };
 
+  const applyUpdatedComplaint = (updated?: Complaint | null) => {
+    if (updated) {
+      setComplaint(processComplaintMedia(updated));
+    }
+  };
+
   const handleStatusUpdate = async (newStatus: string) => {
     if (!complaint) return;
     setActionLoading(true);
@@ -512,15 +458,13 @@ export default function ComplaintDetailPage() {
         newStatus === "REJECTED" ? rejectionReason : undefined
       );
       if (response.success) {
-        // Re-fetch full detail
-        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
-        if (detailResponse.success) {
-          setComplaint(processComplaintMedia(detailResponse.data));
-        }
+        applyUpdatedComplaint(response.data);
         setActionModal(null);
         setRejectionReason("");
       }
       } catch (err) {
+      } finally {
+        setActionLoading(false);
       }
   };
 
@@ -549,16 +493,14 @@ export default function ComplaintDetailPage() {
       }
       
       if (response && response.success) {
-        // Re-fetch full detail
-        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
-        if (detailResponse.success) {
-          setComplaint(processComplaintMedia(detailResponse.data));
-        }
+        applyUpdatedComplaint(response.data);
         setActionModal(null);
         setSelectedUrgency("");
         setSelectedPriorityScore("");
       }
       } catch (err) {
+      } finally {
+        setActionLoading(false);
       }
   };
 
@@ -571,15 +513,13 @@ export default function ComplaintDetailPage() {
         selectedDepartment
       );
       if (response.success) {
-        // Re-fetch full detail to get populated department name
-        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
-        if (detailResponse.success) {
-          setComplaint(processComplaintMedia(detailResponse.data));
-        }
+        applyUpdatedComplaint(response.data);
         setActionModal(null);
         setSelectedDepartment("");
       }
       } catch (err) {
+      } finally {
+        setActionLoading(false);
       }
   };
 
@@ -608,11 +548,8 @@ export default function ComplaintDetailPage() {
       }
       
       if (response.success) {
-        // Refresh complaint details
-        const detailResponse = await complaintService.getComplaintDetail(complaint._id || complaint.id || "");
-        if (detailResponse.success) {
-          setComplaint(detailResponse.data);
-        }
+        const updated = (response.data as any)?.complaint || response.data;
+        applyUpdatedComplaint(updated as Complaint);
         setActionModal(null);
         setSelectedTechnician("");
         setSelectedTechnicians([]);
@@ -624,6 +561,8 @@ export default function ComplaintDetailPage() {
         }
       }
       } catch (err) {
+      } finally {
+        setActionLoading(false);
       }
   };
 
@@ -635,7 +574,7 @@ export default function ComplaintDetailPage() {
     user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT";
   const canSeeUrgencyPrediction = user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
   const showUrgencyAi =
-    canSeeUrgencyPrediction;
+    canSeeUrgencyPrediction && complaint?.status === "SUBMITTED";
   const showDuplicateAi =
     user?.role === "MUNICIPAL_AGENT" &&
     !!complaint?.aiDuplicateCheck &&
@@ -643,8 +582,11 @@ export default function ComplaintDetailPage() {
     complaint.aiDuplicateCheck.topMatches.length > 0;
 
   // Check if current user is a technician assigned to this complaint
-  const isAssignedTechnician = user?.role === "TECHNICIAN" && 
-    complaint?.assignedTo?._id === user?.id;
+  const isAssignedTechnician = user?.role === "TECHNICIAN" && (() => {
+    const assignedTo = complaint?.assignedTo;
+    const assignedToId = typeof assignedTo === "object" ? assignedTo?._id : assignedTo;
+    return assignedToId === user?.id;
+  })();
 
   // Check if current user is the owner of the complaint
   const isOwner = (() => {
@@ -664,14 +606,20 @@ export default function ComplaintDetailPage() {
   const hasLocation = complaint?.location?.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2;
   const afterPhotos = complaint?.afterPhotos || complaint?.resolutionPhotos || complaint?.media?.filter((m: any) => m.type === 'after' || m.category === 'after') || [];
   const beforePhotos = complaint?.beforePhotos || complaint?.media?.filter((m: any) => m.type === 'before' || m.category === 'before') || [];
-  
-  console.log("Complaint photo fields:", {
-    afterPhotos: complaint?.afterPhotos,
-    resolutionPhotos: complaint?.resolutionPhotos,
-    media: complaint?.media,
-    afterPhotosFiltered: complaint?.media?.filter((m: any) => m.type === 'after' || m.category === 'after'),
-    finalAfterPhotos: afterPhotos
-  });
+  const duplicateReference = complaint?.duplicateOfTitle || complaint?.duplicateOfReferenceId || getComplaintIdDisplay(complaint?.duplicateOf || "");
+  const duplicateReferenceId = complaint?.duplicateOfReferenceId || getComplaintIdDisplay(complaint?.duplicateOf || "");
+  const isDuplicateRejection = !!complaint?.isDuplicate && !!complaint?.duplicateOf && complaint?.rejectionReason === "duplicate";
+  const formatLongDate = (date?: string | null) =>
+    date ? new Date(date).toLocaleDateString(locale, { month: "long", day: "numeric", year: "numeric" }) : "";
+  const getStaffName = (value?: string | { fullName?: string } | null) =>
+    typeof value === "object" ? value?.fullName : value;
+  const getMediaSrc = (photo: string | { url?: string }) => {
+    const url = typeof photo === "string" ? photo : photo?.url;
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/api$/, "");
+    return `${baseUrl}${url}`;
+  };
 
   if (loading) {
     return (
@@ -736,45 +684,15 @@ export default function ComplaintDetailPage() {
               >
                 {t(status.labelKey, { defaultValue: complaint.status })}
               </span>
-              {complaint.isDuplicate && complaint.duplicateOf && complaint.rejectionReason === "duplicate" && (
+              {isDuplicateRejection && (
                 <p className="text-xs text-slate-500 mt-1 text-center">
-                  {t("complaintDetail.statusRejectedDuplicate", { rc: getComplaintIdDisplay(complaint.duplicateOf) })}
+                  {t("complaint.reasonDuplicateOf", { rc: duplicateReference })}
                 </p>
               )}
               </div>
           </div>
         }
       />
-
-      {/* Duplicate Rejection Banner */}
-      {complaint.isDuplicate && complaint.duplicateOf && complaint.status === "REJECTED" && complaint.rejectionReason === "duplicate" && (
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-            <div className="flex items-start gap-3">
-              <Copy className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h3 className="font-semibold text-blue-900 mb-1">
-                  {t("complaint.duplicateRejectionBanner.title")}
-                </h3>
-                <p className="text-sm text-blue-800 mb-3">
-                  {t("complaint.duplicateRejectionBanner.body")}
-                </p>
-                <button
-                  onClick={() => router.push(`/dashboard/complaints/${complaint.duplicateOf}`)}
-                  className="inline-flex items-center text-blue-700 hover:text-blue-900 font-medium text-sm"
-                >
-                  {t("complaint.duplicateRejectionBanner.viewOriginal", { rc: getComplaintIdDisplay(complaint.duplicateOf) })}
-                </button>
-                {complaint.mergedAt && (
-                  <p className="text-xs text-slate-500 mt-2">
-                    {t("complaint.duplicateRejectionBanner.mergedOn", { date: new Date(complaint.mergedAt).toLocaleDateString(locale) })}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <main className="max-w-6xl mx-auto px-4 py-6" role="main">
         <div className="grid lg:grid-cols-3 gap-6">
@@ -819,20 +737,25 @@ export default function ComplaintDetailPage() {
               </div>
             </section>
 
-            {/* Duplicate Detection Suggestion Card (Amber) */}
-            {showDuplicateResults && duplicateResults.length > 0 && user?.role === "MUNICIPAL_AGENT" && (
-              <section className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl shadow-lg p-6 border-2 border-amber-300">
-                <div className="flex items-start justify-between mb-4">
+            {/* Duplicate Detection Review Card */}
+            {complaint.status === "SUBMITTED" && showDuplicateResults && duplicateResults.length > 0 && user?.role === "MUNICIPAL_AGENT" && (
+              <section className="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
+                <div className="flex items-start justify-between mb-5">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center">
-                      <AlertTriangle className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-amber-900">
-                        {t("complaintDetail.potentialDuplicatesFound", { count: duplicateResults.length })}
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        {t("complaintDetail.potentialDuplicatesFound", {
+                          count: duplicateResults.length,
+                          defaultValue: "Potential duplicates found!",
+                        })}
                       </h3>
-                      <p className="text-sm text-amber-700">
-                        {t("complaintDetail.duplicatesWarning")}
+                      <p className="text-sm text-slate-600">
+                        {t("complaintDetail.duplicatesWarning", {
+                          defaultValue: "These complaints appear similar. You can merge them or keep them separate.",
+                        })}
                       </p>
                     </div>
                   </div>
@@ -841,10 +764,10 @@ export default function ComplaintDetailPage() {
                       setDuplicateDismissed(true);
                       setShowDuplicateResults(false);
                     }}
-                    className="p-2 hover:bg-amber-200 rounded-lg transition-colors"
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
                     aria-label="Dismiss duplicates"
                   >
-                    <X className="w-5 h-5 text-amber-700" />
+                    <X className="w-5 h-5 text-slate-500" />
                   </button>
                 </div>
 
@@ -854,25 +777,52 @@ export default function ComplaintDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="mb-4 p-4 bg-white rounded-xl border border-amber-200">
-                      <p className="text-sm text-amber-700 font-medium mb-2">Main complaint (target)</p>
+                    <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                      <p className="text-sm text-slate-700 font-medium mb-2">
+                        {t("complaintDetail.mainComplaint", { defaultValue: "Main complaint (target)" })}
+                      </p>
                       <h3 className="font-semibold text-slate-900">{complaint.title}</h3>
                       <p className="text-sm text-slate-600 mt-1">{complaint.description}</p>
+                      {complaint.location?.address && (
+                        <p className="text-xs text-slate-500 mt-2">{complaint.location.address}</p>
+                      )}
                     </div>
 
-                    <p className="text-sm text-slate-600 mb-3 font-medium">Select complaints to merge:</p>
+                    <p className="text-sm text-slate-600 mb-3 font-medium">
+                      {t("complaintDetail.selectToMerge", { defaultValue: "Select complaints to merge:" })}
+                    </p>
 
-                    {duplicateResults.slice(0, 3).map((match: any, idx: number) => (
-                      <div key={idx} className="bg-white rounded-xl p-4 border border-amber-200 shadow-sm">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-semibold text-slate-900">
+                    {duplicateResults.map((match: any, idx: number) => {
+                      const matchId = match.complaintId || match._id || match.id;
+                      return (
+                      <div key={idx} className="rounded-lg border border-slate-200 hover:border-red-300 transition-all overflow-hidden bg-white">
+                        <div className="flex gap-3 p-3">
+                          {match.media?.[0]?.url ? (
+                            <img
+                              src={getMediaSrc(match.media[0])}
+                              alt={match.title}
+                              className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                              <FileText className="w-6 h-6 text-slate-300" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900 text-sm truncate">
                                 {match.title}
+                              </p>
+                              <span className={`ml-auto flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${
+                                Math.round((match.overallScore || 0) * 100) >= 80 ? 'bg-red-100 text-red-700' :
+                                Math.round((match.overallScore || 0) * 100) >= 60 ? 'bg-amber-100 text-amber-700' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>
+                                {Math.round((match.overallScore || 0) * 100)}% similar
                               </span>
                             </div>
-                            <p className="text-sm text-slate-600 mb-2">{match.description || 'No description'}</p>
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{match.description || 'No description'}</p>
+                            <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1.5 flex-wrap">
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                 match.status === 'RESOLVED' ? 'bg-green-100 text-green-700' :
                                 match.status === 'IN_PROGRESS' ? 'bg-orange-100 text-orange-700' :
@@ -880,65 +830,61 @@ export default function ComplaintDetailPage() {
                                 match.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
                                 'bg-slate-100 text-slate-700'
                               }`}>
-                                {match.status}
+                                {String(match.status || "UNKNOWN").replace("_", " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
                               </span>
-                              <span className="text-xs text-slate-500">{match.category || 'UNKNOWN'}</span>
+                              <span className="text-xs text-slate-500">
+                                {categoryLabels[match.category as keyof typeof categoryLabels] || match.category || 'UNKNOWN'}
+                              </span>
+                              {match.municipalityName && <span>{match.municipalityName}</span>}
+                              {match.referenceId && <span className="font-mono">{match.referenceId}</span>}
                             </div>
-                            {match.municipalityName && (
-                              <p className="text-xs text-slate-500 mt-1">{match.municipalityName}</p>
-                            )}
-                          </div>
-                          <div className="text-right ml-4">
-                            <div className="text-2xl font-bold text-amber-600">
-                              {Math.round((match.overallScore || 0) * 100)}%
+                            <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
+                              <button
+                                onClick={() => window.open(`/dashboard/complaints/${matchId}`, '_blank')}
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-sm font-medium transition-colors"
+                              >
+                                <Eye className="w-4 h-4" />
+                                View Details
+                              </button>
+                              <button
+                                onClick={() => handleMergeDuplicate(matchId)}
+                                disabled={mergingWith === matchId}
+                                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                              >
+                                {mergingWith === matchId ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Merge className="w-4 h-4" />
+                                )}
+                                Merge
+                              </button>
                             </div>
-                            <div className="text-xs text-slate-500">similar</div>
                           </div>
-                        </div>
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
-                          <button
-                            onClick={() => window.open(`/dashboard/complaints/${match._id}`, '_blank')}
-                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            <Eye className="w-4 h-4" />
-                            View Details
-                          </button>
-                          <button
-                            onClick={() => setMergingWith(match._id)}
-                            disabled={mergingWith === match._id}
-                            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                          >
-                            {mergingWith === match._id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Merge className="w-4 h-4" />
-                            )}
-                            Merge
-                          </button>
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 )}
                 
-                <div className="flex gap-2 mt-4 pt-4 border-t border-amber-200">
+                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
                   <button
                     onClick={() => {
                       setDuplicateDismissed(true);
                       setShowDuplicateResults(false);
                     }}
-                    className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors"
+                    className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium transition-colors"
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </button>
                   <button
                     onClick={() => {
                       setDuplicateDismissed(true);
                       setShowDuplicateResults(false);
                     }}
-                    className="flex-1 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg font-medium transition-colors border border-slate-300"
+                    className="flex-1 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-md font-medium transition-colors border border-slate-300"
                   >
-                    Keep Separate
+                    {t("complaintDetail.keepSeparate", { defaultValue: "Keep Separate" })}
                   </button>
                 </div>
               </section>
@@ -1343,7 +1289,7 @@ export default function ComplaintDetailPage() {
           {/* Sidebar */}
           <aside className="space-y-6" role="complementary" aria-label="Additional information">
             {/* AI Analysis */}
-            {(canSeeAiInsights && showUrgencyAi) || (user?.role === 'MUNICIPAL_AGENT' && showDuplicateAi) ? (
+            {user?.role === 'MUNICIPAL_AGENT' && showDuplicateAi ? (
               <AIAnalysisCard
                 complaintId={complaint._id || complaintId}
                 title={complaint.title || ""}
@@ -1416,6 +1362,17 @@ export default function ComplaintDetailPage() {
                         ? complaint.assignedDepartment.name
                         : complaint.assignedDepartment;
                     }
+                    const departmentId = (complaint as any).departmentId;
+                    if (departmentId) {
+                      return typeof departmentId === 'object'
+                        ? departmentId.name
+                        : departmentId;
+                    }
+                    if (complaint.department) {
+                      return typeof complaint.department === 'object'
+                        ? complaint.department.name
+                        : complaint.department;
+                    }
                     // Then check assignedTeam department (for in-progress complaints)
                     if (complaint.assignedTeam && typeof complaint.assignedTeam === 'object' && complaint.assignedTeam.department) {
                       return typeof complaint.assignedTeam.department === 'object'
@@ -1439,14 +1396,6 @@ export default function ComplaintDetailPage() {
                   <UserCog className="w-5 h-5 text-primary" />
                   {t("complaintDetail.assignedTo")}
                 </h2>
-                {complaint.assignedDepartment && (
-                  <div className="space-y-2 mb-4">
-                     <p className="font-semibold text-slate-900 flex items-center gap-2">
-                       <Building2 className="w-4 h-4 text-slate-400" />
-                       {getDepartmentLabel(complaint.assignedDepartment)}
-                     </p>
-                  </div>
-                )}
                 {complaint.assignedTo && !complaint.assignedTeam && (
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-900 flex items-center gap-2">
@@ -1603,7 +1552,7 @@ export default function ComplaintDetailPage() {
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {afterPhotos.map((photo, idx: number) => {
-                        const src = photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`;
+                        const src = getMediaSrc(photo);
                         return (
                           <a
                             key={idx}
@@ -1633,8 +1582,8 @@ export default function ComplaintDetailPage() {
                           setActionLoading(true);
                           const result = await managerService.approveResolution(complaintId);
                           if (result.success) {
+                            applyUpdatedComplaint(result.data as unknown as Complaint);
                             alert("Resolution approved! Complaint has been closed.");
-                            window.location.reload();
                           } else {
                             alert(result.message || t("complaintDetail.failedApproveResolution"));
                           }
@@ -1670,7 +1619,7 @@ export default function ComplaintDetailPage() {
                     </p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {beforePhotos.map((photo, idx: number) => {
-                        const src = photo.url?.startsWith("http") ? photo.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${photo.url}`;
+                        const src = getMediaSrc(photo);
                         return (
                           <a key={idx} href={src} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-blue-400 hover:shadow-md transition-all">
                             <img src={src} alt={`Before work photo ${idx + 1}`} className="w-full h-28 object-cover" />
@@ -1744,8 +1693,8 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
-            {/* Merged Reports Section */}
-            {complaint.mergedComplaints && complaint.mergedComplaints.length > 0 && (
+            {/* Merged Reports Section - Only show on original complaint, not on merged ones */}
+            {complaint.mergedComplaints && complaint.mergedComplaints.length > 0 && !complaint.isDuplicate && (
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
                 <h2 className="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
                   <Copy className="w-5 h-5 text-purple-600" />
@@ -1758,13 +1707,26 @@ export default function ComplaintDetailPage() {
                   {complaint.mergedComplaints.map((merged: any) => (
                     <div key={merged.complaintId} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-slate-900 text-sm">
-                          {getComplaintIdDisplay(merged.complaintId)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {t("complaint.mergedReports.confirmedVia")}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/dashboard/complaints/${merged.complaintId}`)}
+                          className="font-semibold text-blue-700 hover:text-blue-900 text-sm"
+                        >
+                          {merged.referenceId || getComplaintIdDisplay(merged.complaintId)}
+                        </button>
+                        {typeof merged.similarityScore === "number" && (
+                          <span className="text-xs text-slate-600 bg-slate-200 px-2 py-1 rounded-full">
+                            {Math.round(merged.similarityScore * 100)}% similar
+                          </span>
+                        )}
                       </div>
+                      {merged.title && (
+                        <p className="text-sm text-slate-800 truncate">{merged.title}</p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-1">
+                        {merged.submittedBy || "Submitted by a citizen"}
+                        {merged.municipality ? ` · ${merged.municipality}` : ""}
+                      </p>
                       {merged.mergedAt && (
                         <p className="text-xs text-slate-500">
                           {t("complaint.duplicateRejectionBanner.mergedOn", { date: new Date(merged.mergedAt).toLocaleDateString(locale) })}
@@ -1784,8 +1746,8 @@ export default function ComplaintDetailPage() {
                   {t("complaintDetail.actions")}
                 </h2>
                 <div className="space-y-3">
-                  {/* SUBMITTED, VALIDATED - Agent can check for duplicates, validate, or reject */}
-                  {["SUBMITTED", "VALIDATED"].includes(complaint.status) && (
+                  {/* SUBMITTED - Agent can check for duplicates, validate, or reject */}
+                  {complaint.status === "SUBMITTED" && (
                     <>
                       {user?.role === "MUNICIPAL_AGENT" && (
                         <Button
@@ -1794,7 +1756,9 @@ export default function ComplaintDetailPage() {
                           onClick={handleCheckDuplicate}
                           disabled={duplicateLoading}
                         >
-                          {duplicateLoading ? "Checking..." : "Check for Similar Complaints"}
+                          {duplicateLoading
+                            ? t("complaintDetail.checkingDuplicates")
+                            : t("complaintDetail.checkSimilarComplaints", { defaultValue: "Check for Similar Complaints" })}
                         </Button>
                       )}
                       {user?.role === "MUNICIPAL_AGENT" && (
@@ -1803,7 +1767,6 @@ export default function ComplaintDetailPage() {
                             className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                             icon={<CheckCircle2 className="w-4 h-4" />}
                             onClick={() => setActionModal("validate")}
-                            disabled={!duplicateDismissed && showDuplicateResults && duplicateResults.length > 0}
                           >
                             {t("complaintDetail.validateComplaint")}
                           </Button>
@@ -1820,7 +1783,7 @@ export default function ComplaintDetailPage() {
                   )}
 
                    {/* VALIDATED - Agent assigns Department, Manager can set Priority */}
-                   {complaint.status === "VALIDATED" && (
+                  {complaint.status === "VALIDATED" && (
                      <>
                        {user?.role === "MUNICIPAL_AGENT" && !complaint.assignedDepartment && (
                          <Button
@@ -1834,6 +1797,12 @@ export default function ComplaintDetailPage() {
                      </>
                    )}
 
+                  {user?.role === "MUNICIPAL_AGENT" && ["ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED"].includes(complaint.status) && (
+                    <p className="text-sm italic text-slate-500">
+                      This complaint has been forwarded. No further actions required.
+                    </p>
+                  )}
+
                   {/* ASSIGNED - Manager assigns Technician/Team and sets Priority */}
                   {complaint.status === "ASSIGNED" && user?.role === "DEPARTMENT_MANAGER" && (
                     <>
@@ -1845,6 +1814,14 @@ export default function ComplaintDetailPage() {
                               {t("complaintDetail.assignedToTeam")}
                             </p>
                           </div>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            icon={<Users className="w-4 h-4" />}
+                            onClick={() => setActionModal("technician")}
+                          >
+                            Edit Assignment
+                          </Button>
                         </>
                       ) : (
                         <>
@@ -1854,13 +1831,6 @@ export default function ComplaintDetailPage() {
                             onClick={() => setActionModal("technician")}
                           >
                             {t("complaintDetail.assignToRepairTeam")}
-                          </Button>
-                          <Button
-                            className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
-                            icon={<AlertTriangle className="w-4 h-4" />}
-                            onClick={() => setActionModal("priority")}
-                          >
-                            {t("complaintDetail.setPriority")}
                           </Button>
                         </>
                       )}
@@ -1874,18 +1844,6 @@ export default function ComplaintDetailPage() {
                         <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
                           <p className="text-sm text-orange-800 font-medium">{t("complaintDetail.inProgress")}</p>
                           <p className="text-xs text-orange-600">{t("complaintDetail.techWorking")}</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* RESOLVED - Manager reviews resolution report */}
-                  {complaint.status === "RESOLVED" && (
-                    <>
-                      {user?.role === "DEPARTMENT_MANAGER" && (
-                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                          <p className="text-sm text-green-800 font-medium">{t("complaintDetail.resolutionReportSubmitted")}</p>
-                          <p className="text-xs text-green-600">{t("complaintDetail.reviewResolutionReport")}</p>
                         </div>
                       )}
                     </>
@@ -1917,6 +1875,34 @@ export default function ComplaintDetailPage() {
                     </div>
                   )}
                 </div>
+              </section>
+            )}
+
+            {isAgentOrManager && isDuplicateRejection && (
+              <section className="bg-blue-50 rounded-2xl shadow-lg p-6 border border-blue-200" aria-labelledby="merged-actions-title">
+                <h2 id="merged-actions-title" className="text-lg font-semibold text-blue-950 mb-2 flex items-center gap-2">
+                  <Merge className="w-5 h-5 text-blue-700" />
+                  {t("complaint.mergedRejectionTitle")}
+                </h2>
+                <p className="text-sm text-blue-800 mb-4">
+                  {t("complaint.mergedRejectionBody")}
+                </p>
+                {(complaint.mergedAt || complaint.mergedBy) && (
+                  <p className="text-xs text-blue-900 mb-3">
+                    Merged by {getStaffName(complaint.mergedBy) || user?.fullName || "Agent"}
+                    {complaint.mergedAt ? ` on ${formatLongDate(complaint.mergedAt)}` : ""}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => router.push(`/dashboard/complaints/${complaint.duplicateOf}`)}
+                >
+                  {t("complaint.duplicateRejectionBanner.viewOriginal", { rc: duplicateReference })}
+                  {duplicateReferenceId && duplicateReference !== duplicateReferenceId && (
+                    <span className="ml-1 text-xs text-slate-400">({duplicateReferenceId})</span>
+                  )}
+                </Button>
               </section>
             )}
 

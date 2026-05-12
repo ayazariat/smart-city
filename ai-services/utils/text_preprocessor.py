@@ -6,6 +6,7 @@ Utility functions for text cleaning and preprocessing.
 
 import re
 import unicodedata
+from difflib import SequenceMatcher
 
 
 # Synonym mapping for common complaint-related terms
@@ -55,12 +56,26 @@ def normalize_synonyms(text: str) -> str:
     words = text.split()
     normalized_words = []
     
+    canonical_terms = list(REVERSE_SYNONYM_MAP.keys())
+
     for word in words:
         word_lower = word.lower()
         if word_lower in REVERSE_SYNONYM_MAP:
             normalized_words.append(REVERSE_SYNONYM_MAP[word_lower])
         else:
-            normalized_words.append(word)
+            compact_word = re.sub(r'(.)\1+', r'\1', word_lower)
+            fuzzy_match = None
+            fuzzy_score = 0.0
+            for term in canonical_terms:
+                compact_term = re.sub(r'(.)\1+', r'\1', term)
+                score = SequenceMatcher(None, compact_word, compact_term).ratio()
+                if score > fuzzy_score:
+                    fuzzy_score = score
+                    fuzzy_match = term
+            if fuzzy_match and fuzzy_score >= 0.78:
+                normalized_words.append(REVERSE_SYNONYM_MAP[fuzzy_match])
+            else:
+                normalized_words.append(word)
     
     return " ".join(normalized_words)
 
@@ -126,6 +141,9 @@ def clean_text(text: str) -> str:
     
     # Convert to lowercase
     text = text.lower()
+
+    # Collapse exaggerated repeated letters before synonym matching
+    text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     
     # Normalize unicode (French/Arabic accents)
     text = unicodedata.normalize('NFKD', text)

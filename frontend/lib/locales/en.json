@@ -80,7 +80,8 @@
   },
   "agent": {
     "noAssignedComplaints": "No complaints assigned to you yet.",
-    "noAssignedComplaintsFiltered": "No complaints match your current filters."
+    "noAssignedComplaintsFiltered": "No complaints match your current filters.",
+    "mergeSuccess": "Complaint merged successfully. It has been marked as a duplicate and rejected."
   },
   "admin": {
     "settings": {
@@ -561,7 +562,39 @@
       "merge": "Merge",
       "keepSeparate": "Keep Separate",
       "confirm": "Confirm",
+      "confirmed": "Confirmed",
+      "confirmFailed": "Could not complete this action. Please try again.",
+      "upvote": "Upvote",
+      "upvoted": "Upvoted",
+      "upvoteFailed": "Failed to upvote. You may have already upvoted this complaint.",
+      "submitAnyway": "Submit Anyway",
+      "viewDetails": "View Details",
+      "ownSimilar": "You have already submitted a similar complaint.",
+      "viewMyComplaint": "View my complaint",
+      "viewExisting": "View existing complaint",
       "cancel": "Cancel"
+    },
+    "duplicateRejectionBanner": {
+      "title": "This complaint is a duplicate",
+      "body": "A similar complaint already exists and is being handled. Your report has been merged and your community votes have been transferred to the original complaint.",
+      "viewOriginal": "View original complaint {{rc}} →",
+      "mergedOn": "Merged on {{date}}"
+    },
+    "mergedReports": {
+      "title": "Merged Reports",
+      "subtitle": "These complaints were identified as duplicates of this report and have been merged into it.",
+      "confirmedVia": "Confirmed via merge"
+    },
+    "communitySupport": {
+      "mergeNote": "including {{count}} via merged reports"
+    },
+    "mergedRejectionTitle": "Complaint merged — rejected as duplicate",
+    "mergedRejectionBody": "This report was identified as similar to an existing complaint. It has been rejected and archived. The citizen has been notified.",
+    "duplicateOf": "Duplicate of {{rc}}",
+    "reasonDuplicateOf": "Reason: Duplicate of {{rc}}",
+    "reasonDuplicate": "Reason: Duplicate",
+    "status": {
+      "rejectedDuplicate": "Duplicate of {{rc}}"
     }
   },
   "transparency": {
@@ -812,7 +845,8 @@
       "RESOLUTION_REVIEW": "Resolution Review",
       "RESOLUTION_REJECTED": "Rejected",
       "REJECTED": "Rejected"
-    }
+    },
+    "mergedAsDuplicate": "Your complaint {{mergedRc}} was identified as similar to complaint {{originalRc}}: '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report."
   },
   "register": {
     "title": "Create Account",
@@ -970,13 +1004,20 @@
     "aiUrgencyPrediction": "AI Urgency Prediction",
     "duplicateCheck": "Duplicate Check",
     "checkingDuplicates": "Checking for similar complaints...",
+    "checkSimilarComplaints": "Check for Similar Complaints",
+    "potentialDuplicatesFound": "Potential duplicates found!",
+    "duplicatesWarning": "These complaints appear similar. You can merge them or keep them separate.",
+    "mainComplaint": "Main complaint (target)",
+    "selectToMerge": "Select complaints to merge:",
+    "keepSeparate": "Keep Separate",
+    "noSimilarFound": "No similar complaints found.",
     "similarComplaintsFound": "Similar complaints found — review before validating",
     "differentIssuesContinue": "These are different issues — continue to validate",
     "view": "View",
     "merge": "Merge",
     "merging": "Merging...",
     "mergeConfirm": "Mark this complaint as a duplicate of [{{rc}}]? The complaint will be closed and the citizen will be notified.",
-    "mergedSuccess": "Complaint merged as duplicate successfully.",
+    "mergedSuccess": "Complaint merged successfully. It has been marked as a duplicate and rejected.",
     "mergeFailed": "Failed to merge complaint.",
     "beforeWorkPhotos": "Before Work Photos",
     "afterWorkPhotos": "After Work Photos",
@@ -1102,6 +1143,8 @@
     "commentPlaceholder": "Share your experience or observation...",
     "postAnonymously": "Post anonymously",
     "postComment": "Post Comment",
+    "commentPosted": "Comment posted",
+    "commentPostFailed": "Could not post your comment. Please try again.",
     "signIn": "Sign in",
     "toAddComment": "to add a comment",
     "noComments": "No comments yet. Be the first to share your thoughts.",

@@ -37,6 +37,7 @@ import {
 import { apiClient } from '@/services/api.client';
 import { getPhotoUrl } from '@/lib/photos';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import { showToast } from '@/components/ui/Toast';
 import { useTranslation } from 'react-i18next';
 
 interface ComplaintMedia {
@@ -110,7 +111,7 @@ export default function PublicComplaintDetailPage() {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || 'en';
 
-  const { user, token, hydrated } = useAuthStore();
+  const { user, token, hydrated, isLoading: authLoading } = useAuthStore();
 
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [loading, setLoading] = useState(true);
@@ -132,6 +133,7 @@ export default function PublicComplaintDetailPage() {
     }>
   >([]);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const handledActionRef = useRef<string | null>(null);
 
@@ -215,7 +217,7 @@ export default function PublicComplaintDetailPage() {
   }, [actionParam, complaint, complaintId, hydrated, token, user]);
 
   const handleUpvote = async () => {
-    if (!hydrated) return; // Wait for hydration
+    if (!hydrated || authLoading) return; // Wait for auth hydration
     if (!user || !token) {
       redirectToLogin(router);
       return;
@@ -238,7 +240,7 @@ export default function PublicComplaintDetailPage() {
   };
 
   const handleConfirm = async () => {
-    if (!hydrated) return; // Wait for hydration
+    if (!hydrated || authLoading) return; // Wait for auth hydration
     if (!user || !token) {
       redirectToLogin(router);
       return;
@@ -266,36 +268,42 @@ export default function PublicComplaintDetailPage() {
   };
 
   const handleComment = async () => {
-    if (!hydrated) return; // Wait for hydration
+    if (!hydrated || authLoading) return; // Wait for auth hydration
     if (!commentText.trim()) return;
     if (!user || !token) {
       redirectToLogin(router);
       return;
     }
     try {
+      setCommentError('');
       setSubmittingComment(true);
-      const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      const res = await fetch(
-        `${apiUrl}/public/complaints/${complaintId}/comment`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ text: commentText, anonymous: isAnonymous }),
-        }
-      );
-      const data = await res.json();
+      const data = await apiClient.post<{
+        success: boolean;
+        data?: {
+          _id: string;
+          text: string;
+          authorName: string;
+          authorRoleLabel?: string;
+          createdAt: string;
+        };
+      }>(`/public/complaints/${complaintId}/comment`, {
+        text: commentText.trim(),
+        anonymous: isAnonymous,
+      });
       if (data.success) {
+        if (data.data) {
+          setComments((prev) => [data.data!, ...prev]);
+        }
         setCommentText('');
         setIsAnonymous(false);
-        await fetchComments();
+        showToast(t('publicComplaint.commentPosted', { defaultValue: 'Comment posted' }), 'success');
       }
     } catch {
-      /* silent */
+      setCommentError(
+        t('publicComplaint.commentPostFailed', {
+          defaultValue: 'Could not post your comment. Please try again.',
+        })
+      );
     } finally {
       setSubmittingComment(false);
     }
@@ -373,7 +381,7 @@ export default function PublicComplaintDetailPage() {
     'IN_PROGRESS',
     'RESOLVED',
     'CLOSED',
-  ].includes(complaint.status);
+  ].includes(complaint.status) && !complaint.isOwnComplaint;
   const canConfirm =
     ['VALIDATED', 'ASSIGNED', 'IN_PROGRESS'].includes(complaint.status) &&
     !complaint.isOwnComplaint;
@@ -727,6 +735,7 @@ export default function PublicComplaintDetailPage() {
                       <input
                         type="checkbox"
                         checked={isAnonymous}
+                        disabled={!hydrated || authLoading || submittingComment}
                         onChange={(e) => setIsAnonymous(e.target.checked)}
                         className="rounded border-slate-300"
                       />
@@ -734,7 +743,7 @@ export default function PublicComplaintDetailPage() {
                     </label>
                     <button
                       onClick={handleComment}
-                      disabled={!commentText.trim() || submittingComment}
+                      disabled={!commentText.trim() || submittingComment || !hydrated || authLoading}
                       className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                     >
                       {submittingComment && (
@@ -743,6 +752,9 @@ export default function PublicComplaintDetailPage() {
                       {t('publicComplaint.postComment')}
                     </button>
                   </div>
+                  {commentError && (
+                    <p className="text-xs text-red-600 mt-2">{commentError}</p>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-4 bg-slate-50 rounded-xl mb-4">
@@ -930,7 +942,7 @@ export default function PublicComplaintDetailPage() {
                     e.preventDefault();
                     handleUpvote();
                   }}
-                  disabled={!canEngage}
+                  disabled={!canEngage || !hydrated || authLoading}
                   className="w-full flex items-center justify-center gap-2 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-600 font-medium rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Heart className="w-4 h-4" />
@@ -947,7 +959,7 @@ export default function PublicComplaintDetailPage() {
                       e.preventDefault();
                       handleConfirm();
                     }}
-                    disabled={!canConfirm}
+                    disabled={!canConfirm || !hydrated || authLoading}
                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-600 font-medium rounded-xl text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <ThumbsUp className="w-4 h-4" />

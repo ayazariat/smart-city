@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import MunicipalityOverview from '@/components/dashboard/MunicipalityOverview';
-import MunicipalityMiniMap from '@/components/dashboard/MunicipalityMiniMap';
+import dynamic from 'next/dynamic';
 
 import { useAuthStore } from '@/store/useAuthStore';
 import { agentService } from '@/services/agent.service';
@@ -36,11 +36,22 @@ import { technicianService } from '@/services/technician.service';
 import { adminService } from '@/services/admin.service';
 import { getCategoryLabel } from '@/lib/categories';
 import { categoryLabels } from '@/lib/complaints';
-import { getTrendAlerts, confirmComplaint } from '@/services/complaint.service';
+import {
+  getTrendAlerts,
+  confirmComplaint,
+  unconfirmComplaint,
+  upvoteComplaint,
+  removeUpvote,
+} from '@/services/complaint.service';
 import { satisfactionService } from '@/services/satisfaction.service';
 import TrendForecastChart from '@/components/dashboard/TrendForecastChart';
 import { useTranslation } from 'react-i18next';
 import { redirectToLogin } from '@/lib/auth-utils';
+
+const MunicipalityMiniMap = dynamic(
+  () => import('@/components/dashboard/MunicipalityMiniMap'),
+  { ssr: false }
+);
 
 interface DashboardStats {
   total?: number;
@@ -102,6 +113,8 @@ interface MunicipalityComplaint {
   media?: { url: string; type?: string }[];
   confirmationCount?: number;
   upvoteCount?: number;
+  confirmations?: Array<{ citizenId?: string | { _id?: string } }>;
+  upvotes?: Array<{ citizenId?: string | { _id?: string } }>;
 }
 
 // Separate component that uses useSearchParams
@@ -148,6 +161,30 @@ function DashboardContent() {
     return complaint.createdBy._id || complaint.createdBy.id;
   };
 
+  const getVoteUserId = (
+    item?: { citizenId?: string | { _id?: string } } | null
+  ) => {
+    const citizenId = item?.citizenId;
+    return typeof citizenId === 'object' ? citizenId?._id : citizenId;
+  };
+
+  const hasUserUpvoted = (complaint: MunicipalityComplaint) =>
+    Boolean(
+      currentUserId &&
+        complaint.upvotes?.some(
+          (vote) => getVoteUserId(vote)?.toString() === currentUserId
+        )
+    );
+
+  const hasUserConfirmed = (complaint: MunicipalityComplaint) =>
+    Boolean(
+      currentUserId &&
+        complaint.confirmations?.some(
+          (confirmation) =>
+            getVoteUserId(confirmation)?.toString() === currentUserId
+        )
+    );
+
   const currentUserId = (() => {
     if (!user) return undefined;
     const u = user as { id?: string; _id?: string };
@@ -168,6 +205,48 @@ function DashboardContent() {
       year: 'numeric',
     })}`;
   };
+
+  const getMunicipalityLabel = (complaint: MunicipalityComplaint) => {
+    if (typeof complaint.municipality === 'string' && complaint.municipality) {
+      return complaint.municipality;
+    }
+    if (
+      complaint.municipality &&
+      typeof complaint.municipality === 'object' &&
+      complaint.municipality.name
+    ) {
+      return complaint.municipality.name;
+    }
+    return complaint.municipalityName || complaint.location?.municipality || '';
+  };
+
+  const getMapSectionTitle = () => {
+    if (user?.role === 'CITIZEN') return t('municipalityOverview.yourMunicipality', { defaultValue: 'Your Municipality' });
+    if (user?.role === 'TECHNICIAN') return t('municipalityOverview.workArea', { defaultValue: 'Work Area' });
+    return t('municipalityOverview.municipalityActivity', { defaultValue: 'Municipality Activity' });
+  };
+
+  const getComplaintMapPoints = () =>
+    (municipalityComplaints || [])
+      .filter((c) => {
+        const loc = c.location as any;
+        const lat = loc?.coordinates?.[1] ?? loc?.latitude;
+        const lng = loc?.coordinates?.[0] ?? loc?.longitude;
+        return Number.isFinite(Number(lat)) && Number.isFinite(Number(lng)) && !(Number(lat) === 0 && Number(lng) === 0);
+      })
+      .map((c) => {
+        const loc = c.location as any;
+        return {
+          lat: loc.coordinates?.[1] ?? loc.latitude,
+          lng: loc.coordinates?.[0] ?? loc.longitude,
+          count: 1,
+          categories: [c.category],
+          status: c.status,
+          referenceId: (c as any).referenceId,
+          title: c.title,
+          createdAt: (c as any).createdAt,
+        };
+      });
 
   // Fetch stats for all roles
   const fetchStats = async () => {
@@ -328,7 +407,7 @@ function DashboardContent() {
           console.error('Agent complaints unexpected structure:', data);
           setMunicipalityComplaints([]);
         }
-      } else if (user.role === 'MANAGER' || user.role === 'DEPARTMENT_MANAGER' || user.role === 'TECHNICIAN') {
+      } else if (user.role === 'DEPARTMENT_MANAGER' || user.role === 'TECHNICIAN') {
         // Manager, Department Manager, and Technician fetch complaints via public endpoint
         const response = await fetch(
           `${apiUrl}/public/my-municipality-complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`,
@@ -363,7 +442,7 @@ function DashboardContent() {
       } else {
         // Citizen fetches public municipality complaints
         const response = await fetch(
-          `${apiUrl}/public/my-municipality-complaints?limit=20&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED`,
+          `${apiUrl}/public/my-municipality-complaints?limit=50&status=VALIDATED,ASSIGNED,IN_PROGRESS,RESOLVED,CLOSED`,
           {
             credentials: 'include',
             headers: {
@@ -425,35 +504,93 @@ function DashboardContent() {
 
     try {
       setIsConfirming(complaintId);
-      const data = await confirmComplaint(complaintId);
+      const hasConfirmed = target ? hasUserConfirmed(target) : false;
+      const data = hasConfirmed
+        ? await unconfirmComplaint(complaintId)
+        : await confirmComplaint(complaintId);
       if (data.success) {
+        const updateConfirmation = (c: MunicipalityComplaint) =>
+          c._id === complaintId
+            ? {
+                ...c,
+                confirmationCount:
+                  data.confirmationCount ??
+                  Math.max(
+                    0,
+                    (c.confirmationCount || 0) + (hasConfirmed ? -1 : 1)
+                  ),
+                confirmations: hasConfirmed
+                  ? c.confirmations?.filter(
+                      (confirmation) =>
+                        getVoteUserId(confirmation)?.toString() !==
+                        currentUserId
+                    )
+                  : [
+                      ...(c.confirmations || []),
+                      { citizenId: currentUserId || '' },
+                    ],
+              }
+            : c;
         setMunicipalityComplaints((prev) =>
-          prev.map((c) =>
-            c._id === complaintId
-              ? {
-                  ...c,
-                  confirmationCount:
-                    data.confirmationCount ?? (c.confirmationCount || 0) + 1,
-                }
-              : c
-          )
+          prev.map(updateConfirmation)
         );
-        setRecentResolutions((prev) =>
-          prev.map((c) =>
-            c._id === complaintId
-              ? {
-                  ...c,
-                  confirmationCount:
-                    data.confirmationCount ?? (c.confirmationCount || 0) + 1,
-                }
-              : c
-          )
-        );
+        setRecentResolutions((prev) => prev.map(updateConfirmation));
       }
     } catch (err) {
       console.error('Confirm failed:', err);
     } finally {
       setIsConfirming(null);
+    }
+  };
+
+  const handleUpvote = async (complaintId: string) => {
+    const { token } = useAuthStore.getState();
+    if (!token) {
+      redirectToLogin(router);
+      return;
+    }
+
+    const target = [...municipalityComplaints, ...recentResolutions].find(
+      (c) => c._id === complaintId
+    );
+    if (target && currentUserId && getOwnerId(target) === currentUserId) return;
+
+    const hadUpvoted = target ? hasUserUpvoted(target) : false;
+    const applyVote = (count?: number) => (c: MunicipalityComplaint) =>
+      c._id === complaintId
+        ? {
+            ...c,
+            upvoteCount:
+              count ??
+              Math.max(0, (c.upvoteCount || 0) + (hadUpvoted ? -1 : 1)),
+            upvotes: hadUpvoted
+              ? c.upvotes?.filter(
+                  (vote) => getVoteUserId(vote)?.toString() !== currentUserId
+                )
+              : [...(c.upvotes || []), { citizenId: currentUserId || '' }],
+          }
+        : c;
+
+    setMunicipalityComplaints((prev) => prev.map(applyVote()));
+    setRecentResolutions((prev) => prev.map(applyVote()));
+
+    try {
+      const data = hadUpvoted
+        ? await removeUpvote(complaintId)
+        : await upvoteComplaint(complaintId);
+      if (data.success) {
+        setMunicipalityComplaints((prev) =>
+          prev.map(applyVote(data.upvoteCount))
+        );
+        setRecentResolutions((prev) => prev.map(applyVote(data.upvoteCount)));
+      }
+    } catch {
+      setMunicipalityComplaints((prev) =>
+        prev.map(applyVote(target?.upvoteCount))
+      );
+      setRecentResolutions((prev) =>
+        prev.map(applyVote(target?.upvoteCount))
+      );
     }
   };
 
@@ -849,18 +986,6 @@ function DashboardContent() {
                       <ArrowRight className="w-4 h-4 text-orange-500" />
                     </Link>
                   )}
-                  {(stats.totalOverdue || stats.overdue || 0) > 0 && (
-                    <Link
-                      href="/tasks"
-                      className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 hover:bg-red-100 transition-colors shadow-sm"
-                    >
-                      <span className="text-sm font-medium text-red-700">
-                        {stats.totalOverdue || stats.overdue}{' '}
-                        {t('priorities.overdueTasks')}
-                      </span>
-                      <ArrowRight className="w-4 h-4 text-red-500" />
-                    </Link>
-                  )}
                   {(stats.assigned || 0) === 0 &&
                     (stats.inProgress || 0) === 0 && (
                       <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
@@ -1103,25 +1228,6 @@ function DashboardContent() {
                     {t('stats.rejectedCases') || 'Rejected complaints'}
                   </div>
                 </div>
-                <div
-                  className={`bg-gradient-to-br ${(stats.totalOverdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}
-                >
-                  <div
-                    className={`text-2xl font-bold ${(stats.totalOverdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}
-                  >
-                    {stats.totalOverdue || stats.overdue || 0}
-                  </div>
-                  <div
-                    className={`text-sm ${(stats.totalOverdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}
-                  >
-                    {t('stats.overdue')}
-                  </div>
-                  <div
-                    className={`text-xs ${(stats.totalOverdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}
-                  >
-                    {t('stats.pastDeadline')}
-                  </div>
-                </div>
               </div>
               {stats.resolutionRate !== undefined && (
                 <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
@@ -1319,25 +1425,6 @@ function DashboardContent() {
                   </div>
                   <div className="text-xs text-red-500 mt-1">
                     {t('stats.rejectedCases') || 'Rejected complaints'}
-                  </div>
-                </div>
-                <div
-                  className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}
-                >
-                  <div
-                    className={`text-2xl font-bold ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-700' : 'text-slate-700'} mb-1`}
-                  >
-                    {stats.totalOverdue || stats.overdue || 0}
-                  </div>
-                  <div
-                    className={`text-sm ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-600' : 'text-slate-600'} font-medium`}
-                  >
-                    {t('stats.overdue')}
-                  </div>
-                  <div
-                    className={`text-xs ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'text-red-500' : 'text-slate-500'} mt-1`}
-                  >
-                    {t('stats.urgent')}
                   </div>
                 </div>
               </div>
@@ -1669,7 +1756,7 @@ function DashboardContent() {
         )}
 
         {/* Municipality Overview — Full width (not for MUNICIPAL_AGENT as they have explicit map) */}
-        {user?.role !== 'MUNICIPAL_AGENT' && (
+        {user?.role === 'ADMIN' && (
           <div className="mt-6">
             <MunicipalityOverview
               role={user?.role || 'CITIZEN'}
@@ -1687,40 +1774,21 @@ function DashboardContent() {
         {/* Municipality Activity Map — For MUNICIPAL_AGENT, MANAGER, DEPARTMENT_MANAGER, TECHNICIAN, and CITIZEN roles */}
         {['MUNICIPAL_AGENT', 'MANAGER', 'DEPARTMENT_MANAGER', 'TECHNICIAN', 'CITIZEN'].includes(user?.role || '') &&
           municipalityComplaints &&
-          Array.isArray(municipalityComplaints) &&
-          municipalityComplaints.filter(
-            (c) => c.location?.coordinates?.length === 2
-          ).length > 0 && (
+          Array.isArray(municipalityComplaints) && (
             <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden mt-6">
               <div className="flex items-center justify-between p-5 pb-0">
                 <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                   <MapPin className="w-5 h-5 text-primary" />
-                  {t('municipalityOverview.municipalityActivity')}
+                  {getMapSectionTitle()}
                 </h3>
                 <span className="text-xs text-slate-500">
-                  {
-                    municipalityComplaints.filter(
-                      (c) => c.location?.coordinates?.length === 2
-                    ).length
-                  }{' '}
+                  {getComplaintMapPoints().length}{' '}
                   locations
                 </span>
               </div>
               <div className="p-5">
                 <MunicipalityMiniMap
-                  points={municipalityComplaints
-                    .filter((c) => c.location?.coordinates?.length === 2)
-                    .map((c) => ({
-                      // @ts-ignore - MunicipalityComplaint type doesn't have all these properties
-                      lat: c.location.coordinates[1],
-                      lng: c.location.coordinates[0],
-                      count: 1,
-                      categories: [c.category],
-                      status: c.status,
-                      referenceId: (c as any).referenceId,
-                      title: c.title,
-                      createdAt: (c as any).createdAt,
-                    }))}
+                  points={getComplaintMapPoints()}
                   municipality={user?.municipalityName || user?.municipality as any}
                 />
               </div>
@@ -1775,7 +1843,7 @@ function DashboardContent() {
                       key={complaint._id}
                       className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow group cursor-pointer"
                       onClick={() =>
-                        router.push(`/dashboard/complaints/${complaint._id}`)
+                        router.push(`/transparency/complaints/${complaint._id}`)
                       }
                     >
                       {/* Image */}
@@ -1848,45 +1916,48 @@ function DashboardContent() {
                           </span>
                         </p>
 
-                        {(complaint.status === 'VALIDATED' ||
-                          complaint.status === 'ASSIGNED' ||
-                          complaint.status === 'IN_PROGRESS') && (
+                        {['SUBMITTED', 'VALIDATED', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(
+                          complaint.status
+                        ) && (
                           <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                            {isOwnComplaint ? (
+                            {!isOwnComplaint && (
                               <>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    // Handle upvote for own complaint
-                                    const { token } = useAuthStore.getState();
-                                    if (!token) {
-                                      redirectToLogin(router);
-                                      return;
-                                    }
-                                    // TODO: Implement upvote functionality
+                                    handleUpvote(complaint._id);
                                   }}
-                                  className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs text-purple-700 font-medium transition-colors"
+                                  className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                                    hasUserUpvoted(complaint)
+                                      ? 'bg-purple-100 border-purple-300 text-purple-800'
+                                      : 'bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700'
+                                  }`}
                                   title="Upvote"
                                 >
                                   <ArrowUp className="w-3.5 h-3.5" />
                                   <span>{complaint.upvoteCount || 0}</span>
                                 </button>
+                                {!['RESOLVED', 'CLOSED'].includes(complaint.status) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleConfirm(complaint._id);
+                                    }}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                                      hasUserConfirmed(complaint)
+                                        ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                                        : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+                                    }`}
+                                    title={t('municipality.confirmTitle')}
+                                  >
+                                    <CheckCircle className="w-3.5 h-3.5" />
+                                    <span>{t('municipality.confirmBtn')}</span>
+                                    <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
+                                      {complaint.confirmationCount || 0}
+                                    </span>
+                                  </button>
+                                )}
                               </>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleConfirm(complaint._id);
-                                }}
-                                className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium transition-colors"
-                                title={t('municipality.confirmTitle')}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>{t('municipality.confirmBtn')}</span>
-                                <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-auto">
-                                  {complaint.confirmationCount || 0}
-                                </span>
-                              </button>
                             )}
                             <Link
                               href={`/transparency/complaints/${complaint._id}#comments`}
@@ -1979,14 +2050,16 @@ function DashboardContent() {
                           )
                         )
                       : null;
-                  const hasConfirmed = (complaint as any).confirmations?.some(
-                    (c) => c.citizenId === currentUserId
+                  const hasUpvoted = hasUserUpvoted(complaint);
+                  const isOwnResolution = Boolean(
+                    currentUserId && getOwnerId(complaint) === currentUserId
                   );
                   const isConfirmingThis = complaint._id === isConfirming;
+                  const municipalityLabel = getMunicipalityLabel(complaint);
                   return (
                     <Link
                       key={complaint._id}
-                      href={`/dashboard/complaints/${complaint._id}`}
+                      href={`/transparency/complaints/${complaint._id}`}
                       className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer"
                     >
                       <div className="relative h-40 bg-gradient-to-br from-green-50 to-slate-50">
@@ -2023,10 +2096,8 @@ function DashboardContent() {
                         </h4>
                         <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                           <MapPin className="w-3 h-3 text-green-500" />
-                          <span>
-                            {complaint.municipalityName ||
-                              complaint.location?.municipality ||
-                              'Unknown'}
+                          <span className={municipalityLabel ? '' : 'italic text-slate-400'}>
+                            {municipalityLabel || 'Municipality not specified'}
                           </span>
                           {daysToFix && (
                             <>
@@ -2040,24 +2111,28 @@ function DashboardContent() {
                         </div>
                         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleConfirm(complaint._id);
-                              }}
-                              disabled={isConfirmingThis}
-                              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                                hasConfirmed
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-600'
-                              } disabled:opacity-50`}
-                            >
-                              <CheckCircle className="w-3 h-3" />
-                              {isConfirmingThis
-                                ? '...'
-                                : complaint.confirmationCount || 0}
-                            </button>
+                            {!isOwnResolution && (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleUpvote(complaint._id);
+                                }}
+                                disabled={isConfirmingThis}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                                  hasUpvoted
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-purple-50 hover:text-purple-600'
+                                } disabled:opacity-50`}
+                              >
+                                <ArrowUp className="w-3 h-3" />
+                                {complaint.upvoteCount || 0}
+                              </button>
+                            )}
+                            <span className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-50 text-blue-700">
+                              <MessageSquare className="w-3 h-3" />
+                              Comments
+                            </span>
                           </div>
                           <span className="text-xs text-slate-400">
                             {formatResolvedDate(complaint.resolvedAt)}

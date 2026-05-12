@@ -27,7 +27,10 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
         # Build query - search for ANY status in the municipality (not filtered by status!)
         # Use regex for flexible municipality matching (case-insensitive, handle accents)
         query = {
-            "createdAt": {"$gte": cutoff}
+            "createdAt": {"$gte": cutoff},
+            "status": {"$nin": ["REJECTED", "ARCHIVED"]},
+            "isArchived": {"$ne": True},
+            "isDuplicate": {"$ne": True}
         }
         
         # Only add municipality filter if it's provided and not empty
@@ -50,6 +53,7 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
             query,
             {"_id": 1, "referenceId": 1, "title": 1, "description": 1,
              "category": 1, "municipalityName": 1, "latitude": 1, "longitude": 1,
+             "location": 1, "media": 1, "photos": 1,
              "status": 1, "createdAt": 1, "submittedAt": 1}
         ).sort("createdAt", -1).limit(limit)
 
@@ -81,6 +85,7 @@ class DuplicateCheckRequest(BaseModel):
     latitude: Optional[float] = Field(None, description="Latitude")
     longitude: Optional[float] = Field(None, description="Longitude")
     municipality: str = Field("", description="Municipality name")
+    imageUrls: List[Any] = Field(default_factory=list, description="Complaint image URLs")
     submittedAt: Optional[str] = Field(None, description="ISO datetime string")
 
 
@@ -108,12 +113,15 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
                 submitted_at = datetime.now(timezone.utc)
 
         new_complaint = {
+            "complaintId": request.complaintId or "",
             "title": request.title or "",
             "description": request.description or "",
             "category": request.category or "AUTRE",
             "latitude": request.latitude,
             "longitude": request.longitude,
             "municipality": request.municipality or "",
+            "media": request.imageUrls or [],
+            "photos": request.imageUrls or [],
             "submittedAt": submitted_at
         }
 
@@ -139,12 +147,15 @@ async def check_duplicate_endpoint(request: DuplicateCheckRequest) -> Dict[str, 
         print(f"[DUPLICATE] Checking {len(candidates)} real DB candidates")
         
         new_complaint_data = {
+            "complaintId": request.complaintId or "",
             "title": request.title,
             "description": request.description,
             "category": request.category,
             "latitude": request.latitude,
             "longitude": request.longitude,
             "municipality": request.municipality,
+            "media": request.imageUrls or [],
+            "photos": request.imageUrls or [],
             "submittedAt": submitted_at
         }
         

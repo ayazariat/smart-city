@@ -172,6 +172,7 @@ export interface Complaint {
   rejectionReason?: string;
   resolvedAt?: string;
   resolutionNotes?: string;
+  resolutionPhotos?: string[];
   resolutionRejectionReason?: string;
   assignedDepartment?: {
     id: string;
@@ -180,6 +181,7 @@ export interface Complaint {
   assignedTeam?: {
     _id: string;
     name: string;
+    department?: { _id?: string; name?: string } | string;
     members?: Array<{ _id: string; fullName: string }>;
   };
   // SLA deadline
@@ -234,6 +236,21 @@ export interface Complaint {
   } | null;
   duplicateStatus?: string | null;
   duplicateOf?: string | null;
+  duplicateOfReferenceId?: string | null;
+  rejectionReasonText?: string | null;
+  isDuplicate?: boolean;
+  mergedAt?: string | null;
+  mergedBy?: string | null;
+  mergedComplaints?: Array<{
+    complaintId: string;
+    _id?: string;
+    referenceId?: string;
+    title?: string;
+    submittedBy?: string;
+    municipality?: string;
+    mergedAt?: string;
+    similarityScore?: number | null;
+  }>;
   // Final human decision (for training)
   finalUrgencyHuman?: string | null;
   // Citizen satisfaction rating
@@ -284,6 +301,9 @@ export interface Notification {
   complaint?: { _id: string; title: string }; // Populated complaint reference
   complaintId?: string; // Direct complaint ID (may not be populated)
   relatedId?: string; // Generic related ID (for backward compatibility)
+  mergedComplaintId?: string;
+  messageKey?: string;
+  messageVariables?: Record<string, string>;
   isRead: boolean; // Alias for 'read' field (frontend uses isRead)
   read?: boolean; // Actual DB field (optional for compatibility)
   metadata?: Record<string, unknown>; // Additional context

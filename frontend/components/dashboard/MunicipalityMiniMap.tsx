@@ -168,7 +168,7 @@ export default function MunicipalityMiniMap({
   // totalFiltered kept in sync for consistency
   void filteredPoints.reduce((s, p) => s + p.count, 0);
 
-  const defaultCenter: [number, number] = [34.0, 9.0];
+  const defaultCenter: [number, number] = [33.8, 9.5];
   const center: [number, number] =
     filteredPoints.length > 0
       ? [
@@ -188,7 +188,7 @@ export default function MunicipalityMiniMap({
 
   if (!points || points.length === 0) {
     return (
-      <div className="h-[420px] bg-gradient-to-b from-slate-50 to-slate-100 rounded-2xl flex flex-col items-center justify-center border border-slate-200 gap-3">
+      <div className="h-[400px] bg-gradient-to-b from-slate-50 to-slate-100 rounded-2xl flex flex-col items-center justify-center border border-slate-200 gap-3">
         <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center">
           <MapPin className="w-6 h-6 text-slate-400" />
         </div>
@@ -263,7 +263,7 @@ export default function MunicipalityMiniMap({
       </div>
 
       {/* ── Tile layer switcher (overlay on map) ── */}
-      <div className="relative" style={{ height: 420 }}>
+      <div className="relative" style={{ height: 400 }}>
         {/* Tile switcher button */}
         <div className="absolute top-3 right-3 z-[400] flex gap-1 bg-white/95 rounded-xl shadow-lg border border-slate-200 p-1">
           {TILE_LAYERS.map((layer, i) => (

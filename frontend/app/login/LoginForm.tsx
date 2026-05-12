@@ -113,8 +113,6 @@ function LoginForm() {
         password: formData.password,
         captchaToken,
       });
-      const redirectTo = searchParams.get('redirect') || '/dashboard';
-      router.replace(redirectTo);
     } catch (err) {
       setLocalError(
         err instanceof Error ? err.message : t('login.loginFailed')

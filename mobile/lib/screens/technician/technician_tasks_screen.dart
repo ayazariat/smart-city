@@ -1,7 +1,10 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/providers/complaints_provider.dart';
 import 'package:smart_city_app/models/complaint_model.dart';
@@ -371,7 +374,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
 
   void _showResolveModal(Complaint task) {
     final notesController = TextEditingController();
-    List<File> selectedPhotos = [];
+    List<XFile> selectedPhotos = [];
     bool isSubmitting = false;
 
     showModalBottomSheet(
@@ -432,11 +435,19 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                 const SizedBox(height: 8),
                 GestureDetector(
                   onTap: () async {
-                    final images = await _picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
-                    if (images.isNotEmpty) {
-                      setModalState(() {
-                        selectedPhotos.addAll(images.map((x) => File(x.path)));
-                      });
+                    try {
+                      final images = await _picker.pickMultiImage(imageQuality: 80, maxWidth: 1200);
+                      if (images.isNotEmpty) {
+                        setModalState(() {
+                          selectedPhotos.addAll(images); // Keep as XFile — works on web + mobile
+                        });
+                      }
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Erreur sélection photo: $e')),
+                        );
+                      }
                     }
                   },
                   child: Container(
@@ -447,7 +458,6 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: selectedPhotos.isNotEmpty ? const Color(0xFF22C55E) : Colors.grey.shade300,
-                        style: BorderStyle.solid,
                       ),
                     ),
                     child: Column(
@@ -455,8 +465,11 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                         Icon(Icons.camera_alt, size: 32, color: selectedPhotos.isNotEmpty ? const Color(0xFF22C55E) : Colors.grey),
                         const SizedBox(height: 8),
                         Text(
-                          selectedPhotos.isNotEmpty ? '${selectedPhotos.length} photo(s) sélectionnée(s)' : 'Appuyez pour ajouter des photos',
+                          selectedPhotos.isNotEmpty
+                              ? '${selectedPhotos.length} photo(s) sélectionnée(s) — Appuyez pour en ajouter'
+                              : 'Appuyez pour ajouter des photos',
                           style: TextStyle(color: selectedPhotos.isNotEmpty ? const Color(0xFF22C55E) : Colors.grey),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
@@ -476,7 +489,17 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                             margin: const EdgeInsets.only(right: 8),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(8),
-                              image: DecorationImage(image: FileImage(selectedPhotos[i]), fit: BoxFit.cover),
+                              color: Colors.grey[200],
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: FutureBuilder<Uint8List>(
+                              future: selectedPhotos[i].readAsBytes(),
+                              builder: (_, snap) {
+                                if (snap.hasData) {
+                                  return Image.memory(snap.data!, fit: BoxFit.cover);
+                                }
+                                return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                              },
                             ),
                           ),
                           Positioned(
@@ -505,18 +528,57 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                         : () async {
                             setModalState(() => isSubmitting = true);
                             try {
-                              // Upload photos first
+                              // Upload photos using http.MultipartRequest — works on web + mobile
                               List<String> photoUrls = [];
                               if (selectedPhotos.isNotEmpty) {
                                 try {
-                                  final uploadResult = await ApiClient().uploadFiles(
-                                    '/upload',
-                                    selectedPhotos.map((f) => f.path).toList(),
-                                    fieldName: 'media',
+                                  final uploadUrl = '${ApiClient.baseUrl}/upload';
+                                  debugPrint('[Upload] Uploading to: $uploadUrl');
+                                  debugPrint('[Upload] Photos count: ${selectedPhotos.length}');
+                                  
+                                  final request = http.MultipartRequest(
+                                    'POST',
+                                    Uri.parse(uploadUrl),
                                   );
-                                  // Response: {success: true, data: [{type, url, ...}]}
-                                  if (uploadResult != null) {
-                                    final dataList = uploadResult['data'] as List?;
+                                  final token = ApiClient().token;
+                                  if (token != null) {
+                                    request.headers['Authorization'] = 'Bearer $token';
+                                    debugPrint('[Upload] Token present');
+                                  } else {
+                                    debugPrint('[Upload] WARNING: No token!');
+                                  }
+                                  for (final xfile in selectedPhotos) {
+                                    final bytes = await xfile.readAsBytes();
+                                    debugPrint('[Upload] Adding file: ${xfile.name}, size: ${bytes.length}');
+                                    // Determine content type from file extension
+                                    final extension = xfile.name.split('.').last.toLowerCase();
+                                    final contentType = {
+                                      'jpg': 'image/jpeg',
+                                      'jpeg': 'image/jpeg',
+                                      'jfif': 'image/jpeg',
+                                      'png': 'image/png',
+                                      'gif': 'image/gif',
+                                      'webp': 'image/webp',
+                                      'mp4': 'video/mp4',
+                                      'mov': 'video/quicktime',
+                                      'webm': 'video/webm',
+                                    }[extension] ?? 'image/jpeg';
+                                    request.files.add(http.MultipartFile.fromBytes(
+                                      'media',
+                                      bytes,
+                                      filename: xfile.name,
+                                      contentType: http.MediaType.parse(contentType),
+                                    ));
+                                  }
+                                  debugPrint('[Upload] Sending request...');
+                                  final streamedResponse = await request.send()
+                                      .timeout(const Duration(seconds: 30));
+                                  final responseBody = await streamedResponse.stream.bytesToString();
+                                  debugPrint('[Upload] Response status: ${streamedResponse.statusCode}');
+                                  debugPrint('[Upload] Response body: $responseBody');
+                                  if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201) {
+                                    final decoded = jsonDecode(responseBody) as Map<String, dynamic>?;
+                                    final dataList = decoded?['data'] as List?;
                                     if (dataList != null) {
                                       for (final item in dataList) {
                                         if (item is Map && item['url'] != null) {
@@ -524,18 +586,35 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
                                         }
                                       }
                                     }
+                                  } else {
+                                    throw Exception('Upload failed: ${streamedResponse.statusCode} - $responseBody');
                                   }
-                                } catch (_) {}
+                                } catch (uploadErr) {
+                                  setModalState(() => isSubmitting = false);
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Échec du téléchargement des photos: $uploadErr'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
                               }
                               await _complaintService.completeTask(task.id, {
                                 'resolutionNotes': notesController.text.trim(),
-                                if (photoUrls.isNotEmpty) 'proofPhotos': photoUrls.map((u) => {'url': u, 'type': 'photo'}).toList(),
+                                if (photoUrls.isNotEmpty)
+                                  'proofPhotos': photoUrls.map((u) => {'url': u, 'type': 'photo'}).toList(),
                               });
                               if (ctx.mounted) Navigator.pop(ctx);
                               await _loadTasks();
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Tâche résolue avec succès !'), backgroundColor: Color(0xFF22C55E)),
+                                  const SnackBar(
+                                    content: Text('Tâche résolue avec succès !'),
+                                    backgroundColor: Color(0xFF22C55E),
+                                  ),
                                 );
                               }
                             } catch (e) {
@@ -590,6 +669,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -599,7 +679,7 @@ class _TechnicianTasksScreenState extends ConsumerState<TechnicianTasksScreen> {
             ),
             child: Icon(icon, color: color, size: 18),
           ),
-          const Spacer(),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(

@@ -255,9 +255,25 @@ class UserController {
 
        // Send invitation email with magic link
       try {
-        await sendMagicLinkEmail(user.email, user._id.toString(), magicToken, fullName);
+        console.log(`[userController] About to send invitation email:`, {
+          recipientEmail: user.email,
+          userId: user._id.toString(),
+          token: magicToken ? `${magicToken.substring(0, 8)}...` : 'MISSING',
+          fullName,
+          role: userRole,
+        });
+        const { sendInvitationEmail } = require("../utils/mailer");
+        await sendInvitationEmail(user.email, user._id.toString(), magicToken, fullName, userRole);
+        console.log(`[userController] Invitation email sent successfully to ${user.email}`);
       } catch (emailError) {
-        console.error("Failed to send invitation email:", emailError);
+        console.error("[userController] Failed to send invitation email:", emailError.message);
+        console.error("[userController] Email error details:", {
+          name: emailError.name,
+          code: emailError.code,
+          command: emailError.command,
+          response: emailError.response,
+          responseCode: emailError.responseCode,
+        });
         // Don't fail the request if email fails
       }
 
@@ -534,6 +550,68 @@ class UserController {
     } catch (error) {
       console.error("Error updating user role:", error);
       res.status(500).json({ success: false, message: "Failed to update user role" });
+    }
+  }
+
+  // Resend activation email
+  async resendActivationEmail(req, res) {
+    try {
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "User ID is required" });
+      }
+
+      const user = await User.findById(userId);
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+
+      if (user.isVerified) {
+        return res.status(400).json({ success: false, message: "User is already verified" });
+      }
+
+      // Generate new magic token
+      const crypto = require("crypto");
+      const magicToken = crypto.randomBytes(32).toString('hex');
+      const magicTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
+
+      user.magicToken = magicToken;
+      user.magicTokenExpires = magicTokenExpires;
+      await user.save();
+
+      // Send invitation email
+      const { sendInvitationEmail } = require("../utils/mailer");
+      try {
+        console.log(`[userController] Resending activation email:`, {
+          recipientEmail: user.email,
+          userId: user._id.toString(),
+          token: magicToken ? `${magicToken.substring(0, 8)}...` : 'MISSING',
+          fullName: user.fullName,
+          role: user.role,
+        });
+        await sendInvitationEmail(user.email, user._id.toString(), magicToken, user.fullName, user.role);
+        console.log(`[userController] Activation email resent successfully to ${user.email}`);
+      } catch (emailError) {
+        console.error("[userController] Failed to resend activation email:", emailError.message);
+        console.error("[userController] Email error details:", {
+          name: emailError.name,
+          code: emailError.code,
+          command: emailError.command,
+          response: emailError.response,
+          responseCode: emailError.responseCode,
+        });
+        // Don't fail the request if email fails
+      }
+
+      res.json({
+        success: true,
+        message: "Activation email sent successfully",
+      });
+    } catch (error) {
+      console.error("Error resending activation email:", error);
+      res.status(500).json({ success: false, message: "Failed to resend activation email" });
     }
   }
 

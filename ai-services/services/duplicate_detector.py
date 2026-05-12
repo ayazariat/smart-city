@@ -7,7 +7,7 @@ falls back to TF-IDF cosine similarity.
 """
 
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Try importing sklearn, but don't fail if not available
 try:
@@ -84,6 +84,66 @@ class DuplicateDetector:
     
     def __init__(self):
         self.vectorizer = None
+        self.version = "duplicate-detector-2026-05-12-v2"
+
+    def _coerce_score(self, value: Any, default: float = 0.0) -> float:
+        """Return a numeric score even when upstream helpers return rich objects."""
+        if isinstance(value, dict):
+            for key in ("score", "similarity", "value", "overallScore"):
+                if key in value:
+                    value = value[key]
+                    break
+            else:
+                return default
+        try:
+            score = float(value)
+        except (TypeError, ValueError):
+            return default
+        return max(0.0, min(1.0, score))
+
+    def _weight(self, key: str, default: float) -> float:
+        """Read score weights defensively even if settings are edited to nested objects."""
+        value = DUPLICATE_WEIGHTS.get(key, default)
+        if isinstance(value, dict):
+            value = value.get("weight", value.get("value", default))
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _extract_coordinates(self, complaint: Dict[str, Any]) -> tuple[Optional[float], Optional[float]]:
+        """Support both flat lat/lng fields and Mongo GeoJSON location objects."""
+        lat = complaint.get("latitude")
+        lng = complaint.get("longitude")
+        location = complaint.get("location")
+        if (lat is None or lng is None) and isinstance(location, dict):
+            coordinates = location.get("coordinates")
+            if isinstance(coordinates, list) and len(coordinates) >= 2:
+                lng = coordinates[0]
+                lat = coordinates[1]
+            else:
+                lat = location.get("latitude", lat)
+                lng = location.get("longitude", lng)
+        try:
+            lat = float(lat) if lat is not None else None
+            lng = float(lng) if lng is not None else None
+        except (TypeError, ValueError):
+            return None, None
+        return lat, lng
+
+    def _normalize_photo_refs(self, photos: List[Any]) -> List[str]:
+        """Accept URL strings or Mongo media objects and return comparable URL strings."""
+        refs: List[str] = []
+        for item in photos or []:
+            if isinstance(item, str):
+                ref = item
+            elif isinstance(item, dict):
+                ref = item.get("url") or item.get("secure_url") or item.get("path") or ""
+            else:
+                ref = ""
+            if ref:
+                refs.append(str(ref).strip().lower())
+        return refs
     
     def _calculate_text_similarity(self, new_text: str, 
                                      candidates: List[Dict]) -> List[float]:
@@ -146,6 +206,9 @@ class DuplicateDetector:
     def _calculate_category_score(self, new_category: str, 
                                    candidate_category: str) -> float:
         """Calculate category match score."""
+        new_category = (new_category or "").lower()
+        candidate_category = (candidate_category or "").lower()
+
         if new_category == candidate_category:
             return 1.0
         
@@ -162,12 +225,24 @@ class DuplicateDetector:
         if new_date is None or candidate_date is None:
             return 0.0
         
-        time_diff = abs((new_date - candidate_date).total_seconds())
-        
-        if time_diff < TEMPORAL_PROXIMITY * 3600:  # Within configured hours
-            return 1.0 - (time_diff / (TEMPORAL_PROXIMITY * 3600))
-        else:
+        diff_days = abs((new_date - candidate_date).total_seconds()) / 86400
+
+        if isinstance(TEMPORAL_PROXIMITY, dict):
+            if diff_days <= TEMPORAL_PROXIMITY.get("sameDay", 0):
+                return 1.0
+            if diff_days <= TEMPORAL_PROXIMITY.get("veryClose", 3):
+                return 0.8
+            if diff_days <= TEMPORAL_PROXIMITY.get("close", 7):
+                return 0.5
+            if diff_days <= TEMPORAL_PROXIMITY.get("near", 14):
+                return 0.2
             return 0.0
+
+        proximity_hours = float(TEMPORAL_PROXIMITY)
+        time_diff = diff_days * 24
+        if time_diff < proximity_hours:
+            return 1.0 - (time_diff / proximity_hours)
+        return 0.0
     
     def _calculate_photo_score(self, new_photos: List[str], 
                                 candidate_photos: List[str]) -> float:
@@ -176,6 +251,9 @@ class DuplicateDetector:
         Compares presence of photos and photo URLs for potential duplicates.
         """
         # If neither has photos, neutral score
+        new_photos = self._normalize_photo_refs(new_photos)
+        candidate_photos = self._normalize_photo_refs(candidate_photos)
+
         if not new_photos and not candidate_photos:
             return 0.5
         
@@ -199,11 +277,11 @@ class DuplicateDetector:
                                 category_score: float, temporal_score: float, photo_score: float = 0.5) -> float:
         """Calculate weighted final score."""
         return (
-            text_score * DUPLICATE_WEIGHTS["textSimilarity"] +
-            geo_score * DUPLICATE_WEIGHTS["geographicProximity"] +
-            category_score * DUPLICATE_WEIGHTS["categoryMatch"] +
-            temporal_score * DUPLICATE_WEIGHTS["temporalProximity"] +
-            photo_score * DUPLICATE_WEIGHTS.get("photoMatch", 0.1)  # Default 10% weight for photos
+            self._coerce_score(text_score) * self._weight("textSimilarity", 0.70) +
+            self._coerce_score(geo_score) * self._weight("geographicProximity", 0.15) +
+            self._coerce_score(category_score) * self._weight("categoryMatch", 0.10) +
+            self._coerce_score(temporal_score) * self._weight("temporalProximity", 0.05) +
+            self._coerce_score(photo_score, default=0.5) * self._weight("photoMatch", 0.0)
         )
     
     def _determine_duplicate_level(self, score: float) -> str:
@@ -233,6 +311,8 @@ class DuplicateDetector:
                 "recommendation": "No candidate complaints to compare against.",
                 "humanReviewRequired": False
             }
+
+        print(f"[DUPLICATE] Detector version: {self.version}")
         
         new_text = combine_fields(
             new_complaint.get("title", ""),
@@ -240,8 +320,7 @@ class DuplicateDetector:
         )
         new_text = clean_text(new_text)
         
-        new_lat = new_complaint.get("latitude")
-        new_lng = new_complaint.get("longitude")
+        new_lat, new_lng = self._extract_coordinates(new_complaint)
         new_category = new_complaint.get("category", "")
         new_date = new_complaint.get("submittedAt")
         new_photos = new_complaint.get("media", []) or new_complaint.get("photos", []) or []
@@ -262,8 +341,11 @@ class DuplicateDetector:
         matches = []
         
         for i, candidate in enumerate(candidates):
+            if str(candidate.get("_id", "")) and str(candidate.get("_id", "")) == str(new_complaint.get("complaintId", "")):
+                continue
+
             # Text score
-            text_score = text_scores[i] if i < len(text_scores) else 0
+            text_score = self._coerce_score(text_scores[i] if i < len(text_scores) else 0)
             
             # Check for exact title match bonus
             title_bonus = 0.0
@@ -271,15 +353,16 @@ class DuplicateDetector:
                 title_bonus = 0.20
             
             # Geographic score
-            geo_score = calculate_geo_score(
+            cand_lat, cand_lng = self._extract_coordinates(candidate)
+            geo_score = self._coerce_score(calculate_geo_score(
                 new_lat, new_lng,
-                candidate.get("latitude"), candidate.get("longitude")
-            )
+                cand_lat, cand_lng
+            ), default=0.3)
             
             # Category score
-            category_score = self._calculate_category_score(
+            category_score = self._coerce_score(self._calculate_category_score(
                 new_category, candidate.get("category", "")
-            )
+            ))
             
             # Temporal score
             cand_date = candidate.get("submittedAt")
@@ -293,15 +376,15 @@ class DuplicateDetector:
             elif cand_date.tzinfo is None:
                 cand_date = cand_date.replace(tzinfo=timezone.utc)
             
-            temporal_score = self._calculate_temporal_score(new_date, cand_date)
+            temporal_score = self._coerce_score(self._calculate_temporal_score(new_date, cand_date))
             
             # Photo score
             candidate_photos = candidate.get("media", []) or candidate.get("photos", []) or []
-            photo_score = self._calculate_photo_score(new_photos, candidate_photos)
+            photo_score = self._coerce_score(self._calculate_photo_score(new_photos, candidate_photos), default=0.5)
             
             # Calculate final score
             final_score = self._calculate_final_score(
-                text_score + title_bonus, geo_score, category_score, temporal_score, photo_score
+                self._coerce_score(text_score + title_bonus), geo_score, category_score, temporal_score, photo_score
             )
             
             matches.append({
@@ -325,8 +408,8 @@ class DuplicateDetector:
         # Sort by score descending
         matches.sort(key=lambda x: x["overallScore"], reverse=True)
         
-        # Take top 10 to give agents more options to review
-        top_matches = matches[:10]
+        # Return only strong, reviewable matches.
+        top_matches = [m for m in matches if m["overallScore"] >= DUPLICATE_THRESHOLD][:3]
         
         # Determine duplicate level
         if top_matches and top_matches[0]["overallScore"] > 0:

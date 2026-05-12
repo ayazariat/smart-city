@@ -193,17 +193,27 @@ class ComplaintService {
     final response = await _apiClient.post('/ai/predict-category', {
       'description': description,
     });
-    return response['data'] ?? {};
-  }
-
-  Future<Map<String, dynamic>> checkDuplicates(Map<String, dynamic> data) async {
-    final response = await _apiClient.post('/ai/check-duplicates', data);
-    return response['data'] ?? {};
+    // Handle {data: {...}} or direct response
+    if (response is Map) {
+      final data = response['data'];
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      if (response is Map<String, dynamic>) return response;
+      return Map<String, dynamic>.from(response);
+    }
+    return {};
   }
 
   Future<Map<String, dynamic>> predictUrgency(Map<String, dynamic> data) async {
     final response = await _apiClient.post('/ai/predict-urgency', data);
-    return response['data'] ?? {};
+    if (response is Map) {
+      final d = response['data'];
+      if (d is Map<String, dynamic>) return d;
+      if (d is Map) return Map<String, dynamic>.from(d);
+      if (response is Map<String, dynamic>) return response;
+      return Map<String, dynamic>.from(response);
+    }
+    return {};
   }
 
   // ─── Agent ───
@@ -530,7 +540,10 @@ class ComplaintService {
     if (latitude != null) body['latitude'] = latitude;
     if (longitude != null) body['longitude'] = longitude;
     final response = await _apiClient.post('/ai/duplicate/check', body);
-    return response;
+    // Return the full response — caller handles data extraction
+    if (response is Map<String, dynamic>) return response;
+    if (response is Map) return Map<String, dynamic>.from(response);
+    return {};
   }
 
   Future<Map<String, dynamic>> confirmDuplicateDecision({

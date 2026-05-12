@@ -214,6 +214,15 @@ class ComplaintController {
         .populate("municipality", "name governorate")
         .populate("statusHistory.updatedBy", "fullName")
         .populate("comments.author", "fullName")
+        .populate("duplicateOf", "referenceId title")
+        .populate({
+          path: "mergedComplaints.complaintId",
+          select: "referenceId title createdBy municipality municipalityName location",
+          populate: [
+            { path: "createdBy", select: "fullName" },
+            { path: "municipality", select: "name" },
+          ],
+        })
         .lean();
 
       if (!complaint) {
@@ -382,6 +391,33 @@ class ComplaintController {
               type: "NOTE",
             }));
 
+      const canSeeMergedSubmitterName = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(userRole);
+      const duplicateOfId = complaint.duplicateOf?._id?.toString() || complaint.duplicateOf?.toString?.() || null;
+      const duplicateOfReferenceId =
+        complaint.duplicateOf?.referenceId || duplicateOfId;
+      const mergedComplaints = (complaint.mergedComplaints || [])
+        .filter((merged) => merged.complaintId)
+        .map((merged) => {
+          const mergedComplaint = merged.complaintId;
+          const mergedId = mergedComplaint?._id?.toString() || mergedComplaint?.toString?.() || "";
+          return {
+            complaintId: mergedId,
+            _id: mergedId,
+            referenceId: mergedComplaint.referenceId || mergedId,
+            title: mergedComplaint.title || "",
+            submittedBy: canSeeMergedSubmitterName
+              ? mergedComplaint.createdBy?.fullName || "Citizen"
+              : "Submitted by a citizen",
+            municipality:
+              mergedComplaint.municipalityName ||
+              mergedComplaint.municipality?.name ||
+              mergedComplaint.location?.municipality ||
+              "",
+            mergedAt: merged.mergedAt,
+            similarityScore: merged.similarityScore,
+          };
+        });
+
       const response = {
         _id: complaint._id,
         complaintId: complaint._id.toString(),
@@ -396,6 +432,7 @@ class ComplaintController {
         location: complaint.location,
         createdBy: citizenInfo,
         departmentId: complaint.assignedDepartment || null,
+        assignedDepartment: complaint.assignedDepartment || null,
         repairTeamId: complaint.assignedTeam || null,
         assignedTechnicians:
           complaint.assignedTeam && complaint.assignedTeam.members
@@ -420,6 +457,14 @@ class ComplaintController {
         publicComments,
         internalNotes, // empty array for CITIZEN
         rejectionReason: complaint.rejectionReason || null,
+        rejectionReasonText: complaint.rejectionReasonText || null,
+        isDuplicate: Boolean(complaint.isDuplicate),
+        duplicateStatus: complaint.duplicateStatus || null,
+        duplicateOf: duplicateOfId,
+        duplicateOfReferenceId,
+        mergedAt: complaint.mergedAt || null,
+        mergedBy: complaint.mergedBy || null,
+        mergedComplaints,
         resolutionNote: complaint.resolutionNotes || null,
         resolvedAt: complaint.resolvedAt || null,
         closedAt: complaint.closedAt || null,
@@ -506,7 +551,7 @@ class ComplaintController {
       await this.applyComplaintScope(query, req);
 
       const complaints = await Complaint.find(query)
-        .select("_id title category status urgency priorityScore resolvedAt municipality municipalityName assignedDepartment location media afterPhotos proofPhotos")
+        .select("_id title category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName assignedDepartment location media afterPhotos proofPhotos confirmations upvotes confirmationCount upvoteCount")
         .populate("municipality", "name governorate")
         .sort({ resolvedAt: -1 })
         .limit(5)
@@ -521,11 +566,17 @@ class ComplaintController {
           status: complaint.status,
           priority: complaint.urgency || complaint.priorityScore || null,
           resolvedAt: complaint.resolvedAt,
+          municipalityName: complaint.municipalityName || complaint.location?.municipality || null,
           municipality: complaint.municipality || complaint.municipalityName || complaint.location?.municipality || null,
+          createdBy: complaint.createdBy,
           assignedDepartment: complaint.assignedDepartment || null,
           media: complaint.media || null,
           afterPhotos: complaint.afterPhotos || null,
           proofPhotos: complaint.proofPhotos || null,
+          confirmations: complaint.confirmations || [],
+          upvotes: complaint.upvotes || [],
+          confirmationCount: complaint.confirmationCount ?? complaint.confirmations?.length ?? 0,
+          upvoteCount: complaint.upvoteCount ?? complaint.upvotes?.length ?? 0,
           createdAt: complaint.createdAt,
           updatedAt: complaint.updatedAt,
         })),

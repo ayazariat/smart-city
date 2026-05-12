@@ -886,12 +886,27 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
           const SizedBox(height: 4),
           if (comment['createdAt'] != null)
             Text(
-              '${DateTime.parse(comment['createdAt'].toString()).day}/${DateTime.parse(comment['createdAt'].toString()).month}/${DateTime.parse(comment['createdAt'].toString()).year}',
+              _formatCommentDate(comment['createdAt'].toString()),
               style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
             ),
         ],
       ),
     );
+  }
+
+  String _formatCommentDate(String? dateStr) {
+    if (dateStr == null) return '';
+    try {
+      final dt = DateTime.parse(dateStr);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 1) return 'À l\'instant';
+      if (diff.inMinutes < 60) return 'Il y a ${diff.inMinutes} min';
+      if (diff.inHours < 24) return 'Il y a ${diff.inHours} h';
+      return '${dt.day}/${dt.month}/${dt.year}';
+    } catch (_) {
+      return '';
+    }
   }
 
   Color _getStatusColor(String status) {

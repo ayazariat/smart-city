@@ -18,7 +18,8 @@ import {
   X,
   Save,
   Phone,
-  Star
+  Star,
+  Copy
 } from "lucide-react";
 import { Complaint, ComplaintCategory, ComplaintUrgency } from "@/types";
 import { complaintService } from "@/services/complaint.service";
@@ -398,6 +399,11 @@ export default function MyComplaintDetailPage() {
                  <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
                  {t(status.labelKey, { defaultValue: complaint.status })}
                </span>
+              {complaint.isDuplicate && complaint.duplicateOf && complaint.rejectionReason === "duplicate" && (
+                <p className="text-xs text-slate-500 text-center">
+                  {t("complaint.status.rejectedDuplicate", { rc: complaint.duplicateOfReferenceId || getComplaintIdDisplay(complaint.duplicateOf) })}
+                </p>
+              )}
               {complaint.status === "SUBMITTED" && !isEditing && (
                 <div className="flex items-center gap-2">
                   <button
@@ -441,6 +447,35 @@ export default function MyComplaintDetailPage() {
           </div>
         </div>
       </header>
+
+      {complaint.isDuplicate && complaint.duplicateOf && complaint.status === "REJECTED" && complaint.rejectionReason === "duplicate" && (
+        <div className="max-w-6xl mx-auto px-4 pt-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <Copy className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h2 className="font-semibold text-blue-900 mb-1">
+                  {t("complaint.duplicateRejectionBanner.title")}
+                </h2>
+                <p className="text-sm text-blue-800 mb-3">
+                  {t("complaint.duplicateRejectionBanner.body")}
+                </p>
+                <button
+                  onClick={() => router.push(`/dashboard/complaints/${complaint.duplicateOf}`)}
+                  className="inline-flex items-center text-blue-700 hover:text-blue-900 font-medium text-sm"
+                >
+                  {t("complaint.duplicateRejectionBanner.viewOriginal", { rc: complaint.duplicateOfReferenceId || getComplaintIdDisplay(complaint.duplicateOf) })}
+                </button>
+                {complaint.mergedAt && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    {t("complaint.duplicateRejectionBanner.mergedOn", { date: new Date(complaint.mergedAt).toLocaleDateString(locale) })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-6xl mx-auto px-4 py-6" role="main">
         <div className="grid lg:grid-cols-3 gap-6">
@@ -884,7 +919,7 @@ export default function MyComplaintDetailPage() {
                        {complaint.rating.score}/5 {t("complaintDetail.yourRating", "Your Rating")}
                      </p>
                      {complaint.rating.comment && (
-                       <p className="text-xs text-purple-600 mt-2 italic">"{complaint.rating.comment}"</p>
+                       <p className="text-xs text-purple-600 mt-2 italic">&quot;{complaint.rating.comment}&quot;</p>
                      )}
                      <p className="text-[10px] text-purple-500 mt-2">
                        {new Date(complaint.rating.createdAt).toLocaleDateString()}

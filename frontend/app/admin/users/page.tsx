@@ -18,6 +18,7 @@ import {
   X,
   MapPin,
   ArrowLeft,
+  Mail,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
@@ -444,6 +445,33 @@ export default function AdminUsersPage() {
     }
   };
 
+  // Handle resend activation email
+  const handleResendActivationEmail = async (user: AdminUser) => {
+    try {
+      const response = await fetch('/api/admin/users/resend-activation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showToast(`Activation email sent to ${user.email}`, 'success');
+      } else {
+        showToast(data.message || 'Failed to send activation email', 'error');
+      }
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : 'Failed to send activation email',
+        'error'
+      );
+    }
+  };
+
   // Open edit modal
   const openEditModal = (userItem: AdminUser) => {
     setSelectedUser(userItem);
@@ -666,17 +694,27 @@ export default function AdminUsersPage() {
                         {userItem.phone || '-'}
                       </td>
                       <td className="px-4 py-4">
-                        {userItem.isActive ? (
-                          <span className="inline-flex items-center gap-1 text-success">
-                            <CheckCircle className="w-4 h-4" />
-                            {t('admin.active')}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-slate-500">
-                            <XCircle className="w-4 h-4" />
-                            {t('admin.inactive')}
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          <div>
+                            {userItem.isActive ? (
+                              <span className="inline-flex items-center gap-1 text-success">
+                                <CheckCircle className="w-4 h-4" />
+                                {t('admin.active')}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-slate-500">
+                                <XCircle className="w-4 h-4" />
+                                {t('admin.inactive')}
+                              </span>
+                            )}
+                          </div>
+                          {!userItem.isVerified && (
+                            <span className="inline-flex items-center gap-1 text-amber-600 text-xs">
+                              <Mail className="w-3 h-3" />
+                              Pending verification
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex justify-end gap-2">
@@ -687,6 +725,15 @@ export default function AdminUsersPage() {
                           >
                             <Edit className="w-4 h-4" />
                           </button>
+                          {!userItem.isVerified && (
+                            <button
+                              onClick={() => handleResendActivationEmail(userItem)}
+                              className="p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Resend activation email"
+                            >
+                              <Mail className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() =>
                               handleToggleActive(

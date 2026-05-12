@@ -78,6 +78,9 @@
     "TECHNICIAN": "فني",
     "ADMIN": "مدير النظام"
   },
+  "agent": {
+    "mergeSuccess": "تم دمج الشكوى بنجاح. تم تمييزها على أنها مكررة ومرفوضة."
+  },
   "admin": {
     "settings": {
       "title": "إعدادات النظام",
@@ -464,7 +467,34 @@
       "upvote": "تصويت",
       "upvoted": "تم التصويت",
       "upvoteFailed": "فشل التصويت. قد تكون قد أكدت هذه الشكوى بالفعل.",
-      "confirm": "تأكيد"
+      "confirm": "تأكيد",
+      "confirmed": "تم التأكيد",
+      "confirmFailed": "تعذّر إتمام هذا الإجراء. يرجى المحاولة مجدداً.",
+      "ownSimilar": "لقد قدّمت بالفعل شكوى مشابهة.",
+      "viewMyComplaint": "عرض شكواي",
+      "viewExisting": "عرض الشكوى الموجودة"
+    },
+    "duplicateRejectionBanner": {
+      "title": "هذه الشكوى مكررة",
+      "body": "توجد شكوى مشابهة بالفعل ويجري معالجتها. تم دمج تقريرك ونقل أصواتك إلى الشكوى الأصلية.",
+      "viewOriginal": "عرض الشكوى الأصلية {{rc}} ←",
+      "mergedOn": "تم الدمج في {{date}}"
+    },
+    "mergedReports": {
+      "title": "التقارير المدمجة",
+      "subtitle": "تم تحديد هذه الشكاوى على أنها مكررة لهذا التقرير ودُمجت فيه.",
+      "confirmedVia": "تأكيد عبر الدمج"
+    },
+    "communitySupport": {
+      "mergeNote": "منها {{count}} عبر تقارير مدمجة"
+    },
+    "mergedRejectionTitle": "تم دمج الشكوى — مرفوضة كمكررة",
+    "mergedRejectionBody": "تم تحديد هذا التقرير على أنه مشابه لشكوى موجودة. تم رفضه وأرشفته. تم إخطار المواطن.",
+    "duplicateOf": "مكرر من {{rc}}",
+    "reasonDuplicateOf": "السبب: مكرر من {{rc}}",
+    "reasonDuplicate": "السبب: مكرر",
+    "status": {
+      "rejectedDuplicate": "مكرر من {{rc}}"
     }
   },
   "transparency": {
@@ -847,13 +877,20 @@
     "aiUrgencyPrediction": "توقع الأولوية بالذكاء الاصطناعي",
     "duplicateCheck": "فحص التكرار",
     "checkingDuplicates": "البحث عن شكاوى مشابهة...",
+    "checkSimilarComplaints": "Check for Similar Complaints",
+    "potentialDuplicatesFound": "Potential duplicates found!",
+    "duplicatesWarning": "These complaints appear similar. You can merge them or keep them separate.",
+    "mainComplaint": "Main complaint (target)",
+    "selectToMerge": "Select complaints to merge:",
+    "keepSeparate": "Keep Separate",
+    "noSimilarFound": "No similar complaints found.",
     "similarComplaintsFound": "تم العثور على شكاوى مشابهة — راجع قبل التحقق",
     "differentIssuesContinue": "هذه مشاكل مختلفة — متابعة التحقق",
     "view": "عرض",
     "merge": "دمج",
     "merging": "جاري الدمج...",
     "mergeConfirm": "تحديد هذه الشكوى كمكرر من [{{rc}}]؟ سيتم إغلاق الشكوى وسيتم إخطار المواطن.",
-    "mergedSuccess": "تم دمج الشكوى كمكرر بنجاح.",
+    "mergedSuccess": "تم دمج الشكوى بنجاح. تم تمييزها على أنها مكررة ومرفوضة.",
     "mergeFailed": "فشل في دمج الشكوى.",
     "beforeWorkPhotos": "صور قبل العمل",
     "afterWorkPhotos": "صور بعد العمل",
@@ -979,6 +1016,8 @@
     "commentPlaceholder": "شارك تجربتك أو ملاحظتك...",
     "postAnonymously": "نشر بشكل مجهول",
     "postComment": "نشر التعليق",
+    "commentPosted": "تم نشر التعليق",
+    "commentPostFailed": "تعذر نشر تعليقك. يرجى المحاولة مرة أخرى.",
     "signIn": "تسجيل الدخول",
     "toAddComment": "لإضافة تعليق",
     "noComments": "لا توجد تعليقات بعد. كن أول من يشارك رأيه.",
@@ -1060,5 +1099,8 @@
       "assignedToYou": "مسندة إليك",
       "assignedToYou.desc": "تم إسناء شكوى إليك."
     }
+  },
+  "notifications": {
+    "mergedAsDuplicate": "تم تحديد شكواك {{mergedRc}} على أنها مشابهة للشكوى {{originalRc}}: '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية."
   }
 }

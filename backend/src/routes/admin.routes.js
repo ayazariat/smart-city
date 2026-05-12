@@ -17,6 +17,7 @@ router.get("/users/stats", userController.getStats);
 // Additional routes for frontend compatibility
 router.put("/users/:id/role", userController.updateUserRole);
 router.put("/users/:id/active", userController.toggleUserActive);
+router.post("/users/resend-activation", userController.resendActivationEmail);
 
 // User ID routes - must come AFTER specific routes
 router.get("/users/:id", userController.getUserById);

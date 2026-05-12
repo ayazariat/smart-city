@@ -32,8 +32,14 @@ const createNotification = async (data) => {
     title = 'Notification',
     complaintId,
     relatedId,
+    messageKey,
+    messageVariables = {},
+    mergedComplaintId,
+    createdAt,
     metadata = {},
     read = false,
+    session,
+    io,
   } = data;
 
   if (!userId || !type || !message) {
@@ -44,16 +50,41 @@ const createNotification = async (data) => {
   const mongoose = require('mongoose');
 
   try {
-    const notification = await Notification.create({
+    const docs = await Notification.create([{
       userId: new mongoose.Types.ObjectId(normalizeUserId(userId)),
       type,
       message,
       title,
       complaintId: complaintId ? new mongoose.Types.ObjectId(complaintId) : undefined,
       relatedId: relatedId ? new mongoose.Types.ObjectId(relatedId) : undefined,
+      messageKey,
+      messageVariables,
+      mergedComplaintId: mergedComplaintId ? new mongoose.Types.ObjectId(mergedComplaintId) : undefined,
       metadata,
       read,
-    });
+      ...(createdAt ? { createdAt } : {}),
+    }], session ? { session } : {});
+
+    const notification = docs[0];
+    if (io) {
+      const normalizedUserId = normalizeUserId(userId);
+      const realtimePayload = {
+        _id: notification._id,
+        userId: normalizedUserId,
+        type,
+        title,
+        message,
+        complaintId,
+        relatedId: relatedId || complaintId,
+        mergedComplaintId,
+        metadata,
+        isRead: false,
+        read: false,
+        createdAt: notification.createdAt,
+      };
+      io.to(`user:${normalizedUserId}`).emit('notification:new', realtimePayload);
+      io.to(`user:${normalizedUserId}`).emit('notification', realtimePayload);
+    }
 
     return notification;
   } catch (err) {
@@ -66,7 +97,17 @@ const createNotification = async (data) => {
  * Send real-time notification via Socket.IO and persist to database
  */
 const sendNotification = async (io, recipientId, data) => {
-  const { type, title, message, complaintId, relatedId, metadata = {} } = data;
+  const {
+    type,
+    title,
+    message,
+    complaintId,
+    relatedId,
+    metadata = {},
+    messageKey,
+    messageVariables = {},
+    mergedComplaintId,
+  } = data;
 
   const Notification = require('../models/Notification');
   const mongoose = require('mongoose');
@@ -86,6 +127,9 @@ const sendNotification = async (io, recipientId, data) => {
       message: safeMessage,
       complaintId: targetComplaintId ? new mongoose.Types.ObjectId(targetComplaintId) : undefined,
       relatedId: targetComplaintId ? new mongoose.Types.ObjectId(targetComplaintId) : undefined,
+      messageKey,
+      messageVariables,
+      mergedComplaintId: mergedComplaintId ? new mongoose.Types.ObjectId(mergedComplaintId) : undefined,
       metadata,
       read: false,
     });

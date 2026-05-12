@@ -110,7 +110,8 @@
     "potentialDuplicatesFound": "Doublons potentiels trouvés !",
     "duplicatesExplanation": "Ces réclamations semblent similaires. Vous pouvez les fusionner ou les garder séparées.",
     "mainComplaint": "Réclamation principale (cible)",
-    "selectToMerge": "Sélectionnez les réclamations à fusionner :"
+    "selectToMerge": "Sélectionnez les réclamations à fusionner :",
+    "mergeSuccess": "Réclamation fusionnée avec succès. Elle a été marquée comme doublon et rejetée."
   },
   "admin": {
     "settings": {
@@ -579,7 +580,34 @@
       "upvote": "Voter",
       "upvoted": "Voté",
       "upvoteFailed": "Échec du vote. Vous avez peut-être déjà confirmé cette réclamation.",
-      "confirm": "Confirmer"
+      "confirm": "Confirmer",
+      "confirmed": "Confirmé",
+      "confirmFailed": "Impossible de confirmer cette action. Veuillez réessayer.",
+      "ownSimilar": "Vous avez déjà soumis une réclamation similaire.",
+      "viewMyComplaint": "Voir ma réclamation",
+      "viewExisting": "Voir la réclamation existante"
+    },
+    "duplicateRejectionBanner": {
+      "title": "Cette réclamation est un doublon",
+      "body": "Une réclamation similaire existe déjà et est en cours de traitement. Votre signalement a été fusionné et vos votes ont été transférés à la réclamation originale.",
+      "viewOriginal": "Voir la réclamation originale {{rc}} →",
+      "mergedOn": "Fusionné le {{date}}"
+    },
+    "mergedReports": {
+      "title": "Signalements fusionnés",
+      "subtitle": "Ces réclamations ont été identifiées comme des doublons de ce signalement et ont été fusionnées.",
+      "confirmedVia": "Confirmation via fusion"
+    },
+    "communitySupport": {
+      "mergeNote": "dont {{count}} par signalements fusionnés"
+    },
+    "mergedRejectionTitle": "Réclamation fusionnée — doublon rejeté",
+    "mergedRejectionBody": "Ce signalement a été identifié comme similaire à une réclamation existante. Il a été rejeté et archivé. Le citoyen a été notifié.",
+    "duplicateOf": "Doublon de {{rc}}",
+    "reasonDuplicateOf": "Motif : Doublon de {{rc}}",
+    "reasonDuplicate": "Motif : Doublon",
+    "status": {
+      "rejectedDuplicate": "Doublon de {{rc}}"
     }
   },
   "transparency": {
@@ -828,7 +856,8 @@
       "RESOLUTION_REVIEW": "Vérification résolution",
       "RESOLUTION_REJECTED": "Résolution rejetée",
       "REJECTED": "Rejetée"
-    }
+    },
+    "mergedAsDuplicate": "Votre réclamation {{mergedRc}} a été identifiée comme similaire à la réclamation {{originalRc}} : '{{originalTitle}}'. Vos votes ont été transférés. Cliquez pour voir la réclamation originale."
   },
   "register": {
     "title": "Créer un compte",
@@ -985,13 +1014,20 @@
     "aiUrgencyPrediction": "Prédiction d'urgence IA",
     "duplicateCheck": "Vérification des doublons",
     "checkingDuplicates": "Recherche de plaintes similaires...",
+    "checkSimilarComplaints": "Verifier les plaintes similaires",
+    "potentialDuplicatesFound": "Doublons potentiels trouves !",
+    "duplicatesWarning": "Ces reclamations semblent similaires. Vous pouvez les fusionner ou les garder separees.",
+    "mainComplaint": "Reclamation principale (cible)",
+    "selectToMerge": "Selectionnez les reclamations a fusionner :",
+    "keepSeparate": "Garder separe",
+    "noSimilarFound": "Aucune reclamation similaire trouvee.",
     "similarComplaintsFound": "Plaintes similaires trouvées — vérifiez avant de valider",
     "differentIssuesContinue": "Ce sont des problèmes différents — continuer à valider",
     "view": "Voir",
     "merge": "Fusionner",
     "merging": "Fusion en cours...",
     "mergeConfirm": "Marquer cette plainte comme doublon de [{{rc}}]? La plainte sera fermée et le citoyen sera notifié.",
-    "mergedSuccess": "Plainte fusionnée comme doublon avec succès.",
+    "mergedSuccess": "Réclamation fusionnée avec succès. Elle a été marquée comme doublon et rejetée.",
     "mergeFailed": "Échec de la fusion de la plainte.",
     "beforeWorkPhotos": "Photos avant travaux",
     "afterWorkPhotos": "Photos après travaux",
@@ -1117,6 +1153,8 @@
     "commentPlaceholder": "Partagez votre expérience ou observation...",
     "postAnonymously": "Publier anonymement",
     "postComment": "Publier le commentaire",
+    "commentPosted": "Commentaire publié",
+    "commentPostFailed": "Impossible de publier votre commentaire. Veuillez réessayer.",
     "signIn": "Se connecter",
     "toAddComment": "pour ajouter un commentaire",
     "noComments": "Aucun commentaire pour le moment. Soyez le premier à partager vos impressions.",

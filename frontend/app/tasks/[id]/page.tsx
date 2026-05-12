@@ -175,9 +175,11 @@ export default function TechnicianTaskDetailPage() {
     if (!task) return;
     setActionLoading(true);
     try {
-      await technicianService.startWork(task._id || '');
+      const response = await technicianService.startWork(task._id || '');
+      if (response.success && response.data) {
+        setTask(response.data);
+      }
       showToast('Work started successfully!', 'success');
-      fetchTaskDetail();
     } catch (err: unknown) {
       showToast(
         err instanceof Error ? err.message : 'Failed to start work',
@@ -210,16 +212,18 @@ export default function TechnicianTaskDetailPage() {
         }
       }
 
-      await technicianService.resolveTask(
+      const response = await technicianService.resolveTask(
         task._id || '',
         resolveNote,
         photoUrls
       );
+      if (response.success && response.data) {
+        setTask(response.data);
+      }
       showToast('Task resolved successfully!', 'success');
       setResolveModal(false);
       setResolveNote('');
       setProofPhotos([]);
-      fetchTaskDetail();
     } catch (err: unknown) {
       showToast(
         err instanceof Error ? err.message : 'Failed to resolve task',
@@ -352,6 +356,12 @@ export default function TechnicianTaskDetailPage() {
               >
                 {t('tasks.markResolved')}
               </Button>
+            )}
+            {task.status === 'RESOLVED' && (
+              <div className="inline-flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 border border-amber-200">
+                <Clock className="w-4 h-4" />
+                Report submitted — awaiting manager validation
+              </div>
             )}
           </div>
         </div>

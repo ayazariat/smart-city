@@ -6,6 +6,7 @@ const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const { normalizeMunicipality } = require("../utils/normalize");
 const { calculatePriorityAndSLA } = require("../utils/priorityCalculator");
+const { mergeDuplicateComplaint } = require("../services/duplicateMerge.service");
 
 const rateLimit = require("express-rate-limit");
 const createLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: { message: "Too many submissions, please try again later." } });
@@ -103,6 +104,31 @@ router.patch("/:id/priority", authorize("DEPARTMENT_MANAGER"), complaintControll
 router.patch("/:id/archive", authorize("ADMIN"), complaintController.archiveComplaint);
 router.patch("/:id/unarchive", authorize("ADMIN"), complaintController.unarchiveComplaint);
 
+router.post("/:id/merge", authorize("MUNICIPAL_AGENT", "ADMIN"), async (req, res) => {
+  try {
+    const { originalComplaintId, similarityScore } = req.body;
+    if (!originalComplaintId) {
+      return res.status(400).json({ success: false, message: "originalComplaintId is required" });
+    }
+
+    const result = await mergeDuplicateComplaint({
+      duplicateComplaintId: req.params.id,
+      originalComplaintId,
+      user: req.user,
+      similarityScore,
+      io: req.app?.get?.("io") || null,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    console.error("Complaint merge error:", error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Failed to merge complaints",
+    });
+  }
+});
+
 // Citizen confirmation routes (BL-28)
 router.post("/:id/confirm", async (req, res) => {
   try {
@@ -127,7 +153,11 @@ router.post("/:id/confirm", async (req, res) => {
       c => c.citizenId?.toString() === req.user.userId
     );
     if (alreadyConfirmed) {
-      return res.status(400).json({ success: false, message: "You have already confirmed this complaint" });
+      return res.json({
+        success: true,
+        confirmationCount: complaint.confirmationCount || complaint.confirmations?.length || 0,
+        message: "Complaint already confirmed"
+      });
     }
 
     // Add confirmation
@@ -256,6 +286,11 @@ router.post("/:id/upvote", async (req, res) => {
 
     if (req.user.role !== "CITIZEN") {
       return res.status(403).json({ success: false, message: "Only citizens can upvote complaints" });
+    }
+
+    const createdById = complaint.createdBy?._id?.toString() || complaint.createdBy?.toString();
+    if (createdById === req.user.userId) {
+      return res.status(400).json({ success: false, message: "You cannot upvote your own complaint" });
     }
 
     const alreadyUpvoted = complaint.upvotes?.some(

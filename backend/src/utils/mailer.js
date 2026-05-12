@@ -69,6 +69,19 @@ const sendMagicLinkEmail = async (to, userId, token, fullName) => {
   const magicLink = `${frontendUrl}/verify-account?token=${token}&id=${userId}`;
   const userName = fullName || to.split('@')[0] || "User";
 
+  console.log(`[mailer] sendMagicLinkEmail called with:`, {
+    to,
+    userId,
+    token: token ? `${token.substring(0, 8)}...` : 'MISSING',
+    fullName,
+    frontendUrl,
+    magicLink: magicLink.substring(0, 100) + '...',
+    from,
+    smtpHost: process.env.SMTP_HOST,
+    smtpPort: process.env.SMTP_PORT,
+    smtpUser: process.env.SMTP_USER ? `${process.env.SMTP_USER.substring(0, 3)}...` : 'NOT_SET',
+  });
+
   try {
     await transporter.sendMail({
       from,
@@ -93,7 +106,16 @@ const sendMagicLinkEmail = async (to, userId, token, fullName) => {
         </div>
       `,
     });
+    console.log(`[mailer] Magic link email sent successfully to ${to}`);
   } catch (error) {
+    console.error(`[mailer] Failed to send magic link email to ${to}:`, error.message);
+    console.error(`[mailer] Error details:`, {
+      name: error.name,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode,
+    });
     throw error;
   }
 };
@@ -170,6 +192,20 @@ const sendInvitationEmail = async (to, userId, token, fullName, role) => {
   const invitationLink = `${frontendUrl}/set-password?token=${token}&email=${encodeURIComponent(to)}`;
   const userName = fullName || to.split('@')[0] || "User";
 
+  console.log(`[mailer] sendInvitationEmail called with:`, {
+    to,
+    userId,
+    token: token ? `${token.substring(0, 8)}...` : 'MISSING',
+    fullName,
+    role,
+    frontendUrl,
+    invitationLink: invitationLink.substring(0, 100) + '...',
+    from,
+    smtpHost: process.env.SMTP_HOST,
+    smtpPort: process.env.SMTP_PORT,
+    smtpUser: process.env.SMTP_USER ? `${process.env.SMTP_USER.substring(0, 3)}...` : 'NOT_SET',
+  });
+
   try {
     await transporter.sendMail({
       from,
@@ -196,9 +232,16 @@ const sendInvitationEmail = async (to, userId, token, fullName, role) => {
         </div>
       `,
     });
-    console.log(`[mailer] Invitation email sent to ${to}`);
+    console.log(`[mailer] Invitation email sent successfully to ${to}`);
   } catch (error) {
     console.error(`[mailer] Failed to send invitation email to ${to}:`, error.message);
+    console.error(`[mailer] Error details:`, {
+      name: error.name,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode,
+    });
     throw error;
   }
 };

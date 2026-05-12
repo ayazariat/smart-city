@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate, authorize } = require("../middleware/auth");
 const aiService = require("../services/ai.service");
 const Complaint = require("../models/Complaint");
+const { mergeDuplicateComplaint } = require("../services/duplicateMerge.service");
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -52,7 +53,7 @@ router.post("/urgency/predict", async (req, res) => {
 
 router.post("/duplicate/check", async (req, res) => {
   try {
-    const { complaintId, title, description, category, municipality, latitude, longitude, submittedAt } = req.body;
+    const { complaintId, title, description, category, municipality, latitude, longitude, imageUrls, media, photos, submittedAt } = req.body;
     const axios = require('axios');
     const response = await axios.post(`${AI_SERVICE_URL}/ai/duplicate/check`, {
       complaintId: complaintId || "new",
@@ -62,6 +63,7 @@ router.post("/duplicate/check", async (req, res) => {
       municipality,
       latitude,
       longitude,
+      imageUrls: imageUrls || media || photos || [],
       submittedAt
     }, { timeout: 10000 });
     
@@ -200,156 +202,20 @@ router.post(
           .json({ success: false, message: "Invalid duplicate action" });
       }
 
-      // Step 1: Validate inputs
-      const source = await Complaint.findById(existingComplaintId);
-      if (!source) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Source complaint not found" });
-      }
-      if (source._id.toString() === target._id.toString()) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Cannot merge same complaint" });
-      }
-      // Only submitted complaints can be merged
-      if (source.status !== "SUBMITTED") {
-        return res
-          .status(400)
-          .json({ success: false, message: "Only submitted complaints can be merged" });
-      }
-      // Verify agent's municipality matches the merged complaint's municipality
-      if (req.user.municipality && source.municipality?.toString() !== req.user.municipality.toString()) {
-        return res
-          .status(403)
-          .json({ success: false, message: "You can only merge complaints in your municipality" });
-      }
-
-      const notificationService = require('../services/notification.service');
-      const now = new Date();
-
-      // Step 2: Transfer upvotes and confirmations from merged to original
-      const sourceUpvoteCount = source.upvoteCount || 0;
-      const sourceConfirmationCount = source.confirmationCount || 0;
-      
-      target.upvoteCount = (target.upvoteCount || 0) + sourceUpvoteCount;
-      target.confirmationCount = (target.confirmationCount || 0) + sourceConfirmationCount + 1; // +1 for the merge itself
-      
-      // Transfer upvotes
-      for (const upvote of source.upvotes || []) {
-        const alreadyUpvoted = target.upvotes?.some(
-          (u) => u.citizenId?.toString() === upvote.citizenId?.toString()
-        );
-        if (!alreadyUpvoted) {
-          target.upvotes = target.upvotes || [];
-          target.upvotes.push({
-            citizenId: upvote.citizenId,
-            upvotedAt: upvote.upvotedAt || now
-          });
-        }
-      }
-      
-      // Transfer confirmations
-      for (const confirmation of source.confirmations || []) {
-        const alreadyConfirmed = target.confirmations?.some(
-          (c) => c.citizenId?.toString() === confirmation.citizenId?.toString()
-        );
-        if (!alreadyConfirmed) {
-          target.confirmations = target.confirmations || [];
-          target.confirmations.push({
-            citizenId: confirmation.citizenId,
-            confirmedAt: confirmation.confirmedAt || now
-          });
-        }
-      }
-      
-      // Add source owner as confirmation if not already present
-      if (source.createdBy) {
-        const alreadyConfirmed = target.confirmations?.some(
-          (c) => c.citizenId?.toString() === source.createdBy.toString()
-        );
-        if (!alreadyConfirmed) {
-          target.confirmations = target.confirmations || [];
-          target.confirmations.push({
-            citizenId: source.createdBy,
-            confirmedAt: now
-          });
-        }
-      }
-      
-      await target.save();
-
-      // Step 3: Update the merged complaint
-      source.status = "REJECTED";
-      source.rejectionReason = "duplicate";
-      source.rejectionReasonText = null;
-      source.isDuplicate = true;
-      source.duplicateOf = target._id;
-      source.duplicateStatus = "CONFIRMED_DUPLICATE";
-      source.mergedAt = now;
-      source.mergedBy = req.user._id;
-      source.isArchived = true;
-      source.archivedAt = now;
-      await source.save();
-
-      // Step 4: Add merge reference to original complaint
-      target.mergedComplaints = target.mergedComplaints || [];
-      const alreadyMerged = target.mergedComplaints.some(
-        (m) => m.complaintId?.toString() === source._id.toString()
-      );
-      if (!alreadyMerged) {
-        target.mergedComplaints.push({
-          complaintId: source._id,
-          mergedAt: now
-        });
-        await target.save();
-      }
-
-      // Step 5: Recalculate urgency score for original
-      // TODO: Call urgency recalculation function if it exists
-      
-      // Step 6: Create in-app notification for the citizen who submitted the merged complaint
-      if (source.createdBy) {
-        try {
-          await notificationService.sendNotification(null, source.createdBy.toString(), {
-            type: "complaint_merged_as_duplicate",
-            messageKey: "notifications.mergedAsDuplicate",
-            messageVariables: {
-              mergedRc: source.referenceId || source._id.toString(),
-              originalRc: target.referenceId || target._id.toString(),
-              originalTitle: target.title
-            },
-            complaintId: target._id.toString(),
-            mergedComplaintId: source._id.toString(),
-            read: false,
-            createdAt: now
-          });
-        } catch (err) {
-          console.error('Notification failed:', err.message);
-        }
-      }
-
-      // Step 7: Return success response
-      return res.json({
-        success: true,
-        message: "Complaints merged successfully",
-        mergedComplaint: {
-          id: source._id,
-          status: source.status,
-          isDuplicate: source.isDuplicate,
-          duplicateOf: source.duplicateOf,
-          referenceId: source.referenceId
-        },
-        originalComplaint: {
-          id: target._id,
-          confirmationCount: target.confirmationCount,
-          upvoteCount: target.upvoteCount,
-          referenceId: target.referenceId
-        }
+      const result = await mergeDuplicateComplaint({
+        duplicateComplaintId: existingComplaintId,
+        originalComplaintId: newComplaintId,
+        user: req.user,
+        io: req.app?.get?.("io") || null,
       });
+
+      return res.json(result);
     } catch (error) {
       console.error("Merge error:", error);
-      res.status(500).json({ success: false, message: "Failed to merge complaints" });
+      res.status(error.status || 500).json({
+        success: false,
+        message: error.message || "Failed to merge complaints",
+      });
     }
   }
 );

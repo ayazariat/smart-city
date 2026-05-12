@@ -24,7 +24,7 @@ router.get('/', authenticate, async (req, res) => {
       Notification.find(query)
         .populate({
           path: 'complaintId',
-          select: 'title _id',
+          select: 'title _id referenceId',
         })
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
@@ -41,11 +41,18 @@ router.get('/', authenticate, async (req, res) => {
       title: n.title,
       message: n.message,
       complaint: n.complaintId ? { _id: n.complaintId._id.toString(), title: n.complaintId.title } : undefined,
+      complaintId: n.complaintId?._id?.toString?.() || n.complaintId?.toString?.(),
       relatedId: n.relatedId?.toString(),
+      messageKey: n.messageKey,
+      messageVariables: n.messageVariables || {},
+      mergedComplaintId: n.mergedComplaintId?.toString?.(),
       isRead: n.read, // Alias for frontend compatibility
       read: n.read,
       createdAt: n.createdAt,
-      metadata: n.metadata || {},
+      metadata: {
+        ...(n.metadata || {}),
+        originalRc: n.messageVariables?.originalRc || n.metadata?.originalRc || n.complaintId?.referenceId,
+      },
     }));
 
     res.json({

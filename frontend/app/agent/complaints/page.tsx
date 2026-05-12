@@ -137,6 +137,17 @@ export default function AgentComplaintsPage() {
     fetch();
   }, [hydrated, token, user, statusFilter]);
 
+  // Automatically check for similar complaints when complaints are loaded
+  useEffect(() => {
+    if (complaints.length > 0) {
+      complaints.forEach(complaint => {
+        if (complaint.status === 'SUBMITTED' && !complaint.assignedDepartment) {
+          checkForSimilarComplaints(complaint);
+        }
+      });
+    }
+  }, [complaints]);
+
   useEffect(() => {
     const fetchDepts = async () => {
       if (!hydrated || !token || !user || user.role !== 'MUNICIPAL_AGENT')
@@ -222,6 +233,60 @@ export default function AgentComplaintsPage() {
     Record<string, number>
   >({});
 
+  // Track which complaints have similar complaints detected
+  const [similarComplaintsDetected, setSimilarComplaintsDetected] = useState<
+    Record<string, boolean>
+  >({});
+
+  // Check for similar complaints using duplicate detection service
+  const checkForSimilarComplaints = async (complaint: any) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const lat = complaint.location?.coordinates?.[1] ?? complaint.location?.latitude;
+      const lng = complaint.location?.coordinates?.[0] ?? complaint.location?.longitude;
+      const imageUrls = (complaint.media || []).map((m: any) => m.url).filter(Boolean).slice(0, 3);
+
+      const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          complaintId: complaint._id || complaint.id || 'new',
+          title: complaint.title,
+          description: complaint.description,
+          category: complaint.category,
+          municipality: complaint.municipalityName,
+          latitude: lat,
+          longitude: lng,
+          imageUrls,
+          submittedAt: complaint.createdAt,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const data = result.data || result;
+        let matches = [];
+        
+        if (data && data.topMatches && Array.isArray(data.topMatches)) {
+          matches = data.topMatches;
+        } else if (data && data.matches && Array.isArray(data.matches)) {
+          matches = data.matches;
+        } else if (data && Array.isArray(data)) {
+          matches = data;
+        }
+
+        const hasSimilar = matches.filter((m: any) => m.status !== "REJECTED" && (m.overallScore || 0) >= 0.65).length > 0;
+        setSimilarComplaintsDetected(prev => ({
+          ...prev,
+          [complaint._id || complaint.id]: hasSimilar
+        }));
+      }
+    } catch (error) {
+      console.error('Error checking for similar complaints:', error);
+    }
+  };
+
   // Handle duplicate check (BL-25) - Using direct API call
   const handleCheckDuplicate = async (complaintId: string) => {
     console.log('handleCheckDuplicate called for complaintId:', complaintId);
@@ -288,7 +353,7 @@ export default function AgentComplaintsPage() {
 
       // Handle different response structures
       let matches = [];
-      let scores: Record<string, number> = {};
+      const scores: Record<string, number> = {};
 
       if (data && data.topMatches && Array.isArray(data.topMatches)) {
         matches = data.topMatches;
@@ -440,50 +505,45 @@ export default function AgentComplaintsPage() {
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
       
       for (const sourceId of sourceIds) {
-        const response = await fetch(`${apiUrl}/ai/duplicate/confirm`, {
+        const response = await fetch(`${apiUrl}/complaints/${sourceId}/merge`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            newComplaintId: targetId,
-            existingComplaintId: sourceId,
-            action: 'merge',
+            originalComplaintId: targetId,
           }),
         });
         
         if (response.ok) {
           const result = await response.json();
-          
-          // Update local state immediately - remove merged complaint from list
-          setComplaints(prevComplaints => 
-            prevComplaints.filter(c => 
-              (c._id || c.id) !== sourceId
-            ).map(c => {
-              // Update original complaint's confirmation count
-              if ((c._id || c.id) === targetId && result.data?.originalComplaint) {
-                return {
-                  ...c,
-                  confirmationCount: result.data.originalComplaint.confirmationCount,
-                  upvoteCount: result.data.originalComplaint.upvoteCount
-                };
-              }
-              return c;
-            })
-          );
-          
-          // Update merged complaint status locally if it's still in the list
+
           setComplaints(prevComplaints =>
             prevComplaints.map(c => {
-              if ((c._id || c.id) === sourceId && result.data?.mergedComplaint) {
+              if ((c._id || c.id) === targetId && result.originalComplaint) {
                 return {
                   ...c,
-                  status: result.data.mergedComplaint.status,
-                  isDuplicate: result.data.mergedComplaint.isDuplicate,
-                  duplicateOf: result.data.mergedComplaint.duplicateOf
+                  confirmationCount: result.originalComplaint.confirmationCount,
+                  upvoteCount: result.originalComplaint.upvoteCount
+                };
+              }
+              if ((c._id || c.id) === sourceId && result.mergedComplaint) {
+                return {
+                  ...c,
+                  ...result.mergedComplaint,
+                  status: 'REJECTED',
+                  isDuplicate: true,
+                  rejectionReason: 'duplicate',
+                  rejectionReasonText: result.mergedComplaint.rejectionReasonText,
+                  duplicateOf: result.mergedComplaint.duplicateOf || targetId,
+                  duplicateOfReferenceId: result.mergedComplaint.duplicateOfReferenceId,
+                  duplicateOfTitle: result.mergedComplaint.duplicateOfTitle,
+                  mergedAt: result.mergedComplaint.mergedAt || new Date().toISOString(),
+                  mergedBy: result.mergedComplaint.mergedBy,
+                  duplicateStatus: 'CONFIRMED_DUPLICATE'
                 };
               }
               return c;
-            })
+            }).filter(c => statusFilter === 'ACTIVE' ? (c._id || c.id) !== sourceId : true)
           );
         }
       }
@@ -493,6 +553,7 @@ export default function AgentComplaintsPage() {
       setDuplicateComplaints([]);
       setMergeSourceId(null);
       setMergeSourceIds([]);
+      await refreshComplaints();
     } catch (err) {
       alert('Failed to merge complaints');
     } finally {
@@ -531,6 +592,9 @@ export default function AgentComplaintsPage() {
 
   // Filter complaints based on all filters
   const filteredComplaints = complaints.filter((c) => {
+    if (statusFilter === 'ACTIVE' && ['RESOLVED', 'CLOSED', 'REJECTED'].includes(c.status)) return false;
+    if (statusFilter === 'ARCHIVE' && !['CLOSED', 'REJECTED'].includes(c.status)) return false;
+    if (statusFilter && !['ACTIVE', 'ARCHIVE'].includes(statusFilter) && c.status !== statusFilter) return false;
     if (categoryFilter && c.category !== categoryFilter) return false;
     if (priorityFilter) {
       if (priorityFilter === 'HIGH' && (c.priorityScore || 0) < 15)
@@ -895,6 +959,7 @@ export default function AgentComplaintsPage() {
                     className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
                   >
                     <option value="ACTIVE">Active (My Actions)</option>
+                    <option value="ARCHIVE">Archive / Rejected</option>
                     <option value="">All Statuses</option>
                     {STATUS_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -1076,17 +1141,14 @@ export default function AgentComplaintsPage() {
                               </span>
                             </div>
                           )}
-                          {/* Check Duplicates button — visible for agent on SUBMITTED status only (not when assigned) */}
+                          {/* Similar complaint suggestion — only show if duplicates were detected */}
                           {complaint.status === 'SUBMITTED' &&
-                            !complaint.assignedDepartment && (
-                              <button
-                                onClick={() => handleCheckDuplicate(id)}
-                                disabled={actionLoading === id}
-                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl hover:bg-amber-100 transition-all text-sm font-medium disabled:opacity-50"
-                              >
+                            !complaint.assignedDepartment &&
+                            similarComplaintsDetected[id] && (
+                              <div className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm font-medium">
                                 <Copy className="w-4 h-4" />
-                                Check Duplicates
-                              </button>
+                                Similar complaints detected
+                              </div>
                             )}
                           <button
                             onClick={() =>

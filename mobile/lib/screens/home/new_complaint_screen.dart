@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:smart_city_app/core/constants/app_theme.dart';
 import 'package:smart_city_app/data/tunisia_geography.dart';
 import 'package:smart_city_app/providers/auth_provider.dart';
@@ -39,7 +42,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
   DateTime? _selectedDateTime;
   bool _isAnonymous = false;
 
-  final List<File> _photos = [];
+  final List<XFile> _photos = [];
   final ImagePicker _picker = ImagePicker();
   bool _isSubmitting = false;
 
@@ -61,6 +64,9 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
   Timer? _categoryDebounce;
   Timer? _duplicateDebounce;
   Timer? _urgencyDebounce;
+
+  // Track description length for rebuild
+  int _descriptionLength = 0;
 
   final List<String> _tunisiaGovernorates = TunisiaGeography.governorateNames;
 
@@ -119,6 +125,10 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
 
   void _onDescriptionChanged() {
     final description = _descriptionController.text;
+    // Update length for rebuild
+    if (mounted && description.length != _descriptionLength) {
+      setState(() => _descriptionLength = description.length);
+    }
     // Trigger AI category prediction after 800ms debounce, min 20 chars
     if (description.length >= 20) {
       _categoryDebounce?.cancel();
@@ -148,9 +158,24 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
         _aiPredictedCategory = prediction['category']?.toString();
         final conf = prediction['confidence'];
         _aiCategoryConfidence = conf is int ? conf : (conf is double ? conf.round() : null);
-        // Auto-select if no category chosen yet
+        // Auto-select if no category chosen yet — normalize to uppercase
         if (_selectedCategory.isEmpty && _aiPredictedCategory != null) {
-          _selectedCategory = _aiPredictedCategory!;
+          final upperKey = _aiPredictedCategory!.toUpperCase();
+          // Map backend category names to our keys
+          final categoryMapping = {
+            'WASTE': 'WASTE', 'waste': 'WASTE',
+            'ROAD': 'ROAD', 'roads': 'ROAD', 'ROADS': 'ROAD',
+            'LIGHTING': 'LIGHTING', 'lighting': 'LIGHTING',
+            'WATER': 'WATER', 'water': 'WATER',
+            'SAFETY': 'SAFETY', 'safety': 'SAFETY',
+            'PUBLIC_PROPERTY': 'PROPERTY', 'property': 'PROPERTY', 'PROPERTY': 'PROPERTY',
+            'GREEN_SPACE': 'PARKS', 'parks': 'PARKS', 'PARKS': 'PARKS',
+            'OTHER': 'OTHER', 'other': 'OTHER',
+          };
+          final mappedKey = categoryMapping[_aiPredictedCategory!] ?? categoryMapping[upperKey] ?? upperKey;
+          if (categories.containsKey(mappedKey)) {
+            _selectedCategory = mappedKey;
+          }
         }
       });
     } catch (_) {
@@ -182,16 +207,21 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
       ).timeout(const Duration(seconds: 5));
 
       if (!mounted) return;
-      final topMatches = result['topMatches'] as List?;
+      // Handle both {topMatches: [...]} and {data: {topMatches: [...]}} formats
+      final resultData = result['data'] is Map ? result['data'] as Map : result;
+      final topMatches = (resultData['topMatches'] ?? result['topMatches']) as List?;
       if (topMatches != null && topMatches.isNotEmpty) {
-        final first = topMatches[0] as Map<String, dynamic>?;
-        final score = (first?['overallScore'] ?? first?['similarity'] ?? 0);
-        final scoreDouble = score is num ? score.toDouble() : 0.0;
-        if (scoreDouble >= 0.65) {
-          setState(() {
-            _hasDuplicateWarning = true;
-            _duplicateComplaint = first;
-          });
+        final first = topMatches[0];
+        final firstMap = first is Map<String, dynamic> ? first : (first is Map ? Map<String, dynamic>.from(first) : null);
+        if (firstMap != null) {
+          final score = (firstMap['overallScore'] ?? firstMap['similarity'] ?? firstMap['score'] ?? 0);
+          final scoreDouble = score is num ? score.toDouble() : 0.0;
+          if (scoreDouble >= 0.65) {
+            setState(() {
+              _hasDuplicateWarning = true;
+              _duplicateComplaint = firstMap;
+            });
+          }
         }
       }
     } catch (_) {
@@ -210,10 +240,10 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
         }).timeout(const Duration(seconds: 5));
         if (!mounted) return;
         setState(() {
-          _aiPredictedUrgency = prediction['urgency']?.toString();
+          _aiPredictedUrgency = prediction['urgency']?.toString()?.toUpperCase();
           final conf = prediction['confidence'];
           _aiUrgencyConfidence = conf is int ? conf : (conf is double ? conf.round() : null);
-          if (_aiPredictedUrgency != null) {
+          if (_aiPredictedUrgency != null && urgencyLevels.containsKey(_aiPredictedUrgency)) {
             _selectedUrgency = _aiPredictedUrgency!;
           }
         });
@@ -225,14 +255,16 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
 
   Future<void> _reverseGeocode(double lat, double lng) async {
     try {
-      final client = HttpClient();
-      final request = await client.getUrl(Uri.parse(
-          'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&accept-language=fr'));
-      request.headers.set('User-Agent', 'SmartCityTunisia/1.0');
-      final response = await request.close();
+      // Use http package — works on both web and mobile
+      final uri = Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&accept-language=fr');
+      final response = await http.get(uri, headers: {
+        'User-Agent': 'SmartCityTunisia/1.0',
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 10));
+
       if (response.statusCode == 200) {
-        final body = await response.transform(utf8.decoder).join();
-        final data = jsonDecode(body) as Map<String, dynamic>?;
+        final data = jsonDecode(response.body) as Map<String, dynamic>?;
         if (data != null) {
           final address = data['address'] as Map<String, dynamic>?;
           if (address != null) {
@@ -244,20 +276,25 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
             final state = address['state'] as String?;
             final stateDistrict = address['state_district'] as String?;
             final road = address['road'] as String?;
+            final suburb = address['suburb'] as String?;
+            final neighbourhood = address['neighbourhood'] as String?;
 
-            final bestMunicipalityMatch = municipality ?? city ?? town ?? village ?? county;
+            final bestMunicipalityMatch = municipality ?? city ?? town ?? suburb ?? neighbourhood ?? village ?? county;
             final bestGovernorateMatch = state ?? stateDistrict;
 
             // Build display address
-            final parts = <String>[];
-            if (road != null && road.isNotEmpty) parts.add(road);
-            if (bestMunicipalityMatch != null && bestMunicipalityMatch.isNotEmpty) parts.add(bestMunicipalityMatch);
-            if (bestGovernorateMatch != null && bestGovernorateMatch.isNotEmpty) parts.add(bestGovernorateMatch);
-            if (parts.isNotEmpty) {
-              setState(() => _locationAddress = parts.join(', '));
+            final displayParts = <String>[];
+            if (road != null && road.isNotEmpty) displayParts.add(road);
+            if (bestMunicipalityMatch != null && bestMunicipalityMatch.isNotEmpty) displayParts.add(bestMunicipalityMatch);
+            if (bestGovernorateMatch != null && bestGovernorateMatch.isNotEmpty) displayParts.add(bestGovernorateMatch);
+            if (displayParts.isNotEmpty && mounted) {
+              setState(() => _locationAddress = displayParts.join(', '));
             }
 
-            // Try to match against Tunisian geography data
+            // Try to match governorate first
+            String? matchedGov;
+            String? matchedMun;
+
             if (bestGovernorateMatch != null) {
               final gov = TunisiaGeography.governorates.firstWhere(
                 (g) =>
@@ -265,42 +302,43 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                     bestGovernorateMatch.toLowerCase().contains(g.name.toLowerCase()),
                 orElse: () => const GovernorateData(name: '', municipalities: []),
               );
-
-              if (gov.municipalities.isNotEmpty) {
-                String matchedMunicipality = gov.municipalities.first;
+              if (gov.name.isNotEmpty) {
+                matchedGov = gov.name;
                 if (bestMunicipalityMatch != null) {
-                  matchedMunicipality = gov.municipalities.firstWhere(
-                    (m) =>
-                        m.toLowerCase().contains(bestMunicipalityMatch.toLowerCase()) ||
-                        bestMunicipalityMatch.toLowerCase().contains(m.toLowerCase()),
-                    orElse: () => gov.municipalities.first,
-                  );
+                  matchedMun = TunisiaGeography.findMunicipalityInGovernorate(gov.name, bestMunicipalityMatch);
                 }
-                if (mounted) {
-                  setState(() {
-                    _selectedGovernorate = gov.name;
-                    _selectedMunicipality = matchedMunicipality;
-                  });
-                }
-                return;
+                matchedMun ??= gov.municipalities.isNotEmpty ? gov.municipalities.first : null;
               }
             }
 
-            // Fallback: set raw values
-            if (mounted) {
+            // Fallback: try to find governorate from municipality name
+            if (matchedGov == null && bestMunicipalityMatch != null) {
+              matchedGov = TunisiaGeography.findGovernorateForMunicipality(bestMunicipalityMatch);
+              if (matchedGov != null) {
+                matchedMun = TunisiaGeography.findMunicipalityInGovernorate(matchedGov, bestMunicipalityMatch)
+                    ?? bestMunicipalityMatch;
+              }
+            }
+
+            if (mounted && matchedGov != null) {
+              setState(() {
+                _selectedGovernorate = matchedGov;
+                _selectedMunicipality = matchedMun;
+              });
+            } else if (mounted) {
+              // Last resort: set raw values
               setState(() {
                 if (bestGovernorateMatch != null && bestGovernorateMatch.isNotEmpty) {
                   _selectedGovernorate = bestGovernorateMatch;
                 }
                 if (bestMunicipalityMatch != null && bestMunicipalityMatch.isNotEmpty) {
-                  _selectedMunicipality = bestMunicipalityMatch;
+                  _selectedMunicipality = null; // Reset — raw value won't match dropdown
                 }
               });
             }
           }
         }
       }
-      client.close();
     } catch (e) {
       debugPrint('Reverse geocoding error: $e');
     }
@@ -309,7 +347,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
   Future<void> _pickImage(ImageSource source) async {
     try {
       if (_photos.length >= 5) {
-        Toast.error(context, 'Maximum 5 photos autorisées');
+        if (mounted) Toast.error(context, 'Maximum 5 photos autorisées');
         return;
       }
       final XFile? image = await _picker.pickImage(
@@ -318,21 +356,22 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
         maxWidth: 1200,
       );
       if (image != null) {
-        final file = File(image.path);
-        final fileSizeMB = await file.length() / (1024 * 1024);
+        // Check file size (works on both web and mobile)
+        final bytes = await image.readAsBytes();
+        final fileSizeMB = bytes.length / (1024 * 1024);
         if (fileSizeMB > 10) {
           if (mounted) Toast.error(context, 'L\'image ne doit pas dépasser 10MB');
           return;
         }
-        if (mounted) setState(() => _photos.add(file));
+        if (mounted) setState(() => _photos.add(image));
       }
     } catch (e) {
       if (mounted) {
         final msg = e.toString().toLowerCase();
-        if (msg.contains('permission') || msg.contains('denied')) {
-          Toast.error(context, 'Permission refusée. Veuillez l\'activer dans les paramètres de votre appareil.');
+        if (msg.contains('permission') || msg.contains('denied') || msg.contains('access')) {
+          Toast.error(context, 'Permission refusée. Veuillez l\'activer dans les paramètres.');
         } else {
-          Toast.error(context, 'Erreur lors de la sélection de l\'image');
+          Toast.error(context, 'Erreur lors de la sélection: $e');
         }
       }
     }
@@ -362,15 +401,28 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
       List<Map<String, String>> mediaUrls = [];
       if (_photos.isNotEmpty) {
         try {
-          // Backend expects field name "media" (not "photos")
-          final uploadResult = await ApiClient().uploadFiles(
-            '/upload',
-            _photos.map((f) => f.path).toList(),
-            fieldName: 'media',
+          // Use multipart upload — works on both web and mobile
+          final request = http.MultipartRequest(
+            'POST',
+            Uri.parse('${ApiClient.baseUrl}/upload'),
           );
-          // Response: {success: true, data: [{type, url, publicId, ...}]}
-          if (uploadResult != null) {
-            final dataList = uploadResult['data'] as List?;
+          final token = ApiClient().token;
+          if (token != null) {
+            request.headers['Authorization'] = 'Bearer $token';
+          }
+          for (final xfile in _photos) {
+            final bytes = await xfile.readAsBytes();
+            request.files.add(http.MultipartFile.fromBytes(
+              'media',
+              bytes,
+              filename: xfile.name,
+            ));
+          }
+          final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+          final responseBody = await streamedResponse.stream.bytesToString();
+          if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201) {
+            final decoded = jsonDecode(responseBody) as Map<String, dynamic>?;
+            final dataList = decoded?['data'] as List?;
             if (dataList != null) {
               for (final item in dataList) {
                 if (item is Map && item['url'] != null) {
@@ -381,10 +433,15 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                 }
               }
             }
+          } else {
+            debugPrint('Upload failed: ${streamedResponse.statusCode} $responseBody');
           }
         } catch (e) {
           debugPrint('Photo upload error: $e');
-          // Continue without photos rather than blocking submission
+          // Show warning but continue — don't block submission
+          if (mounted) {
+            Toast.error(context, 'Avertissement: photos non téléchargées. Soumission sans photos.');
+          }
         }
       }
 
@@ -495,14 +552,14 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                       return null;
                     },
                   ),
-                  if (_descriptionController.text.isNotEmpty)
+                  if (_descriptionLength > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
-                        '${_descriptionController.text.length}/1000',
+                        '$_descriptionLength/1000',
                         style: TextStyle(
                           fontSize: 12,
-                          color: _descriptionController.text.length > 900
+                          color: _descriptionLength > 900
                               ? Colors.red
                               : AppTheme.textSecondary,
                         ),
@@ -539,12 +596,20 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                           children: [
                             const Icon(Icons.auto_awesome, size: 16, color: AppTheme.primary),
                             const SizedBox(width: 8),
-                            Text(
-                              'IA Suggérée: ${categories[_aiPredictedCategory]?['label']} ($_aiCategoryConfidence%)',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.primary,
-                                fontWeight: FontWeight.w600,
+                            Flexible(
+                              child: Text(
+                                () {
+                                  // Normalize category key to uppercase for lookup
+                                  final key = _aiPredictedCategory!.toUpperCase();
+                                  final label = categories[key]?['label'] ?? _aiPredictedCategory;
+                                  final conf = _aiCategoryConfidence != null ? ' ($_aiCategoryConfidence%)' : '';
+                                  return 'IA Suggérée: $label$conf';
+                                }(),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -555,43 +620,44 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Duplicate Warning
               if (_hasDuplicateWarning && _duplicateComplaint != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 20),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEF2F2),
+                    color: const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFFECACA)),
+                    border: Border.all(color: const Color(0xFFF59E0B)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      const Row(
                         children: [
-                          const Icon(Icons.warning, color: Color(0xFFEF4444), size: 20),
-                          const SizedBox(width: 8),
-                          const Text(
+                          Icon(Icons.content_copy, color: Color(0xFFD97706), size: 20),
+                          SizedBox(width: 8),
+                          Text(
                             'Signalement similaire détecté',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFEF4444),
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFD97706)),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '"${_duplicateComplaint!['title']}" - soumis le ${_duplicateComplaint!['createdAt']}',
-                        style: const TextStyle(fontSize: 13),
+                        '"${_duplicateComplaint!['title'] ?? 'Signalement similaire'}"',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Similarité: ${((_duplicateComplaint!['overallScore'] ?? _duplicateComplaint!['similarity'] ?? 0) * 100).round()}%',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFD97706)),
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
                           TextButton(
                             onPressed: () => setState(() => _hasDuplicateWarning = false),
-                            child: const Text('Ignorer', style: TextStyle(fontSize: 12)),
+                            child: const Text('Ignorer et continuer', style: TextStyle(fontSize: 12)),
                           ),
                         ],
                       ),
@@ -742,14 +808,41 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                     _latitude = lat;
                     _longitude = lng;
                   });
+                  // Reverse geocode to get address and auto-fill governorate/municipality
                   _reverseGeocode(lat, lng);
                 },
               ),
+              // Show detected location info
+              if (_latitude != null && _longitude != null)
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: AppTheme.primary, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _locationAddress ?? 'Position détectée: ${_latitude!.toStringAsFixed(4)}, ${_longitude!.toStringAsFixed(4)}',
+                          style: const TextStyle(fontSize: 12, color: AppTheme.primary),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      key: ValueKey('gov_$_selectedGovernorate'),
                       value: _selectedGovernorate,
                       decoration: const InputDecoration(
                         labelText: 'Gouvernorat *',
@@ -757,7 +850,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                       ),
                       items: _tunisiaGovernorates.map((g) =>
-                        DropdownMenuItem(value: g, child: Text(g))
+                        DropdownMenuItem(value: g, child: Text(g, overflow: TextOverflow.ellipsis))
                       ).toList(),
                       onChanged: (value) => setState(() {
                         _selectedGovernorate = value;
@@ -771,6 +864,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
               const SizedBox(height: 12),
               if (_selectedGovernorate != null)
                 DropdownButtonFormField<String>(
+                  key: ValueKey('mun_${_selectedGovernorate}_$_selectedMunicipality'),
                   value: _selectedMunicipality,
                   decoration: const InputDecoration(
                     labelText: 'Municipalité *',
@@ -778,7 +872,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                   ),
                   items: _getMunicipalitiesByGovernorate(_selectedGovernorate!)
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m, overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (value) => setState(() => _selectedMunicipality = value),
                   validator: (value) => value == null ? 'Ce champ est requis' : null,
@@ -879,7 +973,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
               const SizedBox(height: 12),
               if (_photos.isNotEmpty)
                 SizedBox(
-                  height: 80,
+                  height: 90,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: _photos.length,
@@ -892,24 +986,37 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
                             margin: const EdgeInsets.only(right: 8),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(8),
-                              image: DecorationImage(
-                                image: FileImage(_photos[index]),
-                                fit: BoxFit.cover,
-                              ),
+                              color: Colors.grey[200],
                             ),
+                            clipBehavior: Clip.antiAlias,
+                            child: kIsWeb
+                                ? FutureBuilder<Uint8List>(
+                                    future: _photos[index].readAsBytes(),
+                                    builder: (ctx, snap) {
+                                      if (snap.hasData) {
+                                        return Image.memory(snap.data!, fit: BoxFit.cover);
+                                      }
+                                      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                                    },
+                                  )
+                                : Image.file(
+                                    File(_photos[index].path),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+                                  ),
                           ),
                           Positioned(
-                            top: 4,
-                            right: 12,
+                            top: 2,
+                            right: 10,
                             child: GestureDetector(
                               onTap: () => setState(() => _photos.removeAt(index)),
                               child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
+                                padding: const EdgeInsets.all(3),
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.close, color: Colors.white, size: 16),
+                                child: const Icon(Icons.close, color: Colors.white, size: 14),
                               ),
                             ),
                           ),

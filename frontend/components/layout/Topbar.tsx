@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, X, CheckCircle, ChevronDown } from 'lucide-react';
+import { Bell, X, CheckCircle, ChevronDown, GitMerge } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Notification } from '@/types';
@@ -46,6 +46,7 @@ const NotificationBell = () => {
   } = useNotifications();
   const { user } = useAuthStore();
   const { t } = useTranslation();
+  const router = useRouter();
 
   useEffect(() => {
     fetchNotifications();
@@ -66,6 +67,8 @@ const NotificationBell = () => {
       return { icon: X, color: 'text-red-600' };
     if (typeLower.includes('assigned') || typeLower.includes('assign'))
       return { icon: ChevronDown, color: 'text-purple-600' };
+    if (typeLower.includes('merged') || typeLower.includes('duplicate'))
+      return { icon: GitMerge, color: 'text-blue-600' };
     return { icon: Bell, color: 'text-gray-600' };
   };
 
@@ -84,11 +87,11 @@ const NotificationBell = () => {
   const handleNotifClick = (notif: Notification) => {
     if (!notif.isRead) markAsRead(notif._id);
     if (notif.complaint?._id || notif.relatedId) {
-      const id = notif.complaint?._id || notif.relatedId;
-      if (user?.role === 'CITIZEN') {
-        window.location.href = `/my-complaints/${id}`;
+      const id = notif.complaintId || notif.complaint?._id || notif.relatedId;
+      if (user?.role === 'CITIZEN' && notif.type !== 'complaint_merged_as_duplicate') {
+        router.push(`/my-complaints/${id}`);
       } else {
-        window.location.href = `/dashboard/complaints/${id}`;
+        router.push(`/dashboard/complaints/${id}`);
       }
     }
     setDropdownOpen(false);
@@ -147,6 +150,12 @@ const NotificationBell = () => {
                   {t('notifications.today')}
                 </h4>
                 {todayNotifs.slice(0, 5).map((notif) => (
+                  (() => {
+                    const NotifIcon = getNotifStyle(notif.type).icon;
+                    const message = notif.messageKey && notif.messageVariables
+                      ? t(notif.messageKey, notif.messageVariables)
+                      : notif.message || notif.title;
+                    return (
                   <div
                     key={notif._id}
                     className={`p-4 cursor-pointer hover:bg-slate-50 transition-colors ${
@@ -160,11 +169,11 @@ const NotificationBell = () => {
                       <div
                         className={`p-2 rounded-lg bg-blue-100 flex-shrink-0 ${getNotifStyle(notif.type).color}`}
                       >
-                        <Bell className="w-4 h-4" />
+                        <NotifIcon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-900 line-clamp-2">
-                          {notif.message || notif.title}
+                          {message}
                         </p>
                         <p className="text-xs text-slate-500 mt-1">
                           {formatRelativeTime(notif.createdAt)}
@@ -172,6 +181,8 @@ const NotificationBell = () => {
                       </div>
                     </div>
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -181,6 +192,12 @@ const NotificationBell = () => {
                   {t('notifications.earlier')}
                 </h4>
                 {earlierNotifs.slice(0, 5).map((notif) => (
+                  (() => {
+                    const NotifIcon = getNotifStyle(notif.type).icon;
+                    const message = notif.messageKey && notif.messageVariables
+                      ? t(notif.messageKey, notif.messageVariables)
+                      : notif.message || notif.title;
+                    return (
                   <div
                     key={notif._id}
                     className={`p-4 cursor-pointer hover:bg-slate-50 transition-colors ${
@@ -194,11 +211,11 @@ const NotificationBell = () => {
                       <div
                         className={`p-2 rounded-lg bg-blue-100 flex-shrink-0 ${getNotifStyle(notif.type).color}`}
                       >
-                        <Bell className="w-4 h-4" />
+                        <NotifIcon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-900 line-clamp-2">
-                          {notif.message || notif.title}
+                          {message}
                         </p>
                         <p className="text-xs text-slate-500 mt-1">
                           {formatRelativeTime(notif.createdAt)}
@@ -206,6 +223,8 @@ const NotificationBell = () => {
                       </div>
                     </div>
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             )}

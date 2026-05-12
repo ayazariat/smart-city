@@ -319,11 +319,40 @@ class CitizenController {
       const complaint = await Complaint.findOne({ _id: req.params.id, createdBy: req.user.userId })
         .populate("assignedDepartment", "name email phone").populate("assignedTeam", "name members")
         .populate("createdBy", "fullName email phone").populate("municipality", "name governorate")
-        .populate("assignedTo", "fullName email").populate("statusHistory.updatedBy", "fullName");
+        .populate("assignedTo", "fullName email").populate("statusHistory.updatedBy", "fullName")
+        .populate("duplicateOf", "referenceId title")
+        .populate({
+          path: "mergedComplaints.complaintId",
+          select: "referenceId title municipality municipalityName location",
+          populate: { path: "municipality", select: "name" },
+        });
 
       if (!complaint) return res.status(404).json({ message: "Complaint not found" });
 
       const response = complaint.toObject();
+      response.duplicateOfReferenceId =
+        response.duplicateOf?.referenceId ||
+        response.duplicateOf?._id?.toString?.() ||
+        null;
+      response.duplicateOf =
+        response.duplicateOf?._id?.toString?.() ||
+        response.duplicateOf?.toString?.() ||
+        null;
+      response.mergedComplaints = (response.mergedComplaints || [])
+        .filter((merged) => merged.complaintId)
+        .map((merged) => ({
+          complaintId: merged.complaintId._id?.toString?.() || merged.complaintId.toString(),
+          referenceId: merged.complaintId.referenceId,
+          title: merged.complaintId.title,
+          submittedBy: "Submitted by a citizen",
+          municipality:
+            merged.complaintId.municipalityName ||
+            merged.complaintId.municipality?.name ||
+            merged.complaintId.location?.municipality ||
+            "",
+          mergedAt: merged.mergedAt,
+          similarityScore: merged.similarityScore,
+        }));
       if (complaint.municipality) {
         response.location = response.location || {};
         response.location.municipality = complaint.municipality.name;

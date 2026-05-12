@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import unicodedata
+from difflib import SequenceMatcher
 
 app = FastAPI(title="Category Predictor Service")
 
@@ -172,6 +173,64 @@ VALID_CATEGORIES = [
     "other"          
 ]
 
+CATEGORY_ALIASES = {
+    "waste": "waste",
+    "garbage": "waste",
+    "trash": "waste",
+    "dechet": "waste",
+    "dechets": "waste",
+    "ordure": "waste",
+    "ordures": "waste",
+    "road": "roads",
+    "roads": "roads",
+    "street": "roads",
+    "voirie": "roads",
+    "traffic": "roads",
+    "circulation": "roads",
+    "lighting": "lighting",
+    "light": "lighting",
+    "eclairage": "lighting",
+    "water": "water",
+    "eau": "water",
+    "safety": "safety",
+    "security": "safety",
+    "property": "property",
+    "public_property": "property",
+    "public property": "property",
+    "equipment": "property",
+    "parks": "parks",
+    "park": "parks",
+    "green_space": "parks",
+    "green space": "parks",
+    "other": "other",
+    "autre": "other",
+}
+
+
+def normalize_category_key(value: str) -> str:
+    """Map model/provider category names to the app's stored lowercase keys."""
+    if not value:
+        return "other"
+    normalized = unicodedata.normalize("NFKD", str(value))
+    normalized = "".join(c for c in normalized if not unicodedata.combining(c))
+    normalized = re.sub(r"[^a-zA-Z0-9]+", "_", normalized).strip("_").lower()
+    return CATEGORY_ALIASES.get(normalized, "other")
+
+
+def fuzzy_category_alias(word: str) -> Optional[str]:
+    compact_word = re.sub(r'(.)\1+', r'\1', word.lower())
+    best_alias = None
+    best_score = 0.0
+    for alias in CATEGORY_ALIASES:
+        compact_alias = re.sub(r'(.)\1+', r'\1', alias.lower())
+        score = SequenceMatcher(None, compact_word, compact_alias).ratio()
+        if score > best_score:
+            best_score = score
+            best_alias = alias
+    if best_alias and best_score >= 0.78:
+        return CATEGORY_ALIASES[best_alias]
+    return None
+
 SYSTEM_PROMPT = """You are an expert in categorizing citizen complaints for a municipal government in Tunisia.
 
 Your task is to analyze complaint descriptions and predict the most appropriate category from this list:
@@ -258,15 +317,17 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
                 else:
                     raise ValueError("Could not parse JSON from response")
             
-            predicted = result.get("predicted", "AUTRE").upper()
-            if predicted not in VALID_CATEGORIES:
-                predicted = "AUTRE"
+            predicted = normalize_category_key(result.get("predicted", "other"))
             
             confidence = float(result.get("confidence", 0.0))
             confidence = max(0.0, min(1.0, confidence))
             
             alternatives = result.get("alternatives", [])
-            alternatives = [a.upper() for a in alternatives if a.upper() in VALID_CATEGORIES][:3]
+            alternatives = [
+                normalize_category_key(a)
+                for a in alternatives
+                if normalize_category_key(a) in VALID_CATEGORIES and normalize_category_key(a) != predicted
+            ][:3]
             
             return PredictionResponse(
                 predicted=predicted,
@@ -298,28 +359,28 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
             ]
             
             label_to_category = {
-                "road damage, potholes, sidewalks, road signs": "ROAD",
-                "street lighting, broken lights, traffic lights": "LIGHTING",
-                "garbage, waste, illegal dumping, dirty streets": "WASTE",
-                "water supply, leaks, drainage, flooding": "WATER",
-                "security, safety, unsafe conditions, crime": "SAFETY",
-                "damaged public buildings, playgrounds, public facilities": "PUBLIC_PROPERTY",
-                "parks, trees, green spaces, gardens": "GREEN_SPACE",
-                "traffic signals, road markings, parking, congestion": "TRAFFIC",
-                "construction violations, building permits, urban planning": "URBAN_PLANNING",
-                "public benches, bus stops, kiosks, equipment": "EQUIPMENT",
-                "other, miscellaneous": "AUTRE"
+                "road damage, potholes, sidewalks, road signs": "roads",
+                "street lighting, broken lights, traffic lights": "lighting",
+                "garbage, waste, illegal dumping, dirty streets": "waste",
+                "water supply, leaks, drainage, flooding": "water",
+                "security, safety, unsafe conditions, crime": "safety",
+                "damaged public buildings, playgrounds, public facilities": "property",
+                "parks, trees, green spaces, gardens": "parks",
+                "traffic signals, road markings, parking, congestion": "roads",
+                "construction violations, building permits, urban planning": "property",
+                "public benches, bus stops, kiosks, equipment": "property",
+                "other, miscellaneous": "other"
             }
             
             result = classifier(text_to_analyze, candidate_labels, multi_label=False)
             
             top_label = result["labels"][0]
             top_score = result["scores"][0]
-            predicted = label_to_category.get(top_label, "AUTRE")
+            predicted = label_to_category.get(top_label, "other")
             
             alternatives = []
             for label, score in zip(result["labels"][1:4], result["scores"][1:4]):
-                cat = label_to_category.get(label, "AUTRE")
+                cat = label_to_category.get(label, "other")
                 if cat != predicted and score > 0.05:
                     alternatives.append(cat)
             
@@ -334,39 +395,47 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
     
     # Strategy 3: Keyword-based fallback (always free, no dependencies)
     text_normalized = normalize_text(text_to_analyze)
+    fuzzy_hits = [fuzzy_category_alias(word) for word in text_normalized.split()]
+    fuzzy_hits = [hit for hit in fuzzy_hits if hit and hit != "other"]
+    if fuzzy_hits:
+        predicted = max(set(fuzzy_hits), key=fuzzy_hits.count)
+        alternatives = [cat for cat in sorted(set(fuzzy_hits)) if cat != predicted][:3]
+        return PredictionResponse(
+            predicted=predicted,
+            confidence=0.74,
+            alternatives=alternatives,
+            reasoning="Fuzzy multilingual alias match"
+        )
     text_lower = text_normalized.lower()
     
     keyword_map = {
-        "ROAD": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussee", "nid de poule", "bitume", "asphalt",
+        "roads": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussee", "nid de poule", "bitume", "asphalt",
                  # Arabic keywords (normalized)
-                 "طريق", "شارع", "حفرة", "نفق", "اسفلت", "رصيف", "طريق معطل", "تلف الطريق"],
-        "LIGHTING": ["eclairage", "lampadaire", "light", "ampoule", "feu", "traffic light", "lumiere",
+                 "طريق", "شارع", "حفرة", "نفق", "اسفلت", "رصيف", "طريق معطل", "تلف الطريق",
+                 "circulation", "traffic", "stationnement", "parking", "embouteillage", "signal",
+                 "مرور", "انتظار", "زحمة", "اشارة مرور", "توقيف", "ازدحام", "سير"],
+        "lighting": ["eclairage", "lampadaire", "light", "ampoule", "feu", "traffic light", "lumiere",
                      # Arabic keywords (normalized)
                      "انارة", "عمود انارة", "مصباح", "ضوء", "ظلام", "انارة معطلة", "مصباح مكسور"],
-        "WASTE": ["dechet", "poubelle", "garbage", "ordure", "waste", "dump", "sale", "dirty",
+        "waste": ["dechet", "poubelle", "garbage", "ordure", "waste", "dump", "sale", "dirty",
                   # Arabic keywords (normalized)
                   "قمامة", "نفايات", "قارورة", "وسخ", "قذارة", "قذارة الطريق", "نفايات غير مرمى"],
-        "WATER": ["eau", "water", "fuite", "leak", "drainage", "inondation", "flood", "canalisation",
+        "water": ["eau", "water", "fuite", "leak", "drainage", "inondation", "flood", "canalisation",
                   # Arabic keywords (normalized)
                   "ماء", "تسرب", "فيضان", "تصريف", "مجاري", "سائل", "مياه راكدة", "مياه ملوثة"],
-        "SAFETY": ["securite", "safety", "danger", "vol", "theft", "agression", "crime", "insecurite",
+        "safety": ["securite", "safety", "danger", "vol", "theft", "agression", "crime", "insecurite",
                    # Arabic keywords (normalized)
                    "سلامة", "خطر", "سرقة", "اعتداء", "جريمة", "تهديد", "عدم امان", "منطقة خطر"],
-        "PUBLIC_PROPERTY": ["batiment", "building", "playground", "aire de jeu", "propriete publique", "ecole", "school",
+        "property": ["batiment", "building", "playground", "aire de jeu", "propriete publique", "ecole", "school",
                             # Arabic keywords (normalized)
-                            "مبنى", "ملعب", "ممتلكات عامة", "مدرسة", "مرافق عامة", "مجمع سكني", "اثاث عام"],
-        "GREEN_SPACE": ["parc", "park", "arbre", "tree", "jardin", "garden", "espace vert", "pelouse",
+                            "مبنى", "ملعب", "ممتلكات عامة", "مدرسة", "مرافق عامة", "مجمع سكني", "اثاث عام",
+                            "construction", "permis", "permit", "urbanisme", "batir", "violation",
+                            "بناء", "رخصة", "تعمير", "هدم", "انتهاك", "تشيد", "مشروع بناء",
+                            "banc", "bench", "bus", "kiosque", "kiosk", "arret", "stop", "equipement",
+                            "مقعد", "حافلة", "كيشك", "محطة", "توقف", "معدات", "اثاث شارع"],
+        "parks": ["parc", "park", "arbre", "tree", "jardin", "garden", "espace vert", "pelouse",
                        # Arabic keywords (normalized)
                        "حديقة", "شجرة", "مساحة خضراء", "عشب", "منتزه", "حديقة عامة", "نباتات"],
-        "TRAFFIC": ["circulation", "traffic", "stationnement", "parking", "embouteillage", "signal",
-                    # Arabic keywords (normalized)
-                    "مرور", "انتظار", "زحمة", "اشارة مرور", "توقيف", "ازدحام", "سير"],
-        "URBAN_PLANNING": ["construction", "permis", "permit", "urbanisme", "batir", "violation",
-                            # Arabic keywords (normalized)
-                            "بناء", "رخصة", "تعمير", "هدم", "انتهاك", "تشيد", "مشروع بناء"],
-        "EQUIPMENT": ["banc", "bench", "bus", "kiosque", "kiosk", "arret", "stop", "equipement",
-                      # Arabic keywords (normalized)
-                      "مقعد", "حافلة", "كيشك", "محطة", "توقف", "معدات", "اثاث شارع"],
     }
     
     # Normalize keywords for matching
@@ -396,7 +465,7 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
         )
     
     return PredictionResponse(
-        predicted="AUTRE",
+        predicted="other",
         confidence=0.0,
         alternatives=[],
         reasoning="No model or keywords matched"

@@ -36,12 +36,30 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
       widget.initialLongitude ?? 10.1815,
     );
     _currentAddress = widget.address;
-    // Move map to initial position after frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _mapController.move(_currentPosition, 14);
+      try { _mapController.move(_currentPosition, 14); } catch (_) {}
     });
   }
 
+  @override
+  void didUpdateWidget(LocationPickerMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update address display when parent provides new address
+    if (widget.address != oldWidget.address && widget.address != null) {
+      setState(() => _currentAddress = widget.address);
+    }
+    // Update map position if parent provides new coordinates
+    if (widget.initialLatitude != oldWidget.initialLatitude ||
+        widget.initialLongitude != oldWidget.initialLongitude) {
+      if (widget.initialLatitude != null && widget.initialLongitude != null) {
+        final newPos = LatLng(widget.initialLatitude!, widget.initialLongitude!);
+        setState(() => _currentPosition = newPos);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try { _mapController.move(newPos, 15); } catch (_) {}
+        });
+      }
+    }
+  }
   Future<void> _getCurrentLocation() async {
     setState(() => _isLoading = true);
     try {
@@ -62,9 +80,11 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
       );
       _updatePosition(LatLng(position.latitude, position.longitude));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not get location: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Impossible d\'obtenir la position: $e')),
+        );
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -73,6 +93,10 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
   void _updatePosition(LatLng position) {
     setState(() {
       _currentPosition = position;
+    });
+    // Move map to new position
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try { _mapController.move(position, 15); } catch (_) {}
     });
     widget.onLocationSelected(position.latitude, position.longitude);
   }
@@ -172,7 +196,7 @@ class _LocationPickerMapState extends State<LocationPickerMap> {
                   )
                 : const Icon(Icons.my_location, color: AppColors.primary),
             label: Text(
-              _isLoading ? 'Getting location...' : 'Use my current location',
+              _isLoading ? 'Détection en cours...' : 'Utiliser ma position GPS',
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             style: OutlinedButton.styleFrom(

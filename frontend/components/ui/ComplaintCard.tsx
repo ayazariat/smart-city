@@ -57,6 +57,10 @@ export interface BaseComplaint {
   slaDeadline?: string | Date | null;
   referenceId?: string;
   resolutionRejectionReason?: string;
+  rejectionReason?: string;
+  isDuplicate?: boolean;
+  duplicateOf?: string | null;
+  duplicateOfReferenceId?: string | null;
 }
 
 interface ComplaintCardProps {
@@ -270,6 +274,15 @@ export const ComplaintCard = ({
               />
               {t(statusCfg.labelKey, { defaultValue: complaint.status })}
             </span>
+            {complaint.status === 'REJECTED' &&
+              complaint.isDuplicate &&
+              complaint.rejectionReason === 'duplicate' && (
+                <span className="text-xs text-slate-500">
+                  {t('complaint.reasonDuplicateOf', { 
+                    rc: complaint.duplicateOfTitle || complaint.duplicateOfReferenceId || getComplaintIdDisplay(complaint.duplicateOf || "")
+                  })}
+                </span>
+              )}
 
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
               {getCategoryLabel(complaint.category)}
@@ -492,8 +505,8 @@ export const ComplaintCard = ({
           </div>
         )}
 
-        {/* Actions Row */}
-        {(actions || canConfirmUpvote) && (
+        {/* Actions Row - Hide for merged or rejected complaints */}
+        {(actions || canConfirmUpvote) && !complaint.isDuplicate && complaint.status !== 'REJECTED' && (
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100 [&>button]:btn-action [&>a]:btn-action">
             {actions}
 

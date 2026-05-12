@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
+import { redirectToLogin } from '@/lib/auth-utils';
 import {
   TrendingUp,
   TrendingDown,
@@ -879,16 +880,16 @@ export default function TransparencyPage() {
                     }
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
+                  className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
                     isActive
                       ? 'bg-green-50 text-green-700 font-semibold border-l-[3px] border-green-600 pl-[10px]'
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-l-[3px] border-transparent pl-[10px]'
                   }`}
                 >
                   <item.icon
-                    className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-green-600' : 'text-slate-400'}`}
+                    className={`w-[18px] h-[18px] mt-0.5 flex-shrink-0 ${isActive ? 'text-green-600' : 'text-slate-400'}`}
                   />
-                  <span>{item.label}</span>
+                  <span className="flex-1 text-left leading-snug">{item.label}</span>
                 </button>
               );
             })}
@@ -983,7 +984,7 @@ export default function TransparencyPage() {
                       <div className="flex gap-3 mt-6">
                         <button
                           onClick={() => {
-                            sessionStorage.setItem('loginReturnUrl', '/complaints/new');
+                            sessionStorage.setItem('returnAfterLogin', '/complaints/new');
                             redirectToLogin(router);
                           }}
                           className="inline-flex items-center gap-2 px-6 py-3 bg-white text-green-700 font-semibold rounded-xl hover:bg-green-50 transition-all shadow-lg hover:shadow-xl"
@@ -1340,7 +1341,7 @@ export default function TransparencyPage() {
                                       }`}
                                     >
                                       {stats.citizenSatisfaction.value != null
-                                        ? `${stats.citizenSatisfaction.value}%`
+                                        ? `${Math.min(Math.max(stats.citizenSatisfaction.value, 0), 100)}%`
                                         : 'N/A'}
                                     </span>
                                   </div>
@@ -1360,7 +1361,7 @@ export default function TransparencyPage() {
                                           {stats.citizenSatisfaction.vsLast >= 0
                                             ? '+'
                                             : ''}
-                                          {stats.citizenSatisfaction.vsLast}%
+                                          {Math.min(Math.max(stats.citizenSatisfaction.vsLast, -100), 100)}%
                                         </span>
                                         <span className="text-slate-400">
                                           {t('stats.vsLast', 'vs last')}

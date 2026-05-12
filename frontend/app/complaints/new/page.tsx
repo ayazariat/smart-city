@@ -125,6 +125,8 @@ const detectCategory = (
     desc.includes('trash') ||
     desc.includes('bin') ||
     desc.includes('poubelle') ||
+    desc.includes('dechet') ||
+    desc.includes('dechets') ||
     desc.includes('déchet') ||
     desc.includes('ordure') ||
     desc.includes('saleté') ||
@@ -153,6 +155,7 @@ const detectCategory = (
     desc.includes('light') ||
     desc.includes('lamp') ||
     desc.includes('streetlight') ||
+    desc.includes('eclairage') ||
     desc.includes('éclairage') ||
     desc.includes('lampadaire') ||
     desc.includes('lumière') ||
@@ -163,6 +166,7 @@ const detectCategory = (
 
   if (
     desc.includes('water') ||
+    desc.includes('eau') ||
     desc.includes('flood') ||
     desc.includes('drain') ||
     desc.includes('leak') ||
@@ -179,6 +183,7 @@ const detectCategory = (
     desc.includes('danger') ||
     desc.includes('accident') ||
     desc.includes('security') ||
+    desc.includes('securite') ||
     desc.includes('sécurité') ||
     desc.includes('bruit') ||
     desc.includes('tapage') ||
@@ -193,6 +198,7 @@ const detectCategory = (
     desc.includes('fountain') ||
     desc.includes('building') ||
     desc.includes('monument') ||
+    desc.includes('propriete') ||
     desc.includes('propriété') ||
     desc.includes('jardin') ||
     desc.includes('square') ||
@@ -217,6 +223,8 @@ export default function NewComplaintPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<ComplaintCategory | ''>('');
+  const [categoryManuallySelected, setCategoryManuallySelected] =
+    useState(false);
   const [aiSuggestedCategory, setAiSuggestedCategory] =
     useState<ComplaintCategory | null>(null);
   const [urgency, setUrgency] = useState<ComplaintUrgency>('MEDIUM');
@@ -241,6 +249,9 @@ export default function NewComplaintPage() {
       title: string;
       overallScore: number;
       status: string;
+      createdAt?: string;
+      citizenId?: string | { _id?: string };
+      createdBy?: string | { _id?: string };
       upvoted?: boolean;
     }>;
     recommendation: string;
@@ -258,6 +269,14 @@ export default function NewComplaintPage() {
     new Date().toTimeString().slice(0, 5)
   );
   const [phone, setPhone] = useState('');
+  const currentUserId = (user as any)?._id || user?.id;
+  const getMatchOwnerId = (match: {
+    citizenId?: string | { _id?: string };
+    createdBy?: string | { _id?: string };
+  }) => {
+    const owner = match.citizenId || match.createdBy;
+    return typeof owner === 'object' ? owner?._id : owner;
+  };
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [isAnonymous, setIsAnonymous] = useState(false);
 
@@ -419,7 +438,11 @@ export default function NewComplaintPage() {
           if (normalized) {
             setAiSuggestedCategory(normalized);
             // Auto-select if confidence > 85%
-            if (result.confidence > 0.85 && !category) {
+            if (
+              result.confidence > 0.85 &&
+              !categoryManuallySelected &&
+              (!category || category === 'other')
+            ) {
               setCategory(normalized);
             }
           } else {
@@ -441,7 +464,7 @@ export default function NewComplaintPage() {
     }, 1500); // 1.5s debounce for AI
 
     return () => clearTimeout(timer);
-  }, [title, description, category]);
+  }, [title, description, category, categoryManuallySelected]);
 
   // REMOVED: BL-24 Urgency prediction - User requested removal
   // Urgency is now set manually by citizen via slider only
@@ -468,7 +491,8 @@ export default function NewComplaintPage() {
           category as string,
           commune || detectedCommune || 'Unknown',
           location?.latitude,
-          location?.longitude
+          location?.longitude,
+          media.map((item) => item.url).filter(Boolean)
         );
         if (result && result.topMatches && result.topMatches.length > 0) {
           setProactiveDuplicates(result.topMatches.slice(0, 3));
@@ -488,14 +512,19 @@ export default function NewComplaintPage() {
     commune,
     detectedCommune,
     location,
+    media,
     duplicateOverride,
   ]);
 
   useEffect(() => {
-    if (!category && aiSuggestedCategory) {
+    if (
+      aiSuggestedCategory &&
+      !categoryManuallySelected &&
+      (!category || category === 'other')
+    ) {
       setCategory(aiSuggestedCategory);
     }
-  }, [aiSuggestedCategory, category]);
+  }, [aiSuggestedCategory, category, categoryManuallySelected]);
 
   useEffect(() => {
     setUrgency(urgencyLevels[urgencySlider].value);
@@ -764,7 +793,9 @@ export default function NewComplaintPage() {
     const cleanPhone = phoneValue.replace(/[\s-]/g, '');
     const tunisianPhoneRegex = /^[2459]\d{7}$/;
     if (!tunisianPhoneRegex.test(cleanPhone)) {
-      setPhoneError(t('complaint.errors.phoneInvalid'));
+      setPhoneError(t('complaint.errors.phoneInvalid', {
+        defaultValue: 'Phone number must contain 8 digits and start with a digit from 2 to 9.',
+      }));
       return false;
     }
     setPhoneError(null);
@@ -823,7 +854,8 @@ export default function NewComplaintPage() {
           category as string,
           commune || detectedCommune || 'Unknown',
           location?.latitude,
-          location?.longitude
+          location?.longitude,
+          media.map((item) => item.url).filter(Boolean)
         );
         console.log('[ComplaintForm] dupResult:', dupResult);
         console.log('[ComplaintForm] dupResult.isDuplicate:', dupResult?.isDuplicate);
@@ -961,6 +993,7 @@ export default function NewComplaintPage() {
                 setTitle('');
                 setDescription('');
                 setCategory('');
+                setCategoryManuallySelected(false);
                 setUrgency('MEDIUM');
                 setUrgencySlider(2);
                 setAddress('');
@@ -1258,7 +1291,10 @@ export default function NewComplaintPage() {
                     <button
                       key={cat.value}
                       type="button"
-                      onClick={() => setCategory(cat.value)}
+                      onClick={() => {
+                        setCategoryManuallySelected(true);
+                        setCategory(cat.value);
+                      }}
                       className={`flex items-start gap-3 rounded-2xl border-2 px-3 py-3 text-left transition-all duration-200 hover:shadow-md ${
                         isSelected
                           ? 'border-primary bg-primary/5 shadow-lg'
@@ -1632,7 +1668,11 @@ export default function NewComplaintPage() {
                 </div>
                 {duplicateWarning.topMatches.length > 0 && (
                   <div className="space-y-2 mb-3">
-                    {duplicateWarning.topMatches.slice(0, 3).map((match, i) => (
+                    {duplicateWarning.topMatches.slice(0, 3).map((match, i) => {
+                      const isOwnSimilarComplaint =
+                        currentUserId &&
+                        getMatchOwnerId(match)?.toString() === currentUserId.toString();
+                      return (
                       <div
                         key={i}
                         className="p-3 bg-white rounded-lg border border-amber-100 hover:border-amber-300 transition-colors"
@@ -1658,95 +1698,17 @@ export default function NewComplaintPage() {
                             </Link>
                           </div>
                         </div>
-                        <div className="flex gap-2 mt-2 pt-2 border-t border-amber-100">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                const { upvoteComplaint } =
-                                  await import('@/services/complaint.service');
-                                await upvoteComplaint(match.complaintId);
-                                setDuplicateWarning({
-                                  ...duplicateWarning,
-                                  topMatches: duplicateWarning.topMatches.map(
-                                    (m) =>
-                                      m.complaintId === match.complaintId
-                                        ? { ...m, upvoted: true }
-                                        : m
-                                  ),
-                                });
-                              } catch (error) {
-                                alert(
-                                  t('complaint.duplicateModal.upvoteFailed') ||
-                                    'Failed to upvote. You may have already upvoted this complaint.'
-                                );
-                              }
-                            }}
-                            disabled={match.upvoted}
-                            className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                              match.upvoted
-                                ? 'bg-green-100 text-green-700 border border-green-300'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            {match.upvoted
-                              ? t('complaint.duplicateModal.upvoted')
-                              : t('complaint.duplicateModal.upvote')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-                                const token = localStorage.getItem('token');
-                                const response = await fetch(`${apiUrl}/ai/duplicate/confirm`, {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    token: token || '',
-                                  },
-                                  body: JSON.stringify({
-                                    newComplaintId: 'new',
-                                    existingComplaintId: match.complaintId,
-                                    action: 'keep_separate'
-                                  }),
-                                });
-                                if (response.ok) {
-                                  setDuplicateWarning({
-                                    ...duplicateWarning,
-                                    topMatches: duplicateWarning.topMatches.map(
-                                      (m) =>
-                                        m.complaintId === match.complaintId
-                                          ? { ...m, confirmed: true }
-                                          : m
-                                    ),
-                                  });
-                                } else {
-                                  throw new Error('Failed to confirm');
-                                }
-                              } catch (error) {
-                                alert(
-                                  t('complaint.duplicateModal.confirmFailed') ||
-                                    'Failed to confirm. Please try again.'
-                                );
-                              }
-                            }}
-                            disabled={(match as any).confirmed}
-                            className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                              (match as any).confirmed
-                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            {(match as any).confirmed
-                              ? t('complaint.duplicateModal.confirmed')
-                              : t('complaint.duplicateModal.confirm')}
-                          </button>
-                        </div>
+                        {isOwnSimilarComplaint && (
+                          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                            {t('complaint.duplicateModal.ownSimilar', {
+                              defaultValue:
+                                'You have already submitted a similar complaint.',
+                            })}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {duplicateWarning.recommendation && (

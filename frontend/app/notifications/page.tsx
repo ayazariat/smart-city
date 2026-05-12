@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, CheckCircle, Loader2, X, ArrowLeft } from 'lucide-react';
+import { Bell, CheckCircle, Loader2, X, ArrowLeft, GitMerge } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -42,6 +42,8 @@ function getNotifStyle(type: string): { color: string } {
     return { color: 'text-red-600' };
   if (t.includes('assigned') || t.includes('assign'))
     return { color: 'text-purple-600' };
+  if (t.includes('merged') || t.includes('duplicate'))
+    return { color: 'text-blue-600' };
   return { color: 'text-primary' };
 }
 
@@ -56,6 +58,7 @@ function getNotifIcon(type: string) {
     return CheckCircle;
   }
   if (t.includes('rejected')) return X;
+  if (t.includes('merged') || t.includes('duplicate')) return GitMerge;
   return Bell;
 }
 
@@ -90,19 +93,28 @@ export default function NotificationsPage() {
 
   const handleNotifClick = (notif: Notification) => {
     if (!notif.isRead) markAsRead(notif._id);
-    const id = notif.complaint?._id || notif.relatedId;
+    const id = notif.complaintId || notif.complaint?._id || notif.relatedId;
     if (id) {
       const dest =
-        user?.role === 'CITIZEN'
+        user?.role === 'CITIZEN' && notif.type !== 'complaint_merged_as_duplicate'
           ? `/my-complaints/${id}`
           : `/dashboard/complaints/${id}`;
-      window.location.href = dest;
+      router.push(dest);
     }
   };
 
   const renderNotif = (notif: Notification) => {
     const Icon = getNotifIcon(notif.type || '');
     const style = getNotifStyle(notif.type || '');
+    const message =
+      notif.messageKey && notif.messageVariables
+        ? t(notif.messageKey, notif.messageVariables)
+        : notif.message || notif.title;
+    const originalRc =
+      notif.messageVariables?.originalRc ||
+      (typeof notif.metadata?.originalRc === 'string'
+        ? notif.metadata.originalRc
+        : undefined);
     return (
       <div
         key={notif._id}
@@ -121,11 +133,16 @@ export default function NotificationsPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-slate-900 text-sm line-clamp-2">
-              {notif.message || notif.title}
+              {message}
             </p>
             <p className="text-xs text-slate-500 mt-1">
               {formatDate(notif.createdAt, false, t)}
             </p>
+            {notif.type === 'complaint_merged_as_duplicate' && originalRc && (
+              <button className="text-xs text-blue-700 hover:text-blue-900 font-medium mt-2">
+                {t('complaint.duplicateRejectionBanner.viewOriginal', { rc: originalRc })}
+              </button>
+            )}
           </div>
           {!notif.isRead && (
             <span className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0" />
