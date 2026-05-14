@@ -35,7 +35,6 @@ function ArchivePageContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [closedCount, setClosedCount] = useState(0);
-  const [rejectedCount, setRejectedCount] = useState(0);
   const limit = 10;
 
   useEffect(() => {
@@ -88,20 +87,12 @@ function ArchivePageContent() {
     const fetchCounts = async () => {
       if (!token || !hydrated || !user) return;
       try {
-        const [closedRes, rejectedRes] = await Promise.all([
-          complaintService.getArchivedComplaints({
-            filter: 'CLOSED',
-            page: 1,
-            limit: 1,
-          }),
-          complaintService.getArchivedComplaints({
-            filter: 'REJECTED',
-            page: 1,
-            limit: 1,
-          }),
-        ]);
+        const closedRes = await complaintService.getArchivedComplaints({
+          filter: 'CLOSED',
+          page: 1,
+          limit: 1,
+        });
         setClosedCount(closedRes?.total || 0);
-        setRejectedCount(rejectedRes?.total || 0);
       } catch {}
     };
     fetchCounts();
@@ -196,9 +187,8 @@ function ArchivePageContent() {
   }
 
   const archiveStats = {
-    total: closedCount + rejectedCount,
+    total: closedCount,
     closed: closedCount,
-    rejected: rejectedCount,
   };
 
   return (
@@ -206,13 +196,13 @@ function ArchivePageContent() {
       <div className="min-h-screen bg-slate-50/50">
         <PageHeader
           title="Archived Complaints"
-          subtitle={`${archiveStats.total} closed/rejected complaints`}
+          subtitle={`${archiveStats.total} closed complaints`}
           backHref="/dashboard"
         />
 
         {/* Stats Cards */}
-        <div className="max-w-7xl mx-auto px-4 mt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="w-full max-w-none px-4 md:px-6 mt-6">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4 mb-6">
             <button
               onClick={() => {
                 setStatusFilter('');
@@ -254,30 +244,10 @@ function ArchivePageContent() {
                 </div>
               </div>
             </button>
-
-            <button
-              onClick={() => {
-                setStatusFilter('REJECTED');
-                setPage(1);
-              }}
-              className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'REJECTED' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 hover:border-red-300'} animate-fadeInUp delay-150`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-slate-500 font-medium">Rejected</p>
-                  <p className="text-3xl font-bold text-red-600 mt-1">
-                    {archiveStats.rejected}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-                  <XCircle className="w-6 h-6 text-red-600" />
-                </div>
-              </div>
-            </button>
           </div>
         </div>
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           {/* Search and Filters */}
           <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200 animate-fadeIn">
             <div className="flex flex-col md:flex-row gap-3 items-center">
@@ -308,17 +278,17 @@ function ArchivePageContent() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex w-full md:w-auto flex-wrap items-center gap-2">
                 {/* Export Buttons */}
                 <Button
                   onClick={exportCSV}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white"
                 >
                   Export CSV
                 </Button>
                 <Button
                   onClick={exportPDF}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white"
                 >
                   Export PDF
                 </Button>

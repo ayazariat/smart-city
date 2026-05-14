@@ -22,7 +22,11 @@ import { showToast } from '@/components/ui/Toast';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { getDepartmentLabel } from '@/lib/categories';
+import {
+  getCategoryLabel as getTranslatedCategoryLabel,
+  getDepartmentDescriptionLabel,
+  getDepartmentLabel,
+} from '@/lib/categories';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,21 +55,6 @@ const ALL_CATEGORIES = [
 ];
 
 const URGENCY_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-
-// Use i18n - static labels deprecated
-const getCategoryLabel = (cat: string) => {
-  const labels = {
-    waste: 'Déchets et Propreté',
-    roads: 'Routes et Circulation',
-    lighting: 'Éclairage public',
-    water: 'Eau et Drainage',
-    safety: 'Sécurité et Bruit',
-    property: 'Propriété publique',
-    parks: 'Parcs et Espaces verts',
-    other: 'Autre',
-  };
-  return labels[cat as keyof typeof labels] || cat;
-};
 
 const DEFAULT_SLA_HOURS: Record<string, number> = {
   LOW: 168,
@@ -139,7 +128,7 @@ export default function AdminSettingsPage() {
         setSlaRules(buildDefaultSLARules());
       }
     } catch {
-      showToast(t('adminSettings.loadFailed'), 'error');
+      showToast(t('admin.settings.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -174,35 +163,35 @@ export default function AdminSettingsPage() {
   const saveDepartment = async () => {
     if (!deptForm.name.trim())
       return showToast(
-        t('adminSettings.departments.deptNameRequired'),
+        t('admin.settings.departments.deptNameRequired'),
         'error'
       );
     setSavingDept(true);
     try {
       if (editingDept) {
         await apiClient.put(`/admin/departments/${editingDept._id}`, deptForm);
-        showToast(t('adminSettings.departments.deptUpdated'), 'success');
+        showToast(t('admin.settings.departments.deptUpdated'), 'success');
       } else {
         await apiClient.post('/admin/departments', deptForm);
-        showToast(t('adminSettings.departments.deptCreated'), 'success');
+        showToast(t('admin.settings.departments.deptCreated'), 'success');
       }
       setDeptModal(false);
       loadData();
     } catch {
-      showToast(t('adminSettings.departments.deptSaveFailed'), 'error');
+      showToast(t('admin.settings.departments.deptSaveFailed'), 'error');
     } finally {
       setSavingDept(false);
     }
   };
 
   const deleteDepartment = async (id: string) => {
-    if (!confirm(t('adminSettings.departments.deptDeleteConfirm'))) return;
+    if (!confirm(t('admin.settings.departments.deptDeleteConfirm'))) return;
     try {
       await apiClient.delete(`/admin/departments/${id}`);
-      showToast(t('adminSettings.departments.deptDeleted'), 'success');
+      showToast(t('admin.settings.departments.deptDeleted'), 'success');
       loadData();
     } catch {
-      showToast(t('adminSettings.departments.deptDeleteFailed'), 'error');
+      showToast(t('admin.settings.departments.deptDeleteFailed'), 'error');
     }
   };
 
@@ -219,9 +208,9 @@ export default function AdminSettingsPage() {
       await apiClient.put('/admin/sla-rules', { rules: updatedRules });
       setSlaRules(updatedRules);
       setSlaEditing(null);
-      showToast(t('adminSettings.sla.slaUpdated'), 'success');
+      showToast(t('admin.settings.sla.slaUpdated'), 'success');
     } catch {
-      showToast(t('adminSettings.sla.slaUpdateFailed'), 'error');
+      showToast(t('admin.settings.sla.slaUpdateFailed'), 'error');
     } finally {
       setSavingSla(false);
     }
@@ -240,34 +229,34 @@ export default function AdminSettingsPage() {
     <DashboardLayout>
       <div className="min-h-screen bg-slate-50/50">
         <PageHeader
-          title={t('adminSettings.title')}
-          subtitle={t('adminSettings.subtitle')}
+          title={t('admin.settings.title')}
+          subtitle={t('admin.settings.subtitle')}
           backHref="/dashboard"
         />
 
-        <main className="max-w-6xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           {/* Tabs */}
-          <div className="flex items-center gap-2 mb-6 bg-white rounded-2xl p-2 shadow-sm border border-slate-200">
+          <div className="flex flex-wrap items-center gap-2 mb-6 bg-white rounded-2xl p-2 shadow-sm border border-slate-200">
             <button
               onClick={() => setActiveTab('departments')}
               className={tabClass('departments')}
             >
               <Building2 className="w-4 h-4 inline mr-2" />
-              {t('adminSettings.tabs.departments')}
+              {t('admin.settings.tabs.departments')}
             </button>
             <button
               onClick={() => setActiveTab('sla')}
               className={tabClass('sla')}
             >
               <Clock className="w-4 h-4 inline mr-2" />
-              {t('adminSettings.tabs.sla')}
+              {t('admin.settings.tabs.sla')}
             </button>
             <button
               onClick={() => setActiveTab('categories')}
               className={tabClass('categories')}
             >
               <Tag className="w-4 h-4 inline mr-2" />
-              {t('adminSettings.tabs.categories')}
+              {t('admin.settings.tabs.categories')}
             </button>
           </div>
 
@@ -282,7 +271,7 @@ export default function AdminSettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-slate-800">
-                      {t('adminSettings.departments.title')} (
+                      {t('admin.settings.departments.title')} (
                       {departments.length})
                     </h3>
                     <Button
@@ -290,14 +279,14 @@ export default function AdminSettingsPage() {
                       className="flex items-center gap-2"
                     >
                       <Plus className="w-4 h-4" />{' '}
-                      {t('adminSettings.departments.add')}
+                      {t('admin.settings.departments.add')}
                     </Button>
                   </div>
 
                   {departments.length === 0 ? (
                     <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400">
                       <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                      <p>{t('adminSettings.departments.noDepartments')}</p>
+                      <p>{t('admin.settings.departments.noDepartments')}</p>
                     </div>
                   ) : (
                     <div className="grid gap-4">
@@ -313,7 +302,10 @@ export default function AdminSettingsPage() {
                               </h4>
                               {dept.description && (
                                 <p className="text-sm text-slate-500 mt-1">
-                                  {dept.description}
+                                  {getDepartmentDescriptionLabel(
+                                    dept.description,
+                                    dept.categories?.[0]
+                                  )}
                                 </p>
                               )}
                               <div className="flex flex-wrap gap-1.5 mt-3">
@@ -322,7 +314,7 @@ export default function AdminSettingsPage() {
                                     key={cat}
                                     className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium"
                                   >
-                                    {getCategoryLabel(cat)}
+                                    {getTranslatedCategoryLabel(cat)}
                                   </span>
                                 ))}
                               </div>
@@ -331,14 +323,14 @@ export default function AdminSettingsPage() {
                               <button
                                 onClick={() => openDeptModal(dept)}
                                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                                title={t('adminSettings.edit')}
+                                title={t('admin.settings.edit')}
                               >
                                 <Edit2 className="w-4 h-4 text-slate-500" />
                               </button>
                               <button
                                 onClick={() => deleteDepartment(dept._id)}
                                 className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                title={t('adminSettings.delete')}
+                                title={t('admin.settings.delete')}
                               >
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </button>
@@ -357,7 +349,7 @@ export default function AdminSettingsPage() {
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                     <p className="text-sm text-amber-800">
-                      {t('adminSettings.sla.description')}
+                      {t('admin.settings.sla.description')}
                     </p>
                   </div>
 
@@ -371,23 +363,24 @@ export default function AdminSettingsPage() {
                           {cat}
                         </span>
                         <span className="text-sm font-semibold text-slate-700">
-                          {getCategoryLabel(cat)}
+                          {getTranslatedCategoryLabel(cat)}
                         </span>
                       </div>
-                      <table className="w-full text-sm">
+                      <div className="overflow-x-auto">
+                      <table className="w-full min-w-[560px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-100">
                             <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
-                              {t('adminSettings.sla.urgency')}
+                              {t('admin.settings.sla.urgency')}
                             </th>
                             <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
-                              {t('adminSettings.sla.hours')}
+                              {t('admin.settings.sla.hours')}
                             </th>
                             <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
-                              {t('adminSettings.sla.label')}
+                              {t('admin.settings.sla.label')}
                             </th>
                             <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500 uppercase">
-                              {t('adminSettings.sla.actions')}
+                              {t('admin.settings.sla.actions')}
                             </th>
                           </tr>
                         </thead>
@@ -466,13 +459,13 @@ export default function AdminSettingsPage() {
                                         ) : (
                                           <Save className="w-3 h-3" />
                                         )}{' '}
-                                        {t('adminSettings.sla.save')}
+                                        {t('admin.settings.sla.save')}
                                       </button>
                                       <button
                                         onClick={() => setSlaEditing(null)}
                                         className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200"
                                       >
-                                        {t('adminSettings.sla.cancel')}
+                                        {t('admin.settings.sla.cancel')}
                                       </button>
                                     </div>
                                   ) : (
@@ -486,7 +479,7 @@ export default function AdminSettingsPage() {
                                       className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs hover:bg-slate-200 ml-auto"
                                     >
                                       <Edit2 className="w-3 h-3" />{' '}
-                                      {t('adminSettings.sla.edit')}
+                                      {t('admin.settings.sla.edit')}
                                     </button>
                                   )}
                                 </td>
@@ -495,6 +488,7 @@ export default function AdminSettingsPage() {
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -504,13 +498,12 @@ export default function AdminSettingsPage() {
               {activeTab === 'categories' && (
                 <div className="space-y-4">
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
-                    Complaint categories are built-in and fixed across the app.
-                    Assign categories to departments in the{' '}
+                    {t('admin.settings.categories.description')}{' '}
                     <button
                       onClick={() => setActiveTab('departments')}
                       className="underline font-medium"
                     >
-                      Departments tab
+                      {t('admin.settings.categories.departmentsTab')}
                     </button>
                     .
                   </div>
@@ -526,7 +519,7 @@ export default function AdminSettingsPage() {
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-semibold text-slate-800 text-sm">
-                              {getCategoryLabel(cat)}
+                              {getTranslatedCategoryLabel(cat)}
                             </span>
                             <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-mono rounded-lg">
                               {cat}
@@ -541,13 +534,15 @@ export default function AdminSettingsPage() {
                                   className="flex items-center gap-1.5 text-xs text-slate-500"
                                 >
                                   <CheckCircle className="w-3 h-3 text-green-500 flex-shrink-0" />
-                                  <span>{d.name}</span>
+                                  <span>{getDepartmentLabel(d.name)}</span>
                                 </div>
                               ))
                             ) : (
                               <div className="flex items-center gap-1.5 text-xs text-amber-600">
                                 <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                                <span>No department assigned</span>
+                                <span>
+                                  {t('admin.settings.categories.noDepartmentAssigned')}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -567,9 +562,11 @@ export default function AdminSettingsPage() {
         isOpen={deptModal}
         onClose={() => setDeptModal(false)}
         title={
-          editingDept ? t('admin.editDepartment') : t('admin.addDepartment')
+          editingDept
+            ? t('admin.settings.departments.editDepartment')
+            : t('admin.settings.departments.addDepartment')
         }
-        description={t('admin.departmentModalDescription')}
+        description={t('admin.settings.departments.departmentModalDescription')}
         footer={
           <>
             <Button
@@ -582,7 +579,7 @@ export default function AdminSettingsPage() {
             <Button onClick={saveDepartment} isLoading={savingDept}>
               {editingDept
                 ? t('common.saveChanges')
-                : t('admin.createDepartment')}
+                : t('admin.settings.departments.addDepartment')}
             </Button>
           </>
         }
@@ -590,7 +587,7 @@ export default function AdminSettingsPage() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              {t('admin.departmentName')} *
+              {t('admin.settings.departments.departmentName')} *
             </label>
             <input
               value={deptForm.name}
@@ -598,12 +595,12 @@ export default function AdminSettingsPage() {
                 setDeptForm({ ...deptForm, name: e.target.value })
               }
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              placeholder={t('admin.departmentNamePlaceholder')}
+              placeholder={t('admin.settings.departments.departmentNamePlaceholder')}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Description
+              {t('admin.settings.departments.description')}
             </label>
             <textarea
               value={deptForm.description}
@@ -612,16 +609,15 @@ export default function AdminSettingsPage() {
               }
               rows={2}
               className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
-              placeholder="Optional description..."
+              placeholder={t('admin.settings.departments.descriptionPlaceholder')}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Handles Categories (Default Assignment)
+              {t('admin.settings.departments.handlesCategories')}
             </label>
             <p className="text-xs text-slate-500 mb-2">
-              When a citizen submits a complaint with these categories, this
-              department will be suggested as the default assignment.
+              {t('admin.settings.departments.handlesCategoriesHint')}
             </p>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
               {ALL_CATEGORIES.map((cat) => {
@@ -649,7 +645,7 @@ export default function AdminSettingsPage() {
                         checked ? 'text-primary font-medium' : 'text-slate-600'
                       }
                     >
-                      {getCategoryLabel(cat)}
+                      {getTranslatedCategoryLabel(cat)}
                     </span>
                   </label>
                 );

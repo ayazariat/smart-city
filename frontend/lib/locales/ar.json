@@ -99,6 +99,10 @@
         "departmentModalDescription": "تكوين تفاصيل القسم وفئات الشكاوى التي يديرها.",
         "departmentName": "اسم القسم",
         "departmentNamePlaceholder": "مثال: الطرق والبنية التحتية",
+        "description": "الوصف",
+        "descriptionPlaceholder": "وصف اختياري...",
+        "handlesCategories": "الفئات التي يعالجها القسم (التعيين الافتراضي)",
+        "handlesCategoriesHint": "عندما يرسل مواطن شكوى ضمن هذه الفئات، سيتم اقتراح هذا القسم كتعيين افتراضي.",
         "noDepartments": "لم يتم تكوين أي قسم بعد.",
         "deptNameRequired": "اسم القسم مطلوب",
         "deptUpdated": "تم تحديث القسم",
@@ -119,6 +123,11 @@
         "edit": "تعديل",
         "slaUpdated": "تم تحديث قاعدة SLA",
         "slaUpdateFailed": "فشل تحديث قاعدة SLA"
+      },
+      "categories": {
+        "description": "فئات الشكاوى مدمجة وثابتة في كل التطبيق. عيّن الفئات للأقسام من تبويب",
+        "departmentsTab": "الأقسام",
+        "noDepartmentAssigned": "لا يوجد قسم معين"
       },
       "edit": "تعديل",
       "delete": "حذف"
@@ -380,6 +389,8 @@
     "mediumDesc": "هذا الأسبوع",
     "HIGH": "مرتفع",
     "highDesc": "خلال 48 ساعة",
+    "URGENT": "عاجل",
+    "urgentDesc": "فوري",
     "CRITICAL": "عاجل",
     "criticalDesc": "فوري"
   },
@@ -1093,7 +1104,13 @@
         "closed": "تم إغلاق الشكوى",
         "closed.desc": "تم إغلاق شكواك."
       },
-      "mergedAsDuplicate": "تم تحديد شكواك {{mergedRc}} على أنها مشابهة للشكوى {{originalRc}}: '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية.",
+      "mergedAsDuplicate": "تم تحديد شكواك '{{mergedTitle}}' على أنها مشابهة لـ '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية.",
+      "assignedComplaint": {
+        "message": "تم تعيين شكواك '{{complaintTitle}}' إلى فريق {{department}}. نحن نعمل عليها!"
+      },
+      "validatedComplaint": {
+        "message": "تم التحقق من شكواك '{{complaintTitle}}' وأصبحت ظاهرة للعامة."
+      },
       "newComplaint": "شكوى جديدة",
       "newComplaint.desc": "تم تقديم شكوى جديدة.",
       "assignedToYou": "مسندة إليك",
@@ -1101,6 +1118,34 @@
     }
   },
   "notifications": {
-    "mergedAsDuplicate": "تم تحديد شكواك {{mergedRc}} على أنها مشابهة للشكوى {{originalRc}}: '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية."
+    "title": "الإشعارات",
+    "empty": "لا توجد إشعارات بعد",
+    "emptyHint": "سيتم إعلامك عند تحديث شكاواك.",
+    "seeAll": "عرض الكل",
+    "markAllRead": "تحديد الكل كمقروء",
+    "today": "اليوم",
+    "earlier": "سابقاً",
+    "types": {
+      "VALIDATION": "التحقق",
+      "VALIDATED": "تم التحقق",
+      "ASSIGNMENT": "التعيين",
+      "ASSIGNED": "تم التعيين",
+      "STATUS_UPDATE": "تحديث الحالة",
+      "IN_PROGRESS": "قيد التنفيذ",
+      "CLOSURE": "الإغلاق",
+      "CLOSED": "مغلقة",
+      "RESOLVED": "تم الحل",
+      "RESOLUTION_REVIEW": "مراجعة الحل",
+      "RESOLUTION_REJECTED": "مرفوض",
+      "REJECTED": "مرفوض"
+    },
+    "mergedAsDuplicate": "تم تحديد شكواك '{{mergedTitle}}' على أنها مشابهة لـ '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية.",
+    "assignedComplaint": {
+      "message": "تم تعيين شكواك '{{complaintTitle}}' إلى فريق {{department}}. نحن نعمل عليها!"
+    },
+    "validatedComplaint": {
+      "message": "تم التحقق من شكواك '{{complaintTitle}}' وأصبحت ظاهرة للعامة."
+    },
+    "mergedAsDuplicateNoMergedTitle": "تم تحديد شكواك على أنها مشابهة لـ '{{originalTitle}}'. تم نقل أصواتك. انقر لعرض الشكوى الأصلية."
   }
 }

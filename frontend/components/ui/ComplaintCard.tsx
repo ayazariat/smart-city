@@ -60,6 +60,7 @@ export interface BaseComplaint {
   rejectionReason?: string;
   isDuplicate?: boolean;
   duplicateOf?: string | null;
+  duplicateOfTitle?: string | null;
   duplicateOfReferenceId?: string | null;
 }
 
@@ -298,7 +299,8 @@ export const ComplaintCard = ({
                   {t(`urgency.${complaint.urgency}`)}
                 </span>
               )}
-            {(complaint as any).aiPredictedUrgency && (
+            {!(complaint.assignedTo || complaint.assignedTeam) &&
+              (complaint as any).aiPredictedUrgency && (
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                   (complaint as any).aiUrgencyPrediction?.confidence > 0.8

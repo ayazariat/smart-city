@@ -101,6 +101,10 @@
         "departmentModalDescription": "Configure department details and which complaint categories it handles.",
         "departmentName": "Department Name",
         "departmentNamePlaceholder": "e.g. Roads & Infrastructure",
+        "description": "Description",
+        "descriptionPlaceholder": "Optional description...",
+        "handlesCategories": "Handles Categories (Default Assignment)",
+        "handlesCategoriesHint": "When a citizen submits a complaint with these categories, this department will be suggested as the default assignment.",
         "noDepartments": "No departments configured yet.",
         "deptNameRequired": "Department name is required",
         "deptUpdated": "Department updated",
@@ -121,6 +125,11 @@
         "edit": "Edit",
         "slaUpdated": "SLA rule updated",
         "slaUpdateFailed": "Failed to update SLA rule"
+      },
+      "categories": {
+        "description": "Complaint categories are built-in and fixed across the app. Assign categories to departments in the",
+        "departmentsTab": "Departments tab",
+        "noDepartmentAssigned": "No department assigned"
       },
       "edit": "Edit",
       "delete": "Delete"
@@ -476,6 +485,8 @@
     "mediumDesc": "This week",
     "HIGH": "High",
     "highDesc": "Within 48h",
+    "URGENT": "Urgent",
+    "urgentDesc": "Immediate",
     "CRITICAL": "Urgent",
     "criticalDesc": "Immediate"
   },
@@ -846,7 +857,14 @@
       "RESOLUTION_REJECTED": "Rejected",
       "REJECTED": "Rejected"
     },
-    "mergedAsDuplicate": "Your complaint {{mergedRc}} was identified as similar to complaint {{originalRc}}: '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report."
+    "mergedAsDuplicate": "Your complaint '{{mergedTitle}}' was identified as similar to '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report.",
+    "mergedAsDuplicateNoMergedTitle": "Your complaint was identified as similar to '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report.",
+    "assignedComplaint": {
+      "message": "Your complaint '{{complaintTitle}}' has been assigned to the {{department}} team. We are on it!"
+    },
+    "validatedComplaint": {
+      "message": "Your complaint '{{complaintTitle}}' has been validated and is now visible publicly."
+    }
   },
   "register": {
     "title": "Create Account",
@@ -924,7 +942,7 @@
     "infoNotAvailable": "Information not available",
     "department": "Department",
     "assignedTo": "Assigned to",
-    "technicianAssigned": "Technician Assigned",
+    "technicianAssigned": "Assigned to Technician",
     "repairTeam": "Repair Team",
     "teamAssigned": "Team Assigned",
     "dates": "Dates",

@@ -58,7 +58,7 @@ export function PageHeader({
         </>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 py-4 sm:py-5 relative z-10">
+      <div className="w-full max-w-none px-4 sm:px-6 py-4 sm:py-5 relative z-10">
         <div className="flex items-center justify-between">
           {/* Left Section */}
           <div className="flex items-center gap-3 sm:gap-4">

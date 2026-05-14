@@ -388,7 +388,7 @@ function DashboardContent() {
 
   return (
     <DashboardLayout>
-      <main className="px-4 md:px-6 py-6 md:py-8 max-w-6xl">
+      <main className="w-full max-w-none px-4 md:px-6 py-6 md:py-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -730,7 +730,7 @@ function DashboardContent() {
 
           {/* Citizen Stats */}
           {user?.role === 'CITIZEN' && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                 <div className="text-2xl font-bold text-blue-700 mb-1">
                   {stats.total || 0}
@@ -781,7 +781,7 @@ function DashboardContent() {
           {/* Agent Stats */}
           {user?.role === 'MUNICIPAL_AGENT' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">
                     {stats.total || 0}
@@ -881,7 +881,7 @@ function DashboardContent() {
           {/* Manager Stats */}
           {user?.role === 'DEPARTMENT_MANAGER' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">
                     {stats.total || 0}
@@ -981,7 +981,7 @@ function DashboardContent() {
           {/* Technician Stats */}
           {user?.role === 'TECHNICIAN' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
                   <div className="text-2xl font-bold text-slate-700 mb-1">
                     {stats.total ||
@@ -1055,7 +1055,7 @@ function DashboardContent() {
           {/* Admin Stats */}
           {user?.role === 'ADMIN' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">
                     {stats.total || 0}
@@ -1294,7 +1294,7 @@ function DashboardContent() {
         {(user?.role === 'DEPARTMENT_MANAGER' ||
           user?.role === 'ADMIN' ||
           user?.role === 'MUNICIPAL_AGENT') && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-6 mt-6 items-stretch">
             <TrendForecastChart
               municipality={
                 user?.municipalityName ||

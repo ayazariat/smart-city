@@ -115,8 +115,17 @@ export const uploadMedia = async (
     const apiUrl =
       process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-    // Get token from useAuthStore
+    // Get token from useAuthStore with hydration check
     const { useAuthStore } = await import('@/store/useAuthStore');
+    const state = useAuthStore.getState();
+    
+    // Wait for hydration if needed
+    let attempts = 0;
+    while (!state.hydrated && attempts < 10) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      attempts++;
+    }
+
     const { token } = useAuthStore.getState();
 
     const headers: Record<string, string> = {};
@@ -124,12 +133,54 @@ export const uploadMedia = async (
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${apiUrl}/upload`, {
+    let response = await fetch(`${apiUrl}/upload`, {
       method: 'POST',
       body: formData,
       credentials: 'include',
       headers,
     });
+
+    // Handle 401 - try to refresh token
+    if (response.status === 401 && token) {
+      const { refreshToken } = useAuthStore.getState();
+      if (refreshToken) {
+        try {
+          const refreshResponse = await fetch(`${apiUrl}/auth/refresh-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          });
+
+          if (refreshResponse.ok) {
+            const data = await refreshResponse.json();
+            const newToken = data.accessToken || data.token;
+            if (newToken) {
+              useAuthStore.setState({
+                token: newToken,
+                refreshToken: data.refreshToken || refreshToken,
+              });
+              
+              // Retry upload with new token
+              headers['Authorization'] = `Bearer ${newToken}`;
+              response = await fetch(`${apiUrl}/upload`, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+                headers,
+              });
+            }
+          }
+        } catch {
+          // Refresh failed, clear auth
+          useAuthStore.setState({
+            user: null,
+            token: null,
+            refreshToken: null,
+            isAuthenticated: false,
+          });
+        }
+      }
+    }
 
     const result = await response.json();
 
@@ -816,12 +867,15 @@ export const checkDuplicate = async (
 
     const result = await response.json();
     const data = result.data || null;
+    console.log('[checkDuplicate] AI service response:', data);
     if (data?.topMatches) {
+      console.log('[checkDuplicate] Top matches before filter:', data.topMatches);
       data.topMatches = data.topMatches
-        .filter((match: { status?: string; overallScore?: number }) =>
-          match.status !== 'REJECTED' && (match.overallScore || 0) >= 0.65
+        .filter((match: { overallScore?: number }) =>
+          (match.overallScore || 0) >= 0.5
         )
         .slice(0, 3);
+      console.log('[checkDuplicate] Top matches after filter (threshold 0.5):', data.topMatches);
       data.isDuplicate = data.topMatches.length > 0;
     }
     return data;

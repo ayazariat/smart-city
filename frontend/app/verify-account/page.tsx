@@ -21,8 +21,18 @@ function VerifyAccountContent() {
   const searchParams = useSearchParams();
 
   const magicToken = searchParams.get('token');
-  const magicUserId = searchParams.get('userId');
+  const magicUserId = searchParams.get('userId') || searchParams.get('id');
   const emailFromRegister = searchParams.get('email') || '';
+
+  // Debug logging (client-side only)
+  useEffect(() => {
+    console.log('Verify Account Page:', {
+      magicToken: magicToken ? `${magicToken.substring(0, 8)}...` : 'MISSING',
+      magicUserId: magicUserId ? `${magicUserId.substring(0, 8)}...` : 'MISSING',
+      emailFromRegister,
+      fullUrl: typeof window !== 'undefined' ? window.location.href : 'SSR',
+    });
+  }, [magicToken, magicUserId, emailFromRegister]);
 
   const { verifyMagicLink } = useAuthStore();
   const [isVerifying, setIsVerifying] = useState(false);
@@ -72,19 +82,11 @@ function VerifyAccountContent() {
         localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('user', JSON.stringify(data.user));
 
-        // Redirect to dashboard with tokens in URL for verification handling
+        // Show success message without auto-redirect
         setIsVerified(true);
-        setTimeout(() => {
-          router.push(
-            `/dashboard?verified=true&token=${data.token}&refreshToken=${data.refreshToken}`
-          );
-        }, 1500);
       } else {
-        // Fallback: redirect to login if no tokens
+        // Fallback: show success message without auto-redirect
         setIsVerified(true);
-        setTimeout(() => {
-          router.push('/?verified=true');
-        }, 2000);
       }
     } catch (error) {
       setErrorMessage(
@@ -126,11 +128,19 @@ function VerifyAccountContent() {
                       <CheckCircle className="w-8 h-8 text-success-600" />
                     </div>
                     <h2 className="text-xl font-bold text-slate-900 mb-2">
-                      Compte vérifié !
+                      Compte activé avec succès !
                     </h2>
                     <p className="text-slate-600 mb-6">
-                      Redirection vers la page de connexion...
+                      Votre compte a été activé. Vous pouvez maintenant vous connecter.
                     </p>
+                    <Button
+                      onClick={() => router.push('/')}
+                      fullWidth
+                      className="flex items-center justify-center gap-2"
+                    >
+                      Se connecter
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
                   </div>
                 </>
               ) : errorMessage ? (

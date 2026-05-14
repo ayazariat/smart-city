@@ -24,8 +24,8 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
         
-        # Build query - search for ANY status in the municipality (not filtered by status!)
-        # Use regex for flexible municipality matching (case-insensitive, handle accents)
+        # Build query - search for ALL complaints (not filtered by user or municipality)
+        # This ensures similar complaints are found regardless of who created them or where
         query = {
             "createdAt": {"$gte": cutoff},
             "status": {"$nin": ["REJECTED", "ARCHIVED"]},
@@ -33,15 +33,8 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
             "isDuplicate": {"$ne": True}
         }
         
-        # Only add municipality filter if it's provided and not empty
-        # If no municipality provided, search across ALL municipalities
-        if municipality and municipality.strip():
-            # Remove accents and use regex for flexible matching
-            import unicodedata
-            normalized_mun = ''.join(c for c in unicodedata.normalize('NFD', municipality) 
-                                    if unicodedata.category(c) != 'Mn')
-            # Use contains regex to match partial municipality names
-            query["municipalityName"] = {"$regex": normalized_mun, "$options": "i"}
+        # NOTE: Municipality filter removed to search across ALL municipalities
+        # This ensures users see similar complaints from other areas as well
             
         print(f"[DUPLICATE] Query: {query}")
         

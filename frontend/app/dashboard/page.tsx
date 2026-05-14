@@ -302,6 +302,7 @@ function DashboardContent() {
           inProgress: raw.inProgress as number,
           resolved: raw.resolved as number,
           closed: raw.closed as number | undefined,
+          rejected: raw.rejected as number | undefined,
           totalOverdue: raw.totalOverdue as number | undefined,
           overdue: raw.overdue as number | undefined,
           resolutionRate: raw.resolutionRate as number | undefined,
@@ -750,7 +751,7 @@ function DashboardContent() {
 
   return (
     <DashboardLayout>
-      <main className="px-4 md:px-6 py-6 md:py-8 max-w-6xl">
+      <main className="w-full px-4 md:px-6 py-6 md:py-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -1099,7 +1100,7 @@ function DashboardContent() {
 
           {/* Citizen Stats */}
           {user?.role === 'CITIZEN' && (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                 <div className="text-2xl font-bold text-blue-700 mb-1">
                   {stats.total || 0}
@@ -1113,7 +1114,7 @@ function DashboardContent() {
               </div>
               <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 border border-amber-200">
                 <div className="text-2xl font-bold text-amber-700 mb-1">
-                  {(stats.submitted || 0) + (stats.pending || 0)}
+                  {stats.pending ?? stats.submitted ?? 0}
                 </div>
                 <div className="text-sm text-amber-600 font-medium">
                   {t('stats.pending')}
@@ -1161,7 +1162,7 @@ function DashboardContent() {
           {/* Agent Stats */}
           {user?.role === 'MUNICIPAL_AGENT' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">
                     {stats.total || 0}
@@ -1255,10 +1256,10 @@ function DashboardContent() {
           {/* Manager Stats */}
           {user?.role === 'DEPARTMENT_MANAGER' && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">
-                    {stats.total || 0}
+                    {(stats.assigned || 0) + (stats.inProgress || 0) + (stats.resolved || 0) + (stats.closed || 0) + (stats.totalOverdue || stats.overdue || 0)}
                   </div>
                   <div className="text-sm text-blue-600 font-medium">
                     {t('stats.department')}
@@ -1311,17 +1312,6 @@ function DashboardContent() {
                     {t('stats.closedCases') || 'Completed'}
                   </div>
                 </div>
-                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
-                  <div className="text-2xl font-bold text-red-700 mb-1">
-                    {(stats.rejected as any) || 0}
-                  </div>
-                  <div className="text-sm text-red-600 font-medium">
-                    {t('stats.rejectedCases')}
-                  </div>
-                  <div className="text-xs text-red-500 mt-1">
-                    {t('stats.rejectedCases') || 'Rejected complaints'}
-                  </div>
-                </div>
                 <div
                   className={`bg-gradient-to-br ${(stats.totalOverdue || stats.overdue || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-slate-50 to-slate-100 border-slate-200'} rounded-xl p-4 border`}
                 >
@@ -1368,7 +1358,7 @@ function DashboardContent() {
           {/* Technician Stats */}
           {user?.role === 'TECHNICIAN' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border border-slate-200">
                   <div className="text-2xl font-bold text-slate-700 mb-1">
                     {stats.total ||
@@ -1416,17 +1406,6 @@ function DashboardContent() {
                     {t('stats.resolvedTasks')}
                   </div>
                 </div>
-                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 border border-red-200">
-                  <div className="text-2xl font-bold text-red-700 mb-1">
-                    {(stats.rejected as any) || 0}
-                  </div>
-                  <div className="text-sm text-red-600 font-medium">
-                    {t('stats.rejectedCases')}
-                  </div>
-                  <div className="text-xs text-red-500 mt-1">
-                    {t('stats.rejectedCases') || 'Rejected complaints'}
-                  </div>
-                </div>
               </div>
             </>
           )}
@@ -1434,7 +1413,7 @@ function DashboardContent() {
           {/* Admin Stats */}
           {user?.role === 'ADMIN' && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+              <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                   <div className="text-2xl font-bold text-blue-700 mb-1">
                     {stats.total || 0}

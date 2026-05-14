@@ -574,7 +574,11 @@ export default function ComplaintDetailPage() {
     user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN" || user?.role === "MUNICIPAL_AGENT";
   const canSeeUrgencyPrediction = user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN";
   const showUrgencyAi =
-    canSeeUrgencyPrediction && complaint?.status === "SUBMITTED";
+    canSeeUrgencyPrediction &&
+    !!complaint?.aiUrgencyPrediction &&
+    ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS"].includes(
+      complaint?.status || ""
+    );
   const showDuplicateAi =
     user?.role === "MUNICIPAL_AGENT" &&
     !!complaint?.aiDuplicateCheck &&
@@ -599,9 +603,24 @@ export default function ComplaintDetailPage() {
   const canViewContact = isAgentOrManager || isAdmin || isOwner;
   
   // Get citizen info - try createdBy first (for agent/manager view) or citizen (for some views)
-  const citizenInfo = complaint?.createdBy && typeof complaint.createdBy === "object" 
-    ? complaint.createdBy 
-    : (complaint?.citizen as { _id?: string; fullName?: string; email?: string; phone?: string } | null);
+  // Also check complaint.phone field directly for anonymous complaints
+  const citizenInfo = (() => {
+    if (complaint?.createdBy && typeof complaint.createdBy === "object") {
+      return complaint.createdBy;
+    }
+    if (complaint?.citizen && typeof complaint.citizen === "object") {
+      return complaint.citizen;
+    }
+    // For anonymous complaints, create citizen info from complaint fields
+    if (complaint?.isAnonymous && (complaint?.ownerName || complaint?.phone)) {
+      return {
+        fullName: complaint.ownerName || "Anonymous",
+        phone: complaint.phone,
+        email: null
+      };
+    }
+    return null;
+  })();
 
   const hasLocation = complaint?.location?.coordinates && Array.isArray(complaint.location.coordinates) && complaint.location.coordinates.length >= 2;
   const afterPhotos = complaint?.afterPhotos || complaint?.resolutionPhotos || complaint?.media?.filter((m: any) => m.type === 'after' || m.category === 'after') || [];
@@ -694,24 +713,24 @@ export default function ComplaintDetailPage() {
         }
       />
 
-      <main className="max-w-6xl mx-auto px-4 py-6" role="main">
-        <div className="grid lg:grid-cols-3 gap-6">
+      <main className="w-full max-w-4xl mx-auto px-4 py-4 overflow-x-hidden" role="main">
+        <div className="w-full grid grid-cols-1 gap-4 items-start overflow-x-hidden">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-4">
             {/* Basic Info */}
-            <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="basic-info-title">
+            <section className="bg-white rounded-2xl shadow-lg p-4 border border-slate-100" aria-labelledby="basic-info-title">
               <h2 id="basic-info-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
                 {t("complaintDetail.mainInformation")}
               </h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="bg-slate-50 rounded-xl p-4">
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="bg-slate-50 rounded-xl p-3">
                   <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.category")}</label>
                   <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-md">
                     {categoryLabels[complaint.category] || complaint.category}
                   </span>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-4">
+                <div className="bg-slate-50 rounded-xl p-3">
                   <label className="block text-sm font-medium text-slate-500 mb-2">{t("complaintDetail.urgency")}</label>
                   <div className="flex items-center gap-2" role="group" aria-label={`${t("complaintDetail.urgency")}: ${getUrgencyValue(complaint.urgency)} / 5`}>
                     <div className="flex gap-1" aria-hidden="true">
@@ -739,8 +758,8 @@ export default function ComplaintDetailPage() {
 
             {/* Duplicate Detection Review Card */}
             {complaint.status === "SUBMITTED" && showDuplicateResults && duplicateResults.length > 0 && user?.role === "MUNICIPAL_AGENT" && (
-              <section className="bg-white rounded-xl shadow-sm p-6 border border-slate-200">
-                <div className="flex items-start justify-between mb-5">
+              <section className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
+                <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
                       <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -945,8 +964,8 @@ export default function ComplaintDetailPage() {
                   {t("complaintDetail.aiAnalysis")}
                 </h2>
                 
-                {/* BL-24: Urgency Prediction — Manager/Admin only */}
-                {showUrgencyAi && complaint.aiUrgencyPrediction && (
+                {/* BL-24: Urgency Prediction — Manager/Admin only - Hide when assigned */}
+                {showUrgencyAi && complaint.aiUrgencyPrediction && !(complaint.assignedTo || complaint.assignedTeam) && (
                   <div className="mb-4 p-4 bg-white rounded-xl border border-violet-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-700">{t("complaintDetail.aiUrgencyPrediction")}</span>
@@ -988,14 +1007,14 @@ export default function ComplaintDetailPage() {
             )}
 
             {/* Description */}
-            <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="description-title">
-              <h2 id="description-title" className="text-lg font-semibold text-slate-900 mb-4">{t("complaintDetail.description")}</h2>
+            <section className="bg-white rounded-xl shadow-sm p-3" aria-labelledby="description-title">
+              <h2 id="description-title" className="text-base font-semibold text-slate-900 mb-3">{t("complaintDetail.description")}</h2>
               <p className="text-slate-800 whitespace-pre-wrap">{complaint.description}</p>
             </section>
 
             {/* Location */}
-            <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="location-title">
-              <h2 id="location-title" className="text-lg font-semibold text-slate-900 mb-4">{t("complaintDetail.location")}</h2>
+            <section className="bg-white rounded-xl shadow-sm p-3" aria-labelledby="location-title">
+              <h2 id="location-title" className="text-base font-semibold text-slate-900 mb-3">{t("complaintDetail.location")}</h2>
               {!hasLocation ? (
                 <div className="h-64 bg-red-50 rounded-lg flex items-center justify-center border-2 border-red-200 border-dashed">
                   <div className="text-center">
@@ -1046,8 +1065,8 @@ export default function ComplaintDetailPage() {
             </section>
 
             {/* Media */}
-            <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="media-title">
-              <h2 id="media-title" className="text-lg font-semibold text-slate-900 mb-4">
+            <section className="bg-white rounded-xl shadow-sm p-3" aria-labelledby="media-title">
+              <h2 id="media-title" className="text-base font-semibold text-slate-900 mb-3">
                 {t("complaintDetail.photos")} ({complaint.media?.length || 0})
               </h2>
               {!complaint.media || complaint.media.length === 0 ? (
@@ -1099,8 +1118,8 @@ export default function ComplaintDetailPage() {
 
             {/* Before Photos (Technician) */}
             {complaint.beforePhotos && complaint.beforePhotos.length > 0 && (
-              <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500" aria-labelledby="before-photos-title">
-                <h2 id="before-photos-title" className="text-lg font-semibold text-slate-900 mb-4">
+              <section className="bg-white rounded-xl shadow-sm p-3 border-l-4 border-orange-500" aria-labelledby="before-photos-title">
+                <h2 id="before-photos-title" className="text-base font-semibold text-slate-900 mb-3">
                   {t("complaintDetail.beforeWorkPhotos")} ({complaint.beforePhotos.length})
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1145,8 +1164,8 @@ export default function ComplaintDetailPage() {
 
             {/* After Photos (Technician) */}
             {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
-              <section className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500" aria-labelledby="after-photos-title">
-                <h2 id="after-photos-title" className="text-lg font-semibold text-slate-900 mb-4">
+              <section className="bg-white rounded-xl shadow-sm p-3 border-l-4 border-green-500" aria-labelledby="after-photos-title">
+                <h2 id="after-photos-title" className="text-base font-semibold text-slate-900 mb-3">
                   {t("complaintDetail.afterWorkPhotos")} ({complaint.afterPhotos.length})
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -1191,8 +1210,8 @@ export default function ComplaintDetailPage() {
 
             {/* Timeline/History */}
             {complaint.history && complaint.history.length > 0 && (
-              <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="timeline-title">
-                <h2 id="timeline-title" className="text-lg font-semibold text-slate-900 mb-4">
+              <section className="bg-white rounded-xl shadow-sm p-3" aria-labelledby="timeline-title">
+                <h2 id="timeline-title" className="text-base font-semibold text-slate-900 mb-3">
                   {t("complaintDetail.history")}
                 </h2>
                 <Timeline 
@@ -1205,8 +1224,8 @@ export default function ComplaintDetailPage() {
             )}
 
             {/* Comments */}
-            <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="comments-title">
-                <h2 id="comments-title" className="text-lg font-semibold text-slate-900 mb-4">
+            <section className="bg-white rounded-xl shadow-sm p-3" aria-labelledby="comments-title">
+                <h2 id="comments-title" className="text-base font-semibold text-slate-900 mb-3">
                   {t("complaintDetail.comments")} ({complaint.publicComments?.length || 0})
                 </h2>
                 {(complaint.publicComments?.length || 0) > 0 ? (
@@ -1264,8 +1283,8 @@ export default function ComplaintDetailPage() {
 
             {/* Internal Notes - Staff only; Admin read-only */}
             {(isAgentOrManager || isAdmin) && (
-              <section className="bg-white rounded-xl shadow-sm p-6" aria-labelledby="notes-title">
-                <h2 id="notes-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <section className="bg-white rounded-xl shadow-sm p-3" aria-labelledby="notes-title">
+                <h2 id="notes-title" className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
                   {t("complaintDetail.internalNotes")}
                 </h2>
@@ -1289,7 +1308,8 @@ export default function ComplaintDetailPage() {
           {/* Sidebar */}
           <aside className="space-y-6" role="complementary" aria-label="Additional information">
             {/* AI Analysis */}
-            {user?.role === 'MUNICIPAL_AGENT' && showDuplicateAi ? (
+            {(canSeeUrgencyPrediction ||
+              (user?.role === 'MUNICIPAL_AGENT' && showDuplicateAi)) ? (
               <AIAnalysisCard
                 complaintId={complaint._id || complaintId}
                 title={complaint.title || ""}
@@ -1307,8 +1327,8 @@ export default function ComplaintDetailPage() {
 
             {/* Citizen Info - Only show for agents/managers/admins/technicians if not anonymous */}
             {(isAgentOrManager || isAdmin || user?.role === "TECHNICIAN") && (
-              <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="citizen-title">
-                <h2 id="citizen-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <section className="bg-white rounded-2xl shadow-lg p-3 border border-slate-100" aria-labelledby="citizen-title">
+                <h2 id="citizen-title" className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <User className="w-5 h-5 text-primary" />
                     {t("complaintDetail.citizen")}
                 </h2>
@@ -1349,8 +1369,8 @@ export default function ComplaintDetailPage() {
             )}
 
              {/* Department Info */}
-             <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="department-title">
-               <h2 id="department-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+             <section className="bg-white rounded-2xl shadow-lg p-3 border border-slate-100" aria-labelledby="department-title">
+               <h2 id="department-title" className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
                  <Building2 className="w-5 h-5 text-primary" />
                  {t("complaintDetail.department")}
                </h2>
@@ -1391,11 +1411,27 @@ export default function ComplaintDetailPage() {
 
             {/* Assigned To */}
             {(complaint.assignedTo || complaint.assignedTeam) && (
-              <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="assigned-title">
-                <h2 id="assigned-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                  <UserCog className="w-5 h-5 text-primary" />
-                  {t("complaintDetail.assignedTo")}
-                </h2>
+              <section className="bg-white rounded-2xl shadow-lg p-3 border border-slate-100" aria-labelledby="assigned-title">
+                {complaint.assignedTeam && typeof complaint.assignedTeam === 'object' && (
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-slate-400" />
+                      {t("complaintDetail.repairTeam")}: {complaint.assignedTeam.name || t("complaintDetail.assignedToRepairTeam")}
+                    </p>
+                    {complaint.assignedTeam.members && Array.isArray(complaint.assignedTeam.members) && (
+                      <div className="space-y-1 mt-2">
+                    {complaint.assignedTeam.members.map((member: AssignedTeamMember, index: number) => (
+                      <p key={member._id || index} className="text-sm text-slate-600 flex items-center gap-2">
+                        <span className="w-5 h-5 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-medium">
+                          {index + 1}
+                        </span>
+                        {member.fullName}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {complaint.assignedTo && !complaint.assignedTeam && (
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-900 flex items-center gap-2">
@@ -1410,31 +1446,12 @@ export default function ComplaintDetailPage() {
                     )}
                   </div>
                 )}
-                {complaint.assignedTeam && typeof complaint.assignedTeam === 'object' && (
-                  <div className="mt-3 pt-3 border-t border-slate-200">
-                    <p className="text-sm font-medium text-slate-700 mb-2">
-                      {t("complaintDetail.repairTeam")}: {complaint.assignedTeam.name || t("complaintDetail.teamAssigned")}
-                    </p>
-                    {complaint.assignedTeam.members && Array.isArray(complaint.assignedTeam.members) && (
-                      <div className="space-y-1">
-                    {complaint.assignedTeam.members.map((member: AssignedTeamMember, index: number) => (
-                      <p key={member._id || index} className="text-sm text-slate-600 flex items-center gap-2">
-                        <span className="w-5 h-5 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-medium">
-                          {index + 1}
-                        </span>
-                        {member.fullName}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </section>
             )}
 
             {/* Timestamps */}
-            <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100" aria-labelledby="dates-title">
-              <h2 id="dates-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <section className="bg-white rounded-2xl shadow-lg p-3 border border-slate-100" aria-labelledby="dates-title">
+              <h2 id="dates-title" className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-primary" />
                 {t("complaintDetail.dates")}
               </h2>
@@ -1712,7 +1729,9 @@ export default function ComplaintDetailPage() {
                           onClick={() => router.push(`/dashboard/complaints/${merged.complaintId}`)}
                           className="font-semibold text-blue-700 hover:text-blue-900 text-sm"
                         >
-                          {merged.referenceId || getComplaintIdDisplay(merged.complaintId)}
+                          {merged.title ||
+                            merged.referenceId ||
+                            getComplaintIdDisplay(merged.complaintId)}
                         </button>
                         {typeof merged.similarityScore === "number" && (
                           <span className="text-xs text-slate-600 bg-slate-200 px-2 py-1 rounded-full">
@@ -1720,8 +1739,10 @@ export default function ComplaintDetailPage() {
                           </span>
                         )}
                       </div>
-                      {merged.title && (
-                        <p className="text-sm text-slate-800 truncate">{merged.title}</p>
+                      {merged.referenceId && merged.title && (
+                        <p className="text-xs text-slate-500 truncate">
+                          {merged.referenceId}
+                        </p>
                       )}
                       <p className="text-xs text-slate-500 mt-1">
                         {merged.submittedBy || "Submitted by a citizen"}
@@ -1739,7 +1760,7 @@ export default function ComplaintDetailPage() {
             )}
 
             {/* Actions for Agent/Manager */}
-            {isAgentOrManager && !complaint.isDuplicate && complaint.status !== "REJECTED" && (
+            {isAgentOrManager && !complaint.isDuplicate && (
               <section className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl shadow-lg p-6 border border-primary/20" aria-labelledby="actions-title">
                 <h2 id="actions-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-primary" />
@@ -1804,37 +1825,34 @@ export default function ComplaintDetailPage() {
                   )}
 
                   {/* ASSIGNED - Manager assigns Technician/Team and sets Priority */}
-                  {complaint.status === "ASSIGNED" && user?.role === "DEPARTMENT_MANAGER" && (
+                  {!(complaint.assignedTo || complaint.assignedTeam) && !(complaint.status === "IN_PROGRESS" || complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (complaint.status === "ASSIGNED" || complaint.status === "VALIDATED") && user?.role === "DEPARTMENT_MANAGER" && (
                     <>
-                      {(complaint.assignedTo || complaint.assignedTeam) ? (
-                        <>
-                          <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
-                            <p className="text-sm font-medium text-green-800 flex items-center gap-2">
-                              <CheckCircle2 className="w-4 h-4" />
-                              {t("complaintDetail.assignedToTeam")}
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            className="w-full"
-                            icon={<Users className="w-4 h-4" />}
-                            onClick={() => setActionModal("technician")}
-                          >
-                            Edit Assignment
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                            icon={<Users className="w-4 h-4" />}
-                            onClick={() => setActionModal("technician")}
-                          >
-                            {t("complaintDetail.assignToRepairTeam")}
-                          </Button>
-                        </>
-                      )}
+                      <Button
+                        className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700"
+                        icon={<Flag className="w-4 h-4" />}
+                        onClick={() => setActionModal("priority")}
+                      >
+                        {t("complaintDetail.setPriority", {
+                          defaultValue: "Set Priority",
+                        })}
+                      </Button>
+                      <Button
+                        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
+                        icon={<Users className="w-4 h-4" />}
+                        onClick={() => setActionModal("technician")}
+                      >
+                        {t("complaintDetail.assignToRepairTeam")}
+                      </Button>
                     </>
+                  )}
+                  {/* Show assigned message if already assigned - hide assignment actions permanently */}
+                  {(complaint.assignedTo || complaint.assignedTeam) && user?.role === "DEPARTMENT_MANAGER" && (
+                    <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
+                      <p className="text-sm font-medium text-green-800 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {complaint.assignedTeam ? t("complaintDetail.assignedToRepairTeam") : t("complaintDetail.assignedToTechnician")}
+                      </p>
+                    </div>
                   )}
 
                   {/* IN_PROGRESS - Manager checks SLA, Admin monitors globally */}
@@ -2033,7 +2051,7 @@ export default function ComplaintDetailPage() {
                       {level: 'LOW', color: 'bg-green-500 hover:bg-green-600 text-white border-2 border-green-400', score: 3},
                       {level: 'MEDIUM', color: 'bg-amber-500 hover:bg-amber-600 text-white border-2 border-amber-400', score: 6},
                       {level: 'HIGH', color: 'bg-orange-500 hover:bg-orange-600 text-white border-2 border-orange-400', score: 8},
-                      {level: 'CRITICAL', color: 'bg-red-500 hover:bg-red-600 text-white border-2 border-red-400 shadow-md shadow-red-200', score: 10}
+                      {level: 'URGENT', color: 'bg-red-500 hover:bg-red-600 text-white border-2 border-red-400 shadow-md shadow-red-200', score: 10}
                     ].map(({level, color, score}) => (
                       <button
                         key={level}
@@ -2106,7 +2124,7 @@ export default function ComplaintDetailPage() {
                                 : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                             }`}
                           >
-                            {dept.name}
+                            {getDepartmentLabel(dept.name)}
                           </button>
                         ))}
                       </div>
@@ -2125,7 +2143,7 @@ export default function ComplaintDetailPage() {
                     <option value="">{t("complaintDetail.chooseDepartment")}</option>
                     {(departments || []).map((dept) => (
                       <option key={dept._id} value={dept._id}>
-                        {dept.name}
+                        {getDepartmentLabel(dept.name)}
                       </option>
                     ))}
                   </select>

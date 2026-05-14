@@ -16,7 +16,10 @@ const transporter = nodemailer.createTransport({
 // Verify SMTP connection on startup
 transporter.verify((error) => {
   if (error) {
-    // SMTP connection error
+    console.error("[mailer] SMTP connection FAILED:", error.message);
+    console.error("[mailer] Check your SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_SECURE values in .env");
+  } else {
+    console.log("[mailer] SMTP connection verified — ready to send emails");
   }
 });
 
@@ -66,7 +69,7 @@ const translateDepartmentName = (departmentName, language = 'en') => {
 // Send account verification email
 const sendMagicLinkEmail = async (to, userId, token, fullName) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-  const magicLink = `${frontendUrl}/verify-account?token=${token}&id=${userId}`;
+  const magicLink = `${frontendUrl}/verify-account?token=${token}&userId=${userId}`;
   const userName = fullName || to.split('@')[0] || "User";
 
   console.log(`[mailer] sendMagicLinkEmail called with:`, {
@@ -86,22 +89,24 @@ const sendMagicLinkEmail = async (to, userId, token, fullName) => {
     await transporter.sendMail({
       from,
       to,
-      subject: "Smart City Tunisia - Verify your account",
-      text: `Hi ${userName}, click here to verify your account: ${magicLink}`,
+      subject: "Smart City Tunisia - Account Invitation",
+      text: `Hi ${userName}, you've been invited to join Smart City Tunisia. Click to activate your account: ${magicLink} (expires in 15 minutes)`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
           </div>
           <p>Hi <strong>${userName}</strong>,</p>
-          <p>Please click the button below to verify your account:</p>
+          <p>You've been invited to join Smart City Tunisia.</p>
+          <p>Click the button below to activate your account:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${magicLink}" style="background: #2E7D32; color: white; padding: 15px 30px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-              Verify Account
+              Activate Account
             </a>
           </div>
           <p style="color: #666; font-size: 12px;">
-            If you didn't create this account, you can ignore this email.
+            This link expires in <strong>15 minutes</strong>.<br/>
+            If you didn't expect this invitation, you can ignore this email.
           </p>
         </div>
       `,

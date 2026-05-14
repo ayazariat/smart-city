@@ -14,12 +14,12 @@ function formatDate(dateString: string, short = false, t: any): string {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
 
-  if (diff < 60000) return t('timeAgo.now');
+  if (diff < 60000) return t('common.timeAgo.now');
   if (diff < 3600000)
-    return t('timeAgo.minutes', { n: Math.floor(diff / 60000) });
+    return t('common.timeAgo.minutes', { n: Math.floor(diff / 60000) });
   if (diff < 86400000)
-    return t('timeAgo.hours', { n: Math.floor(diff / 3600000) });
-  if (short) return t('timeAgo.days', { n: Math.floor(diff / 86400000) });
+    return t('common.timeAgo.hours', { n: Math.floor(diff / 3600000) });
+  if (short) return t('common.timeAgo.days', { n: Math.floor(diff / 86400000) });
 
   return date.toLocaleDateString('fr-FR', {
     day: 'numeric',
@@ -106,10 +106,30 @@ export default function NotificationsPage() {
   const renderNotif = (notif: Notification) => {
     const Icon = getNotifIcon(notif.type || '');
     const style = getNotifStyle(notif.type || '');
+    const messageVariables = {
+      ...(notif.metadata || {}),
+      ...(notif.messageVariables || {}),
+    } as Record<string, string>;
+    const translated =
+      notif.messageKey === 'notifications.mergedAsDuplicate' &&
+      !messageVariables.mergedTitle
+        ? t('notifications.mergedAsDuplicateNoMergedTitle', {
+            ...messageVariables,
+            defaultValue:
+              "Your complaint was identified as similar to '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report.",
+          })
+        : notif.messageKey
+        ? t(notif.messageKey, {
+            ...messageVariables,
+            defaultValue: '',
+          })
+        : '';
     const message =
-      notif.messageKey && notif.messageVariables
-        ? t(notif.messageKey, notif.messageVariables)
-        : notif.message || notif.title;
+      translated && translated !== notif.messageKey
+        ? translated
+        : notif.message?.startsWith('notifications.')
+          ? t(notif.message, { ...messageVariables, defaultValue: notif.title })
+          : notif.message || notif.title;
     const originalRc =
       notif.messageVariables?.originalRc ||
       (typeof notif.metadata?.originalRc === 'string'
@@ -164,7 +184,7 @@ export default function NotificationsPage() {
 
   return (
     <DashboardLayout>
-      <main className="px-4 md:px-6 py-6 md:py-8 max-w-4xl mx-auto">
+      <main className="w-full max-w-none px-4 md:px-6 py-6 md:py-8">
         <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <button

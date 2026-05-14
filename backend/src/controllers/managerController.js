@@ -547,44 +547,18 @@ async assignTechnician(req, res) {
         });
       }
 
-      const department = await getManagerDepartment(req.user.userId);
-      const departmentId = department?._id;
+      // Allow managers to change priority if complaint is in their municipality
+      const user = await User.findById(req.user.userId).select('municipality municipalityName governorate').lean();
+      const managerMunicipality = user?.municipality || user?.municipalityName;
+      const complaintMunicipality = complaint.municipalityName || complaint.municipality;
       const isAdmin = req.user.role === "ADMIN";
       
-      // Get assigned department ID (handle both ObjectId and string)
-      const assignedDeptId = complaint.assignedDepartment?._id || complaint.assignedDepartment;
-      
-      // Proper ObjectId comparison
-      const mongoose = require('mongoose');
       let canAccess = isAdmin;
       
-      if (!canAccess && departmentId && assignedDeptId) {
-        // Convert both to ObjectId for comparison
-        const deptObjectId = mongoose.Types.ObjectId.isValid(departmentId.toString()) 
-          ? new mongoose.Types.ObjectId(departmentId.toString()) 
-          : departmentId;
-        const assignedObjectId = mongoose.Types.ObjectId.isValid(assignedDeptId.toString()) 
-          ? new mongoose.Types.ObjectId(assignedDeptId.toString()) 
-          : assignedDeptId;
-        
-        canAccess = deptObjectId.toString() === assignedObjectId.toString();
-      }
-      
-      // Fallback: allow if complaint has no department assigned yet
-      if (!canAccess && !assignedDeptId) {
-        canAccess = true;
-      }
-      
-      // Fallback: allow if complaint is in manager's municipality (for complaints not yet assigned to a department)
-      if (!canAccess) {
-        const user = await User.findById(req.user.userId).select('municipality municipalityName governorate').lean();
-        const managerMunicipality = user?.municipality || user?.municipalityName;
-        const complaintMunicipality = complaint.municipalityName || complaint.municipality;
-        
-        if (managerMunicipality && complaintMunicipality) {
-          // Case-insensitive comparison
-          canAccess = managerMunicipality.toLowerCase() === complaintMunicipality.toLowerCase();
-        }
+      // Check municipality match
+      if (!canAccess && managerMunicipality && complaintMunicipality) {
+        // Case-insensitive comparison
+        canAccess = managerMunicipality.toLowerCase() === complaintMunicipality.toLowerCase();
       }
       
       if (!canAccess) {

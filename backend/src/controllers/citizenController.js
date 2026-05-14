@@ -417,17 +417,18 @@ class CitizenController {
   async getStats(req, res) {
     try {
       const userId = req.user.userId;
-      const historicalQuery = { createdBy: userId, isArchived: false };
+      const historicalQuery = { createdBy: userId };
       const activeQuery = {
         ...historicalQuery,
+        isArchived: { $ne: true },
         status: { $in: CITIZEN_ACTIVE_STATUSES },
       };
 
-       const [historicalTotal, total, submitted, inProgress, resolved, closed, rejected, resolvedWithRatingCount, csatCount] = await Promise.all([
+       const [historicalTotal, activeTotal, submitted, inProgress, resolved, closed, rejected, resolvedWithRatingCount, csatCount] = await Promise.all([
          Complaint.countDocuments(historicalQuery),
          Complaint.countDocuments(activeQuery),
          Complaint.countDocuments({ ...historicalQuery, status: "SUBMITTED" }),
-         Complaint.countDocuments({ ...historicalQuery, status: "IN_PROGRESS" }),
+         Complaint.countDocuments({ ...historicalQuery, status: { $in: ["VALIDATED", "ASSIGNED", "IN_PROGRESS"] } }),
          Complaint.countDocuments({ ...historicalQuery, status: "RESOLVED" }),
          Complaint.countDocuments({ ...historicalQuery, status: "CLOSED" }),
          Complaint.countDocuments({ ...historicalQuery, status: "REJECTED" }),
@@ -452,7 +453,7 @@ class CitizenController {
         const totalRatings = resolvedWithRatingCount;
         const csat = totalRatings > 0 ? Math.round((csatCount / totalRatings) * 100) : 0;
 
-        res.json({ success: true, data: { total, historicalTotal, submitted, pending: submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime, slaComplianceRate, csat, totalRatings } });
+        res.json({ success: true, data: { total: historicalTotal, activeTotal, historicalTotal, submitted, pending: submitted, inProgress, resolved, closed, rejected, resolutionRate, averageResolutionTime, slaComplianceRate, csat, totalRatings } });
     } catch (error) {
       console.error("Citizen stats error:", error);
       res.json({

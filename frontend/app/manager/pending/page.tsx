@@ -372,9 +372,9 @@ export default function ManagerPendingPage() {
           }
         />
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-6">
             <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
               <div className="flex items-center justify-between">
                 <div>
@@ -440,7 +440,7 @@ export default function ManagerPendingPage() {
             <h3 className="text-sm font-semibold text-slate-700 mb-4">
               Performance Metrics
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
               <div className="text-center p-3 bg-blue-50 rounded-xl">
                 <p className="text-2xl font-bold text-blue-600">
                   {complaints.filter((c) => c.status === 'IN_PROGRESS').length}
@@ -639,7 +639,9 @@ export default function ManagerPendingPage() {
                                 className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 transition-all text-sm font-medium disabled:opacity-50 hover:shadow-lg"
                               >
                                 <Flag className="w-4 h-4" />
-                                Set Priority
+                                {t('complaintDetail.setPriority', {
+                                  defaultValue: 'Set Priority',
+                                })}
                               </button>
                             )}
                           <Link
@@ -786,7 +788,7 @@ export default function ManagerPendingPage() {
                   score: 8,
                 },
                 {
-                  level: 'CRITICAL',
+                  level: 'URGENT',
                   color:
                     'bg-red-500 hover:bg-red-600 text-white border-2 border-red-400 shadow-md shadow-red-200',
                   score: 10,

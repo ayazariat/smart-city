@@ -288,9 +288,9 @@ export default function AdminComplaintsPage() {
           }
         />
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           {/* Stats Cards - Clickable Quick Filters */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-6">
             <button
               onClick={() => setStatusFilter('')}
               className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${!statusFilter ? 'border-primary ring-2 ring-primary/20' : 'border-slate-200 hover:border-slate-300'}`}
@@ -375,7 +375,7 @@ export default function AdminComplaintsPage() {
             <h3 className="text-sm font-semibold text-slate-700 mb-4">
               {t('admin.teamPerformance')}
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
               <div className="text-center p-3 bg-blue-50 rounded-xl">
                 <p className="text-2xl font-bold text-blue-600">
                   {complaints.filter((c) => c.status === 'IN_PROGRESS').length}

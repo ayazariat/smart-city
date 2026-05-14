@@ -747,7 +747,7 @@ export default function TransparencyPage() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-slate-50">
       {/* Header - Responsive: Collapses on mobile with hamburger menu */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+        <div className="w-full px-3 sm:px-4 py-2 sm:py-3">
           {/* Top Row: Logo + Actions - Stacked on mobile, inline on tablet+ */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
             <div className="flex items-center justify-between">
@@ -933,7 +933,7 @@ export default function TransparencyPage() {
       )}
 
       <main
-        className={`relative max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 ${isRTL ? 'mr-0 md:mr-[260px]' : 'ml-0 md:ml-[260px]'}`}
+        className={`relative px-4 md:px-6 py-6 md:py-8 ${isRTL ? 'mr-0 md:mr-[260px]' : 'ml-0 md:ml-[260px]'}`}
       >
         {error ? (
           <div className="flex items-center justify-center py-24">
@@ -1092,7 +1092,7 @@ export default function TransparencyPage() {
                   </div>
 
                   {stats && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+                    <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3 sm:gap-4">
                       {[
                         {
                           label: t('transparency.metrics.totalReports'),
@@ -1195,7 +1195,7 @@ export default function TransparencyPage() {
                         <Target className="w-5 h-5 text-green-600" />
                         {t('transparency.metrics.resolutionStatus')}
                       </h3>
-                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-10 items-start">
+                      <div className="w-full grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-10 items-stretch">
                         <div className="w-56 h-56 min-w-[224px] relative">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -1443,7 +1443,7 @@ export default function TransparencyPage() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
                     {recentResolutionComplaints.length === 0 && (
                       <div className="md:col-span-2 lg:col-span-3 text-center py-10 bg-slate-50 rounded-2xl border border-slate-100">
                         <CheckCircle2 className="w-9 h-9 text-slate-300 mx-auto mb-3" />
@@ -1871,7 +1871,7 @@ export default function TransparencyPage() {
                     Recurring problems reported multiple times
                   </p>
                   {mostReportedIssues.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
                       {mostReportedIssues.map((issue, idx) => {
                         const getStatusBadge = (status: string) => {
                           switch (status) {

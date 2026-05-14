@@ -252,7 +252,7 @@ function MunicipalitiesPageContent() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+        <div className="w-full max-w-none px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -322,7 +322,7 @@ function MunicipalitiesPageContent() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <main className="w-full max-w-none px-4 sm:px-6 py-8">
         {error ? (
           <div className="text-center py-16">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">

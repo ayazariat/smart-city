@@ -266,8 +266,8 @@ export default function TechnicianTasksPage() {
         />
 
         {/* Stats Cards */}
-        <div className="max-w-7xl mx-auto px-4 mt-6">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="w-full max-w-none px-4 md:px-6 mt-6">
+          <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-6">
             <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200 animate-fadeInUp">
               <div className="flex items-center justify-between">
                 <div>
@@ -351,7 +351,7 @@ export default function TechnicianTasksPage() {
         </div>
 
         {/* Filters */}
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="w-full max-w-none px-4 md:px-6">
           <div className="bg-white rounded-2xl shadow-sm p-4 mb-6 border border-slate-200 animate-fadeIn">
             <div className="flex flex-col md:flex-row gap-3 items-center">
               <div className="flex-1 w-full relative">

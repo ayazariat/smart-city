@@ -36,14 +36,14 @@ export default function DuplicateStatsCard() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+      <div className="w-full h-full bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
         <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <Copy className="w-5 h-5 text-amber-600" />
           Duplicate Detection
         </h3>
         <div className="animate-pulse">
           <div className="h-16 bg-slate-100 rounded-xl mb-3"></div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(90px,1fr))] gap-3">
             <div className="h-20 bg-slate-100 rounded-xl"></div>
             <div className="h-20 bg-slate-100 rounded-xl"></div>
             <div className="h-20 bg-slate-100 rounded-xl"></div>
@@ -56,17 +56,17 @@ export default function DuplicateStatsCard() {
   if (!stats) return null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+    <div className="w-full h-full bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <Copy className="w-5 h-5 text-amber-600" />
           Duplicate Detection
         </h3>
         <span className="text-[10px] text-slate-400 font-medium">
-          Today's summary
+          Today&apos;s summary
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(90px,1fr))] gap-3">
         <div className="text-center p-3 bg-slate-50 rounded-xl">
           <div className="text-2xl font-bold text-slate-800">
             {stats.total_checked}

@@ -483,7 +483,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </header>
 
       <div
-        className={`${isRTL ? 'mr-0 md:mr-[260px]' : 'ml-0 md:ml-[260px]'} pt-0`}
+        className={`${isRTL ? 'mr-0 md:mr-[260px]' : 'ml-0 md:ml-[260px]'} pt-0 overflow-x-hidden`}
       >
         {children}
       </div>

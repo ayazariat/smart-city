@@ -335,7 +335,7 @@ export default function TechnicianTaskDetailPage() {
           }
         />
 
-        <div className="max-w-6xl mx-auto px-4 py-3">
+        <div className="w-full max-w-none px-4 md:px-6 py-3">
           <div className="bg-white rounded-xl shadow-sm p-3 flex flex-wrap gap-2">
             {task.status === 'ASSIGNED' && (
               <Button
@@ -366,7 +366,7 @@ export default function TechnicianTaskDetailPage() {
           </div>
         </div>
 
-        <main className="max-w-6xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
               <section className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">

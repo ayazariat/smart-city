@@ -129,10 +129,6 @@ export default function MyComplaintsPage() {
     );
   });
 
-  // Stats - Total includes ALL complaints except REJECTED
-  const total = complaints.filter(
-    (c) => c.status !== 'REJECTED'
-  ).length;
   // Active complaints exclude CLOSED/REJECTED (those go to archive)
   const activeComplaints = complaints.filter((c) => {
     const s = c.status as string;
@@ -176,7 +172,7 @@ export default function MyComplaintsPage() {
         />
 
         {/* Stats Cards */}
-        <div className="max-w-7xl mx-auto px-4 mt-6">
+        <div className="w-full max-w-none px-4 md:px-6 mt-6">
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
             <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200 animate-fadeInUp">
               <div className="flex items-center gap-3">
@@ -256,7 +252,7 @@ export default function MyComplaintsPage() {
           </div>
         </div>
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           <FilterBar
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}

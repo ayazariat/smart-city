@@ -81,7 +81,7 @@ export default function TrendForecastChart({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100 animate-pulse">
+      <div className="w-full h-full bg-white rounded-2xl shadow-lg p-6 border border-slate-100 animate-pulse">
         <h3 className="text-lg font-semibold text-slate-300 mb-4 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-slate-200" />
           AI Trend Forecasts — Next 7 Days
@@ -122,7 +122,7 @@ export default function TrendForecastChart({
       : 'bg-slate-100 text-slate-600';
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
+    <div className="w-full h-full bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
       {/* Header - FIXED: Title + Updated same line */}
       <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-5 py-4">
         <div className="flex items-center justify-between">

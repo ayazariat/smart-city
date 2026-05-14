@@ -60,7 +60,7 @@
       "title": "Status Updated",
       "message": "Complaint '{{complaintTitle}}' status has been updated to {{status}}"
     },
-    "mergedAsDuplicate": "Your complaint {{mergedRc}} was identified as similar to complaint {{originalRc}}: '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report."
+    "mergedAsDuplicate": "Your complaint '{{mergedTitle}}' was identified as similar to '{{originalTitle}}'. Your votes have been transferred. Tap to view the original report."
   },
   "complaint": {
     "duplicateModal": {

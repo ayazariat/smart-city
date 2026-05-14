@@ -190,6 +190,7 @@ const mergeDuplicateComplaint = async ({
       const locale = citizen?.language || "en";
       const messageVariables = {
         mergedRc: displayRc(duplicateComplaint),
+        mergedTitle: duplicateComplaint.title,
         originalRc: displayRc(originalComplaint),
         originalTitle: originalComplaint.title,
       };

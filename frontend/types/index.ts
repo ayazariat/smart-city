@@ -236,6 +236,7 @@ export interface Complaint {
   } | null;
   duplicateStatus?: string | null;
   duplicateOf?: string | null;
+  duplicateOfTitle?: string | null;
   duplicateOfReferenceId?: string | null;
   rejectionReasonText?: string | null;
   isDuplicate?: boolean;

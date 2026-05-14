@@ -52,13 +52,13 @@ class AuthController {
 
       // Basic presence/type validation before touching database
       if (!fullName || typeof fullName !== 'string') {
-        return res.status(400).json({ message: "Full name is required" });
+        return res.status(400).json({ message: "Le nom complet est requis" });
       }
       if (!email || typeof email !== 'string') {
-        return res.status(400).json({ message: "Email is required" });
+        return res.status(400).json({ message: "L'email est requis" });
       }
       if (!password || typeof password !== 'string') {
-        return res.status(400).json({ message: "Password is required" });
+        return res.status(400).json({ message: "Le mot de passe est requis" });
       }
 
       const normalizedEmail = email.toLowerCase().trim();
@@ -66,7 +66,7 @@ class AuthController {
       // Check if user already exists
       const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
-        return res.status(400).json({ message: "User already exists" });
+        return res.status(400).json({ message: "Cet email est déjà utilisé" });
       }
 
       // Check for pending registration - DELETE if exists (to allow fresh registration)
@@ -85,7 +85,7 @@ class AuthController {
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(normalizedEmail)) {
-        return res.status(400).json({ message: "Invalid email format" });
+        return res.status(400).json({ message: "Format d'email invalide" });
       }
 
       // Validate phone number
@@ -181,8 +181,9 @@ class AuthController {
       try {
         await sendMagicLinkEmail(normalizedEmail, pendingUser._id.toString(), magicToken, fullName);
       } catch (emailError) {
+        console.error("Email sending error:", emailError);
         // Silent fail: email non-critical for registration
-        return res.status(500).json({ message: "Failed to send verification email" });
+        return res.status(500).json({ message: "Erreur lors de l'envoi de l'email de vérification" });
       }
 
       res.status(201).json({
@@ -640,7 +641,7 @@ class AuthController {
 
       // Send password reset email
       try {
-        await sendPasswordResetEmail(user.email, user.fullName, resetToken);
+        await sendPasswordResetEmail(user.email, user._id.toString(), resetToken, user.fullName);
       } catch (emailError) {
         // log but do not expose to client
         console.error("Failed to send password reset email for", user.email, "token", resetToken, emailError);

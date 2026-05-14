@@ -47,7 +47,7 @@ export default function AISpikeAlertCard({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+      <div className="w-full bg-white rounded-2xl shadow-lg p-6 border border-slate-100 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-amber-600" />
@@ -76,7 +76,7 @@ export default function AISpikeAlertCard({
 
   if (spikeDays.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+      <div className="w-full bg-white rounded-2xl shadow-lg p-6 border border-slate-100 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-violet-600" />
@@ -103,7 +103,7 @@ export default function AISpikeAlertCard({
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-100">
+    <div className="w-full bg-white rounded-2xl shadow-lg p-6 border border-slate-100 flex flex-col justify-between">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-600" />
@@ -119,11 +119,11 @@ export default function AISpikeAlertCard({
       <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
+          <div className="min-w-0">
             <div className="font-semibold text-amber-800 text-sm">
               ⚠️ SPIKE PREDICTED
             </div>
-            <div className="text-xs text-amber-700 mt-1">
+            <div className="text-xs text-amber-700 mt-1 break-words">
               Peak of {maxSpike} complaints expected on {spikeDays.length} day
               {spikeDays.length > 1 ? 's' : ''} in{' '}
               {municipality || 'your municipality'}

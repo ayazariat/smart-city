@@ -494,9 +494,13 @@ export default function NewComplaintPage() {
           location?.longitude,
           media.map((item) => item.url).filter(Boolean)
         );
+        console.log('[Proactive Duplicate Check] Result:', result);
+        console.log('[Proactive Duplicate Check] topMatches:', result?.topMatches);
         if (result && result.topMatches && result.topMatches.length > 0) {
+          console.log('[Proactive Duplicate Check] Setting proactiveDuplicates:', result.topMatches.slice(0, 3));
           setProactiveDuplicates(result.topMatches.slice(0, 3));
         } else {
+          console.log('[Proactive Duplicate Check] No matches found, clearing proactiveDuplicates');
           setProactiveDuplicates([]);
         }
       } catch {

@@ -61,6 +61,14 @@ const DEPT_NAME_TO_KEY: Record<string, string> = {
   'Propriété publique': 'property',
   'Parcs et Espaces verts': 'parks',
   'Services Généraux': 'other',
+  'Poubelles, bennes débordantes, décharges illégales, nettoyage des rues': 'waste',
+  'Fuites, zones inondées, canalisations bouchées, eaux usées': 'water',
+  'Parcs, jardins, arbres, entretien des espaces verts': 'parks',
+  'Bâtiments municipaux, mobilier urbain, monuments': 'property',
+  'Routes endommagées, trottoirs, stationnement, signalisation': 'roads',
+  'Tout ce qui ne correspond pas aux autres catégories': 'other',
+  'Situations dangereuses, accidents, bruit, zones à risque': 'safety',
+  'Lampadaires cassés, rues sombres, éclairage instable': 'lighting',
   // English fallbacks (in case DB language changes)
   'Waste & Cleanliness': 'waste',
   'Roads & Traffic': 'roads',
@@ -109,6 +117,22 @@ export function getDepartmentLabel(
   }
   
   return '';
+}
+
+export function getDepartmentDescriptionLabel(
+  description: string | undefined | null,
+  fallbackCategory?: string
+): string {
+  if (!description && !fallbackCategory) return '';
+  const key = description ? DEPT_NAME_TO_KEY[description] : fallbackCategory;
+  if (!key) return description || '';
+  try {
+    return i18n.t(`categories.${key}Desc`, {
+      defaultValue: description || '',
+    });
+  } catch {
+    return description || '';
+  }
 }
 
 /**

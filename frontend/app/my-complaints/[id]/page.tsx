@@ -366,7 +366,7 @@ export default function MyComplaintDetailPage() {
 
       {/* Header - White design matching dashboard */}
       <header className="bg-white border-b border-slate-200 shadow-sm" role="banner">
-        <div className="max-w-6xl mx-auto px-4 py-4">
+        <div className="w-full max-w-none px-4 md:px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
@@ -449,7 +449,7 @@ export default function MyComplaintDetailPage() {
       </header>
 
       {complaint.isDuplicate && complaint.duplicateOf && complaint.status === "REJECTED" && complaint.rejectionReason === "duplicate" && (
-        <div className="max-w-6xl mx-auto px-4 pt-6">
+        <div className="w-full max-w-none px-4 md:px-6 pt-6">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <Copy className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -477,7 +477,7 @@ export default function MyComplaintDetailPage() {
         </div>
       )}
 
-      <main className="max-w-6xl mx-auto px-4 py-6" role="main">
+      <main className="w-full max-w-none px-4 md:px-6 py-6" role="main">
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
@@ -548,7 +548,7 @@ export default function MyComplaintDetailPage() {
                 {isEditing ? (
                   <input
                     type="tel"
-                    value={editForm.phone}
+                    value={editForm.phone || complaint.phone || ''}
                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                     placeholder={t("complaintDetail.phonePlaceholder")}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"

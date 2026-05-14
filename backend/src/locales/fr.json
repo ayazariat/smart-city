@@ -60,7 +60,7 @@
       "title": "Statut mis à jour",
       "message": "Le statut de la réclamation '{{complaintTitle}}' a été mis à jour à {{status}}"
     },
-    "mergedAsDuplicate": "Votre réclamation {{mergedRc}} a été identifiée comme similaire à la réclamation {{originalRc}} : '{{originalTitle}}'. Vos votes ont été transférés. Cliquez pour voir la réclamation originale."
+    "mergedAsDuplicate": "Votre réclamation '{{mergedTitle}}' a été identifiée comme similaire à '{{originalTitle}}'. Vos votes ont été transférés. Cliquez pour voir la réclamation originale."
   },
   "complaint": {
     "duplicateModal": {

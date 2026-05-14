@@ -188,13 +188,13 @@ class UserController {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const normalizedEmail = email.toLowerCase().trim();
       if (!emailRegex.test(normalizedEmail)) {
-        return res.status(400).json({ success: false, message: "Invalid email format" });
+        return res.status(400).json({ success: false, message: "Format d'email invalide" });
       }
 
       // Check if user already exists
       const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
-        return res.status(400).json({ success: false, message: "User with this email already exists" });
+        return res.status(400).json({ success: false, message: "Cet email est déjà utilisé" });
       }
 
       // Validate role
@@ -318,7 +318,7 @@ class UserController {
         // Check if email is taken by another user
         const existingUser = await User.findOne({ email: normalizedEmail, _id: { $ne: id } });
         if (existingUser) {
-          return res.status(400).json({ success: false, message: "Email already in use" });
+          return res.status(400).json({ success: false, message: "Cet email est déjà utilisé par un autre utilisateur" });
         }
         
         user.email = normalizedEmail;

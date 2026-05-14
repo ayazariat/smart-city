@@ -560,7 +560,7 @@ export default function AdminUsersPage() {
 
           {/* Stats Cards */}
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-8">
               <div className="bg-white rounded-xl shadow-lg p-4 border border-slate-100">
                 <div className="text-2xl font-bold text-primary">
                   {stats.total}

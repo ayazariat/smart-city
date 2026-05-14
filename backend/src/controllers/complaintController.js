@@ -395,6 +395,7 @@ class ComplaintController {
       const duplicateOfId = complaint.duplicateOf?._id?.toString() || complaint.duplicateOf?.toString?.() || null;
       const duplicateOfReferenceId =
         complaint.duplicateOf?.referenceId || duplicateOfId;
+      const duplicateOfTitle = complaint.duplicateOf?.title || null;
       const mergedComplaints = (complaint.mergedComplaints || [])
         .filter((merged) => merged.complaintId)
         .map((merged) => {
@@ -462,9 +463,16 @@ class ComplaintController {
         duplicateStatus: complaint.duplicateStatus || null,
         duplicateOf: duplicateOfId,
         duplicateOfReferenceId,
+        duplicateOfTitle,
         mergedAt: complaint.mergedAt || null,
         mergedBy: complaint.mergedBy || null,
         mergedComplaints,
+        aiUrgencyPrediction: complaint.aiUrgencyPrediction || null,
+        aiPredictedUrgency:
+          complaint.aiPredictedUrgency ||
+          complaint.aiUrgencyPrediction?.predictedUrgency ||
+          null,
+        aiDuplicateCheck: complaint.aiDuplicateCheck || null,
         resolutionNote: complaint.resolutionNotes || null,
         resolvedAt: complaint.resolvedAt || null,
         closedAt: complaint.closedAt || null,

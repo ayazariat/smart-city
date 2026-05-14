@@ -99,7 +99,7 @@ function MunicipalityComplaintsPageContent() {
           : statusFilter;
 
       let url;
-      let headers: Record<string, string> = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
@@ -204,7 +204,7 @@ function MunicipalityComplaintsPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-6xl mx-auto">
+      <div className="w-full max-w-none">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <button

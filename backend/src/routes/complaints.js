@@ -58,8 +58,22 @@ router.get("/archived", authenticate, async (req, res) => {
       }
     }
     // ADMIN sees all archived complaints - no additional filter needed
-    if (req.user.role === 'DEPARTMENT_MANAGER' && req.user.department) {
-      query.assignedDepartment = req.user.department;
+    if (req.user.role === 'DEPARTMENT_MANAGER') {
+      const manager = await User.findById(req.user.userId || req.user.id)
+        .select('department')
+        .lean();
+      const departmentId = req.user.department || manager?.department;
+      if (departmentId) {
+        const departmentIdString = departmentId.toString();
+        query.$or = [
+          { assignedDepartment: departmentId },
+          { assignedDepartment: departmentIdString },
+          { "assignedDepartment._id": departmentId },
+          { "assignedDepartment._id": departmentIdString },
+          { "assignedDepartment.id": departmentId },
+          { "assignedDepartment.id": departmentIdString },
+        ];
+      }
     }
     if (req.user.role === 'TECHNICIAN') {
       query.assignedTo = req.user.userId;

@@ -782,9 +782,9 @@ export default function AgentComplaintsPage() {
           }
         />
 
-        <main className="max-w-7xl mx-auto px-4 py-6">
+        <main className="w-full max-w-none px-4 md:px-6 py-6">
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-6">
             <div className="bg-white rounded-2xl shadow-lg p-5 border border-slate-200">
               <div className="flex items-center justify-between">
                 <div>
@@ -851,7 +851,7 @@ export default function AgentComplaintsPage() {
             <h3 className="text-sm font-semibold text-slate-700 mb-4">
               Performance Metrics
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
               <div className="text-center p-3 bg-blue-50 rounded-xl">
                 <p className="text-2xl font-bold text-blue-600">
                   {complaints.filter((c) => c.status === 'IN_PROGRESS').length}
@@ -1189,7 +1189,7 @@ export default function AgentComplaintsPage() {
                 }}
                 disabled={actionLoading !== null}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 variant="danger"
@@ -1239,7 +1239,7 @@ export default function AgentComplaintsPage() {
                 isLoading={actionLoading !== null}
                 disabled={!selectedDepartment || actionLoading !== null}
               >
-                Assign
+                {t('complaintDetail.assign')}
               </Button>
             </>
           }
@@ -1248,7 +1248,10 @@ export default function AgentComplaintsPage() {
             {aiSuggestion?.departmentName && (
               <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
                 <span className="text-sm font-medium text-blue-800">
-                  AI suggests: {getDepartmentLabel(aiSuggestion.departmentName)}
+                  {t('agent.aiSuggests', {
+                    defaultValue: 'AI suggests',
+                  })}
+                  : {getDepartmentLabel(aiSuggestion.departmentName)}
                 </span>
                 <span className="px-2 py-0.5 bg-blue-200 text-blue-800 text-xs rounded-full font-semibold">
                   {aiSuggestion.confidence}%
@@ -1260,7 +1263,7 @@ export default function AgentComplaintsPage() {
               onChange={(e) => setSelectedDepartment(e.target.value)}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white transition-all"
             >
-              <option value="">Choose Department</option>
+              <option value="">{t('complaintDetail.chooseDepartment')}</option>
               {departments.map((dept) => (
                 <option key={dept._id} value={dept._id}>
                   {getDepartmentLabel(dept.name)}
