@@ -277,11 +277,11 @@ class DuplicateDetector:
                                 category_score: float, temporal_score: float, photo_score: float = 0.5) -> float:
         """Calculate weighted final score using config weights."""
         return (
-            self._coerce_score(text_score) * self._weight("textSimilarity") +
-            self._coerce_score(geo_score) * self._weight("geographicProximity") +
-            self._coerce_score(category_score) * self._weight("categoryMatch") +
-            self._coerce_score(temporal_score) * self._weight("temporalProximity") +
-            self._coerce_score(photo_score, default=0.5) * self._weight("photoMatch")
+            self._coerce_score(text_score) * self._weight("textSimilarity", 0.50) +
+            self._coerce_score(geo_score) * self._weight("geographicProximity", 0.20) +
+            self._coerce_score(category_score) * self._weight("categoryMatch", 0.10) +
+            self._coerce_score(temporal_score) * self._weight("temporalProximity", 0.05) +
+            self._coerce_score(photo_score, default=0.5) * self._weight("photoMatch", 0.15)
         )
     
     def _determine_duplicate_level(self, score: float) -> str:
@@ -354,6 +354,11 @@ class DuplicateDetector:
                 cand_lat, cand_lng
             ), default=0.3)
             
+            # HARD RULE: Both have valid coordinates but are far apart → not a duplicate
+            both_have_coords = all(x is not None for x in [new_lat, new_lng, cand_lat, cand_lng])
+            if both_have_coords and geo_score == 0.0:
+                continue
+            
             # Category score
             category_score = self._coerce_score(self._calculate_category_score(
                 new_category, candidate.get("category", "")
@@ -381,6 +386,10 @@ class DuplicateDetector:
             final_score = self._calculate_final_score(
                 text_score, geo_score, category_score, temporal_score, photo_score
             )
+            
+            # BOOST: Same category + same location (geo high) → auto-duplicate
+            if geo_score >= 0.7 and category_score >= 1.0:
+                final_score = max(final_score, 0.85)
             
             matches.append({
                 "complaintId": str(candidate.get("_id", "")),

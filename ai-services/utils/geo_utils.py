@@ -47,20 +47,17 @@ def calculate_geo_score(lat1: Optional[float], lng1: Optional[float],
     Returns:
         Score from 0 to 1
     """
-    # If no coordinates, use municipality fallback
     if lat1 is None or lng1 is None or lat2 is None or lng2 is None:
-        return 0.3  # Municipality match fallback
+        return 0.5
     
     distance = haversine(lat1, lng1, lat2, lng2)
     
-    if distance < 50:
+    if distance < 30:
         return 1.0
+    elif distance < 80:
+        return 0.7
     elif distance < 150:
-        return 0.8
-    elif distance < 300:
-        return 0.5
-    elif distance < 500:
-        return 0.2
+        return 0.3
     else:
         return 0.0
 
