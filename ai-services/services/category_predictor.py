@@ -256,36 +256,43 @@ VALID_CATEGORIES = [
 ]
 
 CATEGORY_ALIASES = {
-    "waste": "waste",
-    "garbage": "waste",
-    "trash": "waste",
-    "dechet": "waste",
-    "dechets": "waste",
-    "ordure": "waste",
-    "ordures": "waste",
-    "road": "roads",
-    "roads": "roads",
-    "street": "roads",
-    "voirie": "roads",
-    "traffic": "roads",
-    "circulation": "roads",
-    "lighting": "lighting",
-    "light": "lighting",
-    "eclairage": "lighting",
-    "water": "water",
-    "eau": "water",
-    "safety": "safety",
-    "security": "safety",
-    "property": "property",
-    "public_property": "property",
-    "public property": "property",
-    "equipment": "property",
-    "parks": "parks",
-    "park": "parks",
-    "green_space": "parks",
-    "green space": "parks",
-    "other": "other",
-    "autre": "other",
+    "waste": "waste", "garbage": "waste", "trash": "waste", "trsh": "waste",
+    "dechet": "waste", "dechets": "waste", "deche": "waste", "ordure": "waste",
+    "ordures": "waste", "poubelle": "waste", "poubelles": "waste", "rubbish": "waste",
+    "litter": "waste", "salete": "waste", "saleté": "waste", "proprete": "waste",
+    "propreté": "waste", "dump": "waste", "dirty": "waste", "garbaje": "waste",
+    "garbidge": "waste",
+    "road": "roads", "roads": "roads", "street": "roads", "streets": "roads",
+    "voirie": "roads", "traffic": "roads", "circulation": "roads",
+    "route": "roads", "rue": "roads", "pothole": "roads", "potholl": "roads",
+    "trottoir": "roads", "sidewalk": "roads", "pavement": "roads",
+    "chaussee": "roads", "chaussée": "roads", "parking": "roads",
+    "bitume": "roads", "asphalt": "roads", "signal": "roads",
+    "signalisation": "roads", "nid de poule": "roads",
+    "lighting": "lighting", "light": "lighting", "lamp": "lighting",
+    "eclairage": "lighting", "éclairage": "lighting", "lampe": "lighting",
+    "lumiere": "lighting", "lumière": "lighting", "lampadaire": "lighting",
+    "streetlight": "lighting", "ampoule": "lighting",
+    "water": "water", "eau": "water", "fuite": "water", "leak": "water",
+    "inondation": "water", "flood": "water", "drainage": "water",
+    "canalisation": "water", "egout": "water", "égout": "water",
+    "fuyte": "water", "watr": "water", "watter": "water",
+    "safety": "safety", "security": "safety", "securite": "safety",
+    "sécurité": "safety", "danger": "safety", "bruit": "safety",
+    "crime": "safety", "vol": "safety", "theft": "safety",
+    "agression": "safety", "accident": "safety", "insecurite": "safety",
+    "insécurité": "safety", "dangerus": "safety", "securty": "safety",
+    "property": "property", "public_property": "property",
+    "public property": "property", "equipment": "property",
+    "equipement": "property", "batiment": "property", "bâtiment": "property",
+    "building": "property", "bilding": "property",
+    "ecole": "property", "école": "property", "school": "property",
+    "playground": "property", "bench": "property", "benche": "property",
+    "monument": "property", "monumnt": "property", "vitre": "property",
+    "parks": "parks", "park": "parks", "jardin": "parks",
+    "green_space": "parks", "green space": "parks", "garden": "parks",
+    "arbre": "parks", "tree": "parks", "playgroud": "parks",
+    "other": "other", "autre": "other",
 }
 
 
@@ -477,18 +484,36 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
     
     # Strategy 3: Keyword-based fallback (always free, no dependencies)
     text_normalized = normalize_text(text_to_analyze)
+    text_lower = text_normalized.lower()
+    
+    # 3a: Fuzzy match individual words against CATEGORY_ALIASES
     fuzzy_hits = [fuzzy_category_alias(word) for word in text_normalized.split()]
     fuzzy_hits = [hit for hit in fuzzy_hits if hit and hit != "other"]
+    
+    # 3b: Also fuzzy match n-grams (bigrams and trigrams) to catch multi-word aliases
+    words = text_normalized.split()
+    for n in [2, 3]:
+        for i in range(len(words) - n + 1):
+            ngram = " ".join(words[i:i+n])
+            hit = fuzzy_category_alias(ngram)
+            if hit and hit != "other":
+                fuzzy_hits.append(hit)
+    
+    # 3c: Also check if any CATEGORY_ALIASES key is a substring of the text
+    for alias_raw, alias_cat in CATEGORY_ALIASES.items():
+        if alias_cat != "other" and alias_raw in text_lower:
+            fuzzy_hits.append(alias_cat)
+    
     if fuzzy_hits:
         predicted = max(set(fuzzy_hits), key=fuzzy_hits.count)
+        confidence = min(0.74, 0.50 + 0.05 * fuzzy_hits.count(predicted))
         alternatives = [cat for cat in sorted(set(fuzzy_hits)) if cat != predicted][:3]
         return PredictionResponse(
             predicted=predicted,
-            confidence=0.74,
+            confidence=round(confidence, 2),
             alternatives=alternatives,
             reasoning="Fuzzy multilingual alias match"
         )
-    text_lower = text_normalized.lower()
     
     keyword_map = {
         "roads": ["route", "road", "pothole", "trottoir", "sidewalk", "chaussee", "nid de poule", "bitume", "asphalt",
@@ -544,6 +569,24 @@ def predict_category(description: str, title: Optional[str] = None) -> Predictio
             confidence=round(confidence, 2),
             alternatives=alternatives,
             reasoning="Keyword-based fallback prediction"
+        )
+    
+    # 3d: Low-threshold catch-all — try every word against every alias with threshold 0.40
+    low_hits = []
+    for word in text_normalized.split():
+        for alias in CATEGORY_ALIASES:
+            if CATEGORY_ALIASES[alias] == "other":
+                continue
+            score = SequenceMatcher(None, word, alias).ratio()
+            if score >= 0.40:
+                low_hits.append(CATEGORY_ALIASES[alias])
+    if low_hits:
+        predicted = max(set(low_hits), key=low_hits.count)
+        return PredictionResponse(
+            predicted=predicted,
+            confidence=round(min(0.55, 0.30 + 0.03 * low_hits.count(predicted)), 2),
+            alternatives=[cat for cat in sorted(set(low_hits)) if cat != predicted][:3],
+            reasoning="Low-threshold fuzzy catch-all"
         )
     
     return PredictionResponse(

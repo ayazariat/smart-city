@@ -275,13 +275,13 @@ class DuplicateDetector:
     
     def _calculate_final_score(self, text_score: float, geo_score: float,
                                 category_score: float, temporal_score: float, photo_score: float = 0.5) -> float:
-        """Calculate weighted final score."""
+        """Calculate weighted final score using config weights."""
         return (
-            self._coerce_score(text_score) * self._weight("textSimilarity", 0.70) +
-            self._coerce_score(geo_score) * self._weight("geographicProximity", 0.15) +
-            self._coerce_score(category_score) * self._weight("categoryMatch", 0.10) +
-            self._coerce_score(temporal_score) * self._weight("temporalProximity", 0.05) +
-            self._coerce_score(photo_score, default=0.5) * self._weight("photoMatch", 0.0)
+            self._coerce_score(text_score) * self._weight("textSimilarity") +
+            self._coerce_score(geo_score) * self._weight("geographicProximity") +
+            self._coerce_score(category_score) * self._weight("categoryMatch") +
+            self._coerce_score(temporal_score) * self._weight("temporalProximity") +
+            self._coerce_score(photo_score, default=0.5) * self._weight("photoMatch")
         )
     
     def _determine_duplicate_level(self, score: float) -> str:
@@ -347,11 +347,6 @@ class DuplicateDetector:
             # Text score
             text_score = self._coerce_score(text_scores[i] if i < len(text_scores) else 0)
             
-            # Check for exact title match bonus
-            title_bonus = 0.0
-            if new_complaint.get("title", "").lower() in candidate.get("title", "").lower():
-                title_bonus = 0.20
-            
             # Geographic score
             cand_lat, cand_lng = self._extract_coordinates(candidate)
             geo_score = self._coerce_score(calculate_geo_score(
@@ -384,7 +379,7 @@ class DuplicateDetector:
             
             # Calculate final score
             final_score = self._calculate_final_score(
-                self._coerce_score(text_score + title_bonus), geo_score, category_score, temporal_score, photo_score
+                text_score, geo_score, category_score, temporal_score, photo_score
             )
             
             matches.append({

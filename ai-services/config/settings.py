@@ -193,12 +193,13 @@ SENSITIVE_ZONES = {
 }
 
 # Duplicate Detection Weights
+# Prioritized: geographic proximity (lat/lng) and photo similarity over text
 DUPLICATE_WEIGHTS = {
-    "textSimilarity": 0.58,
-    "geographicProximity": 0.18,
+    "textSimilarity": 0.30,
+    "geographicProximity": 0.35,
+    "photoMatch": 0.20,
     "categoryMatch": 0.10,
-    "temporalProximity": 0.04,
-    "photoMatch": 0.10
+    "temporalProximity": 0.05
 }
 
 # Geographic Proximity Scoring (in meters)

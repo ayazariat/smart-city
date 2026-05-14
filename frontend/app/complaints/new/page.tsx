@@ -113,99 +113,65 @@ const detectCategory = (
   description: string
 ): ComplaintCategory => {
   const desc = `${title} ${description}`.toLowerCase();
+  const norm = desc
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/(.)\1{2,}/g, '$1$1');
 
-  const onlyLetters = desc.replace(/[^a-zàâçéèêëîïôûùüÿñæœ]/gi, '');
+  const onlyLetters = norm.replace(/[^a-z]/gi, '');
   if (onlyLetters.length >= 3 && new Set(onlyLetters).size === 1) {
     return 'other';
   }
 
-  if (
-    desc.includes('waste') ||
-    desc.includes('garbage') ||
-    desc.includes('trash') ||
-    desc.includes('bin') ||
-    desc.includes('poubelle') ||
-    desc.includes('dechet') ||
-    desc.includes('dechets') ||
-    desc.includes('déchet') ||
-    desc.includes('ordure') ||
-    desc.includes('saleté') ||
-    desc.includes('propreté')
-  ) {
+  const match = (words: string[]) => words.some(w => norm.includes(w));
+
+  if (match(['waste', 'garbage', 'trash', 'rubbish', 'litter', 'bin', 'dump',
+    'poubelle', 'dechet', 'ordure', 'salete', 'proprete',
+    'deche', 'trsh', 'garbaje', 'garbidge', 'ordures', 'poubelles',
+    'dechets', 'decharg', 'nettoy', 'benne',
+    'قمامة', 'نفايات', 'قذارة'])) {
     return 'waste';
   }
 
-  if (
-    desc.includes('road') ||
-    desc.includes('street') ||
-    desc.includes('pavement') ||
-    desc.includes('sidewalk') ||
-    desc.includes('pothole') ||
-    desc.includes('route') ||
-    desc.includes('rue') ||
-    desc.includes('nid-de-poule') ||
-    desc.includes('parking') ||
-    desc.includes('trafic') ||
-    desc.includes('traffic')
-  ) {
+  if (match(['road', 'street', 'pavement', 'sidewalk', 'pothole', 'asphalt',
+    'route', 'rue', 'traffic', 'parking', 'signal',
+    'nid de poule', 'trottoir', 'chaussee', 'bitume', 'voirie',
+    'nid de poulles', 'potholl', 'pavment', 'side walk',
+    'حفرة', 'طريق', 'شارع', 'رصيف', 'اسفلت', 'زحمة'])) {
     return 'roads';
   }
 
-  if (
-    desc.includes('light') ||
-    desc.includes('lamp') ||
-    desc.includes('streetlight') ||
-    desc.includes('eclairage') ||
-    desc.includes('éclairage') ||
-    desc.includes('lampadaire') ||
-    desc.includes('lumière') ||
-    desc.includes('éteint')
-  ) {
+  if (match(['light', 'lamp', 'lumier', 'eclairag', 'lampadair',
+    'streetlight', 'ampoule', 'eclairaje',
+    'انارة', 'مصباح', 'ضوء', 'ظلام'])) {
     return 'lighting';
   }
 
-  if (
-    desc.includes('water') ||
-    desc.includes('eau') ||
-    desc.includes('flood') ||
-    desc.includes('drain') ||
-    desc.includes('leak') ||
-    desc.includes('égout') ||
-    desc.includes('inondation') ||
-    desc.includes('fuite') ||
-    desc.includes('canalisation')
-  ) {
+  if (match(['water', 'flood', 'drain', 'leak', 'sewer', 'pipe',
+    'eau', 'inondation', 'fuite', 'canalisation',
+    'egout', 'fuyte', 'innondation', 'watter', 'dreinage',
+    'ماء', 'تسرب', 'فيضان', 'مجاري'])) {
     return 'water';
   }
 
-  if (
-    desc.includes('safety') ||
-    desc.includes('danger') ||
-    desc.includes('accident') ||
-    desc.includes('security') ||
-    desc.includes('securite') ||
-    desc.includes('sécurité') ||
-    desc.includes('bruit') ||
-    desc.includes('tapage') ||
-    desc.includes('agression')
-  ) {
+  if (match(['safety', 'danger', 'accident', 'security', 'bruit', 'crime', 'theft',
+    'securite', 'agression', 'insecurite', 'violence',
+    'dangerus', 'securty', 'incendie', 'feu',
+    'سلامة', 'خطر', 'سرقة', 'اعتداء'])) {
     return 'safety';
   }
 
-  if (
-    desc.includes('park') ||
-    desc.includes('bench') ||
-    desc.includes('fountain') ||
-    desc.includes('building') ||
-    desc.includes('monument') ||
-    desc.includes('propriete') ||
-    desc.includes('propriété') ||
-    desc.includes('jardin') ||
-    desc.includes('square') ||
-    desc.includes('place publique')
-  ) {
+  if (match(['park', 'jardin', 'arbre', 'tree', 'garden', 'green', 'pelouse',
+    'حديقة', 'شجرة', 'مساحة خضراء', 'منتزه'])) {
+    return 'parks';
+  }
+
+  if (match(['building', 'bench', 'monument', 'equipment', 'school', 'playground',
+    'batiment', 'propriete', 'ecole', 'vitre', 'porte', 'fenetre',
+    'bilding', 'skool', 'monumnt', 'benche',
+    'مبنى', 'ملعب', 'مدرسة'])) {
     return 'property';
   }
+
   return 'other';
 };
 
