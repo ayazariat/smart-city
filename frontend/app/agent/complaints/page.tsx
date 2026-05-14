@@ -651,8 +651,8 @@ export default function AgentComplaintsPage() {
   const resolvedCount = complaints.filter(
     (c) => c.status === 'RESOLVED' || c.status === 'CLOSED'
   ).length;
-  const rejectedCount = complaints.filter(
-    (c) => c.status === 'REJECTED'
+  const waitingValidationCount = complaints.filter(
+    (c) => c.status === 'SUBMITTED' || c.status === 'VALIDATED'
   ).length;
   const highPriorityCount = complaints.filter(
     (c) => (c.priorityScore || 0) >= 15
@@ -817,16 +817,16 @@ export default function AgentComplaintsPage() {
               </div>
             </div>
 
-            <div className="bg-red-50 rounded-2xl shadow-lg p-5 border border-red-200">
+            <div className="bg-amber-50 rounded-2xl shadow-lg p-5 border border-amber-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-red-600 font-medium">Rejected</p>
-                  <p className="text-3xl font-bold text-red-600 mt-1">
-                    {rejectedCount}
+                  <p className="text-sm text-amber-700 font-medium">Waiting Validation</p>
+                  <p className="text-3xl font-bold text-amber-700 mt-1">
+                    {waitingValidationCount}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-                  <XCircle className="w-6 h-6 text-red-600" />
+                <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-amber-600" />
                 </div>
               </div>
             </div>

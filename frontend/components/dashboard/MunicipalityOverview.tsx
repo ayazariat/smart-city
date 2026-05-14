@@ -8,15 +8,10 @@ import { useTranslation } from 'react-i18next';
 
 // Dynamic import for the mini map (no SSR for Leaflet)
 const MunicipalityMiniMap = dynamic<{
-  points: HeatmapPoint[];
-  municipality?: string;
+  municipality: string;
+  points: any[];
 }>(() => import('./MunicipalityMiniMap'), {
   ssr: false,
-  loading: () => (
-    <div className="h-[280px] bg-slate-50 rounded-xl flex items-center justify-center">
-      <Loader2 className="w-5 h-5 animate-spin text-primary" />
-    </div>
-  ),
 });
 
 interface MunicipalityData {

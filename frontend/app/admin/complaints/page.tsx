@@ -275,7 +275,7 @@ export default function AdminComplaintsPage() {
     <DashboardLayout>
       <div className="min-h-screen bg-slate-50/50">
         <PageHeader
-          title={`All Complaints (${totalCount})`}
+          title="All Complaints"
           subtitle={t('admin.complaintsPageSubtitle')}
           backHref="/dashboard"
           rightContent={

@@ -324,110 +324,64 @@ export default function NewComplaintPage() {
 
   useEffect(() => {
     const totalLength = title.length + description.length;
-    if (totalLength < 4) {
+    if (totalLength < 10 || description.trim().length < 3) {
       setAiSuggestedCategory(null);
       return;
     }
 
+    const keywordResult = detectCategory(title, description);
+    setAiSuggestedCategory(keywordResult);
+
     const timer = setTimeout(async () => {
       setIsAiSuggesting(true);
       try {
-        // Use AI prediction
         const text = `${title} ${description}`;
         const result = await predictCategory(text);
 
-        // Normalize the predicted value to match the lowercase CATEGORIES values
         const normalizePrediction = (raw: string): ComplaintCategory | null => {
           if (!raw) return null;
-          // Strip accents + lowercase for robust matching (handles "déchet" and "dechet" equally)
           const v = raw
             .toLowerCase()
             .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '') // remove diacritics
+            .replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9_]/g, '_')
             .replace(/_+/g, '_')
             .trim();
           const map: Record<string, ComplaintCategory> = {
-            // English (as Python returns)
-            waste: 'waste',
-            garbage: 'waste',
-            trash: 'waste',
-            road: 'roads',
-            roads: 'roads',
-            street: 'roads',
-            voirie: 'roads',
-            circulation: 'roads',
-            lighting: 'lighting',
-            light: 'lighting',
-            water: 'water',
-            flood: 'water',
-            drainage: 'water',
-            safety: 'safety',
-            security: 'safety',
-            property: 'property',
-            public_property: 'property',
-            parks: 'parks',
-            park: 'parks',
-            green_space: 'parks',
-            green: 'parks',
+            waste: 'waste', garbage: 'waste', trash: 'waste',
+            road: 'roads', roads: 'roads', street: 'roads', voirie: 'roads', circulation: 'roads',
+            lighting: 'lighting', light: 'lighting',
+            water: 'water', flood: 'water', drainage: 'water',
+            safety: 'safety', security: 'safety',
+            property: 'property', public_property: 'property',
+            parks: 'parks', park: 'parks', green_space: 'parks', green: 'parks',
             other: 'other',
-            // French accent-stripped
-            dechet: 'waste',
-            dechets: 'waste',
-            ordure: 'waste',
-            ordures: 'waste',
-            proprete: 'waste',
-            route: 'roads',
-            rue: 'roads',
-            eclairage: 'lighting',
-            lampadaire: 'lighting',
-            lumiere: 'lighting',
-            eau: 'water',
-            inondation: 'water',
-            canalisation: 'water',
-            securite: 'safety',
-            bruit: 'safety',
-            danger: 'safety',
-            propriete: 'property',
-            batiment: 'property',
-            parc: 'parks',
-            jardin: 'parks',
-            espaces_verts: 'parks',
-            espace_vert: 'parks',
+            dechet: 'waste', dechets: 'waste', ordure: 'waste', ordures: 'waste', proprete: 'waste',
+            route: 'roads', rue: 'roads',
+            eclairage: 'lighting', lampadaire: 'lighting', lumiere: 'lighting',
+            eau: 'water', inondation: 'water', canalisation: 'water',
+            securite: 'safety', bruit: 'safety', danger: 'safety',
+            propriete: 'property', batiment: 'property',
+            parc: 'parks', jardin: 'parks', espaces_verts: 'parks', espace_vert: 'parks',
             autre: 'other',
           };
           return map[v] ?? null;
         };
 
-        if (result && result.confidence > 0.6) {
+        if (result && result.confidence > 0.35) {
           const normalized = normalizePrediction(result.predicted);
-          if (normalized) {
+          if (normalized && normalized !== 'other') {
             setAiSuggestedCategory(normalized);
-            // Auto-select if confidence > 85%
-            if (
-              result.confidence > 0.85 &&
-              !categoryManuallySelected &&
-              (!category || category === 'other')
-            ) {
+            if (result.confidence > 0.85 && !categoryManuallySelected && (!category || category === 'other')) {
               setCategory(normalized);
             }
-          } else {
-            const detected = detectCategory(title, description);
-            setAiSuggestedCategory(detected);
           }
-        } else {
-          // Fallback to keyword detection
-          const detected = detectCategory(title, description);
-          setAiSuggestedCategory(detected);
         }
       } catch {
-        // Fallback to keyword detection on error
-        const detected = detectCategory(title, description);
-        setAiSuggestedCategory(detected);
       } finally {
         setIsAiSuggesting(false);
       }
-    }, 1500); // 1.5s debounce for AI
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, [title, description, category, categoryManuallySelected]);

@@ -143,6 +143,7 @@ async def health_check():
 
 # ── Category Prediction (used by ai.service.js) ──
 @app.post("/predict-category", tags=["Category Prediction"])
+@app.post("/ai/predict-category", tags=["Category Prediction"])
 async def predict_category_endpoint(request: dict):
     """Predict complaint category from description."""
     text = request.get("text") or request.get("description", "")

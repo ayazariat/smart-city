@@ -1501,7 +1501,7 @@ function DashboardContent() {
                 </div>
               </div>
               {stats.resolutionRate !== undefined && (
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="mt-4 w-full">
                   <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-semibold text-emerald-800">

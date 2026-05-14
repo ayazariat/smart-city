@@ -9,8 +9,6 @@ import {
   TrendingUp,
   Clock,
   CheckCircle,
-  Lock,
-  XCircle,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { complaintService } from '@/services/complaint.service';
@@ -146,9 +144,7 @@ export default function MyComplaintsPage() {
   const resolved = complaints.filter((c) =>
     ['RESOLVED', 'CLOSED'].includes(c.status)
   ).length;
-  // Closed = CLOSED status (fully resolved and approved)
-  const closed = complaints.filter((c) => c.status === 'CLOSED').length;
-  const rejected = complaints.filter((c) => c.status === 'REJECTED').length;
+
 
   if (!hydrated) return <LoadingSpinner fullScreen />;
   if (!user || user.role !== 'CITIZEN') return null;
@@ -226,29 +222,6 @@ export default function MyComplaintsPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200 animate-fadeInUp delay-300">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-slate-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Closed</p>
-                  <p className="text-xl font-bold text-slate-800">{closed}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-lg p-4 border border-red-200 animate-fadeInUp delay-400">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
-                  <XCircle className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-red-600">Rejected</p>
-                  <p className="text-xl font-bold text-red-700">{rejected}</p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

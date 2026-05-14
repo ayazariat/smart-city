@@ -151,7 +151,7 @@ export default function TrendForecastChart({
             </div>
           </div>
           {spikeDays.length > 0 && (
-            <div className="flex items-center gap-2 bg-red-500/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg shadow-lg text-sm font-bold">
+            <div className="flex items-center gap-2 bg-red-500/90 backdrop-blur-sm text-white px-4 py-3 rounded-lg shadow-lg text-sm font-bold w-full">
               <AlertTriangle className="w-4 h-4" />
               <div>
                 <div>SPIKE PREDICTED</div>
