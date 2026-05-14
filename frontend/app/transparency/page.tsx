@@ -2061,8 +2061,9 @@ export default function TransparencyPage() {
                             key={gov.governorate}
                             className={`p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg hover:-translate-y-1 ${borderClass}`}
                             onClick={() => {
-                              setSelectedGovernorate(gov.governorate);
-                              setActiveView('municipalities');
+                              setSearchQuery(gov.governorate);
+                              setActiveView('complaints');
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                           >
                             <div className="flex items-center justify-between mb-3">

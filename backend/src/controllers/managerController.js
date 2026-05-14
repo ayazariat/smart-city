@@ -92,6 +92,7 @@ class ManagerController {
         Complaint.find(query)
           .populate("createdBy", "fullName email phone")
           .populate("assignedTo", "fullName")
+          .populate("assignedTeam", "name members")
           .populate("assignedDepartment", "name")
           .sort({ priorityScore: -1, createdAt: -1 })
           .skip(skip)
@@ -454,20 +455,22 @@ async assignTechnician(req, res) {
       });
       await repairTeam.save();
 
-       complaint.assignedTeam = repairTeam._id;
-       complaint.assignedTo = technicianIds[0];
-       complaint.status = "ASSIGNED";
-       
-       // Set assignedDepartment if department is known
-       if (departmentId) {
-         complaint.assignedDepartment = {
-           id: department._id,
-           name: department.name
-         };
-       }
-       
-      const populatedTeam = await RepairTeam.findById(repairTeam._id)
-        .populate("members", "fullName email");
+        complaint.assignedTeam = repairTeam._id;
+        complaint.assignedTo = technicianIds[0];
+        complaint.status = "ASSIGNED";
+        
+        // Set assignedDepartment if department is known
+        if (departmentId) {
+          complaint.assignedDepartment = {
+            id: department._id,
+            name: department.name
+          };
+        }
+        
+        await complaint.save();
+        
+       const populatedTeam = await RepairTeam.findById(repairTeam._id)
+         .populate("members", "fullName email");
 
       const io = req.app?.get?.('io');
       // Notify technicians
@@ -555,10 +558,10 @@ async assignTechnician(req, res) {
       
       let canAccess = isAdmin;
       
-      // Check municipality match
+      // Check municipality match using normalized comparison
       if (!canAccess && managerMunicipality && complaintMunicipality) {
-        // Case-insensitive comparison
-        canAccess = managerMunicipality.toLowerCase() === complaintMunicipality.toLowerCase();
+        const { normalizeMunicipality } = require("../utils/normalize");
+        canAccess = normalizeMunicipality(managerMunicipality) === normalizeMunicipality(complaintMunicipality);
       }
       
       if (!canAccess) {

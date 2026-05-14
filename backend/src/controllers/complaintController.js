@@ -2,7 +2,7 @@ const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const Department = require("../models/Department");
 const { getStatus: getSlaStatus } = require("../utils/slaCalculator");
-const { normalizeMunicipality, normalizeGovernorate, getMunicipalityGovernorate } = require("../utils/normalize");
+const { normalizeMunicipality, normalizeGovernorate, getMunicipalityGovernorate, getCanonicalMunicipalityName } = require("../utils/normalize");
 const notificationService = require("../services/notification.service");
 const { logAction } = require("../services/audit.service");
 
@@ -87,8 +87,8 @@ class ComplaintController {
 
       const mediaData = media || images || [];
       const normalizedMunicipality = normalizeMunicipality(municipality || "");
+      const canonicalMunicipality = getCanonicalMunicipalityName(municipality || "");
 
-      // Auto-populate governorate from municipality if not provided
       const resolvedGovernorate = governorate || getMunicipalityGovernorate(municipality) || "";
       const normalizedGovernorate = normalizeGovernorate(resolvedGovernorate);
 
@@ -98,8 +98,8 @@ class ComplaintController {
         category,
         governorate: resolvedGovernorate,
         governorateNormalized: normalizedGovernorate,
-        municipality: municipality || "",
-        municipalityName: municipality || "",
+        municipality: canonicalMunicipality,
+        municipalityName: canonicalMunicipality,
         municipalityNormalized: normalizedMunicipality,
         latitude: latitude || null,
         longitude: longitude || null,
@@ -435,6 +435,7 @@ class ComplaintController {
         departmentId: complaint.assignedDepartment || null,
         assignedDepartment: complaint.assignedDepartment || null,
         repairTeamId: complaint.assignedTeam || null,
+        assignedTeam: complaint.assignedTeam || null,
         assignedTechnicians:
           complaint.assignedTeam && complaint.assignedTeam.members
             ? complaint.assignedTeam.members.map((m) => ({
@@ -677,7 +678,7 @@ class ComplaintController {
         Complaint.find(query)
           .populate("createdBy", "fullName email phone governorate municipality")
           .populate("assignedTo", "fullName email")
-          .populate("assignedTeam", "fullName email")
+          .populate("assignedTeam", "name members")
           .populate("assignedDepartment", "name categoryKey")
           .populate("municipality", "name governorate")
           .sort({ createdAt: -1 })

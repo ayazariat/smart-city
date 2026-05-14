@@ -651,6 +651,9 @@ export default function AgentComplaintsPage() {
   const resolvedCount = complaints.filter(
     (c) => c.status === 'RESOLVED' || c.status === 'CLOSED'
   ).length;
+  const rejectedCount = complaints.filter(
+    (c) => c.status === 'REJECTED'
+  ).length;
   const highPriorityCount = complaints.filter(
     (c) => (c.priorityScore || 0) >= 15
   ).length;
@@ -810,6 +813,20 @@ export default function AgentComplaintsPage() {
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                   <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 rounded-2xl shadow-lg p-5 border border-red-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-red-600 font-medium">Rejected</p>
+                  <p className="text-3xl font-bold text-red-600 mt-1">
+                    {rejectedCount}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                  <XCircle className="w-6 h-6 text-red-600" />
                 </div>
               </div>
             </div>

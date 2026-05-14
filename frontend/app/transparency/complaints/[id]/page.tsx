@@ -535,7 +535,7 @@ export default function PublicComplaintDetailPage() {
       )}
 
       {/* Main Content */}
-      <div className="ml-0 md:ml-[260px] w-full max-w-none px-4 md:px-6 py-6">
+      <div className="ml-0 md:ml-[260px] w-full max-w-5xl mx-auto px-4 md:px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* LEFT COLUMN */}
           <div className="lg:col-span-2 space-y-6">

@@ -548,8 +548,8 @@ export default function ComplaintDetailPage() {
       }
       
       if (response.success) {
-        const updated = (response.data as any)?.complaint || response.data;
-        applyUpdatedComplaint(updated as Complaint);
+        // Re-fetch complaint to get fully populated assignedTeam/assignedTo
+        await refreshComplaint();
         setActionModal(null);
         setSelectedTechnician("");
         setSelectedTechnicians([]);
@@ -605,17 +605,29 @@ export default function ComplaintDetailPage() {
   // Get citizen info - try createdBy first (for agent/manager view) or citizen (for some views)
   // Also check complaint.phone field directly for anonymous complaints
   const citizenInfo = (() => {
-    if (complaint?.createdBy && typeof complaint.createdBy === "object") {
+    if (!complaint) return null;
+    if (complaint.createdBy && typeof complaint.createdBy === "object") {
       return complaint.createdBy;
     }
-    if (complaint?.citizen && typeof complaint.citizen === "object") {
+    if (complaint.citizen && typeof complaint.citizen === "object") {
       return complaint.citizen;
     }
+    // For non-anonymous complaints where createdBy is a string ID (not populated), use complaint-level fields
+    if (!complaint.isAnonymous) {
+      const c = complaint as any;
+      const name = c.ownerName || c.citizenName || c.fullName || "";
+      const phone = c.phone || c.citizenPhone || "";
+      const email = c.citizenEmail || "";
+      if (name || phone || email) {
+        return { fullName: name || "Citizen", phone, email };
+      }
+    }
     // For anonymous complaints, create citizen info from complaint fields
-    if (complaint?.isAnonymous && (complaint?.ownerName || complaint?.phone)) {
+    const c2 = complaint as any;
+    if (complaint.isAnonymous && (c2.ownerName || c2.phone)) {
       return {
-        fullName: complaint.ownerName || "Anonymous",
-        phone: complaint.phone,
+        fullName: c2.ownerName || "Anonymous",
+        phone: c2.phone,
         email: null
       };
     }
@@ -713,13 +725,13 @@ export default function ComplaintDetailPage() {
         }
       />
 
-      <main className="w-full max-w-4xl mx-auto px-4 py-4 overflow-x-hidden" role="main">
-        <div className="w-full grid grid-cols-1 gap-4 items-start overflow-x-hidden">
+      <main className="w-full max-w-7xl mx-auto px-4 py-4 overflow-x-hidden" role="main">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-[2fr_380px] gap-4 lg:gap-6 items-start overflow-x-hidden">
           {/* Main Content */}
           <div className="space-y-4">
             {/* Basic Info */}
-            <section className="bg-white rounded-2xl shadow-lg p-4 border border-slate-100" aria-labelledby="basic-info-title">
-              <h2 id="basic-info-title" className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <section className="bg-white rounded-2xl shadow-lg p-2 border border-slate-100" aria-labelledby="basic-info-title">
+              <h2 id="basic-info-title" className="text-sm font-semibold text-slate-900 mb-2 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
                 {t("complaintDetail.mainInformation")}
               </h2>
@@ -956,8 +968,8 @@ export default function ComplaintDetailPage() {
               </div>
             </section>
 
-            {/* AI Analysis Section (BL-24, BL-25) */}
-            {canSeeAiInsights && showUrgencyAi && (
+            {/* AI Analysis Section (BL-24, BL-25) - only before assignment */}
+            {canSeeAiInsights && showUrgencyAi && !(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId) && (
               <section className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl shadow-lg p-6 border border-violet-200">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
                   <span className="text-2xl">🤖</span>
@@ -965,7 +977,7 @@ export default function ComplaintDetailPage() {
                 </h2>
                 
                 {/* BL-24: Urgency Prediction — Manager/Admin only - Hide when assigned */}
-                {showUrgencyAi && complaint.aiUrgencyPrediction && !(complaint.assignedTo || complaint.assignedTeam) && (
+                {showUrgencyAi && complaint.aiUrgencyPrediction && !(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId) && (
                   <div className="mb-4 p-4 bg-white rounded-xl border border-violet-100">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-700">{t("complaintDetail.aiUrgencyPrediction")}</span>
@@ -1309,7 +1321,7 @@ export default function ComplaintDetailPage() {
           <aside className="space-y-6" role="complementary" aria-label="Additional information">
             {/* AI Analysis */}
             {(canSeeUrgencyPrediction ||
-              (user?.role === 'MUNICIPAL_AGENT' && showDuplicateAi)) ? (
+              (user?.role === 'MUNICIPAL_AGENT' && showDuplicateAi && !(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId))) ? (
               <AIAnalysisCard
                 complaintId={complaint._id || complaintId}
                 title={complaint.title || ""}
@@ -1409,10 +1421,10 @@ export default function ComplaintDetailPage() {
                 })()}
              </section>
 
-            {/* Assigned To */}
-            {(complaint.assignedTo || complaint.assignedTeam) && (
+             {/* Assigned To */}
+            {(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId) && (
               <section className="bg-white rounded-2xl shadow-lg p-3 border border-slate-100" aria-labelledby="assigned-title">
-                {complaint.assignedTeam && typeof complaint.assignedTeam === 'object' && (
+                {(complaint.assignedTeam && typeof complaint.assignedTeam === 'object') && (
                   <div className="space-y-2">
                     <p className="font-semibold text-slate-900 flex items-center gap-2">
                       <Users className="w-4 h-4 text-slate-400" />
@@ -1444,6 +1456,15 @@ export default function ComplaintDetailPage() {
                         {complaint.assignedTo.email}
                       </p>
                     )}
+                  </div>
+                )}
+                {/* Fallback: repairTeamId exists but no populated assignedTeam object */}
+                {(complaint as any).repairTeamId && !complaint.assignedTeam && !complaint.assignedTo && (
+                  <div className="space-y-2">
+                    <p className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-slate-400" />
+                      {t("complaintDetail.assignedToRepairTeam")}
+                    </p>
                   </div>
                 )}
               </section>
@@ -1825,7 +1846,7 @@ export default function ComplaintDetailPage() {
                   )}
 
                   {/* ASSIGNED - Manager assigns Technician/Team and sets Priority */}
-                  {!(complaint.assignedTo || complaint.assignedTeam) && !(complaint.status === "IN_PROGRESS" || complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (complaint.status === "ASSIGNED" || complaint.status === "VALIDATED") && user?.role === "DEPARTMENT_MANAGER" && (
+                  {!(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId) && !(complaint.status === "IN_PROGRESS" || complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (complaint.status === "ASSIGNED" || complaint.status === "VALIDATED") && user?.role === "DEPARTMENT_MANAGER" && (
                     <>
                       <Button
                         className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700"
@@ -1845,12 +1866,23 @@ export default function ComplaintDetailPage() {
                       </Button>
                     </>
                   )}
-                  {/* Show assigned message if already assigned - hide assignment actions permanently */}
-                  {(complaint.assignedTo || complaint.assignedTeam) && user?.role === "DEPARTMENT_MANAGER" && (
+                  {/* Show assigned/resolved message based on status */}
+                  {(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId) && user?.role === "DEPARTMENT_MANAGER" && !["RESOLVED", "CLOSED"].includes(complaint.status) && (
                     <div className="mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
                       <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4" />
-                        {complaint.assignedTeam ? t("complaintDetail.assignedToRepairTeam") : t("complaintDetail.assignedToTechnician")}
+                        {complaint.assignedTeam
+                          ? t("complaintDetail.assignedToRepairTeam", { defaultValue: "Assigned to repair team" })
+                          : t("complaintDetail.assignedToTechnician", { defaultValue: "Assigned to technician" })}
+                      </p>
+                    </div>
+                  )}
+                  {/* Show resolved message when complaint is CLOSED */}
+                  {(complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId) && user?.role === "DEPARTMENT_MANAGER" && ["RESOLVED", "CLOSED"].includes(complaint.status) && (
+                    <div className="mb-3 p-3 bg-blue-50 rounded-xl border border-blue-200">
+                      <p className="text-sm font-medium text-blue-800 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {t("complaintDetail.resolved", { defaultValue: "Complaint resolved" })}
                       </p>
                     </div>
                   )}

@@ -1182,7 +1182,7 @@ function DashboardContent() {
                 <BarChart3 className="w-4 h-4 text-primary" />
                 {t('stats.byCategory')}
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="w-full space-y-3">
                 {Object.entries(byCategory).map(([cat, count]) => {
                   const maxCount = Math.max(...Object.values(byCategory));
                   const totalCount = Object.values(byCategory).reduce(

@@ -35,6 +35,7 @@ function ArchivePageContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [closedCount, setClosedCount] = useState(0);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const limit = 10;
 
   useEffect(() => {
@@ -87,12 +88,12 @@ function ArchivePageContent() {
     const fetchCounts = async () => {
       if (!token || !hydrated || !user) return;
       try {
-        const closedRes = await complaintService.getArchivedComplaints({
-          filter: 'CLOSED',
-          page: 1,
-          limit: 1,
-        });
+        const [closedRes, rejectedRes] = await Promise.all([
+          complaintService.getArchivedComplaints({ filter: 'CLOSED', page: 1, limit: 1 }),
+          complaintService.getArchivedComplaints({ filter: 'REJECTED', page: 1, limit: 1 }),
+        ]);
         setClosedCount(closedRes?.total || 0);
+        setRejectedCount(rejectedRes?.total || 0);
       } catch {}
     };
     fetchCounts();
@@ -187,8 +188,9 @@ function ArchivePageContent() {
   }
 
   const archiveStats = {
-    total: closedCount,
+    total: closedCount + rejectedCount,
     closed: closedCount,
+    rejected: rejectedCount,
   };
 
   return (
@@ -196,7 +198,7 @@ function ArchivePageContent() {
       <div className="min-h-screen bg-slate-50/50">
         <PageHeader
           title="Archived Complaints"
-          subtitle={`${archiveStats.total} closed complaints`}
+          subtitle={`${archiveStats.total} archived complaints (${archiveStats.closed} closed, ${archiveStats.rejected} rejected)`}
           backHref="/dashboard"
         />
 
@@ -241,6 +243,26 @@ function ArchivePageContent() {
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                   <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setStatusFilter('REJECTED');
+                setPage(1);
+              }}
+              className={`bg-white rounded-2xl shadow-lg p-5 border transition-all text-left ${statusFilter === 'REJECTED' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-200 hover:border-red-300'} animate-fadeInUp delay-150`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-500 font-medium">Rejected</p>
+                  <p className="text-3xl font-bold text-red-600 mt-1">
+                    {archiveStats.rejected}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                  <XCircle className="w-6 h-6 text-red-600" />
                 </div>
               </div>
             </button>

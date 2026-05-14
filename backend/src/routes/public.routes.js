@@ -69,7 +69,9 @@ router.get("/complaints/:id", optionalAuth, async (req, res) => {
     const { id } = req.params;
 
     const complaint = await Complaint.findOne({ _id: id, isArchived: { $ne: true } })
-      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
+      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment assignedTeam assignedTo media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
+      .populate("assignedTeam", "name members")
+      .populate("assignedTo", "fullName email")
       .populate("municipality", "name governorate")
       .lean();
 
@@ -655,12 +657,14 @@ router.get("/stats", async (req, res) => {
         },
         { $sort: { total: -1 } }
       ]),
-      // Municipality stats with avg fix time calculation - fix per-municipality calculation
+      // Municipality stats with avg fix time calculation - grouped by municipalityNormalized
       Complaint.aggregate([
         { $match: match },
         {
           $group: {
-            _id: { municipality: "$municipalityName", governorate: "$governorate" },
+            _id: "$municipalityNormalized",
+            municipalityName: { $first: "$municipalityName" },
+            governorate: { $first: "$governorate" },
             totalComplaints: { $sum: 1 },
             resolvedCount: {
               $sum: {
@@ -765,12 +769,13 @@ router.get("/stats", async (req, res) => {
         },
         { $sort: { total: -1 } }
       ]),
-      // Top recurring issues (only recurring problems - count > 1)
+      // Top recurring issues (only recurring problems - count > 1) grouped by municipalityNormalized
       Complaint.aggregate([
         { $match: { status: { $nin: ["DELETED", "REJECTED"] }, createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } } },
         {
           $group: {
-            _id: { category: "$category", municipality: "$municipalityName" },
+            _id: { category: "$category", municipalityNormalized: "$municipalityNormalized" },
+            municipalityName: { $first: "$municipalityName" },
             count: { $sum: 1 },
             resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
           }
@@ -779,12 +784,14 @@ router.get("/stats", async (req, res) => {
         { $sort: { count: -1 } },
         { $limit: 5 }
       ]),
-      // All municipalities (all-time)
+      // All municipalities (all-time) grouped by municipalityNormalized
       Complaint.aggregate([
         { $match: { status: { $nin: ["DELETED", "REJECTED"] } } },
         {
           $group: {
-            _id: { municipality: "$municipalityName", governorate: "$governorate" },
+            _id: "$municipalityNormalized",
+            municipalityName: { $first: "$municipalityName" },
+            governorate: { $first: "$governorate" },
             total: { $sum: 1 },
             resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
           }
@@ -820,10 +827,10 @@ router.get("/stats", async (req, res) => {
       rate: (categoryMap[cat.category] || {}).resolutionRate || 0
     }));
 
-    // Format municipality stats - now with proper per-municipality calculations
+    // Format municipality stats - now grouped by municipalityNormalized for deduplication
     const formattedMunicipalityStats = (municipalityStats || []).map((item, idx) => ({
-      name: item._id?.municipality || 'Unknown',
-      governorate: item._id?.governorate || 'Unknown',
+      name: item.municipalityName || item._id || 'Unknown',
+      governorate: item.governorate || 'Unknown',
       total: item.totalComplaints || 0,
       resolved: item.resolvedCount || 0,
       rate: item.totalComplaints > 0 ? Math.round((item.resolvedCount / item.totalComplaints) * 100) : 0,
@@ -869,7 +876,7 @@ router.get("/stats", async (req, res) => {
       .filter(item => item.count > 1) // Only include recurring problems
       .map(item => ({
         category: item._id.category,
-        municipality: item._id.municipality,
+        municipality: item.municipalityName || item._id.municipalityNormalized,
         count: item.count,
         resolvedCount: item.resolved,
         status: item.resolved > 0 && item.resolved === item.count ? 'All Resolved' :
@@ -878,8 +885,8 @@ router.get("/stats", async (req, res) => {
 
     // Format all municipalities
     const formattedAllMunicipalityStats = allMunicipalityStats.map(item => ({
-      name: item._id.municipality,
-      governorate: item._id.governorate,
+      name: item.municipalityName || item._id,
+      governorate: item.governorate,
       total: item.total,
       resolved: item.resolved,
       rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0
@@ -1035,7 +1042,9 @@ router.get("/stats/by-municipality", async (req, res) => {
       { $match: match },
       {
         $group: {
-          _id: { name: "$municipalityName", governorate: "$governorate" },
+          _id: "$municipalityNormalized",
+          municipalityName: { $first: "$municipalityName" },
+          governorate: { $first: "$governorate" },
           total: { $sum: 1 },
           resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } },
           avgFixTime: { $avg: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, { $divide: [{ $subtract: ["$resolvedAt", "$createdAt"] }, 86400000] }, null] } },
@@ -1046,8 +1055,8 @@ router.get("/stats/by-municipality", async (req, res) => {
     ]);
 
     const result = byMunicipality.map((item) => ({
-      municipality: item._id.name || "Unknown",
-      governorate: item._id.governorate || "",
+      municipality: item.municipalityName || item._id || "Unknown",
+      governorate: item.governorate || "",
       total: item.total,
       resolved: item.resolved,
       rate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0,
@@ -1070,7 +1079,21 @@ router.get("/stats/by-zone", async (req, res) => {
 
     const byZone = await Complaint.aggregate([
       { $match: match },
-      { $group: { _id: "$governorate", total: { $sum: 1 }, resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } } } },
+      {
+        $addFields: {
+          effectiveGovNormalized: {
+            $ifNull: ["$governorateNormalized", { $toLower: { $trim: { input: "$governorate" } } }]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: "$effectiveGovNormalized",
+          governorateDisplay: { $first: "$governorate" },
+          total: { $sum: 1 },
+          resolved: { $sum: { $cond: [{ $in: ["$status", ["RESOLVED", "CLOSED"]] }, 1, 0] } }
+        }
+      },
       { $sort: { total: -1 } }
     ]);
 
@@ -1078,9 +1101,13 @@ router.get("/stats/by-zone", async (req, res) => {
 
     const governorateMap = {};
     byZone.forEach(item => {
-      const govName = (item._id || "").trim();
-      const govKey = govName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      governorateMap[govKey] = { total: item.total, resolved: item.resolved, resolutionRate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0 };
+      const govKey = item._id || "";
+      governorateMap[govKey] = {
+        total: item.total,
+        resolved: item.resolved,
+        resolutionRate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0,
+        displayName: item.governorateDisplay || ""
+      };
     });
 
     const result = allGovernorates.map(gov => {
@@ -1169,14 +1196,21 @@ router.get("/stats/all-municipalities", async (req, res) => {
     const match = buildPeriodMatch(period);
     const all = await Complaint.aggregate([
       { $match: match },
-      { $group: { _id: { municipality: "$municipalityName", governorate: "$governorate" }, count: { $sum: 1 } } },
+      {
+        $group: {
+          _id: "$municipalityNormalized",
+          municipalityName: { $first: "$municipalityName" },
+          governorate: { $first: "$governorate" },
+          count: { $sum: 1 }
+        }
+      },
       { $sort: { count: -1 } },
     ]);
     res.json({
       success: true,
       data: all.map((item) => ({
-        municipality: item._id.municipality || "Unknown",
-        governorate: item._id.governorate || "",
+        municipality: item.municipalityName || item._id || "Unknown",
+        governorate: item.governorate || "",
         count: item.count,
       })),
     });

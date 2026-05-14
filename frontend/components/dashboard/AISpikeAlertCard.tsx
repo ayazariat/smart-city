@@ -116,23 +116,23 @@ export default function AISpikeAlertCard({
         </span>
       </div>
 
-      <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <div className="font-semibold text-amber-800 text-sm">
-              ⚠️ SPIKE PREDICTED
+      <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 w-full">
+        <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-3 md:flex-shrink-0">
+            <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+            <div className="font-semibold text-amber-800 text-sm whitespace-nowrap">
+              SPIKE PREDICTED
             </div>
-            <div className="text-xs text-amber-700 mt-1 break-words">
-              Peak of {maxSpike} complaints expected on {spikeDays.length} day
-              {spikeDays.length > 1 ? 's' : ''} in{' '}
-              {municipality || 'your municipality'}
-            </div>
-            <div className="mt-2">
-              <span className="inline-block px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full text-[10px] font-medium">
-                Plan for high volume
-              </span>
-            </div>
+          </div>
+          <div className="text-xs text-amber-700 md:text-center md:flex-1">
+            Peak of {maxSpike} complaints expected on {spikeDays.length} day
+            {spikeDays.length > 1 ? 's' : ''} in{' '}
+            {municipality || 'your municipality'}
+          </div>
+          <div className="md:flex-shrink-0">
+            <span className="inline-block px-3 py-1 bg-amber-200 text-amber-800 rounded-full text-xs font-medium whitespace-nowrap">
+              Plan for high volume
+            </span>
           </div>
         </div>
       </div>

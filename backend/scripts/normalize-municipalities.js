@@ -1,16 +1,9 @@
-const normalizeMunicipality = (name) => {
-  if (!name) return '';
-  return name
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[-''`]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
+const mongoose = require('mongoose');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 
-const normalizeGovernorate = (name) => {
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/smart-city';
+
+const normalize = (name) => {
   if (!name) return '';
   return name
     .trim()
@@ -49,47 +42,183 @@ const MUNICIPALITY_TO_GOVERNORATE = {
   "Zaghouan": "Zaghouan", "Bir Mcherga": "Zaghouan", "El Fahs": "Zaghouan", "Nadhour": "Zaghouan", "Saouaf": "Zaghouan", "Zriba": "Zaghouan"
 };
 
-const getMunicipalityGovernorate = (municipalityName) => {
-  if (!municipalityName) return null;
-  const trimmed = municipalityName.trim();
-  if (MUNICIPALITY_TO_GOVERNORATE[trimmed]) return MUNICIPALITY_TO_GOVERNORATE[trimmed];
-  for (const [mun, gov] of Object.entries(MUNICIPALITY_TO_GOVERNORATE)) {
-    if (mun.toLowerCase() === trimmed.toLowerCase()) return gov;
-  }
-  for (const [mun, gov] of Object.entries(MUNICIPALITY_TO_GOVERNORATE)) {
-    if (trimmed.toLowerCase().includes(mun.toLowerCase()) || mun.toLowerCase().includes(trimmed.toLowerCase())) return gov;
-  }
-  return null;
-};
-
 const CANONICAL_MUNICIPALITY_NAMES = {};
-
-const _buildCanonicalNames = () => {
-  const seen = new Set();
-  for (const rawName of Object.keys(MUNICIPALITY_TO_GOVERNORATE)) {
-    const normalized = normalizeMunicipality(rawName);
-    if (!seen.has(normalized)) {
-      seen.add(normalized);
-      CANONICAL_MUNICIPALITY_NAMES[normalized] = rawName;
-    }
+const seen = new Set();
+for (const rawName of Object.keys(MUNICIPALITY_TO_GOVERNORATE)) {
+  const normalized = normalize(rawName);
+  if (!seen.has(normalized)) {
+    seen.add(normalized);
+    CANONICAL_MUNICIPALITY_NAMES[normalized] = rawName;
   }
-};
-_buildCanonicalNames();
+}
 
-const getCanonicalMunicipalityName = (name) => {
-  if (!name) return "";
-  const normalized = normalizeMunicipality(name);
+function getCanonicalName(name) {
+  if (!name) return '';
+  const normalized = normalize(name);
   if (CANONICAL_MUNICIPALITY_NAMES[normalized]) {
     return CANONICAL_MUNICIPALITY_NAMES[normalized];
   }
   return name.trim().replace(/\b\w/g, (c) => c.toUpperCase());
-};
+}
 
-module.exports = {
-  normalizeMunicipality,
-  normalizeGovernorate,
-  getMunicipalityGovernorate,
-  getCanonicalMunicipalityName,
-  MUNICIPALITY_TO_GOVERNORATE,
-  CANONICAL_MUNICIPALITY_NAMES,
-};
+function getGovernorate(name) {
+  if (!name) return '';
+  const normalized = normalize(name);
+  for (const [mun, gov] of Object.entries(MUNICIPALITY_TO_GOVERNORATE)) {
+    if (normalize(mun) === normalized) return gov;
+  }
+  for (const [mun, gov] of Object.entries(MUNICIPALITY_TO_GOVERNORATE)) {
+    if (normalized.includes(normalize(mun)) || normalize(mun).includes(normalized)) return gov;
+  }
+  return '';
+}
+
+async function runMigration() {
+  console.log('Connecting to MongoDB...');
+  await mongoose.connect(MONGODB_URI);
+  console.log('Connected to MongoDB');
+
+  const db = mongoose.connection.db;
+  const complaintsCol = db.collection('complaints');
+  const usersCol = db.collection('users');
+
+  console.log('\n--- Migrating Complaints ---');
+  const complaints = await complaintsCol.find({
+    $or: [
+      { municipalityName: { $exists: true, $ne: '' } },
+      { municipality: { $exists: true, $ne: '' } },
+    ]
+  }).toArray();
+
+  console.log(`Found ${complaints.length} complaints with municipality data`);
+
+  let complaintUpdated = 0;
+  let complaintSkipped = 0;
+  const unmatchedMun = new Set();
+
+  for (const c of complaints) {
+    const rawMunicipality = c.municipalityName || (typeof c.municipality === 'string' ? c.municipality : '') || c.location?.municipality || '';
+    if (!rawMunicipality) {
+      complaintSkipped++;
+      continue;
+    }
+
+    const normalized = normalize(rawMunicipality);
+    const canonical = getCanonicalName(rawMunicipality);
+    const governorate = getGovernorate(rawMunicipality);
+    const normalizedGovernorate = normalize(governorate);
+
+    const update = { $set: {} };
+
+    if (canonical && canonical !== c.municipalityName) {
+      update.$set.municipalityName = canonical;
+    }
+    if (typeof c.municipality === 'string' && canonical && canonical !== c.municipality) {
+      update.$set.municipality = canonical;
+    }
+    if (governorate && governorate !== c.governorate) {
+      update.$set.governorate = governorate;
+    }
+    update.$set.municipalityNormalized = normalized;
+    update.$set.governorateNormalized = normalizedGovernorate;
+
+    if (c.location && (c.location.municipality || c.location.governorate)) {
+      update.$set['location.municipality'] = canonical || c.location.municipality;
+      if (governorate) {
+        update.$set['location.governorate'] = governorate;
+      }
+    }
+
+    if (Object.keys(update.$set).length > 0) {
+      await complaintsCol.updateOne({ _id: c._id }, update);
+      complaintUpdated++;
+      if (complaintUpdated <= 5 || complaintUpdated % 100 === 0) {
+        console.log(`  Updated: "${rawMunicipality}" → "${canonical}" (norm: "${normalized}", gov: "${governorate}")`);
+      }
+    } else {
+      complaintSkipped++;
+    }
+
+    if (!canonical) {
+      unmatchedMun.add(rawMunicipality);
+    }
+  }
+
+  console.log(`\nComplaints: ${complaintUpdated} updated, ${complaintSkipped} skipped`);
+
+  console.log('\n--- Migrating Users ---');
+  const users = await usersCol.find({
+    $or: [
+      { municipalityName: { $exists: true, $ne: '' } },
+    ]
+  }).toArray();
+
+  console.log(`Found ${users.length} users with municipality data`);
+
+  let userUpdated = 0;
+  let userSkipped = 0;
+
+  for (const u of users) {
+    const rawMunicipality = u.municipalityName || '';
+    if (!rawMunicipality) {
+      userSkipped++;
+      continue;
+    }
+
+    const normalized = normalize(rawMunicipality);
+    const canonical = getCanonicalName(rawMunicipality);
+    const governorate = getGovernorate(rawMunicipality);
+    const normalizedGovernorate = normalize(governorate);
+
+    const update = { $set: {} };
+
+    if (canonical && canonical !== u.municipalityName) {
+      update.$set.municipalityName = canonical;
+    }
+    update.$set.municipalityNormalized = normalized;
+    update.$set.governorateNormalized = normalizedGovernorate;
+
+    if (Object.keys(update.$set).length > 0) {
+      await usersCol.updateOne({ _id: u._id }, update);
+      userUpdated++;
+    } else {
+      userSkipped++;
+    }
+  }
+
+  console.log(`Users: ${userUpdated} updated, ${userSkipped} skipped`);
+
+  console.log('\n--- Verification ---');
+  const complaintGroups = await complaintsCol.aggregate([
+    {
+      $group: {
+        _id: "$municipalityNormalized",
+        displayNames: { $addToSet: "$municipalityName" },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { count: -1 } },
+    { $limit: 20 }
+  ]).toArray();
+
+  console.log('\nTop 20 normalized municipality groups:');
+  for (const g of complaintGroups) {
+    const dupes = g.displayNames.length > 1 ? ` VARIANTS: ${g.displayNames.join(', ')}` : '';
+    console.log(`  ${g._id || '(empty)'}: ${g.count} complaints${dupes}`);
+  }
+
+  const duplicateNorm = complaintGroups.filter(g => g.displayNames.length > 1);
+  if (duplicateNorm.length > 0) {
+    console.log(`\n${duplicateNorm.length} normalized keys still have multiple display name variants. Re-run migration.`);
+  } else {
+    console.log('\nAll municipalities are correctly normalized with unique display names!');
+  }
+
+  await mongoose.disconnect();
+  console.log('\nMigration complete!');
+}
+
+runMigration().catch(err => {
+  console.error('Migration failed:', err);
+  process.exit(1);
+});

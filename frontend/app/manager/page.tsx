@@ -494,7 +494,7 @@ export default function ManagerDashboardPage() {
                         actions={
                           <>
                             {!(
-                              complaint.assignedTo || complaint.assignedTeam
+                              complaint.assignedTo || complaint.assignedTeam || (complaint as any).repairTeamId
                             ) &&
                               (complaint.status === 'VALIDATED' ||
                                 complaint.status === 'ASSIGNED') && (
