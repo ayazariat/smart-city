@@ -27,6 +27,7 @@ const app = express();
 const staticAllowedOrigins = new Set([
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "https://smart-city2.vercel.app",
   "http://localhost:3001",
   "http://127.0.0.1:3001",
   "http://localhost:5000",
@@ -50,6 +51,7 @@ const dynamicAllowedOriginPatterns = [
   /^http:\/\/10\.0\.2\.2:\d+$/,
   /^http:\/\/192\.168\.\d+\.\d+:\d+$/,
   /^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:\d+$/,
+  /^https:\/\/.*\.vercel\.app$/,
 ];
 
 const isAllowedOrigin = (origin) => {
