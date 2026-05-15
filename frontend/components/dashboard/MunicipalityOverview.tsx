@@ -277,7 +277,7 @@ export default function MunicipalityOverview({
                     </div>
                   </div>
                 )}
-                <MunicipalityMiniMap points={heatmapPoints} />
+                <MunicipalityMiniMap municipality={userMunicipality || ''} points={heatmapPoints} />
               </>
             )}
           </>
