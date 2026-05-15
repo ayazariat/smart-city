@@ -104,6 +104,9 @@ app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
+// Trust proxy (for Render, Railway, etc.)
+app.set('trust proxy', 1);
+
 // Rate limiters - increased for development
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 1000, message: { message: "Too many requests, please try again later." } });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { message: "Too many authentication attempts, please try again later." } });

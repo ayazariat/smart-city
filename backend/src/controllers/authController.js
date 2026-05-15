@@ -149,7 +149,7 @@ class AuthController {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      // Generate magic token
+      // Generate magic token (before DB write so email fails fast)
       const magicToken = crypto.randomBytes(32).toString('hex');
       const magicTokenExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
 
@@ -157,15 +157,22 @@ class AuthController {
       let finalGovernorate = governorate || "";
       let finalMunicipality = municipality || "";
 
-      // If latitude/longitude provided but no location, we would need a geocoding service
-      // For now, use manual input or empty values
+      // Send magic link email FIRST — only create user if email succeeds
+      const tempUserId = new mongoose.Types.ObjectId();
+      try {
+        await sendMagicLinkEmail(normalizedEmail, tempUserId.toString(), magicToken, fullName, 15000);
+      } catch (emailError) {
+        console.error("Email sending error:", emailError);
+        return res.status(500).json({ message: "Erreur lors de l'envoi de l'email de vérification. Vérifiez votre connexion SMTP." });
+      }
 
-      // Create pending user
+      // Email sent successfully — now create pending user with the pre-generated ID
       const pendingUser = await PendingUser.create({
+        _id: tempUserId,
         fullName,
         email: normalizedEmail,
         password: hashedPassword,
-        phone: phone ? phone.replace(/\D/g, "").slice(-8) : null, // Store as 8 digits without +216
+        phone: phone ? phone.replace(/\D/g, "").slice(-8) : null,
         governorate: finalGovernorate,
         municipality: finalMunicipality,
         municipalityName: finalMunicipality,
@@ -174,17 +181,8 @@ class AuthController {
         verificationToken: magicToken,
         verificationExpires: magicTokenExpires,
         verificationMethod: "email",
-        role: "CITIZEN", // Default role for public registration
+        role: "CITIZEN",
       });
-
-      // Send magic link email with the pending user's _id
-      try {
-        await sendMagicLinkEmail(normalizedEmail, pendingUser._id.toString(), magicToken, fullName);
-      } catch (emailError) {
-        console.error("Email sending error:", emailError);
-        // Silent fail: email non-critical for registration
-        return res.status(500).json({ message: "Erreur lors de l'envoi de l'email de vérification" });
-      }
 
       res.status(201).json({
         message: "Registration successful! Please check your email to verify your account.",

@@ -9,7 +9,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 const API_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth`;
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 60000): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {

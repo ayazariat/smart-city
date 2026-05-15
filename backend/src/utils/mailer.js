@@ -11,6 +11,7 @@ const transporter = nodemailer.createTransport({
   tls: {
     rejectUnauthorized: false,
   },
+  connectionTimeout: 15000,
 });
 
 // Verify SMTP connection on startup
@@ -67,7 +68,7 @@ const translateDepartmentName = (departmentName, language = 'en') => {
 };
 
 // Send account verification email
-const sendMagicLinkEmail = async (to, userId, token, fullName) => {
+const sendMagicLinkEmail = async (to, userId, token, fullName, timeoutMs = 15000) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const magicLink = `${frontendUrl}/verify-account?token=${token}&userId=${userId}`;
   const userName = fullName || to.split('@')[0] || "User";
