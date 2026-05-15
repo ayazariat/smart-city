@@ -64,6 +64,11 @@ const isAllowedOrigin = (origin) => {
 
 app.set("isAllowedOrigin", isAllowedOrigin);
 
+// Health check — responds before any DB-dependent middleware
+app.get(["/health", "/api/health"], (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // Middleware
 app.use(cors({
   origin: (origin, callback) => {

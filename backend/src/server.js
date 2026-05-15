@@ -7,16 +7,15 @@ const http = require('http');
 const connectDB = require('./config/db');
 const { verifyAccessToken, extractToken } = require('./utils/jwt');
 
-connectDB();
+connectDB().catch(err => {
+  console.warn("[DB] Initial connection failed (server will continue running):", err.message);
+});
 require('./utils/mailer');
-require('./jobs/archive.job');
-require('./jobs/trend-prediction.job');
-
-// Import models to register them with Mongoose
-require('./models/User');
-require('./models/Municipality');
-require('./models/Department');
-require('./models/SatisfactionSurvey');
+const startJobs = () => {
+  try { require('./jobs/archive.job'); } catch(e) { console.warn("[JOB] archive.job failed:", e.message); }
+  try { require('./jobs/trend-prediction.job'); } catch(e) { console.warn("[JOB] trend-prediction.job failed:", e.message); }
+};
+setTimeout(startJobs, 5000);
 
 const PORT = process.env.PORT || 5000;
 

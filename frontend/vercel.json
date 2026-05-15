@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/health",
+      "destination": "https://smart-city-x82i.onrender.com/api/health"
+    }
+  ]
+}
