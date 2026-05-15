@@ -42,7 +42,7 @@ export default function RegisterPage() {
   const mt = (key: string, fallback?: string) =>
     mounted ? t(key) : (fallback ?? '');
   const router = useRouter();
-  const { register, isLoading, error } = useAuthStore();
+  const { register, isLoading, error, verificationLink } = useAuthStore();
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -54,6 +54,7 @@ export default function RegisterPage() {
   });
   const [localError, setLocalError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showSuccess, setShowSuccess] = useState(false);
   const [, setCaptchaToken] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState('');
@@ -201,9 +202,13 @@ export default function RegisterPage() {
         governorate: formData.governorate || undefined,
         municipality: formData.municipality || undefined,
       });
-      router.push(
-        `/verify-account?email=${encodeURIComponent(formData.email)}`
-      );
+      if (verificationLink) {
+        setShowSuccess(true);
+      } else {
+        router.push(
+          `/verify-account?email=${encodeURIComponent(formData.email)}`
+        );
+      }
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Registration failed');
     }

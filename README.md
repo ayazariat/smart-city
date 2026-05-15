@@ -1,6 +1,14 @@
 # Smart City Tunisia
 
-Plateforme citoyenne de signalement et de gestion des problèmes urbains en Tunisie. Permet aux citoyens de signaler des incidents (déchets, routes, éclairage, eau, sécurité, etc.), de suivre leur traitement, et aux autorités municipales de gérer ces signalements.
+Plateforme citoyenne de signalement et de gestion des problèmes urbains en Tunisie.
+
+## Déploiements
+
+| Service | URL |
+|---|---|
+| **Frontend** | https://smart-city2.vercel.app |
+| **Backend** | https://smart-city-x82i.onrender.com |
+| **AI Services** | https://smart-city-ai-services.onrender.com |
 
 ---
 
@@ -11,231 +19,280 @@ smart-city/
 ├── frontend/              # Next.js 16 + TypeScript + Tailwind CSS
 ├── backend/               # Express.js + MongoDB (port 5000)
 ├── ai-services/           # Service Python FastAPI (port 8000)
-│   ├── main.py           # Point d'entrée AI (prédiction, doublons, tendances)
+│   ├── main.py
 │   └── services/
-│       ├── category_predictor.py   # Prédiction de catégorie
-│       ├── duplicate_detector.py   # Détection de doublons
-│       ├── urgency_predictor.py    # Prédiction d'urgence
-│       └── trend_predictor.py      # Prévisions de tendances
-└── mobile/                # Application Flutter (Dart)
+│       ├── category_predictor.py
+│       ├── duplicate_detector.py
+│       ├── urgency_predictor.py
+│       └── trend_predictor.py
+├── mobile/                # Flutter (Dart)
+└── docs/
 ```
 
 ---
 
-## Démarrage Rapide
+## Fichiers .env à créer
 
-### Prérequis
-- Node.js 18+
-- Python 3.10+
-- MongoDB (local ou Atlas)
-- Git
+### `backend/.env`
 
-### 1. Backend (Express + MongoDB)
+```env
+PORT=5000
+MONGO_URI=mongodb://127.0.0.1:27017/smart-city
+
+# Cloudinary (photos)
+CLOUDINARY_CLOUD_NAME=votre_cloud_name
+CLOUDINARY_API_KEY=votre_api_key
+CLOUDINARY_API_SECRET=votre_api_secret
+
+# SMTP (emails)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=votre.email@gmail.com
+SMTP_PASS=votre_mot_de_passe_16_caractères
+MAIL_FROM=SmartCity Tunisia <votre.email@gmail.com>
+
+FRONTEND_URL=http://localhost:3000
+
+# SMS (optionnel)
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_PHONE=
+
+# AI Service
+AI_SERVICE_URL=http://localhost:8000
+
+# JWT
+JWT_SECRET=une_chaine_aleatoire_securisee
+
+# reCAPTCHA
+RECAPTCHA_SECRET_KEY=votre_cle_secrete
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=votre_cle_publique
+```
+
+### `frontend/.env.local`
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_AI_SERVICE_URL=http://localhost:8000
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=votre_cloud_name
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=votre_cle_publique
+```
+
+### `ai-services/.env` (optionnel)
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...    # Pour Claude API (prédiction catégorie améliorée)
+```
+
+---
+
+## Installation et Démarrage
+
+### 1. Backend
+
 ```bash
 cd backend
 npm install
 cp .env.example .env
-# Modifier .env : MONGODB_URI, JWT_SECRET, etc.
+# Éditer .env avec vos infos
 npm run dev
+# → http://localhost:5000
 ```
-→ `http://localhost:5000`
 
-### 2. Frontend (Next.js)
+**Build production :**
+```bash
+npm run build
+npm start
+```
+
+### 2. Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev
+# → http://localhost:3000
 ```
-→ `http://localhost:3000`
 
-### 3. Services IA (Python FastAPI)
+**Build production :**
+```bash
+npm run build
+npm start
+```
+
+### 3. AI Services
+
 ```bash
 cd ai-services
 pip install -r requirements.txt
 python main.py
-```
-→ `http://localhost:8000`
-
----
-
-## Fonctionnalités par Rôle
-
-### Citoyen
-| Fonctionnalité | Description |
-|---|---|
-| Signaler un problème | Formulaire avec titre, description, catégorie, localisation (carte), photos |
-| Prédiction de catégorie IA | Suggestion automatique de la catégorie via analyse sémantique du texte |
-| Détection de doublons IA | Alerte si un signalement similaire existe déjà (même lieu + même description) |
-| Suivi des signalements | Tableau de bord avec statuts : Nouveau, En cours, Résolu, Archivé |
-| Confirmation communautaire | Les citoyens peuvent confirmer les signalements des autres |
-| Localisation précise | Carte interactive avec géolocalisation, sélection par commune/gouvernorat |
-| Pièces jointes | Upload de photos avant/après |
-| Notifications | Mise à jour par email sur le statut du signalement |
-| Archivage | Consultation de l'historique complet des signalements clos/rejetés |
-
-### Agent Municipal
-| Fonctionnalité | Description |
-|---|---|
-| File d'attente | Liste des signalements à valider (SUBMITTED) |
-| Validation/R eject | Approuver ou rejeter les signalements avec motif |
-| Détection de doublons | Panneau IA listant les doublons potentiels, fusion ou rejet |
-| Gestion des médias | Visualisation des photos avant validation |
-| Statistiques | Métriques de performance : taux de résolution, délais, urgences |
-| Recherche & filtres | Filtre par statut, date, catégorie, commune |
-
-### Technicien
-| Fonctionnalité | Description |
-|---|---|
-| Tâches assignées | Liste des signalements affectés (ASSIGNED) |
-| Mise à jour de statut | Passage à EN_COURS, ajout de notes de résolution |
-| Photos après intervention | Preuve de complétion avec photos |
-| Statistiques personnelles | Nombre de tâches complétées, délai moyen |
-
-### Manager (Chef de Département)
-| Fonctionnalité | Description |
-|---|---|
-| Dashboard analytique | Graphiques : signalements par catégorie, par commune, tendances |
-| Affectation d'équipe | Création d'équipe de réparation, assignation à un signalement |
-| Définition de priorité | Score de priorité basé sur l'urgence citoyenne + analyse IA |
-| Prévisions IA | Tendances 7 jours, alertes de pics d'activité |
-| Métriques SLA | Taux de résolution dans les délais, délai moyen par commune |
-| Classement communal | Leaderboard des communes par nombre de signalements |
-
-### Administrateur
-| Fonctionnalité | Description |
-|---|---|
-| Gestion des utilisateurs | CRUD complet, recherche, filtre par rôle |
-| Invitations par email | Envoi d'invitation aux nouveaux agents/techniciens/managers |
-| Statistiques système | Vue d'ensemble : totaux, taux de résolution, délais |
-| Audit | Logs des actions système |
-
----
-
-## Services IA Détail
-
-### Prédiction de Catégorie (POST /predict-category)
-Analyse le titre et la description pour suggérer une catégorie :
-1. **Stratégie 1** : Claude API (Haiku) — meilleure précision
-2. **Stratégie 2** : HuggingFace zero-shot (bart-large-mnli)
-3. **Stratégie 3** : Correspondance floue de mots-clés (fuzzy matching, seuil 0.60)
-
-### Détection de Doublons (POST /ai/duplicate/check)
-Compare un nouveau signalement avec les existants en base :
-- **Similarité textuelle** (poids 0.50) — embeddings sémantiques (sentence-transformers)
-- **Proximité géographique** (poids 0.20) — distance en mètres via haversine (rayon < 150m)
-- **Correspondance photo** (poids 0.15) — mêmes URLs d'image
-- **Catégorie** (poids 0.10) — même catégorie renforce le score
-- Seuil de décision : 0.50 / Règle stricte : deux coordonnées valides et distantes > 150m → non doublon
-
-### Prédiction d'Urgence (POST /ai/urgency/predict)
-Calcule un niveau d'urgence (LOW/MEDIUM/HIGH) basé sur :
-- Urgence déclarée par le citoyen
-- Mots-clés détectés dans la description
-- Catégorie du signalement
-- Signal communautaire (nombre de confirmations)
-
-### Prévisions de Tendances (GET /ai/trend/forecast)
-Prévisions sur 7/30 jours par commune utilisant la régression Ridge.
-
----
-
-## Pages de l'Application
-
-### Pages Publiques
-| Route | Description |
-|---|---|
-| `/` | Page d'accueil |
-| `/register` | Inscription citoyen |
-| `/login` | Connexion |
-| `/forgot-password` | Mot de passe oublié |
-| `/reset-password` | Réinitialisation |
-| `/transparency` | Tableau de bord public (statistiques des communes, gouvernorats) |
-| `/transparency/complaints/:id` | Détail public d'un signalement |
-| `/municipalities` | Classement des communes |
-
-### Pages Citoyen
-| Route | Description |
-|---|---|
-| `/dashboard` | Tableau de bord personnel |
-| `/complaints/new` | Nouveau signalement |
-| `/my-complaints` | Mes signalements |
-| `/archive` | Signalements archivés |
-| `/profile` | Profil utilisateur |
-
-### Pages Agent
-| Route | Description |
-|---|---|
-| `/dashboard` | Tableau de bord agent |
-| `/agent/complaints` | File des signalements à traiter |
-
-### Pages Manager
-| Route | Description |
-|---|---|
-| `/dashboard` | Tableau de bord manager |
-| `/manager/pending` | Signalements en attente d'assignation |
-| `/dashboard/complaints/:id` | Détail d'un signalement (actions : assigner, prioriser) |
-
-### Pages Technicien
-| Route | Description |
-|---|---|
-| `/dashboard` | Tableau de bord technicien |
-| `/tasks` | Tâches assignées |
-| `/tasks/:id` | Détail d'une tâche |
-
-### Pages Admin
-| Route | Description |
-|---|---|
-| `/dashboard` | Tableau de bord admin |
-| `/admin/complaints` | Tous les signalements (lecture seule) |
-| `/admin/users` | Gestion des utilisateurs |
-| `/admin/settings` | Paramètres SLA |
-
----
-
-## Modèles de Données (MongoDB)
-
-| Modèle | Champs clés |
-|---|---|
-| **User** | email, password, role (CITIZEN/AGENT/TECHNICIAN/MANAGER/ADMIN), fullName, phone, municipality, governorate, municipalityNormalized |
-| **Complaint** | title, description, category, status, priorityScore, location (lat/lng), municipality, municipalityNormalized, governorate, governorateNormalized, media[], assignedTo, assignedTeam, aiUrgencyPrediction, aiDuplicateCheck, slaDeadline, resolvedAt |
-| **RepairTeam** | name, members[], createdBy, department |
-| **Comment** | complaintId, userId, text, media[] |
-| **Notification** | userId, type, message, read |
-| **Department** | name, categoryKey |
-| **AuditLog** | userId, action, resource, details |
-
----
-
-## Variables d'Environnement
-
-### Backend (.env)
-```
-PORT=5000
-MONGODB_URI=mongodb://localhost:27017/smartcity
-JWT_SECRET=your_jwt_secret
-JWT_EXPIRE=30d
-AI_SERVICE_URL=http://localhost:8000
-MAIL_HOST=smtp.mailtrap.io
-MAIL_PORT=587
-MAIL_USER=
-MAIL_PASS=
-RECAPTCHA_SECRET_KEY=
+# → http://localhost:8000
 ```
 
-### Frontend (.env.local)
-```
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
-NEXT_PUBLIC_AI_SERVICE_URL=http://localhost:8000
-NEXT_PUBLIC_RECAPTCHA_SITE_KEY=
-```
+### 4. Mobile (Flutter)
 
-### Services IA (.env)
-```
-ANTHROPIC_API_KEY=     # Optionnel : pour Claude API (prédiction catégorie)
+```bash
+cd mobile
+flutter pub get
+flutter run
 ```
 
 ---
 
-## Licence
+## Créer un Administrateur
 
-ISC License
+Méthode 1 — via l'interface d'inscription (recommandée) :
+
+1. Inscrivez-vous normalement sur `http://localhost:3000/register`
+2. Connectez-vous à MongoDB :
+   ```bash
+   mongosh mongodb://127.0.0.1:27017/smart-city
+   ```
+3. Passez le compte en ADMIN :
+   ```javascript
+   db.users.updateOne(
+     { email: "votre@email.com" },
+     { $set: { role: "ADMIN", isVerified: true, isActive: true, status: "ACTIVE" } }
+   )
+   ```
+
+Méthode 2 — insertion directe (mot de passe hashé) :
+
+```bash
+mongosh mongodb://127.0.0.1:27017/smart-city
+```
+
+```javascript
+const bcrypt = require('bcryptjs');
+const hash = bcrypt.hashSync('VotreMotDePasse', 10);
+db.users.insertOne({
+  fullName: "Super Admin",
+  email: "admin@smartcity.tn",
+  password: hash,
+  role: "ADMIN",
+  isVerified: true,
+  isActive: true,
+  status: "ACTIVE",
+  createdAt: new Date(),
+  updatedAt: new Date()
+})
+```
+
+> ⚠️ Ne stockez JAMAIS le mot de passe en clair dans le champ `password`. Utilisez toujours `bcrypt.hashSync()`.
+
+Sur **MongoDB Atlas** (cloud), utilisez le shell intégré dans Atlas → Browse Collections → `users` → Insert Document.
+
+---
+
+## Variables d'Environnement pour le Déploiement
+
+### Render (Backend)
+
+Dans **Render Dashboard → Backend → Environment** :
+
+```
+MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/smart-city
+JWT_SECRET=...
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASS=SG.votre_cle_sendgrid
+MAIL_FROM=SmartCity Tunisia <votre@email.com>
+FRONTEND_URL=https://smart-city2.vercel.app
+AI_SERVICE_URL=https://smart-city-ai-services.onrender.com
+```
+
+### Vercel (Frontend)
+
+Dans **Vercel Dashboard → Frontend → Settings → Environment Variables** :
+
+```
+NEXT_PUBLIC_API_URL=https://smart-city-x82i.onrender.com/api
+NEXT_PUBLIC_AI_SERVICE_URL=https://smart-city-ai-services.onrender.com
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=...
+NEXT_PUBLIC_RECAPTCHA_SITE_KEY=...
+```
+
+### Render (AI Services)
+
+Dans **Render Dashboard → AI Service → Environment** :
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## Route des Pages
+
+| Route | Rôle | Description |
+|---|---|---|
+| `/` | Public | Page d'accueil |
+| `/register` | Public | Inscription citoyen |
+| `/login` | Public | Connexion |
+| `/transparency` | Public | Stats publiques des communes |
+| `/municipalities` | Public | Classement des communes |
+| `/dashboard` | All | Tableau de bord |
+| `/complaints/new` | Citizen | Nouveau signalement |
+| `/my-complaints` | Citizen | Mes signalements |
+| `/archive` | Citizen | Signalements archivés |
+| `/agent/complaints` | Agent | File des signalements |
+| `/manager/pending` | Manager | Signalements en attente |
+| `/dashboard/complaints/:id` | Agent/Manager | Détail + actions |
+| `/tasks` | Technicien | Tâches assignées |
+| `/admin/complaints` | Admin | Tous les signalements (lecture) |
+| `/admin/users` | Admin | Gestion des utilisateurs |
+
+---
+
+## Services IA
+
+| Endpoint | Description | Port |
+|---|---|---|
+| `POST /predict-category` | Prédiction de catégorie | 8000 |
+| `POST /ai/duplicate/check` | Détection de doublons | 8000 |
+| `POST /ai/urgency/predict` | Prédiction d'urgence | 8000 |
+| `GET /ai/trend/forecast` | Prévisions 7 jours | 8000 |
+
+---
+
+## API Backend Principale
+
+| Méthode | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Inscription |
+| POST | `/api/auth/login` | Connexion |
+| GET | `/api/public/stats` | Statistiques publiques |
+| GET | `/api/public/complaints` | Signalements publics |
+| POST | `/api/complaints` | Créer un signalement |
+| PUT | `/api/manager/complaints/:id/assign-team` | Assigner une équipe |
+| PUT | `/api/agent/complaints/:id/validate` | Valider un signalement |
+
+---
+
+## Modèles MongoDB
+
+| Collection | Champs clés |
+|---|---|
+| `users` | email, password (hashé bcrypt), role, fullName, municipality, governorate, isActive |
+| `complaints` | title, description, category, status, location (lat/lng), municipality, municipalityNormalized, governorate, governorateNormalized, media[], assignedTo, assignedTeam |
+| `repairteams` | name, members[], createdBy, department |
+| `departments` | name, categoryKey |
+| `notifications` | userId, type, message, read |
+| `auditlogs` | userId, action, resource, details |
+
+---
+
+## Technologies
+
+- **Frontend** : Next.js 16, TypeScript, Tailwind CSS, Zustand, Lucide React
+- **Backend** : Node.js, Express.js, Mongoose, JWT, Socket.io
+- **AI** : Python, FastAPI, scikit-learn, sentence-transformers, Claude API
+- **Mobile** : Flutter, Dart
+- **Base de données** : MongoDB
+- **Stockage média** : Cloudinary (cloud) / disque local (développement)
+- **Email** : SendGrid (production) / Gmail App Password

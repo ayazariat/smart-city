@@ -972,16 +972,16 @@ export default function TransparencyPage() {
                     <div className="absolute top-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                     <div className="absolute bottom-0 left-0 w-64 h-64 bg-white rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
                   </div>
-                  <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 md:gap-8 items-center">
-                    {/* Left column (60%) */}
-                    <div className="md:col-span-3">
+                  <div className="relative z-10 flex flex-col lg:flex-row gap-6 lg:gap-8 items-start lg:items-center">
+                    {/* Left column */}
+                    <div className="w-full lg:w-3/5">
                       <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-3">
                         {t('transparency.hero.title')}
                       </h2>
                       <p className="text-green-100 text-lg max-w-xl">
                         {t('transparency.hero.subtitle')}
                       </p>
-                      <div className="flex gap-3 mt-6">
+                      <div className="flex flex-wrap gap-3 mt-6">
                         <button
                           onClick={() => {
                             sessionStorage.setItem('returnAfterLogin', '/complaints/new');
@@ -1001,8 +1001,8 @@ export default function TransparencyPage() {
                         </button>
                       </div>
                     </div>
-                    {/* Right column (40%) — All-time stats card */}
-                    <div className="md:col-span-2 mt-4 md:mt-0">
+                    {/* Right column — All-time stats card */}
+                    <div className="w-full lg:w-2/5">
                       <div className="bg-white/95 backdrop-blur rounded-2xl p-4 sm:p-5 shadow-xl space-y-2 sm:space-y-3">
                         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                           {t('transparency.hero.allTimeStats')}

@@ -1082,7 +1082,7 @@ router.get("/stats/by-zone", async (req, res) => {
       {
         $addFields: {
           effectiveGovNormalized: {
-            $ifNull: ["$governorateNormalized", { $toLower: { $trim: { input: "$governorate" } } }]
+            $ifNull: ["$governorateNormalized", { $toLower: "$governorate" }]
           }
         }
       },
@@ -1102,12 +1102,15 @@ router.get("/stats/by-zone", async (req, res) => {
     const governorateMap = {};
     byZone.forEach(item => {
       const govKey = item._id || "";
-      governorateMap[govKey] = {
+      const entry = {
         total: item.total,
         resolved: item.resolved,
         resolutionRate: item.total > 0 ? Math.round((item.resolved / item.total) * 100) : 0,
         displayName: item.governorateDisplay || ""
       };
+      governorateMap[govKey] = entry;
+      const cleanKey = govKey.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (cleanKey !== govKey) governorateMap[cleanKey] = entry;
     });
 
     const result = allGovernorates.map(gov => {

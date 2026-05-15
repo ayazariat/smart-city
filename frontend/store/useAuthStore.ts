@@ -29,6 +29,7 @@ interface AuthState {
   error: string | null;
   hydrated: boolean;
   isAuthenticated: boolean;
+  verificationLink: string | null;
   register: (data: RegisterData) => Promise<void>;
   login: (data: LoginData) => Promise<void>;
   verifyMagicLink: (token: string, userId: string) => Promise<void>;
@@ -60,12 +61,16 @@ export const useAuthStore = create<AuthState>()(
       error: null,
       hydrated: false,
       isAuthenticated: false,
+      verificationLink: null,
 
       register: async (data: RegisterData) => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, verificationLink: null });
         try {
-          await authService.register(data);
-          set({ isLoading: false });
+          const response = await authService.register(data);
+          set({
+            isLoading: false,
+            verificationLink: (response as any).verificationLink || null,
+          });
         } catch (error) {
           const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
           set({ error: msg, isLoading: false });

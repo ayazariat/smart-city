@@ -11,6 +11,13 @@ connectDB().catch(err => {
   console.warn("[DB] Initial connection failed (server will continue running):", err.message);
 });
 require('./utils/mailer');
+
+// Register Mongoose models
+require('./models/User');
+require('./models/Municipality');
+require('./models/Department');
+require('./models/SatisfactionSurvey');
+
 const startJobs = () => {
   try { require('./jobs/archive.job'); } catch(e) { console.warn("[JOB] archive.job failed:", e.message); }
   try { require('./jobs/trend-prediction.job'); } catch(e) { console.warn("[JOB] trend-prediction.job failed:", e.message); }

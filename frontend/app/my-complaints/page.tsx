@@ -169,7 +169,7 @@ export default function MyComplaintsPage() {
 
         {/* Stats Cards */}
         <div className="w-full max-w-none px-4 md:px-6 mt-6">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+          <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-6">
             <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200 animate-fadeInUp">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">

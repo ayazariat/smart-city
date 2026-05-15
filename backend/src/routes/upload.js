@@ -6,26 +6,15 @@ const fs = require("fs");
 const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
 
-// Configure local storage
-const uploadDir = path.join(__dirname, "../../uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const apiKey = process.env.CLOUDINARY_API_KEY;
+const apiSecret = process.env.CLOUDINARY_API_SECRET;
+const useCloudinary = cloudName && cloudName !== 'demo' && apiKey && apiKey !== '123456789012345';
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const filename = `${uuidv4()}${ext}`;
-    cb(null, filename);
-  },
-});
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "video/mp4", "video/quicktime", "video/webm"];
-  // Also check file extension for .jfif files which are JPEG but may have different mimetype
   const ext = path.extname(file.originalname).toLowerCase();
   const allowedExtensions = [".jpg", ".jpeg", ".jfif", ".png", ".gif", ".webp", ".mp4", ".mov", ".webm"];
   if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
@@ -35,15 +24,31 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter,
-});
+let upload;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+if (useCloudinary) {
+  const cloudinary = require('cloudinary').v2;
+  const { CloudinaryStorage } = require('multer-storage-cloudinary');
+  cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret });
+  const storage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder: 'smart-city-complaints',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'webm'],
+      resource_type: 'auto',
+      transformation: [{ width: 1920, height: 1080, crop: 'limit', quality: 'auto:good' }],
+    },
+  });
+  upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, fileFilter });
+} else {
+  const uploadDir = path.join(__dirname, "../../uploads");
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => { const ext = path.extname(file.originalname); cb(null, `${uuidv4()}${ext}`); },
+  });
+  upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, fileFilter });
+}
 
 // POST /api/upload - Upload media
 router.post("/", (req, res, next) => {
@@ -72,12 +77,12 @@ router.post("/", (req, res, next) => {
     }
 
     const uploadedFiles = req.files.map((file) => {
-      const fileUrl = `${API_BASE_URL}/uploads/${file.filename}`;
-      console.log('[Upload] File uploaded:', file.filename, file.mimetype, file.size);
+      const isCloud = file.path && file.path.startsWith('http');
+      const fileUrl = isCloud ? file.path : `${API_BASE_URL}/uploads/${file.filename || file.originalname}`;
       return {
         type: file.mimetype.startsWith("video/") ? "video" : "photo",
         url: fileUrl,
-        publicId: file.filename,
+        publicId: isCloud ? file.filename : (file.filename || file.originalname),
         originalName: file.originalname,
         size: file.size,
       };
@@ -114,16 +119,15 @@ router.delete("/", authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: "Public ID is required" });
     }
 
-    const filePath = path.join(uploadDir, publicId);
-    
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    if (useCloudinary) {
+      const cloudinary = require('cloudinary').v2;
+      await cloudinary.uploader.destroy(`smart-city-complaints/${publicId}`);
+    } else {
+      const filePath = path.join(__dirname, "../../uploads", publicId);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
-    res.json({
-      success: true,
-      message: "File deleted successfully",
-    });
+    res.json({ success: true, message: "File deleted successfully" });
   } catch (error) {
     console.error("Delete error:", error);
     res.status(500).json({ success: false, message: "Failed to delete file" });

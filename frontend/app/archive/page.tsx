@@ -198,7 +198,7 @@ function ArchivePageContent() {
       <div className="min-h-screen bg-slate-50/50">
         <PageHeader
           title="Archived Complaints"
-          subtitle={`${archiveStats.total} archived complaints (${archiveStats.closed} closed, ${archiveStats.rejected} rejected)`}
+          subtitle="View your archived and rejected complaints"
           backHref="/dashboard"
         />
 
@@ -277,7 +277,7 @@ function ArchivePageContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder="Search archived complaints..."
+                  placeholder="Search complaints..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => {
@@ -332,7 +332,7 @@ function ArchivePageContent() {
               <h3 className="text-xl font-bold text-slate-900 mb-2">
                 {searchTerm || statusFilter
                   ? 'No results found'
-                  : 'No archived complaints'}
+                  : 'No complaints found'}
               </h3>
               <p className="text-slate-500 mb-6">
                 {searchTerm || statusFilter

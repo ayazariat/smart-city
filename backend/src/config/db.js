@@ -1,8 +1,5 @@
 const mongoose = require('mongoose');
 
-// Disable buffering so operations fail immediately when DB is disconnected
-mongoose.set('bufferCommands', false);
-
 mongoose.connection.on('connected', () => console.log('[DB] Connected successfully'));
 mongoose.connection.on('disconnected', () => console.warn('[DB] Disconnected'));
 mongoose.connection.on('reconnected', () => console.log('[DB] Reconnected'));
