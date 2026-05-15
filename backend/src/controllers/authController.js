@@ -157,18 +157,8 @@ class AuthController {
       let finalGovernorate = governorate || "";
       let finalMunicipality = municipality || "";
 
-      // Send magic link email FIRST — only create user if email succeeds
-      const tempUserId = new mongoose.Types.ObjectId();
-      try {
-        await sendMagicLinkEmail(normalizedEmail, tempUserId.toString(), magicToken, fullName, 15000);
-      } catch (emailError) {
-        console.error("Email sending error:", emailError);
-        return res.status(500).json({ message: "Erreur lors de l'envoi de l'email de vérification. Vérifiez votre connexion SMTP." });
-      }
-
-      // Email sent successfully — now create pending user with the pre-generated ID
+      // Create pending user
       const pendingUser = await PendingUser.create({
-        _id: tempUserId,
         fullName,
         email: normalizedEmail,
         password: hashedPassword,
@@ -184,8 +174,22 @@ class AuthController {
         role: "CITIZEN",
       });
 
+      // Try to send email — non-blocking (log failure, user can still verify via link in response)
+      let emailSent = false;
+      try {
+        await sendMagicLinkEmail(normalizedEmail, pendingUser._id.toString(), magicToken, fullName, 15000);
+        emailSent = true;
+      } catch (emailError) {
+        console.error("[register] Email sending failed (non-blocking):", emailError.message);
+      }
+
       res.status(201).json({
-        message: "Registration successful! Please check your email to verify your account.",
+        message: emailSent
+          ? "Inscription réussie ! Vérifiez votre email."
+          : "Inscription réussie !",
+        ...(emailSent ? {} : {
+          verificationLink: `${process.env.FRONTEND_URL || "http://localhost:3000"}/verify-account?token=${magicToken}&userId=${pendingUser._id.toString()}`,
+        }),
       });
     } catch (error) {
       res.status(500).json({ message: "Erreur serveur lors de l'inscription" });
