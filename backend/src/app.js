@@ -64,9 +64,20 @@ const isAllowedOrigin = (origin) => {
 
 app.set("isAllowedOrigin", isAllowedOrigin);
 
+const mongoose = require('mongoose');
+
 // Health check — responds before any DB-dependent middleware
 app.get(["/health", "/api/health"], (req, res) => {
-  res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: "ok", uptime: process.uptime(), db: mongoose.connection.readyState === 1 ? "connected" : "disconnected", timestamp: new Date().toISOString() });
+});
+
+// DB connection guard — reject requests if MongoDB is not connected
+app.use((req, res, next) => {
+  if (req.path === "/health" || req.path === "/api/health") return next();
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ message: "Database not connected. Please wait for reconnection." });
+  }
+  next();
 });
 
 // Middleware

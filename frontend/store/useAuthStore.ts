@@ -67,10 +67,8 @@ export const useAuthStore = create<AuthState>()(
           await authService.register(data);
           set({ isLoading: false });
         } catch (error) {
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
           throw error;
         }
       },
@@ -94,10 +92,8 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
           });
         } catch (error) {
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
           throw error;
         }
       },
@@ -114,10 +110,8 @@ export const useAuthStore = create<AuthState>()(
             });
           }
         } catch (error) {
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
           throw error;
         }
       },
@@ -128,10 +122,8 @@ export const useAuthStore = create<AuthState>()(
           await authService.deletePendingRegistration(email);
           set({ isLoading: false });
         } catch (error) {
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
           throw error;
         }
       },
@@ -246,10 +238,8 @@ export const useAuthStore = create<AuthState>()(
           const user = await authService.getProfile();
           set({ user, isLoading: false });
         } catch (error) {
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
         }
       },
 
@@ -259,10 +249,8 @@ export const useAuthStore = create<AuthState>()(
           const user = await authService.updateProfile(data);
           set({ user, isLoading: false });
         } catch (error) {
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
           throw error;
         }
       },
@@ -274,18 +262,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           await authService.changePassword(data);
-          // Password changed successfully, but token is now invalid
-          // Clear user and token so they need to log in again
           set({ user: null, token: null, isLoading: false });
           throw new Error('PASSWORD_CHANGED');
         } catch (error) {
           if (error instanceof Error && error.message === 'PASSWORD_CHANGED') {
             throw error;
           }
-          set({
-            error: "Une erreur s'est produite. Veuillez réessayer.",
-            isLoading: false,
-          });
+          const msg = error instanceof Error ? error.message : "Une erreur s'est produite.";
+          set({ error: msg, isLoading: false });
           throw error;
         }
       },
