@@ -66,7 +66,19 @@ app.set("isAllowedOrigin", isAllowedOrigin);
 
 const mongoose = require('mongoose');
 
-// Health check — responds before any DB-dependent middleware
+// CORS must come before all other middleware so cross-origin errors include CORS headers
+app.use(cors({
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin not allowed by CORS: ${origin}`));
+  },
+  credentials: true,
+}));
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+
+// Health check — responds without DB
 app.get(["/health", "/api/health"], (req, res) => {
   res.json({ status: "ok", uptime: process.uptime(), db: mongoose.connection.readyState === 1 ? "connected" : "disconnected", timestamp: new Date().toISOString() });
 });
@@ -79,18 +91,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-// Middleware
-app.use(cors({
-  origin: (origin, callback) => {
-    if (isAllowedOrigin(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error(`Origin not allowed by CORS: ${origin}`));
-  },
-  credentials: true,
-}));
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 // express-mongo-sanitize's default middleware sets req.query/req.params which are read-only in Express 5.
 // Sanitize body/headers via reassignment, and query/params in-place only.
 app.use((req, res, next) => {

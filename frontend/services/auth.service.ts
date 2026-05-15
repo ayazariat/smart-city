@@ -9,6 +9,16 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 const API_URL = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth`;
 
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 interface LoginResponse {
   message: string;
   token: string;
@@ -51,8 +61,19 @@ export const authService = {
     return response.json();
   },
 
+  async fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      return response;
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+
   async register(data: RegisterData): Promise<{ message: string }> {
-    const response = await fetch(`${API_URL}/register`, {
+    const response = await fetchWithTimeout(`${API_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -60,7 +81,7 @@ export const authService = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({ message: 'Network error' }));
       throw new Error(error.message || 'Registration failed');
     }
 
@@ -68,9 +89,7 @@ export const authService = {
   },
 
   async login(data: LoginData): Promise<LoginResponse> {
-    const url = `${API_URL}/login`;
-
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(`${API_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
