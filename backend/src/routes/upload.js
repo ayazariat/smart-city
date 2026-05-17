@@ -52,27 +52,19 @@ if (useCloudinary) {
 
 // POST /api/upload - Upload media
 router.post("/", (req, res, next) => {
-  console.log('[Upload] Route hit');
-  console.log('[Upload] Headers:', req.headers['content-type']);
-  console.log('[Upload] Auth:', req.headers['authorization'] ? 'Present' : 'Missing');
   next();
 }, authenticate, (req, res, next) => {
-  console.log('[Upload] After auth, before multer');
   upload.array("media", 5)(req, res, (err) => {
     if (err) {
       console.error('[Upload] Multer error:', err);
       return res.status(500).json({ success: false, message: "Upload error: " + err.message });
     }
-    console.log('[Upload] Multer success, files:', req.files ? req.files.length : 0);
     next();
   });
 }, async (req, res) => {
   try {
-    console.log('[Upload] Request received after middleware');
-    console.log('[Upload] Files:', req.files ? req.files.length : 0);
     
     if (!req.files || req.files.length === 0) {
-      console.log('[Upload] No files in request');
       return res.status(400).json({ success: false, message: "No files uploaded" });
     }
 
@@ -88,7 +80,6 @@ router.post("/", (req, res, next) => {
       };
     });
 
-    console.log('[Upload] Sending success response');
     res.json({
       success: true,
       message: "Files uploaded successfully",

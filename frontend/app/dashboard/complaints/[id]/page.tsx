@@ -2097,7 +2097,6 @@ export default function ComplaintDetailPage() {
                             );
                             if (response.success) {
                               await refreshComplaint();
-                              console.log('Priority updated successfully');
                             }
                           } catch (err) {
                             console.error('Priority update failed', err);

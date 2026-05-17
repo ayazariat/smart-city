@@ -258,7 +258,6 @@ router.get("/my-municipality-complaints", authenticate, async (req, res) => {
     }
 
     const userMunicipality = user.municipalityName || (typeof user.municipality === 'object' ? user.municipality?.name : user.municipality);
-    console.log("User municipality:", userMunicipality, "User role:", user.role, "User ID:", user._id);
     
     if (!userMunicipality) {
       const fallbackQuery = {
@@ -298,7 +297,6 @@ router.get("/my-municipality-complaints", authenticate, async (req, res) => {
 
     const normalizeMunicipality = require("../utils/normalize").normalizeMunicipality;
     const normalizedUserMunicipality = normalizeMunicipality(userMunicipality);
-    console.log("Normalized municipality:", normalizedUserMunicipality);
 
     const munRegex = new RegExp(userMunicipality.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     const query = {
@@ -318,7 +316,6 @@ router.get("/my-municipality-complaints", authenticate, async (req, res) => {
       }
     }
 
-    console.log("Query:", JSON.stringify(query, null, 2));
 
     const complaints = await Complaint.find(query)
       .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment media beforePhotos afterPhotos proofPhotos confirmations upvotes confirmationCount upvoteCount referenceId")
@@ -327,7 +324,6 @@ router.get("/my-municipality-complaints", authenticate, async (req, res) => {
       .limit(limit)
       .lean();
 
-    console.log("Found complaints:", complaints.length);
     
     res.json({
       success: true,
@@ -1097,7 +1093,6 @@ router.get("/stats/by-zone", async (req, res) => {
       { $sort: { total: -1 } }
     ]);
 
-    console.log("By-zone aggregation result:", JSON.stringify(byZone.slice(0, 5)));
 
     const governorateMap = {};
     byZone.forEach(item => {

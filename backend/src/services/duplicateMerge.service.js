@@ -238,7 +238,6 @@ const mergeDuplicateComplaint = async ({
                 originalTitle: originalComplaint.title,
               }
             );
-            console.log(`[mergeDuplicate] Email sent to ${citizen.email} for merged complaint ${displayRc(duplicateComplaint)}`);
           } catch (emailError) {
             console.error(`[mergeDuplicate] Failed to send email to ${citizen?.email}:`, emailError.message);
             // Don't fail the merge if email fails

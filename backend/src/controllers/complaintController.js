@@ -134,7 +134,6 @@ class ComplaintController {
           metadata: { category, municipality: normalizedMun },
         });
 
-        console.log(`Created ${agentIds.length} notifications for municipal agents`);
       } catch (notifError) {
         console.error("Failed to create notifications for agents:", notifError);
       }
@@ -740,7 +739,6 @@ class ComplaintController {
       const userId = req.user.userId;
       const userRole = req.user.role;
 
-      console.log(`[updateStatus] Request: id=${id}, status=${status}, userId=${userId}, userRole=${userRole}`);
 
       // Validate status using the new lifecycle
       const validStatuses = ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED", "REJECTED"];
@@ -842,9 +840,7 @@ class ComplaintController {
         complaint.closedAt = new Date();
       }
 
-      console.log(`[updateStatus] Saving complaint...`);
       await complaint.save();
-      console.log(`[updateStatus] Complaint saved successfully`);
 
       // Notify citizen via Socket.IO
       try {

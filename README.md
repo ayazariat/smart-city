@@ -37,7 +37,7 @@ smart-city/
 
 ```env
 PORT=5000
-MONGO_URI=mongodb://127.0.0.1:27017/smart-city
+MONGO_URI=
 
 # Cloudinary (photos)
 CLOUDINARY_CLOUD_NAME=votre_cloud_name
@@ -54,10 +54,6 @@ MAIL_FROM=SmartCity Tunisia <votre.email@gmail.com>
 
 FRONTEND_URL=http://localhost:3000
 
-# SMS (optionnel)
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE=
 
 # AI Service
 AI_SERVICE_URL=http://localhost:8000

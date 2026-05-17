@@ -169,7 +169,6 @@ function DashboardContent() {
         }
       );
       const data = await response.json();
-      console.log('Municipality complaints response:', data);
 
       // Handle different response structures
       let complaintsArray = null;

@@ -385,7 +385,6 @@ function DashboardContent() {
           },
         });
         const data = await response.json();
-        console.log('Agent municipality complaints response:', data);
 
         // Handle empty or unexpected response
         if (!data || Object.keys(data).length === 0) {
@@ -421,7 +420,6 @@ function DashboardContent() {
           }
         );
         const data = await response.json();
-        console.log('Manager/Technician municipality complaints response:', data);
 
         // Handle empty or unexpected response
         if (!data || Object.keys(data).length === 0) {
@@ -453,8 +451,6 @@ function DashboardContent() {
           }
         );
         const data = await response.json();
-        console.log('Municipality complaints response:', data);
-        console.log('Response status:', response.status);
 
         // Handle empty or unexpected response
         if (!data || Object.keys(data).length === 0) {

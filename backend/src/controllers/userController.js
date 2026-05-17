@@ -255,16 +255,8 @@ class UserController {
 
        // Send invitation email with magic link
       try {
-        console.log(`[userController] About to send invitation email:`, {
-          recipientEmail: user.email,
-          userId: user._id.toString(),
-          token: magicToken ? `${magicToken.substring(0, 8)}...` : 'MISSING',
-          fullName,
-          role: userRole,
-        });
         const { sendInvitationEmail } = require("../utils/mailer");
         await sendInvitationEmail(user.email, user._id.toString(), magicToken, fullName, userRole);
-        console.log(`[userController] Invitation email sent successfully to ${user.email}`);
       } catch (emailError) {
         console.error("[userController] Failed to send invitation email:", emailError.message);
         console.error("[userController] Email error details:", {
@@ -584,15 +576,7 @@ class UserController {
       // Send invitation email
       const { sendInvitationEmail } = require("../utils/mailer");
       try {
-        console.log(`[userController] Resending activation email:`, {
-          recipientEmail: user.email,
-          userId: user._id.toString(),
-          token: magicToken ? `${magicToken.substring(0, 8)}...` : 'MISSING',
-          fullName: user.fullName,
-          role: user.role,
-        });
         await sendInvitationEmail(user.email, user._id.toString(), magicToken, user.fullName, user.role);
-        console.log(`[userController] Activation email resent successfully to ${user.email}`);
       } catch (emailError) {
         console.error("[userController] Failed to resend activation email:", emailError.message);
         console.error("[userController] Email error details:", {

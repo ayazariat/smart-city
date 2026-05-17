@@ -867,15 +867,12 @@ export const checkDuplicate = async (
 
     const result = await response.json();
     const data = result.data || null;
-    console.log('[checkDuplicate] AI service response:', data);
     if (data?.topMatches) {
-      console.log('[checkDuplicate] Top matches before filter:', data.topMatches);
       data.topMatches = data.topMatches
         .filter((match: { overallScore?: number }) =>
           (match.overallScore || 0) >= 0.5
         )
         .slice(0, 3);
-      console.log('[checkDuplicate] Top matches after filter (threshold 0.5):', data.topMatches);
       data.isDuplicate = data.topMatches.length > 0;
     }
     return data;

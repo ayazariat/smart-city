@@ -289,7 +289,6 @@ export default function AgentComplaintsPage() {
 
   // Handle duplicate check (BL-25) - Using direct API call
   const handleCheckDuplicate = async (complaintId: string) => {
-    console.log('handleCheckDuplicate called for complaintId:', complaintId);
     setDuplicateTarget(complaintId);
     setDuplicateLoading(true);
     setDuplicateComplaints([]);
@@ -312,10 +311,6 @@ export default function AgentComplaintsPage() {
 
       const apiUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      console.log(
-        'Making duplicate check request to:',
-        `${apiUrl}/ai/duplicate/check`
-      );
       const response = await fetch(`${apiUrl}/ai/duplicate/check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -334,22 +329,9 @@ export default function AgentComplaintsPage() {
       });
       const result = await response.json();
 
-      console.log('Duplicate check response:', result);
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
 
       // Check inside result.data (backend wraps response)
       const data = result.data || result;
-      console.log('Parsed data:', data);
-      console.log('Data has topMatches:', !!data.topMatches);
-      console.log('TopMatches length:', data.topMatches?.length || 0);
-      console.log('TopMatches sample:', data.topMatches?.slice(0, 2));
-      console.log('Data has matches:', !!data.matches);
-      console.log('Matches length:', data.matches?.length || 0);
-      console.log('Data has candidates:', !!data.candidates);
-      console.log('Candidates length:', data.candidates?.length || 0);
-      console.log('Data isDuplicate:', data.isDuplicate);
-      console.log('Data duplicateLevel:', data.duplicateLevel);
 
       // Handle different response structures
       let matches = [];
@@ -410,30 +392,21 @@ export default function AgentComplaintsPage() {
       } else if (data && Array.isArray(data)) {
         matches = data;
       } else {
-        console.log('No duplicate matches found in response structure');
-        console.log('Actual data keys:', data ? Object.keys(data) : 'data is null/undefined');
-        console.log('Full data object:', JSON.stringify(data, null, 2));
       }
 
       if (matches.length > 0) {
-        console.log('Processing matches:', matches.length);
         const matchIds = matches.map(
           (m: { complaintId: string }) => m.complaintId
         );
-        console.log('Match IDs:', matchIds);
-        console.log('Loaded complaint IDs:', complaints.map(c => c._id || c.id).slice(0, 5));
         setDuplicateMatchScores(scores);
-        console.log('Duplicate match scores:', scores);
         // Match with loaded complaints first, then fall back to AI-provided titles
         const matched = complaints.filter((x) => {
           const id = x._id || x.id;
           const match = matchIds.includes(id);
           if (match) {
-            console.log(`Match found: ${id}`);
           }
           return match;
         });
-        console.log('Matched complaints from loaded list:', matched.length);
         
         // Build fallback objects for matches not in loaded list
         const matchedIds = new Set(matched.map(x => x._id || x.id));
@@ -444,7 +417,6 @@ export default function AgentComplaintsPage() {
         let allDuplicateComplaints = [...matched];
         
         if (unmatchedMatches.length > 0) {
-          console.log('Building fallback objects for unmatched matches:', unmatchedMatches.length);
           const fallback = unmatchedMatches.map(
             (m: {
               complaintId: string;
@@ -473,10 +445,8 @@ export default function AgentComplaintsPage() {
           allDuplicateComplaints = [...allDuplicateComplaints, ...fallback];
         }
         
-        console.log('Setting duplicateComplaints with total items:', allDuplicateComplaints.length);
         setDuplicateComplaints(allDuplicateComplaints);
       } else {
-        console.log('No matches found in response');
         setDuplicateComplaints([]);
       }
     } catch (error) {
@@ -484,14 +454,6 @@ export default function AgentComplaintsPage() {
       setDuplicateComplaints([]);
     } finally {
       setDuplicateLoading(false);
-      console.log(
-        'Duplicate check complete, duplicateTarget:',
-        duplicateTarget,
-        'duplicateComplaints.length:',
-        complaints.find((x) => (x._id || x.id) === duplicateTarget)
-          ? duplicateComplaints.length
-          : 'complaint not found'
-      );
     }
   };
 

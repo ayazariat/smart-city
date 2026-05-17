@@ -26,12 +26,6 @@ function VerifyAccountContent() {
 
   // Debug logging (client-side only)
   useEffect(() => {
-    console.log('Verify Account Page:', {
-      magicToken: magicToken ? `${magicToken.substring(0, 8)}...` : 'MISSING',
-      magicUserId: magicUserId ? `${magicUserId.substring(0, 8)}...` : 'MISSING',
-      emailFromRegister,
-      fullUrl: typeof window !== 'undefined' ? window.location.href : 'SSR',
-    });
   }, [magicToken, magicUserId, emailFromRegister]);
 
   const { verifyMagicLink } = useAuthStore();
