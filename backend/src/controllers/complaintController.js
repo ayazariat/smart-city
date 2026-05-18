@@ -562,7 +562,7 @@ class ComplaintController {
         .select("_id title category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName assignedDepartment location media afterPhotos proofPhotos confirmations upvotes confirmationCount upvoteCount")
         .populate("municipality", "name governorate")
         .sort({ resolvedAt: -1 })
-        .limit(5)
+        .limit(6)
         .lean();
 
       res.json({

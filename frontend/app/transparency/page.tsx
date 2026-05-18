@@ -561,6 +561,26 @@ export default function TransparencyPage() {
             rate: cat.rate,
           }));
           setCategoryStats(formattedCategoryStats);
+        } else {
+          // Fallback: ensure all categories are shown even if backend doesn't send byCategory
+          const allCategories = [
+            { category: "waste", label: "Waste & Cleanliness" },
+            { category: "roads", label: "Roads & Traffic" },
+            { category: "lighting", label: "Street Lighting" },
+            { category: "water", label: "Water & Drainage" },
+            { category: "safety", label: "Public Safety & Noise" },
+            { category: "property", label: "Public Property" },
+            { category: "parks", label: "Parks & Green Spaces" },
+            { category: "other", label: "Other" }
+          ];
+          const fallbackCategoryStats = allCategories.map(cat => ({
+            category: cat.category,
+            label: cat.label,
+            total: 0,
+            resolved: 0,
+            rate: 0
+          }));
+          setCategoryStats(fallbackCategoryStats);
         }
         if (d.byMunicipality) {
           const formattedMunicipalityStats = d.byMunicipality.map(
@@ -1443,7 +1463,7 @@ export default function TransparencyPage() {
                     </button>
                   </div>
 
-                  <div className="w-full grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
+                  <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {recentResolutionComplaints.length === 0 && (
                       <div className="md:col-span-2 lg:col-span-3 text-center py-10 bg-slate-50 rounded-2xl border border-slate-100">
                         <CheckCircle2 className="w-9 h-9 text-slate-300 mx-auto mb-3" />
