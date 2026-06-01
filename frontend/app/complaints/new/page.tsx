@@ -1,7 +1,7 @@
 'use client';
 
 // @ts-nocheck - Temporarily disable TypeScript checking for this file
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -637,6 +637,43 @@ export default function NewComplaintPage() {
       })
       .catch(() => {});
   };
+
+  const forwardGeocode = useCallback((query: string) => {
+    if (!query || query.trim().length < 3) return;
+    const controller = new AbortController();
+    fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=tn`,
+      { signal: controller.signal }
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.length > 0) {
+          const { lat, lon, display_name } = data[0];
+          const latNum = parseFloat(lat);
+          const lonNum = parseFloat(lon);
+          setLocation({ latitude: latNum, longitude: lonNum });
+          setLocationMode('manual');
+          reverseGeocode(latNum, lonNum);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  // Debounced geocode when user types an address
+  const geocodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (geocodeTimerRef.current) {
+      clearTimeout(geocodeTimerRef.current);
+    }
+    if (!address || address.trim().length < 3) return;
+    geocodeTimerRef.current = setTimeout(() => {
+      forwardGeocode(address);
+    }, 600);
+    return () => {
+      if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current);
+    };
+  }, [address, forwardGeocode]);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) {

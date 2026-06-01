@@ -1049,6 +1049,8 @@
     "mergeFailed": "Échec de la fusion de la plainte.",
     "beforeWorkPhotos": "Photos avant travaux",
     "afterWorkPhotos": "Photos après travaux",
+    "resolutionPhotos": "Photos de résolution",
+    "resolutionPhotoAlt": "Photo de résolution {{n}}",
     "comments": "Commentaires",
     "dateUnknown": "Date inconnue",
     "internalNotes": "Notes internes",
@@ -1131,7 +1133,8 @@
     "confidence": "{{n}}% de confiance",
     "currentMismatch": "≠ Actuelle : {{current}}",
     "similarComplaints": "Réclamations similaires",
-    "match": "{{n}}% de correspondance"
+    "match": "{{n}}% de correspondance",
+    "predictionUnavailable": "Prédiction IA non disponible pour cette réclamation"
   },
   "filterBar": {
     "searchPlaceholder": "Rechercher par description ou catégorie...",

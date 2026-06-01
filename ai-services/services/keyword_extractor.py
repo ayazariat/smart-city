@@ -77,7 +77,7 @@ TUNISIA_LOCATIONS = [
 # Urgency keywords
 URGENCY_KEYWORDS = {
     "urgent": ["urgent", "immediately", "emergency", "danger", "dangerous", "hazard", "accident"],
-    "high": ["serious", "critical", "important", "asap", "soon", "broken", "damaged"],
+    "high": ["critical", "important", "asap", "soon", "broken", "damaged"],
     "medium": ["soon", "needed", "should be fixed"],
     "low": ["when possible", "when convenient", "sometime"]
 }

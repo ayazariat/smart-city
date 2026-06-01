@@ -52,11 +52,11 @@ def calculate_geo_score(lat1: Optional[float], lng1: Optional[float],
     
     distance = haversine(lat1, lng1, lat2, lng2)
     
-    if distance < 30:
+    if distance < 50:
         return 1.0
-    elif distance < 80:
+    elif distance < 200:
         return 0.7
-    elif distance < 150:
+    elif distance < 500:
         return 0.3
     else:
         return 0.0

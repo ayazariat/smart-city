@@ -905,6 +905,8 @@
     "mergeFailed": "فشل في دمج الشكوى.",
     "beforeWorkPhotos": "صور قبل العمل",
     "afterWorkPhotos": "صور بعد العمل",
+    "resolutionPhotos": "صور الحل",
+    "resolutionPhotoAlt": "صورة الحل {{n}}",
     "comments": "التعليقات",
     "dateUnknown": "تاريخ غير معروف",
     "internalNotes": "ملاحظات داخلية",
@@ -987,7 +989,8 @@
     "confidence": "{{n}}% ثقة",
     "currentMismatch": "≠ الحالي: {{current}}",
     "similarComplaints": "شكاوى مشابهة",
-    "match": "{{n}}% تطابق"
+    "match": "{{n}}% تطابق",
+    "predictionUnavailable": "التنبؤ بالذكاء الاصطناعي غير متاح لهذه الشكوى"
   },
   "filterBar": {
     "searchPlaceholder": "البحث حسب الوصف أو الفئة...",

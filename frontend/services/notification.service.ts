@@ -28,7 +28,7 @@ export const getNotifications = async (
 ): Promise<{ success: boolean; data?: Notification[]; message?: string }> => {
   const searchParams = new URLSearchParams();
   if (options.unreadOnly) {
-    searchParams.set('unread', 'true');
+    searchParams.set('unreadOnly', 'true');
   }
 
   const queryString = searchParams.toString();

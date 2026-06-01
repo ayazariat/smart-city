@@ -6,15 +6,22 @@ const { FRONTEND_URL = 'http://localhost:3000' } = process.env;
 
 module.exports = {
   // === EXISTING ASSIGNMENT TEMPLATES (KEEP) ===
-  assignmentCitizenEmail: (firstName, complaintTitle, submitDate, departmentName) => ({
-    subject: `Your complaint has been assigned — Smart City`,
-    html: `
+  assignmentCitizenEmail: (firstName, complaintTitle, submitDate, departmentName, assignmentType = 'repair_team') => {
+    const assignPhrase = assignmentType === 'department'
+      ? `has been assigned to the department <strong>${departmentName}</strong>`
+      : `has been assigned to the repair team <strong>${departmentName}</strong>`;
+    const subjectText = assignmentType === 'department'
+      ? 'Your complaint has been assigned to a department'
+      : 'Your complaint has been assigned to a repair team';
+    return {
+      subject: `${subjectText} — Smart City`,
+      html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
         <p>Hello <strong>${firstName}</strong>,</p>
-        <p>your complaint titled <strong>"${complaintTitle}"</strong> submitted on <strong>${new Date(submitDate).toLocaleDateString('fr-FR')}</strong> has been assigned to the <strong>${departmentName}</strong> department.</p>
+        <p>your complaint titled <strong>"${complaintTitle}"</strong> submitted on <strong>${new Date(submitDate).toLocaleDateString('fr-FR')}</strong> ${assignPhrase}.</p>
         <p>You will be notified when work begins.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/my-complaints" style="background: #2E7D32; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
@@ -26,17 +33,22 @@ module.exports = {
         </p>
       </div>
     `
-  }),
+    };
+  },
 
-  assignmentTechnicianEmail: (firstName, complaintTitle, municipalityZone, departmentName) => ({
-    subject: `New complaint assigned to your department`,
-    html: `
+  assignmentTechnicianEmail: (firstName, complaintTitle, municipalityZone, departmentName, assignmentType = 'repair_team') => {
+    const assignPhrase = assignmentType === 'department'
+      ? `has been assigned to your department <strong>(${departmentName})</strong>`
+      : `has been assigned to your repair team <strong>(${departmentName})</strong>`;
+    return {
+      subject: `New complaint assigned to your ${assignmentType === 'department' ? 'department' : 'repair team'}`,
+      html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
         <p>Hello <strong>${firstName}</strong>,</p>
-        <p>a complaint titled <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> has been assigned to your department <strong>(${departmentName})</strong>.</p>
+        <p>a complaint titled <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> ${assignPhrase}.</p>
         <p>Please log in to review it.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/dashboard" style="background: #2E7D32; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
@@ -48,16 +60,21 @@ module.exports = {
         </p>
       </div>
     `
-  }),
+    };
+  },
 
-  assignmentManagerEmail: (complaintTitle, departmentName, assignDate) => ({
-    subject: `Assignment confirmed — ${complaintTitle}`,
-    html: `
+  assignmentManagerEmail: (complaintTitle, departmentName, assignDate, assignmentType = 'repair_team') => {
+    const assignPhrase = assignmentType === 'department'
+      ? `to the <strong>${departmentName}</strong> department`
+      : `to the <strong>${departmentName}</strong> repair team`;
+    return {
+      subject: `Assignment confirmed — ${complaintTitle}`,
+      html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
-        <p>You have successfully assigned the complaint <strong>"${complaintTitle}"</strong> to the <strong>${departmentName}</strong> team on <strong>${new Date(assignDate).toLocaleDateString('fr-FR')}</strong>.</p>
+        <p>You have successfully assigned the complaint <strong>"${complaintTitle}"</strong> ${assignPhrase} on <strong>${new Date(assignDate).toLocaleDateString('fr-FR')}</strong>.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/manager/pending" style="background: #2E7D32; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
             View Assigned Complaints
@@ -68,7 +85,8 @@ module.exports = {
         </p>
       </div>
     `
-  }),
+    };
+  },
 
   // === NEW TEMPLATES FOR ALL 10 EVENTS ===
 
@@ -142,16 +160,16 @@ module.exports = {
     `
   }),
 
-  // 4. Assigned to department → Citizen
+  // 4. Assigned to repair team → Citizen
   complaintAssignedCitizen: (firstName, complaintTitle, departmentName) => ({
-    subject: `Your complaint "${complaintTitle}" assigned to ${departmentName}`,
+    subject: `Your complaint "${complaintTitle}" has been assigned to a repair team`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
         <p>Hello <strong>${firstName}</strong>,</p>
-        <p>Your complaint <strong>"${complaintTitle}"</strong> has been assigned to <strong>${departmentName}</strong>.</p>
+        <p>Your complaint <strong>"${complaintTitle}"</strong> has been assigned to the repair team <strong>${departmentName}</strong>.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/my-complaints" style="background: #FF9800; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
             Track Progress
@@ -164,16 +182,60 @@ module.exports = {
     `  
   }),
 
-  // 5. Assigned to department → Technicians
-  complaintAssignedTechnician: (techName, complaintTitle, departmentName, municipalityZone) => ({
-    subject: `New: "${complaintTitle}" assigned to ${departmentName}`,
+  // 4b. Assigned to department → Citizen
+  complaintAssignedDepartmentCitizen: (firstName, complaintTitle, departmentName) => ({
+    subject: `Your complaint "${complaintTitle}" has been assigned to a department`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
+        </div>
+        <p>Hello <strong>${firstName}</strong>,</p>
+        <p>Your complaint <strong>"${complaintTitle}"</strong> has been assigned to the department <strong>${departmentName}</strong>.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${FRONTEND_URL}/my-complaints" style="background: #FF9800; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
+            Track Progress
+          </a>
+        </div>
+        <p style="color: #666; font-size: 12px;">
+          Status: Assigned
+        </p>
+      </div>
+    `
+  }),
+
+  // 5b. Assigned to department → Technicians
+  complaintAssignedDepartmentTechnician: (techName, complaintTitle, departmentName, municipalityZone) => ({
+    subject: `New: "${complaintTitle}" assigned to your department`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
         <p>Hello <strong>${techName}</strong>,</p>
-        <p>Complaint <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> has been assigned to your team <strong>(${departmentName})</strong>.</p>
+        <p>Complaint <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> has been assigned to your department <strong>(${departmentName})</strong>.</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${FRONTEND_URL}/dashboard" style="background: #FF9800; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
+            Review Assignment
+          </a>
+        </div>
+        <p style="color: #666; font-size: 12px;">
+          Please review and take necessary action.
+        </p>
+      </div>
+    `
+  }),
+
+  // 5. Assigned to repair team → Technicians
+  complaintAssignedTechnician: (techName, complaintTitle, departmentName, municipalityZone) => ({
+    subject: `New: "${complaintTitle}" assigned to your team`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
+        </div>
+        <p>Hello <strong>${techName}</strong>,</p>
+        <p>Complaint <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> has been assigned to your repair team <strong>(${departmentName})</strong>.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/dashboard" style="background: #FF9800; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
             Review Assignment

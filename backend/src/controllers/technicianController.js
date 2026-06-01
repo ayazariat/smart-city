@@ -687,8 +687,8 @@ class TechnicianController {
         Complaint.countDocuments({ ...historicalBaseQuery, status: "RESOLVED" }),
         Complaint.countDocuments({ ...historicalBaseQuery, status: "CLOSED" }),
         Complaint.countDocuments({ ...historicalBaseQuery, status: "REJECTED" }),
-        Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "OVERDUE", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
-        Complaint.countDocuments({ ...historicalBaseQuery, slaStatus: "AT_RISK", status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...historicalBaseQuery, slaDeadline: { $lt: new Date() }, status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
+        Complaint.countDocuments({ ...historicalBaseQuery, slaDeadline: { $gte: new Date(), $lte: new Date(Date.now() + 48 * 60 * 60 * 1000) }, status: { $in: ["ASSIGNED", "IN_PROGRESS"] } }),
         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $exists: true, $ne: null } }),
         Complaint.countDocuments({ ...historicalBaseQuery, status: { $in: ["RESOLVED", "CLOSED"] }, "rating.score": { $gte: 4 } }),
       ]);

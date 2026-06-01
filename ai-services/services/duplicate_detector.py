@@ -150,6 +150,7 @@ class DuplicateDetector:
         """Calculate text similarity scores.
         Strategy: Sentence-transformers (free, semantic) → TF-IDF (free, lexical) → Simple matching
         """
+
         if not candidates:
             return []
         
@@ -246,32 +247,98 @@ class DuplicateDetector:
     
     def _calculate_photo_score(self, new_photos: List[str], 
                                 candidate_photos: List[str]) -> float:
+        """Calculate photo similarity score.
+
+        Priority order:
+        1) Fast path: identical photo URL → 1.0
+        2) Existing heuristic (URL/presence) → base score
+        3) Optional CLIP-based boost (secondary) on top of base score
+           - never replaces the base heuristic
+           - failure-safe: if anything goes wrong, return base score
         """
-        Calculate photo similarity score.
-        Compares presence of photos and photo URLs for potential duplicates.
-        """
-        # If neither has photos, neutral score
+        # Normalize to comparable URL strings
         new_photos = self._normalize_photo_refs(new_photos)
         candidate_photos = self._normalize_photo_refs(candidate_photos)
 
+        # If neither has photos, neutral score
         if not new_photos and not candidate_photos:
             return 0.5
-        
+
         # If both have photos, higher likelihood of being related
         if new_photos and candidate_photos:
             # Check for exact URL matches (same photo uploaded)
             new_urls = set(new_photos)
             candidate_urls = set(candidate_photos)
             common_urls = new_urls & candidate_urls
-            
+
+            # Fast path (must keep backward compatibility)
             if common_urls:
-                return 1.0  # Same photo uploaded - strong duplicate indicator
-            
-            # Different photos but both have images - moderate boost
-            return 0.6
-        
-        # Only one has photos - slight penalty (could be same issue reported differently)
-        return 0.34
+                return 1.0
+
+            # Base heuristic (existing behavior)
+            base_photo_score = 0.6
+        else:
+            # Base heuristic when only one has photos
+            base_photo_score = 0.34
+
+        # CLIP boost (secondary enhancement)
+        try:
+            # Lazy import to avoid hard dependency / crashing
+            try:
+                from services.image_similarity_service import ImageSimilarityService
+            except ImportError:
+                return base_photo_score
+
+            clip_service = ImageSimilarityService()
+
+            # Compare a small subset to control latency
+            # (2-4 images max each side). Use up to 2 to be safer.
+            new_subset = list(new_photos)[:2]
+            cand_subset = list(candidate_photos)[:2]
+            if not new_subset or not cand_subset:
+                return base_photo_score
+
+            similarities: List[float] = []
+
+            # Use CLIP only if image similarity service can load images
+            # Any error → fallback to base score
+            for img1_url in new_subset:
+                img1 = clip_service.load_image_from_url(img1_url)
+                if not img1:
+                    continue
+
+                for img2_url in cand_subset:
+                    img2 = clip_service.load_image_from_url(img2_url)
+                    if not img2:
+                        continue
+
+                    try:
+                        result = clip_service.calculate_similarity_clip(img1, img2)
+                        sim = float(result.similarity_score)
+                        similarities.append(sim)
+                    except Exception:
+                        # If CLIP calc fails for one pair, keep going with others
+                        continue
+
+            if not similarities:
+                return base_photo_score
+
+            # Convert similarity to a small bonus in [0, 0.15]
+            # similarity is roughly in [-1..1] or [0..1] depending on model output;
+            # clamp defensively.
+            max_sim = max(similarities)
+            max_sim = max(0.0, min(1.0, max_sim))
+
+            # Threshold around service.threshold (0.85) but keep smooth boost.
+            # Bonus grows when similarity approaches 1.
+            bonus = 0.15 * max_sim
+
+            enhanced = base_photo_score + bonus
+            return max(0.0, min(1.0, enhanced))
+        except Exception:
+            # On any failure, do NOT break duplicate detection.
+            return base_photo_score
+
     
     def _calculate_final_score(self, text_score: float, geo_score: float,
                                 category_score: float, temporal_score: float, photo_score: float = 0.5) -> float:
@@ -354,9 +421,12 @@ class DuplicateDetector:
                 cand_lat, cand_lng
             ), default=0.3)
             
-            # HARD RULE: Both have valid coordinates but are far apart → not a duplicate
+            # HARD RULE: Both have valid coordinates but are far apart AND category doesn't match → not a duplicate
             both_have_coords = all(x is not None for x in [new_lat, new_lng, cand_lat, cand_lng])
-            if both_have_coords and geo_score == 0.0:
+            category_score = self._coerce_score(self._calculate_category_score(
+                new_category, candidate.get("category", "")
+            ))
+            if both_have_coords and geo_score == 0.0 and category_score < 1.0:
                 continue
             
             # Category score

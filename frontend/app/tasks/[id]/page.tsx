@@ -810,8 +810,8 @@ export default function TechnicianTaskDetailPage() {
             setResolveNote('');
             setProofPhotos([]);
           }}
-          title={t('tasks.resolutionModal.title')}
-          description={t('tasks.resolutionModal.description')}
+          title={t('tasks.resolveTitle')}
+          description={t('tasks.submitResolution')}
           footer={
             <>
               <Button
@@ -819,7 +819,7 @@ export default function TechnicianTaskDetailPage() {
                 onClick={() => setResolveModal(false)}
                 disabled={actionLoading}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -833,7 +833,7 @@ export default function TechnicianTaskDetailPage() {
                 className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
               >
                 {proofPhotos.length === 0
-                  ? t('tasks.addProofRequired')
+                  ? t('tasks.addPhotos')
                   : resolveNote.trim().length < 10
                     ? t('tasks.charsNeeded', {
                         count: 10 - resolveNote.trim().length,
@@ -846,7 +846,7 @@ export default function TechnicianTaskDetailPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                {t('tasks.resolutionModal.label')}{' '}
+                                {t('tasks.resolveNote')} {' '}
                 <span className="text-red-500">*</span>
               </label>
               <textarea
@@ -854,7 +854,7 @@ export default function TechnicianTaskDetailPage() {
                 onChange={(e) => setResolveNote(e.target.value)}
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
                 rows={5}
-                placeholder={t('tasks.resolutionModal.placeholder')}
+                placeholder={t('tasks.resolveNotePlaceholder')}
               />
             </div>
             <div>

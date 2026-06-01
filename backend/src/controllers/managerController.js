@@ -3,7 +3,7 @@ const User = require("../models/User");
 const RepairTeam = require("../models/RepairTeam");
 const Department = require("../models/Department");
 const notificationService = require("../services/notification.service");
-const { sendAssignmentEmails } = require("../utils/mailer");
+const { sendAssignmentEmails, translateDepartmentName } = require("../utils/mailer");
 
 const MANAGER_ACTIVE_STATUSES = [
   "VALIDATED",
@@ -261,10 +261,11 @@ async assignTechnician(req, res) {
       const io = req.app?.get?.('io');
       
       // Personalized notification to technician
+      const deptNameEn = translateDepartmentName(department?.name || 'Department', 'en');
       await notificationService.sendNotification(io, technicianId, {
         type: "assigned",
         title: "New Complaint Assigned",
-        message: `A new complaint "${complaint.title}" has been assigned to your department (${department?.name}). Please review it.`,
+        message: `A new complaint "${complaint.title}" has been assigned to your department (${deptNameEn}). Please review it.`,
         complaintId: complaint._id.toString(),
         metadata: { assignedBy: req.user.userId, departmentId: department?._id?.toString() },
       });
@@ -272,11 +273,11 @@ async assignTechnician(req, res) {
       // Notification to citizen
       if (complaint.createdBy) {
         await notificationService.sendNotification(io, complaint.createdBy.toString(), {
-          type: "assigned",
+          type: "assigned_department",
           title: "Your complaint has been assigned",
-          message: `Your complaint "${complaint.title}" has been assigned to the ${department?.name} team. We are on it!`,
+          message: `Your complaint "${complaint.title}" has been assigned to the department (${deptNameEn}). We are on it!`,
           complaintId: complaint._id.toString(),
-          metadata: { departmentId: department?._id?.toString(), departmentName: department?.name },
+          metadata: { departmentId: department?._id?.toString(), departmentName: deptNameEn },
         });
       }
 
@@ -287,7 +288,7 @@ async assignTechnician(req, res) {
       const managerUser = { email: req.user.email, fullName: req.user.fullName };
 
       // Trigger emails (non-blocking)
-      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser)
+      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser, 'department')
         .catch(err => console.error('Assignment emails failed:', err));
 
       res.json({
@@ -478,8 +479,8 @@ async assignTechnician(req, res) {
         try {
           await notificationService.sendNotification(io, tech._id.toString(), {
             type: "assigned",
-            title: "New Complaint Assigned",
-            message: `Complaint '${complaint.title}' has been assigned to your team (${department?.name}).`,
+            title: "New Complaint Assigned to Your Repair Team",
+            message: `Complaint '${complaint.title}' has been assigned to your repair team (${teamName}).`,
             complaintId: complaint._id.toString(),
             metadata: { teamId: repairTeam._id.toString(), departmentId: department?._id?.toString(), assignedBy: req.user.userId },
           });
@@ -491,14 +492,12 @@ async assignTechnician(req, res) {
       // Notify citizen
       if (complaint.createdBy) {
         try {
-          const dept = await getManagerDepartment(req.user.userId);
-          const deptName = dept?.name || 'a department';
           await notificationService.sendNotification(io, complaint.createdBy.toString(), {
             type: "assigned",
             title: "Complaint Assigned",
-            message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
+            message: `Your complaint '${complaint.title}' has been assigned to the repair team (${teamName}).`,
             complaintId: complaint._id.toString(),
-            metadata: { departmentName: deptName, departmentId: department?._id?.toString() },
+            metadata: { teamName, departmentId: department?._id?.toString() },
           });
         } catch (notifError) {
           console.error("Failed to notify citizen:", notifError);
@@ -508,7 +507,7 @@ async assignTechnician(req, res) {
       // Send confirmation email to manager
       const technicianEmails = technicians.map(t => t.email).filter(Boolean);
       const managerUser = { email: req.user.email, fullName: req.user.fullName };
-      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser)
+      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser, 'repair_team')
         .catch(err => console.error('Assignment emails failed:', err));
 
       res.json({
@@ -626,46 +625,51 @@ async assignTechnician(req, res) {
 
   async getTechnicians(req, res) {
     try {
-      const { search } = req.query;
+      const { search, departmentId, municipality } = req.query;
       
-      // Remove isActive filter since it defaults to false and would exclude all technicians
       let query = { role: "TECHNICIAN" };
       
       if (search) {
         query.fullName = { $regex: search, $options: "i" };
+      }
+
+      // Filter by department if provided
+      if (departmentId) {
+        query.department = departmentId;
+      }
+      
+      // Filter by municipality if provided
+      if (municipality) {
+        query.municipalityName = municipality;
       }
       
       let technicians;
       
       if (req.user.role === "ADMIN") {
         technicians = await User.find(query)
-          .select("fullName email phone department")
+          .select("fullName email phone department municipalityName")
           .sort({ fullName: 1 });
        } else {
-         const department = await getManagerDepartment(req.user.userId);
-         const departmentId = department?._id;
+         const managerDepartment = await getManagerDepartment(req.user.userId);
+         const managerDepartmentId = managerDepartment?._id;
          
-         // If no department assigned, show all technicians as fallback
+         // If no department specified, use manager's department
          if (!departmentId) {
-           console.warn(`Manager has no department assigned, showing all technicians`);
-           technicians = await User.find(query)
-             .select("fullName email phone")
-             .sort({ fullName: 1 });
-         } else {
-           // First try to get technicians in the manager's department
-           query.department = departmentId;
-           technicians = await User.find(query)
-             .select("fullName email phone")
-             .sort({ fullName: 1 });
-         
-           // If no technicians found in department, show all technicians as fallback
-           if (!technicians || technicians.length === 0) {
-             console.warn(`No technicians found in department ${departmentId}, showing all technicians`);
-             delete query.department;
+           if (!managerDepartmentId) {
+             console.warn(`Manager has no department assigned`);
              technicians = await User.find(query)
-               .select("fullName email phone")
+               .select("fullName email phone municipalityName")
+               .sort({ fullName: 1 });
+           } else {
+             query.department = managerDepartmentId;
+             technicians = await User.find(query)
+               .select("fullName email phone municipalityName")
                .sort({ fullName: 1 });
            }
+         } else {
+           technicians = await User.find(query)
+             .select("fullName email phone municipalityName")
+             .sort({ fullName: 1 });
          }
        }
 

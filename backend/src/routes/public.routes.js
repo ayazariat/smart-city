@@ -20,14 +20,30 @@ router.get("/complaints", async (req, res) => {
           .filter(Boolean)
         : [];
     const publicStatuses = ["VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED", "CLOSED"];
-    const statuses = requestedStatuses.length > 0
-      ? requestedStatuses.filter((status) => publicStatuses.includes(status))
+
+    const governorate = req.query.governorate;
+    const municipality = req.query.municipality;
+
+    // Allow SUBMITTED when filtering by governorate (for transparency drill-down)
+    const allowedStatuses = governorate
+      ? [...publicStatuses, "SUBMITTED"]
       : publicStatuses;
+
+    const statuses = requestedStatuses.length > 0
+      ? requestedStatuses.filter((status) => allowedStatuses.includes(status))
+      : allowedStatuses;
 
     const query = {
       status: { $in: statuses },
       isArchived: { $ne: true },
     };
+
+    if (governorate) {
+      query.governorate = governorate;
+    }
+    if (municipality) {
+      query.municipalityName = municipality;
+    }
 
     const skip = (page - 1) * limit;
     const [complaints, totalCount] = await Promise.all([
@@ -69,7 +85,8 @@ router.get("/complaints/:id", optionalAuth, async (req, res) => {
     const { id } = req.params;
 
     const complaint = await Complaint.findOne({ _id: id, isArchived: { $ne: true } })
-      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment assignedTeam assignedTo media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount")
+      .select("_id title description category status urgency priorityScore resolvedAt createdAt updatedAt createdBy municipality municipalityName governorate location assignedDepartment assignedTeam assignedTo media beforePhotos afterPhotos proofPhotos confirmationCount upvoteCount referenceId resolutionNote statusHistory viewsCount ownerName isAnonymous aiPredictedUrgency aiUrgencyPrediction finalUrgencyHuman")
+      .populate("createdBy", "fullName email phone")
       .populate("assignedTeam", "name members")
       .populate("assignedTo", "fullName email")
       .populate("municipality", "name governorate")
@@ -88,12 +105,29 @@ router.get("/complaints/:id", optionalAuth, async (req, res) => {
       return res.status(404).json({ success: false, message: "Complaint not found" });
     }
 
+    const isOwnComplaint = Boolean(
+      req.user?.userId &&
+      complaint.createdBy?._id?.toString?.() === req.user.userId?.toString()
+    );
+    const isStaff = ["ADMIN", "MUNICIPAL_AGENT", "DEPARTMENT_MANAGER"].includes(req.user?.role);
+
+    // Format citizen info — show contact details for owner or staff
+    let createdBy = null;
+    if (!complaint.isAnonymous && complaint.createdBy) {
+      const citizen = complaint.createdBy;
+      createdBy = {
+        _id: citizen._id,
+        fullName: citizen.fullName,
+        ...((isOwnComplaint || isStaff) && { email: citizen.email, phone: citizen.phone }),
+      };
+    } else if (complaint.ownerName) {
+      createdBy = { _id: null, fullName: complaint.ownerName };
+    }
+
     const response = {
       ...complaint,
-      isOwnComplaint: Boolean(
-        req.user?.userId &&
-        complaint.createdBy?.toString?.() === req.user.userId?.toString()
-      ),
+      createdBy,
+      isOwnComplaint,
     };
 
     res.json({
@@ -430,7 +464,7 @@ router.get("/stats", async (req, res) => {
       resolvedWithConfirmation,
       resolvedWithRatings,
     ] = await Promise.all([
-      Complaint.countDocuments(match),
+      Complaint.countDocuments({ ...match, status: { $nin: ["DELETED", "REJECTED"] }, isArchived: { $ne: true } }),
       Complaint.countDocuments({ ...match, status: "SUBMITTED" }),
       Complaint.countDocuments({ ...match, status: "VALIDATED" }),
       Complaint.countDocuments({ ...match, status: "ASSIGNED" }),

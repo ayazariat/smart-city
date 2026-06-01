@@ -24,7 +24,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from datetime import datetime
+import asyncio
 import time
 
 # Import new routers
@@ -38,11 +40,42 @@ from services.category_predictor import predict_category, PredictionRequest as C
 from services.keyword_extractor import extract_keywords, ExtractionRequest as KeywordExtractionRequest
 from services.sla_calculator import calculate_sla, SLACalculationRequest
 
-# Create FastAPI app
+# Create FastAPI app with lifespan for model warm-up
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Warm up AI models at startup to avoid cold-start timeouts."""
+    print("[WARMUP] Pre-warming AI models...")
+    warmup_start = time.time()
+
+    # Pre-warm urgency HuggingFace model (BL-24)
+    try:
+        from services.urgency_predictor import TRANSFORMERS_AVAILABLE
+        if TRANSFORMERS_AVAILABLE:
+            from services.urgency_predictor import get_urgency_classifier
+            await asyncio.to_thread(get_urgency_classifier)
+            print("[WARMUP] Urgency classifier (bart-large-mnli) loaded")
+    except Exception as e:
+        print(f"[WARMUP] Urgency classifier warm-up failed: {e}")
+
+    # Pre-warm duplicate detector (BL-25)
+    try:
+        from services.duplicate_detector import SENTENCE_TRANSFORMERS_AVAILABLE
+        if SENTENCE_TRANSFORMERS_AVAILABLE:
+            from services.duplicate_detector import get_detector
+            await asyncio.to_thread(get_detector)
+            print("[WARMUP] Duplicate detector (all-MiniLM-L6-v2) loaded")
+    except Exception as e:
+        print(f"[WARMUP] Duplicate detector warm-up failed: {e}")
+
+    warmup_duration = int((time.time() - warmup_start) * 1000)
+    print(f"[WARMUP] All models warmed up in {warmup_duration}ms")
+    yield
+
 app = FastAPI(
     title="Smart City Tunisia AI Services",
     description="AI services for complaint urgency, duplicate detection, and trend prediction",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware

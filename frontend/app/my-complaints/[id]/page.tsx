@@ -128,7 +128,7 @@ export default function MyComplaintDetailPage() {
          description: complaint.description,
          category: complaint.category,
          urgency: complaint.urgency,
-         phone: complaint.phone || ""
+         phone: (complaint.createdBy as any)?.phone || complaint.phone || ""
        });
      }
    }, [complaint]);
@@ -152,12 +152,12 @@ export default function MyComplaintDetailPage() {
         description: complaint.description,
         category: complaint.category,
         urgency: complaint.urgency,
-        phone: complaint.phone || ""
-      });
-    }
-  };
+         phone: (complaint.createdBy as any)?.phone || complaint.phone || ""
+       });
+     }
+   };
 
-  const handleSaveEdit = async () => {
+   const handleSaveEdit = async () => {
     if (!complaintId || !token) return;
     
     setIsSaving(true);
@@ -548,13 +548,13 @@ export default function MyComplaintDetailPage() {
                 {isEditing ? (
                   <input
                     type="tel"
-                    value={editForm.phone || complaint.phone || ''}
+                    value={editForm.phone || (complaint.createdBy as any)?.phone || complaint.phone || ''}
                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                     placeholder={t("complaintDetail.phonePlaceholder")}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary"
                   />
                 ) : (
-                  <span className="text-slate-700">{complaint.phone || t("complaintDetail.notProvided")}</span>
+                  <span className="text-slate-700">{(complaint.createdBy as any)?.phone || complaint.phone || t("complaintDetail.notProvided")}</span>
                 )}
               </div>
             </section>
@@ -794,14 +794,14 @@ export default function MyComplaintDetailPage() {
             {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
               <section className="bg-green-50 rounded-xl shadow-sm p-6" aria-labelledby="resolution-photos-title">
                 <h2 id="resolution-photos-title" className="text-lg font-semibold text-green-900 mb-4">
-                  {t("complaintDetail.resolutionPhotos") || "Resolution Photos"} ({complaint.afterPhotos?.length || 0})
+                  {t("complaintDetail.resolutionPhotos", { defaultValue: "Resolution Photos" })} ({complaint.afterPhotos?.length || 0})
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {complaint.afterPhotos.map((item, index) => (
                     <div key={index} className="relative aspect-square bg-green-100 rounded-lg overflow-hidden">
                       <img
                         src={getPhotoUrl(item.url) || undefined}
-                        alt={`Resolution photo ${index + 1}`}
+                        alt={t("complaintDetail.resolutionPhotoAlt", { n: index + 1 })}
                         className="w-full h-full object-cover hover:opacity-90 transition"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;

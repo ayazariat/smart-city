@@ -1039,6 +1039,8 @@
     "mergeFailed": "Failed to merge complaint.",
     "beforeWorkPhotos": "Before Work Photos",
     "afterWorkPhotos": "After Work Photos",
+    "resolutionPhotos": "Resolution Photos",
+    "resolutionPhotoAlt": "Resolution photo {{n}}",
     "comments": "Comments",
     "dateUnknown": "Unknown date",
     "internalNotes": "Internal Notes",
@@ -1121,7 +1123,8 @@
     "confidence": "{{n}}% confidence",
     "currentMismatch": "≠ Current: {{current}}",
     "similarComplaints": "Similar Complaints",
-    "match": "{{n}}% match"
+    "match": "{{n}}% match",
+    "predictionUnavailable": "AI prediction not available for this complaint"
   },
   "filterBar": {
     "searchPlaceholder": "Search by description or category...",

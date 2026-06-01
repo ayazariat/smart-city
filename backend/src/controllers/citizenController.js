@@ -155,7 +155,7 @@ class CitizenController {
         const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
         const urgencyResult = await axios.post(`${aiServiceUrl}/ai/urgency/predict`, {
           title: title, description: description, category: predictedCategory,
-          citizenUrgency: urgency || 'MEDIUM', municipality: userMunicipalityName,
+          citizenUrgency: urgency || 'MEDIUM', municipality: complaintMunicipalityName,
           latitude: geoLocation?.coordinates?.[1], longitude: geoLocation?.coordinates?.[0],
           confirmationCount: 0, submittedAt: new Date()
         }, { timeout: 5000 });
@@ -172,14 +172,15 @@ class CitizenController {
 
       const keywords = extractKeywords(description);
       const user = await User.findById(req.user.userId).select('municipalityName municipality').lean();
-      const userMunicipalityName = user?.municipalityName || location?.municipality || location?.commune || "";
-      const governorate = municipalityToGovernorate[userMunicipalityName] || municipalityToGovernorate[location?.municipality] || municipalityToGovernorate[location?.commune] || null;
+      const complaintMunicipality = location?.municipality || location?.commune || "";
+      const complaintMunicipalityName = complaintMunicipality || user?.municipalityName || "";
+      const governorate = municipalityToGovernorate[complaintMunicipalityName] || municipalityToGovernorate[complaintMunicipality] || null;
       const normalizedGovernorate = normalizeGovernorate(governorate);
 
       const complaint = new Complaint({
         title: title.trim(), description: description.trim(), category: predictedCategory || "OTHER", urgency: urgencyLevel, priorityScore,
-        location: Object.keys(geoLocation).length ? geoLocation : {}, municipalityName: userMunicipalityName,
-        municipalityNormalized: normalizeMunicipality(userMunicipalityName), governorate, governorateNormalized: normalizedGovernorate, media: media || [],
+        location: Object.keys(geoLocation).length ? geoLocation : {}, municipalityName: complaintMunicipalityName,
+        municipalityNormalized: normalizeMunicipality(complaintMunicipalityName), governorate, governorateNormalized: normalizedGovernorate, media: media || [],
         isAnonymous: !!isAnonymous, ownerName: !isAnonymous ? ownerName : undefined, phone: phone || undefined,
         keywords, createdBy: req.user.userId, assignedDepartment, status: "SUBMITTED",
         slaDeadline: new Date(Date.now() + slaFinal * 60 * 60 * 1000),
@@ -195,7 +196,7 @@ class CitizenController {
         const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
         const urgencyResult = await axios.post(`${aiServiceUrl}/ai/urgency/predict`, {
           title: complaint.title, description: complaint.description, category: complaint.category,
-          citizenUrgency: complaint.urgency, municipality: complaint.municipalityName,
+          citizenUrgency: urgency || complaint.urgency, municipality: complaint.municipalityName,
           latitude: complaint.location?.coordinates?.[1], longitude: complaint.location?.coordinates?.[0],
           confirmationCount: 0, submittedAt: complaint.createdAt
         }, { timeout: 5000 });
@@ -261,7 +262,7 @@ class CitizenController {
 
       // Notify agents
       try {
-        const normalizedMun = normalizeMunicipality(userMunicipalityName);
+        const normalizedMun = normalizeMunicipality(complaint.municipalityName);
         const io = req.app?.get?.('io');
         if (normalizedMun) {
           const agents = await User.find({ role: "MUNICIPAL_AGENT", municipalityName: { $regex: new RegExp(`^${normalizedMun}$`, 'i') } }).select('_id');
@@ -270,7 +271,7 @@ class CitizenController {
             await notificationService.sendNotificationToMultiple(io, agentIds, {
               type: "complaint_submitted",
               title: "New Complaint Submitted",
-              message: `New complaint submitted: '${title.trim()}' in ${userMunicipalityName || 'your municipality'}. Awaiting validation.`,
+              message: `New complaint submitted: '${title.trim()}' in ${complaint.municipalityName || 'your municipality'}. Awaiting validation.`,
               complaintId: complaint._id,
             });
           }
@@ -377,7 +378,9 @@ class CitizenController {
       if (description) complaint.description = description;
       if (category) complaint.category = category;
       if (urgency) complaint.urgency = urgency;
-      if (phone !== undefined) complaint.phone = phone;
+      if (phone !== undefined) {
+        await User.findByIdAndUpdate(req.user.userId, { phone });
+      }
       if (location) {
         if (location.latitude) complaint.location.latitude = location.latitude;
         if (location.longitude) complaint.location.longitude = location.longitude;
@@ -391,7 +394,8 @@ class CitizenController {
       complaint.statusHistory.push({ status: complaint.status, updatedBy: req.user.userId, updatedAt: new Date(), notes: "Edited by citizen" });
       await complaint.save();
 
-      res.json({ message: "Complaint updated successfully", complaint });
+      const populated = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone").lean();
+      res.json({ message: "Complaint updated successfully", complaint: populated });
     } catch (error) {
       console.error("Update complaint error:", error);
       res.status(500).json({ message: "Failed to update complaint" });

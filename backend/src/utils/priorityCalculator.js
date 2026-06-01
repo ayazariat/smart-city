@@ -96,9 +96,9 @@ function calculatePriorityScore({
 }
 
 function getUrgencyLevel(priorityScore) {
-  if (priorityScore >= 15) return 'CRITICAL';
-  if (priorityScore >= 10) return 'HIGH';
-  if (priorityScore >= 6) return 'MEDIUM';
+  if (priorityScore >= 10) return 'CRITICAL';
+  if (priorityScore >= 6) return 'HIGH';
+  if (priorityScore >= 3) return 'MEDIUM';
   return 'LOW';
 }
 

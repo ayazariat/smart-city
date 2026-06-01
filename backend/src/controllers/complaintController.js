@@ -216,7 +216,7 @@ class ComplaintController {
         .populate("duplicateOf", "referenceId title")
         .populate({
           path: "mergedComplaints.complaintId",
-          select: "referenceId title createdBy municipality municipalityName location",
+          select: "referenceId title createdBy municipality municipalityName location isAnonymous",
           populate: [
             { path: "createdBy", select: "fullName" },
             { path: "municipality", select: "name" },
@@ -326,15 +326,38 @@ class ComplaintController {
 
       // Format citizen info - hide email/phone if anonymous
       let citizenInfo = null;
-      if (!complaint.isAnonymous && complaint.createdBy) {
-        const citizen = complaint.createdBy;
-        // Include contact info for: agents/managers/admin, OR the owner viewing their own complaint
-        const showContactInfo = isAdminOrAgent || isOwner;
-        citizenInfo = {
-          _id: citizen._id,
-          fullName: citizen.fullName,
-          ...(showContactInfo && { email: citizen.email, phone: citizen.phone })
-        };
+      if (!complaint.isAnonymous) {
+        let citizenData = null;
+
+        if (complaint.createdBy) {
+          const citizen = complaint.createdBy;
+          if (citizen.fullName) {
+            // createdBy is properly populated
+            citizenData = citizen;
+          } else {
+            // Unpopulated ObjectId reference — try to fetch user data directly
+            const userId = citizen._id?.toString() || citizen.toString();
+            const userDoc = await User.findById(userId).select("fullName email phone").lean();
+            if (userDoc) {
+              citizenData = userDoc;
+            }
+          }
+        }
+
+        if (citizenData) {
+          const showContactInfo = isAdminOrAgent || isOwner;
+          citizenInfo = {
+            _id: citizenData._id,
+            fullName: citizenData.fullName,
+            ...(showContactInfo && { email: citizenData.email, phone: citizenData.phone })
+          };
+        } else if (complaint.ownerName) {
+          // Fallback: createdBy user was deleted or not populated, use complaint-level ownerName
+          citizenInfo = {
+            _id: null,
+            fullName: complaint.ownerName,
+          };
+        }
       }
 
       // Compute SLA status from deadline (if present)
@@ -405,7 +428,7 @@ class ComplaintController {
             _id: mergedId,
             referenceId: mergedComplaint.referenceId || mergedId,
             title: mergedComplaint.title || "",
-            submittedBy: canSeeMergedSubmitterName
+            submittedBy: canSeeMergedSubmitterName && !mergedComplaint.isAnonymous
               ? mergedComplaint.createdBy?.fullName || "Citizen"
               : "Submitted by a citizen",
             municipality:
@@ -431,6 +454,8 @@ class ComplaintController {
         slaStatus,
         location: complaint.location,
         createdBy: citizenInfo,
+        isAnonymous: complaint.isAnonymous || false,
+        ownerName: complaint.ownerName || null,
         departmentId: complaint.assignedDepartment || null,
         assignedDepartment: complaint.assignedDepartment || null,
         repairTeamId: complaint.assignedTeam || null,
@@ -472,6 +497,7 @@ class ComplaintController {
           complaint.aiPredictedUrgency ||
           complaint.aiUrgencyPrediction?.predictedUrgency ||
           null,
+        finalUrgencyHuman: complaint.finalUrgencyHuman || null,
         aiDuplicateCheck: complaint.aiDuplicateCheck || null,
         resolutionNote: complaint.resolutionNotes || null,
         resolvedAt: complaint.resolvedAt || null,

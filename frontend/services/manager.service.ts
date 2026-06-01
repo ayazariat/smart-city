@@ -36,6 +36,7 @@ interface Technician {
   fullName: string;
   email?: string;
   phone?: string;
+  municipalityName?: string;
 }
 
 interface ManagerStatsResponse {
@@ -183,9 +184,13 @@ export const managerService = {
   /**
    * Get technicians in manager's department
    */
-  async getTechnicians() {
+  async getTechnicians(params?: { departmentId?: string; municipality?: string }) {
+    const queryParams = new URLSearchParams();
+    if (params?.departmentId) queryParams.append('departmentId', params.departmentId);
+    if (params?.municipality) queryParams.append('municipality', params.municipality);
+    const queryString = queryParams.toString();
     return apiClient.get<{ success: boolean; data: Technician[] }>(
-      '/manager/technicians'
+      `/manager/technicians${queryString ? `?${queryString}` : ''}`
     );
   },
 

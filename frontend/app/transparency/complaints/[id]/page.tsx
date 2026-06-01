@@ -99,6 +99,13 @@ const resolveMediaUrl = (url?: string): string | null => {
     return `${origin}${url}`;
   }
 
+  if (url.startsWith('backend/uploads/')) {
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const origin = apiUrl.replace(/\/api\/?$/, '');
+    return `${origin}/uploads/${url.slice('backend/uploads/'.length)}`;
+  }
+
   return getPhotoUrl(url);
 };
 

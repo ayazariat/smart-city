@@ -22,6 +22,11 @@ export const getPhotoUrl = (url: string | undefined): string | null => {
     return `${API_URL}${url}`;
   }
 
+  // Handle seed data format (backend/uploads/xxx.png)
+  if (url.startsWith('backend/uploads/')) {
+    return `${API_URL}/uploads/${url.slice('backend/uploads/'.length)}`;
+  }
+
   // Cloudinary public ID or partial path - construct full URL
   // Handle different formats: uploaded files, old format, etc.
   if (url.includes('/upload/')) {

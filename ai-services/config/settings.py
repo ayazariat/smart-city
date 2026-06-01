@@ -4,37 +4,44 @@ AI Services Configuration
 Configuration settings for Smart City Tunisia AI services.
 """
 
-# Service Configuration
 AI_SERVICE_PORT = 8000
 
-# Model Settings
+
 MIN_TRAINING_SAMPLES = 20
 
-# Duplicate Detection Thresholds
-# Unified threshold for duplicate detection across all services
+
 DUPLICATE_THRESHOLD = 0.5
-DUPLICATE_THRESHOLD_REVIEW = 0.5  # Deprecated: use DUPLICATE_THRESHOLD
-DUPLICATE_THRESHOLD_PROBABLE = 0.5  # Deprecated: use DUPLICATE_THRESHOLD
+DUPLICATE_THRESHOLD_REVIEW = 0.5 
+DUPLICATE_THRESHOLD_PROBABLE = 0.5  
 
-# Urgency Score Thresholds
+
 URGENCY_THRESHOLDS = {
-    "LOW": 0.25,
-    "MEDIUM": 0.50,
-    "HIGH": 0.75
+    "LOW": 0.15,
+    "MEDIUM": 0.40,
+    "HIGH": 0.65
 }
 
-# Category Base Urgency Scores
 CATEGORY_BASE_SCORES = {
-    "EAU": 0.7,           # Water leaks often critical
-    "SECURITE": 0.75,     # Security issues
+    "EAU": 0.7,
+    "WATER": 0.7,
+    "SECURITE": 0.75,
+    "SAFETY": 0.75,
     "ROUTES": 0.5,
-    "DECHETS": 0.4,       # Waste
-    "ECLAIRAGE": 0.35,    # Lighting
-    "BIENS_PUBLICS": 0.3, # Public property
-    "AUTRE": 0.2          # Other
+    "ROADS": 0.5,
+    "ROAD": 0.5,
+    "DECHETS": 0.4,
+    "WASTE": 0.4,
+    "ECLAIRAGE": 0.35,
+    "LIGHTING": 0.35,
+    "BIENS_PUBLICS": 0.3,
+    "PUBLIC_PROPERTY": 0.3,
+    "PROPERTY": 0.3,
+    "GREEN_SPACE": 0.25,
+    "PARKS": 0.25,
+    "AUTRE": 0.2,
+    "OTHER": 0.2,
 }
 
-# Citizen Urgency Mapping (from user input to numeric score)
 CITIZEN_URGENCY_MAP = {
     "LOW": 0.1,
     "MEDIUM": 0.35,
@@ -42,9 +49,8 @@ CITIZEN_URGENCY_MAP = {
     "URGENT": 0.9
 }
 
-# Feature Weights for Urgency Prediction
 URGENCY_FEATURE_WEIGHTS = {
-    "citizenUrgency": 0.30,  # Strongest single feature
+    "citizenUrgency": 0.30,  
     "textKeywords": 0.25,
     "categoryBase": 0.20,
     "communitySignal": 0.10,
@@ -52,7 +58,7 @@ URGENCY_FEATURE_WEIGHTS = {
     "sensitiveZone": 0.05
 }
 
-# Critical Keywords (dangerous terms that raise urgency)
+
 CRITICAL_KEYWORDS = [
     # French
     "inondation", "incendie", "accident", "électrocution", "explosion",
@@ -69,17 +75,18 @@ HIGH_KEYWORDS = [
     # French
     "canalisation", "fuite eau", "panne totale", "route coupée",
     "décharge", "eau stagnante", "égout bouché", "inondation", "fuite importante",
-    "câble électrique", "poteau tombé", "chaussée effondrée",
+    "câble électrique", "poteau tombé", "chaussée effondrée", "école",
+    "près d'école", "passage piéton", "carrefour dangereux",
     # Arabic
     "قناة مياه", "تسرب ماء", "انقطاع كامل", "طريق مغلق", "مياه راكدة",
-    "مجرى مسدود", "كابل كهربائي", "عمود ساقط",
+    "مجرى مسدود", "كابل كهربائي", "عمود ساقط", "مدرسة", "بالقرب من مدرسة",
     # English
     "burst pipe", "total blackout", "road closed", "sewage overflow", "fallen pole",
-    "collapsed road", "major leak"
+    "collapsed road", "major leak", "near school", "school zone", "school",
+    "pedestrian crossing", "dangerous intersection",
 ]
 
 MEDIUM_KEYWORDS = [
-    # French
     "nid de poule", "lampadaire", "ordures", "dégradé", "cassé",
     "trottoir abîmé", "bac débordant", "feux de signalisation", "graffiti",
     "éclairage défaillant", "déchets accumulés",
@@ -91,7 +98,6 @@ MEDIUM_KEYWORDS = [
     "cracked pavement", "overflowing bin", "graffiti", "littering"
 ]
 
-# Category Keywords for better category prediction
 CATEGORY_KEYWORDS = {
     "DECHETS": ["garbage", "waste", "bins", "ordures", "poubelle", "déchets", "نفايات", "قمامة", "زبالة"],
     "ROUTES": ["pothole", "road", "nid de poule", "route", "chaussée", "trottoir", "طريق", "حفرة", "رصيف"],
@@ -105,7 +111,6 @@ CATEGORY_KEYWORDS = {
 # Sensitive Zones (municipality → list of zone types)
 # Every municipality with school, hospital, or main road gets zone_bonus = 0.10
 SENSITIVE_ZONES = {
-    # Nabeul Governorate
     "Béni Khiar": ["school_zone", "hospital_zone", "main_road"],
     "Nabeul": ["school_zone", "hospital_zone", "main_road"],
     "Hammamet": ["school_zone", "hospital_zone", "main_road"],

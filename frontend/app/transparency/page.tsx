@@ -98,6 +98,12 @@ const getPhotoUrl = (
     const origin = apiUrl.replace(/\/api\/?$/, '');
     return url.startsWith('/') ? `${origin}${url}` : `${origin}/${url}`;
   }
+  if (url.startsWith('backend/uploads/')) {
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const origin = apiUrl.replace(/\/api\/?$/, '');
+    return `${origin}/uploads/${url.slice('backend/uploads/'.length)}`;
+  }
   const cloud = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD;
   if (cloud && !url.includes('/')) {
     return `https://res.cloudinary.com/${cloud}/image/upload/${url}`;
@@ -371,6 +377,8 @@ export default function TransparencyPage() {
   const [filteredComplaints, setFilteredComplaints] = useState<ComplaintItem[]>(
     []
   );
+  const [governorateComplaints, setGovernorateComplaints] = useState<ComplaintItem[]>([]);
+  const [loadingGovernorate, setLoadingGovernorate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState('month');
@@ -683,6 +691,50 @@ export default function TransparencyPage() {
     const interval = setInterval(() => fetchData(true), 60000);
     return () => clearInterval(interval);
   }, [period]);
+
+  useEffect(() => {
+    if (!selectedGovernorate) {
+      setGovernorateComplaints([]);
+      return;
+    }
+    const fetchGovComplaints = async () => {
+      setLoadingGovernorate(true);
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const res = await fetch(
+          `${apiUrl}/public/complaints?limit=100&governorate=${encodeURIComponent(selectedGovernorate)}`
+        );
+        const json = await res.json();
+        if (json.success && json.data?.complaints) {
+          const scored = json.data.complaints.map((c: any) => ({
+            ...c,
+            confirmationCount: c.confirmationCount ?? c.confirmations?.length ?? 0,
+            upvoteCount: c.upvoteCount ?? c.votes?.length ?? 0,
+            socialScore: calculateSocialScore(
+              c.confirmationCount ?? c.confirmations?.length ?? 0,
+              c.upvoteCount ?? c.votes?.length ?? 0
+            ),
+            priorityLevel:
+              (c.priorityScore || 0) >= 15
+                ? 'CRITICAL'
+                : (c.priorityScore || 0) >= 10
+                  ? 'HIGH'
+                  : (c.priorityScore || 0) >= 6
+                    ? 'MEDIUM'
+                    : 'LOW',
+          }));
+          setGovernorateComplaints(scored);
+        } else {
+          setGovernorateComplaints([]);
+        }
+      } catch {
+        setGovernorateComplaints([]);
+      } finally {
+        setLoadingGovernorate(false);
+      }
+    };
+    fetchGovComplaints();
+  }, [selectedGovernorate]);
 
   useEffect(() => {
     let filtered = [...complaints];
@@ -2693,7 +2745,6 @@ export default function TransparencyPage() {
                                         : 'bg-red-500'
                                   }`}
                                 >
-                                  {rate}%
                                   {t('transparency.govDetail.resolved', {
                                     n: rate,
                                   })}
@@ -2852,7 +2903,10 @@ export default function TransparencyPage() {
                                     })}
                                   </h4>
                                   <div className="space-y-2">
-                                    {complaints
+                                    {(governorateComplaints.length > 0
+                                      ? governorateComplaints
+                                      : complaints
+                                    )
                                       .filter((c) => {
                                         // Match by governorate directly or by municipality belonging to this governorate
                                         if (
@@ -2954,7 +3008,12 @@ export default function TransparencyPage() {
                                           </div>
                                         );
                                       })}
-                                    {total === 0 && (
+                                    {loadingGovernorate && (
+                                      <div className="flex items-center justify-center py-4">
+                                        <Loader2 className="w-5 h-5 animate-spin text-green-600" />
+                                      </div>
+                                    )}
+                                    {!loadingGovernorate && governorateComplaints.length === 0 && (
                                       <p className="text-sm text-slate-500">
                                         {t(
                                           'transparency.govDetail.noRecentReports'

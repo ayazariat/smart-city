@@ -219,6 +219,7 @@ def combine_fields(title: str, description: str = "") -> str:
 def extract_keywords_by_level(text: str) -> dict:
     """
     Extract keywords by urgency level from text.
+    Uses word boundary matching to prevent false positives.
     
     Args:
         text: Text to analyze
@@ -237,15 +238,27 @@ def extract_keywords_by_level(text: str) -> dict:
     }
     
     for kw in CRITICAL_KEYWORDS:
-        if kw.lower() in text_lower:
+        kw_lower = kw.lower()
+        if " " in kw_lower:
+            if kw_lower in text_lower:
+                result["critical"].append(kw)
+        elif re.search(r'(?<![a-z])' + re.escape(kw_lower) + r'(?![a-z])', text_lower):
             result["critical"].append(kw)
     
     for kw in HIGH_KEYWORDS:
-        if kw.lower() in text_lower:
+        kw_lower = kw.lower()
+        if " " in kw_lower:
+            if kw_lower in text_lower:
+                result["high"].append(kw)
+        elif re.search(r'(?<![a-z])' + re.escape(kw_lower) + r'(?![a-z])', text_lower):
             result["high"].append(kw)
     
     for kw in MEDIUM_KEYWORDS:
-        if kw.lower() in text_lower:
+        kw_lower = kw.lower()
+        if " " in kw_lower:
+            if kw_lower in text_lower:
+                result["medium"].append(kw)
+        elif re.search(r'(?<![a-z])' + re.escape(kw_lower) + r'(?![a-z])', text_lower):
             result["medium"].append(kw)
     
     return result

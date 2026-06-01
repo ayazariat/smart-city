@@ -100,6 +100,39 @@ router.get('/count', authenticate, async (req, res) => {
 });
 
 /**
+ * PATCH /api/notifications/read-all
+ * Mark all notifications as read for the authenticated user
+ */
+router.patch('/read-all', authenticate, async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    await Notification.updateMany(
+      { userId: req.user.userId, read: false },
+      { read: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'All notifications marked as read',
+    });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark all notifications as read',
+    });
+  }
+});
+
+/**
+ * PUT /api/notifications/read-all
+ * Alternate endpoint for marking all as read
+ */
+router.put('/read-all', authenticate, async (req) => {
+  return req.patch('/read-all'); // delegate to PATCH handler
+});
+
+/**
  * PATCH /api/notifications/:id/read
  * Mark a single notification as read
  */
@@ -140,39 +173,6 @@ router.patch('/:id/read', authenticate, async (req, res) => {
  */
 router.put('/:id/read', authenticate, async (req) => {
   return req.patch('/' + req.params.id + '/read'); // delegate to PATCH handler
-});
-
-/**
- * PATCH /api/notifications/read-all
- * Mark all notifications as read for the authenticated user
- */
-router.patch('/read-all', authenticate, async (req, res) => {
-  try {
-    const Notification = require('../models/Notification');
-    await Notification.updateMany(
-      { userId: req.user.userId, read: false },
-      { read: true }
-    );
-
-    res.json({
-      success: true,
-      message: 'All notifications marked as read',
-    });
-  } catch (error) {
-    console.error('Error marking all notifications as read:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to mark all notifications as read',
-    });
-  }
-});
-
-/**
- * PUT /api/notifications/read-all
- * Alternate endpoint for marking all as read
- */
-router.put('/read-all', authenticate, async (req) => {
-  return req.patch('/read-all'); // delegate to PATCH handler
 });
 
 /**

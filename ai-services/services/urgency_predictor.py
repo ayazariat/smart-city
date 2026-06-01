@@ -2,11 +2,13 @@
 Urgency Prediction Service (BL-24)
 ===================================
 Predict urgency level (LOW/MEDIUM/HIGH/CRITICAL) at complaint submission time.
-Uses HuggingFace zero-shot classification (free) for text analysis + rule-based scoring.
+Uses HuggingFace zero-shot classification + keyword-based fallback + optional Anthropic API.
 """
 
 from typing import Optional, Dict, Any
 from datetime import datetime
+import os
+import json
 
 # Try importing sklearn, but don't fail if not available
 try:
@@ -21,7 +23,7 @@ except ImportError:
 try:
     from transformers import pipeline as hf_pipeline
     _urgency_classifier = None
-    
+
     def get_urgency_classifier():
         global _urgency_classifier
         if _urgency_classifier is None:
@@ -41,10 +43,27 @@ try:
                     device=-1
                 )
         return _urgency_classifier
-    
+
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
+
+# Try importing anthropic for cloud-based fallback
+try:
+    import anthropic
+    _anthropic_client = None
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+
+    def get_anthropic_client():
+        global _anthropic_client
+        if _anthropic_client is None and ANTHROPIC_API_KEY:
+            _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        return _anthropic_client
+
+    ANTHROPIC_AVAILABLE = bool(ANTHROPIC_API_KEY)
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    ANTHROPIC_API_KEY = None
 
 from utils.text_preprocessor import (
     clean_text, 
@@ -87,43 +106,111 @@ class UrgencyPredictor:
                                      submitted_at: datetime) -> Dict[str, Any]:
         """
         Calculate urgency score using rule-based approach.
-        Used as fallback when no trained model exists.
+        Uses HuggingFace or Anthropic for intelligent text scoring,
+        with keyword-based fallback.
         """
         text = combine_fields(title, description)
         
-        # Use HuggingFace zero-shot for text urgency scoring (free, more accurate)
+        # Use AI (HuggingFace or Anthropic) for text urgency scoring
         text_score = 0.0
-        ai_keywords = []
+        ai_used = "none"
+
+        def _try_claude() -> bool:
+            nonlocal text_score, ai_used
+            if not ANTHROPIC_AVAILABLE:
+                return False
+            try:
+                client = get_anthropic_client()
+                if not client:
+                    return False
+                prompt = f"""Analyze this citizen complaint and classify its urgency level.
+Complaint: "{text}"
+
+Respond with exactly one word: CRITICAL, HIGH, MEDIUM, or LOW.
+
+CRITICAL = immediate danger to life or property (fire, flood, collapse, gas leak, electrocution)
+HIGH = serious problem needing quick attention (burst pipe, sewage overflow, road closed, near school, school zone)
+MEDIUM = moderate issue that should be addressed (damaged road, pothole, broken streetlight)
+LOW = minor inconvenience (graffiti, littering, general inquiry)
+
+Consider:
+- Severity of language used
+- Whether children or vulnerable people are near (school, hospital, etc.)
+- Whether infrastructure is damaged
+- Whether there is immediate danger
+
+Urgency:"""
+                response = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=10,
+                    temperature=0,
+                    system="You classify complaint urgency. Respond with one word only.",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                urgency_text = response.content[0].text.strip().upper()
+                if "CRITICAL" in urgency_text:
+                    text_score = 0.9
+                elif "HIGH" in urgency_text:
+                    text_score = 0.7
+                elif "MEDIUM" in urgency_text:
+                    text_score = 0.4
+                else:
+                    text_score = 0.15
+                ai_used = "claude-haiku"
+                return True
+            except Exception as e:
+                print(f"Anthropic urgency classification error: {e}")
+                return False
+
         if TRANSFORMERS_AVAILABLE:
             try:
                 classifier = get_urgency_classifier()
                 urgency_labels = [
                     "critical emergency requiring immediate action",
-                    "serious problem needing urgent attention",
+                    "high priority issue needing urgent attention",
                     "moderate issue that should be addressed",
                     "minor inconvenience with low priority"
                 ]
-                label_scores = {"critical": 1.0, "serious": 0.7, "moderate": 0.4, "minor": 0.15}
-                
+                label_scores = {"critical": 1.0, "high": 0.7, "moderate": 0.4, "minor": 0.15}
+
                 result = classifier(text[:512], urgency_labels, multi_label=False)
                 top_label = result["labels"][0]
                 top_score = result["scores"][0]
-                
-                # Map label to score
+
                 for key, score_val in label_scores.items():
                     if key in top_label:
                         text_score = score_val * top_score
                         break
-                ai_keywords = [top_label.split()[0]]  # e.g. "critical", "serious"
+                ai_used = "bart-large-mnli"
             except Exception as e:
                 print(f"HuggingFace urgency classification error: {e}")
+                if not _try_claude():
+                    text_score = calculate_keyword_score(text)
+                    ai_used = "keyword-fallback"
+
+        elif ANTHROPIC_AVAILABLE:
+            if not _try_claude():
                 text_score = calculate_keyword_score(text)
-                ai_keywords = []
+                ai_used = "keyword-fallback"
         else:
             text_score = calculate_keyword_score(text)
-        
+            ai_used = "keyword-only"
+
         keywords = extract_keywords_by_level(text)
-        
+
+        # Boost text_score if critical/high keywords found (even if AI gave lower score)
+        has_critical = len(keywords["critical"]) > 0
+        has_high = len(keywords["high"]) > 0
+        has_medium = len(keywords["medium"]) > 0
+
+        keyword_boost = 0.0
+        if has_critical:
+            keyword_boost += 0.3
+        if has_high:
+            keyword_boost += 0.2
+
+        text_score = max(text_score, keyword_boost)
+
         category_score = CATEGORY_BASE_SCORES.get((category or "OTHER").upper(), 0.3)
         
         citizen_score = CITIZEN_URGENCY_MAP.get((citizen_urgency or "MEDIUM").upper(), 0.2)
@@ -150,7 +237,7 @@ class UrgencyPredictor:
         
         return {
             "predictedUrgency": predicted_urgency,
-            "confidenceScore": 0.75 if TRANSFORMERS_AVAILABLE else 0.65,
+            "confidenceScore": 0.75 if ai_used not in ("keyword-only", "keyword-fallback", "none") else 0.65,
             "breakdown": {
                 "textScore": round(text_score, 3),
                 "citizenUrgencyScore": round(citizen_score, 3),
@@ -158,11 +245,11 @@ class UrgencyPredictor:
                 "communityScore": round(community_score, 3),
                 "timeScore": round(time_score, 3),
                 "sensitiveZoneBonus": round(zone_bonus, 3),
-                "keywordsDetected": ai_keywords + keywords["critical"] + keywords["high"] + keywords["medium"],
+                "keywordsDetected": keywords["critical"] + keywords["high"] + keywords["medium"],
                 "citizenUrgencyInput": (citizen_urgency or "MEDIUM").upper(),
-                "modelUsed": "bart-large-mnli" if TRANSFORMERS_AVAILABLE else "keyword-rules"
+                "modelUsed": ai_used
             },
-            "isRuleBased": not TRANSFORMERS_AVAILABLE
+            "isRuleBased": ai_used in ("keyword-only", "keyword-fallback", "none")
         }
     
     def _calculate_time_score(self, submitted_at: datetime) -> float:

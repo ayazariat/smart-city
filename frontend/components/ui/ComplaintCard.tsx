@@ -62,6 +62,7 @@ export interface BaseComplaint {
   duplicateOf?: string | null;
   duplicateOfTitle?: string | null;
   duplicateOfReferenceId?: string | null;
+  isAnonymous?: boolean;
 }
 
 interface ComplaintCardProps {
@@ -88,6 +89,7 @@ const urgencyColors: Record<string, { bg: string; text: string }> = {
 export const ComplaintCard = ({
   complaint,
   href,
+  showCitizen = false,
   showDepartment = false,
   showAssignedTo = false,
   isPublic = false,
@@ -417,7 +419,8 @@ export const ComplaintCard = ({
               {municipalityName}
             </span>
           )}
-          {showDepartment &&
+          {(showCitizen || showDepartment) &&
+            !complaint.isAnonymous &&
             (complaint.citizen ||
               (typeof complaint.createdBy === 'object' &&
                 complaint.createdBy?.fullName)) && (

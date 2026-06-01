@@ -78,7 +78,7 @@ async def predict_urgency_endpoint(request: UrgencyPredictionRequest) -> Dict[st
                         submitted_at=submitted_at
                     )
                 ),
-                timeout=4.0
+                timeout=12.0
             )
         except asyncio.TimeoutError:
             result = {
