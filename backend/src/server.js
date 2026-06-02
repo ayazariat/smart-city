@@ -2,6 +2,10 @@ const dotenv = require('dotenv');
 const path = require('path');
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
+if (typeof globalThis.crypto === 'undefined') {
+  globalThis.crypto = require('crypto');
+}
+
 const app = require('./app');
 const http = require('http');
 const connectDB = require('./config/db');
