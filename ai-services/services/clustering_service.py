@@ -1,6 +1,5 @@
 """
-Root Cause Clustering Service (BL-1770032236)
-==============================================
+
 Clusters complaints to identify systemic urban problems.
 Uses text embeddings and geographic clustering to group related issues.
 """

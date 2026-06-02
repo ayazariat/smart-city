@@ -1,8 +1,7 @@
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const User = require("../models/User");
 const Department = require("../models/Department");
 const Municipality = require("../models/Municipality");
-const { sendMagicLinkEmail } = require("../utils/mailer");
 const { normalizeMunicipality } = require("../utils/normalize");
 const { logAction } = require("../services/audit.service");
 
@@ -565,7 +564,7 @@ class UserController {
       }
 
       // Generate new magic token
-      const crypto = require("crypto");
+      const crypto = require("node:crypto");
       const magicToken = crypto.randomBytes(32).toString('hex');
       const magicTokenExpires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
 

@@ -25,7 +25,7 @@ async function predictCategory(description) {
       timeout: 10000
     });
     return response.data;
-  } catch (error) {
+  } catch {
     return {
       predicted: 'AUTRE',
       confidence: 0,
@@ -48,7 +48,7 @@ async function extractKeywords(description) {
       timeout: 10000
     });
     return response.data;
-  } catch (error) {
+  } catch {
     return {
       keywords: [],
       locationKeywords: [],
@@ -75,7 +75,7 @@ async function calculateSLA(category, urgency, createdAt) {
       timeout: 10000
     });
     return response.data;
-  } catch (error) {
+  } catch {
     const defaultDeadline = new Date();
     defaultDeadline.setDate(defaultDeadline.getDate() + 7);
     return {
@@ -107,7 +107,7 @@ async function processNewComplaint(complaint) {
           }
         });
       }
-    } catch (error) {
+    } catch {
       // Never throw - this runs in background
     }
   });
@@ -145,7 +145,7 @@ async function recalculateSLA(complaint) {
 /**
  * Predict department from category + other factors
  */
-async function predictDepartment(category, description = '', municipality = '') {
+async function predictDepartment(category) {
   try {
     // Static mapping from categories to departments (based on seed data)
     const categoryToDepartment = {
@@ -171,7 +171,7 @@ async function predictDepartment(category, description = '', municipality = '') 
       confidence: Math.round(confidence * 100),
       message: `Matched category "${category}" to ${dept.name}`
     };
-  } catch (error) {
+  } catch {
     return {
       suggestedDepartment: null,
       departmentName: 'Services Généraux',
@@ -181,11 +181,95 @@ async function predictDepartment(category, description = '', municipality = '') 
   }
 }
 
+const URGENCY_KEYWORDS = {
+  CRITICAL: ['danger', 'mort', 'accident', 'effondrement', 'incendie', 'explosion', 'électrocut', 'urgence vital', 'grave', 'blessé', 'urgence', 'urgent', 'collapse', 'fire', 'explosion', 'injury', 'fatal'],
+  HIGH: ['risque', 'danger', 'dégât', 'fuite gaz', 'casse', 'brisé', 'cassé', 'endommagé', 'obstrué', 'bouché', 'débord', 'inondation', 'flood', 'leak', 'broken', 'damage', 'hazard', 'safety'],
+  MEDIUM: ['problème', 'panne', 'dysfonctionnement', 'casse', 'trou', 'mauvais', 'abîmé', 'usé', 'dégradé', 'saleté', 'encombrant', 'issue', 'broken', 'worn', 'dirty', 'clogged'],
+  LOW: ['info', 'renseignement', 'suggestion', 'demande', 'question', 'information', 'request', 'suggestion', 'inquiry']
+};
+
+const CATEGORY_URGENCY = {
+  safety: 5, water: 4, waste: 3, roads: 2,
+  lighting: 2, property: 2, parks: 1, other: 1
+};
+
+const CITIZEN_URGENCY_SCORE = { CRITICAL: 3, HIGH: 2, MEDIUM: 1, LOW: 0 };
+
+function computeLocalUrgencyPrediction({ title, description, category, citizenUrgency, confirmationCount = 0 }) {
+  const text = `${title || ''} ${description || ''}`.toLowerCase();
+  const textKeywords = text.split(/\s+/);
+
+  let maxScore = 0;
+  for (const [, keywords] of Object.entries(URGENCY_KEYWORDS)) {
+    const score = keywords.filter(kw => textKeywords.some(w => w.includes(kw))).length;
+    if (score > maxScore) {
+      maxScore = score;
+    }
+  }
+
+  const textScore = Math.min(maxScore / 3, 1);
+  const categoryScore = CATEGORY_URGENCY[category] || 1;
+  const citizenScore = CITIZEN_URGENCY_SCORE[citizenUrgency] || 1;
+  const communityScore = Math.min(Math.log(confirmationCount + 1) / 2, 1);
+  const isNight = new Date().getHours() < 6 || new Date().getHours() > 20;
+  const timeScore = isNight ? 1 : 0;
+
+  const total = textScore * 3 + categoryScore + citizenScore + communityScore + timeScore;
+  let predictedUrgency;
+  if (total >= 9) predictedUrgency = 'CRITICAL';
+  else if (total >= 6) predictedUrgency = 'HIGH';
+  else if (total >= 3) predictedUrgency = 'MEDIUM';
+  else predictedUrgency = 'LOW';
+
+  const confidenceScore = Math.min((total / 12) * 0.8 + 0.15, 0.95);
+
+  const factors = [];
+  if (textScore > 0) factors.push(`${Math.round(textScore * 100)}% urgency keywords in text`);
+  factors.push(`${Math.round(categoryScore / 5 * 100)}% category base (${category})`);
+  factors.push(`${Math.round(citizenScore / 3 * 100)}% citizen assessment`);
+  if (communityScore > 0) factors.push(`confirmed by ${confirmationCount} people`);
+  if (isNight) factors.push('submitted during nighttime (higher risk)');
+
+  return {
+    predictedUrgency,
+    confidenceScore: Math.round(confidenceScore * 100) / 100,
+    breakdown: {
+      textScore: Math.round(textScore * 100) / 100,
+      categoryBaseScore: Math.round((categoryScore / 5) * 100) / 100,
+      citizenUrgencyScore: Math.round((citizenScore / 3) * 100) / 100,
+      communityScore: communityScore,
+      timeScore: timeScore,
+      sensitiveZoneBonus: 0
+    },
+    isRuleBased: true,
+    explanation: `Rule-based: ${factors.join(', ')}`
+  };
+}
+
+async function predictUrgency({ title, description, category, citizenUrgency, municipality, latitude, longitude, confirmationCount }) {
+  try {
+    const axios = require('axios');
+    const response = await axios.post(`${AI_SERVICE_URL}/ai/urgency/predict`, {
+      title, description, category, citizenUrgency: citizenUrgency || 'MEDIUM',
+      municipality: municipality || '', latitude, longitude,
+      confirmationCount: confirmationCount || 0, submittedAt: new Date()
+    }, { timeout: 5000 });
+    if (response.data?.data) {
+      return { ...response.data.data, isRemote: true };
+    }
+  } catch {
+    // Python service unavailable — use local fallback
+  }
+  return computeLocalUrgencyPrediction({ title, description, category, citizenUrgency, confirmationCount, latitude, longitude });
+}
+
 module.exports = {
   predictCategory,
   predictDepartment,
   extractKeywords,
   calculateSLA,
   processNewComplaint,
-  recalculateSLA
+  recalculateSLA,
+  predictUrgency,
+  computeLocalUrgencyPrediction
 };

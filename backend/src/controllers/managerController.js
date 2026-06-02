@@ -3,7 +3,7 @@ const User = require("../models/User");
 const RepairTeam = require("../models/RepairTeam");
 const Department = require("../models/Department");
 const notificationService = require("../services/notification.service");
-const { sendAssignmentEmails, translateDepartmentName } = require("../utils/mailer");
+const { translateDepartmentName } = require("../utils/mailer");
 
 const MANAGER_ACTIVE_STATUSES = [
   "VALIDATED",
@@ -92,8 +92,7 @@ class ManagerController {
         Complaint.find(query)
           .populate("createdBy", "fullName email phone")
           .populate("assignedTo", "fullName")
-          .populate("assignedTeam", "name members")
-          .populate("assignedDepartment", "name")
+                     .populate("assignedTeam", "name members")
           .sort({ priorityScore: -1, createdAt: -1 })
           .skip(skip)
           .limit(parseInt(limit)),
@@ -270,31 +269,40 @@ async assignTechnician(req, res) {
         metadata: { assignedBy: req.user.userId, departmentId: department?._id?.toString() },
       });
 
-      // Notification to citizen
+      // Notification+email to citizen
       if (complaint.createdBy) {
+        const citizenUser = await User.findById(complaint.createdBy).select('language').lean();
+        const citizenLang = citizenUser?.language || 'en';
         await notificationService.sendNotification(io, complaint.createdBy.toString(), {
-          type: "assigned_department",
+          type: "assigned",
           title: "Your complaint has been assigned",
-          message: `Your complaint "${complaint.title}" has been assigned to the department (${deptNameEn}). We are on it!`,
+          message: `Your complaint "${complaint.title}" has been assigned to a repair team. We are on it!`,
           complaintId: complaint._id.toString(),
-          metadata: { departmentId: department?._id?.toString(), departmentName: deptNameEn },
+          metadata: { departmentId: department?._id?.toString() },
         });
       }
 
-      // Get technician email
-      const technicianUser = await User.findById(technicianId).select('email').lean();
+      // Confirmation notification+email to manager
+      if (req.user.userId) {
+        await notificationService.sendNotification(io, req.user.userId, {
+          type: "assigned",
+          title: "Assignment confirmed",
+          message: `You have successfully assigned "${complaint.title}" to a repair team.`,
+          complaintId: complaint._id.toString(),
+          metadata: { departmentName: department?.name || 'Department' },
+        });
+      }
 
-      const technicianEmails = technicianUser?.email ? [technicianUser.email] : [];
-      const managerUser = { email: req.user.email, fullName: req.user.fullName };
-
-      // Trigger emails (non-blocking)
-      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser, 'department')
-        .catch(err => console.error('Assignment emails failed:', err));
+      // Re-fetch complaint with citizen info populated
+      const populatedComplaint = await Complaint.findById(complaint._id)
+        .populate("createdBy", "fullName email phone")
+        .populate("assignedTo", "fullName")
+        .populate("assignedTeam", "name members");
 
       res.json({
         success: true,
         message: "Complaint assigned to technician successfully",
-        data: complaint
+        data: populatedComplaint
       });
      } catch (error) {
        console.error("Manager assign technician error:", error);
@@ -386,19 +394,21 @@ async assignTechnician(req, res) {
         }
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Technician reassigned successfully",
-        data: complaint
+        data: populatedComplaint
       });
      } catch (error) {
-       console.error("Manager reassign technician error:", error);
-       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
-         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-       }
-       res.status(500).json({ success: false, message: "Failed to reassign technician" });
+        console.error("Manager reassign technician error:", error);
+        if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+          return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+        }
+        res.status(500).json({ success: false, message: "Failed to reassign technician" });
      }
-  }
+   }
 
   async assignTeam(req, res) {
     try {
@@ -446,6 +456,7 @@ async assignTechnician(req, res) {
 
       // Fetch department for email notifications
       const department = departmentId ? await Department.findById(departmentId) : null;
+      const technicianNames = technicians.map(t => t.fullName).filter(Boolean);
 
       const teamName = `RC-${complaint._id.toString().slice(-6)} ${complaint.category || 'Maintenance'} - Equipe`;
       const repairTeam = new RepairTeam({
@@ -504,17 +515,32 @@ async assignTechnician(req, res) {
         }
       }
 
-      // Send confirmation email to manager
-      const technicianEmails = technicians.map(t => t.email).filter(Boolean);
-      const managerUser = { email: req.user.email, fullName: req.user.fullName };
-      sendAssignmentEmails(complaint, department?.name || 'Department', technicianEmails, managerUser, 'repair_team')
-        .catch(err => console.error('Assignment emails failed:', err));
+      // Confirmation notification+email to manager
+      if (req.user.userId) {
+        try {
+          await notificationService.sendNotification(io, req.user.userId, {
+            type: "assigned",
+            title: "Assignment confirmed",
+            message: `You have successfully assigned "${complaint.title}" to the repair team (${teamName}).`,
+            complaintId: complaint._id.toString(),
+            metadata: { departmentName: department?.name || 'Department' },
+          });
+        } catch (notifError) {
+          console.error("Failed to notify manager:", notifError);
+        }
+      }
+
+      // Re-fetch complaint with citizen info populated
+      const populatedComplaint = await Complaint.findById(complaint._id)
+        .populate("createdBy", "fullName email phone")
+        .populate("assignedTo", "fullName")
+        .populate("assignedTeam", "name members");
 
       res.json({
         success: true,
         message: `Equipe creee avec ${technicianIds.length} techniciens`,
         data: {
-          complaint,
+          complaint: populatedComplaint,
           team: populatedTeam
         }
       });
@@ -609,19 +635,21 @@ async assignTechnician(req, res) {
         }
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint priority updated successfully",
-        data: complaint
+        data: populatedComplaint
       });
      } catch (error) {
-       console.error("Manager update priority error:", error);
-       if (error.message === "NO_DEPARTMENT_ASSIGNED") {
-         return res.status(400).json({ success: false, message: "No department assigned to this manager" });
-       }
-       res.status(500).json({ success: false, message: `Failed to update priority: ${error.message}` });
+        console.error("Manager update priority error:", error);
+        if (error.message === "NO_DEPARTMENT_ASSIGNED") {
+          return res.status(400).json({ success: false, message: "No department assigned to this manager" });
+        }
+        res.status(500).json({ success: false, message: `Failed to update priority: ${error.message}` });
      }
-  }
+   }
 
   async getTechnicians(req, res) {
     try {
@@ -638,9 +666,9 @@ async assignTechnician(req, res) {
         query.department = departmentId;
       }
       
-      // Filter by municipality if provided
+      // Filter by municipality if provided (case-insensitive)
       if (municipality) {
-        query.municipalityName = municipality;
+        query.municipalityName = { $regex: `^${municipality.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: "i" };
       }
       
       let technicians;
@@ -1046,10 +1074,12 @@ async assignTechnician(req, res) {
         metadata: { assignedBy: req.user.userId, reassignment: true },
       });
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Technician reassigned successfully",
-        data: complaint
+        data: populatedComplaint
       });
     } catch (error) {
       console.error("Reassign technician error:", error);
@@ -1106,7 +1136,12 @@ async assignTechnician(req, res) {
         });
       }
 
-      res.json({ success: true, message: "Complaint validated successfully", data: complaint });
+      const populatedComplaint = await Complaint.findById(complaint._id)
+        .populate("createdBy", "fullName email phone")
+        .populate("assignedTo", "fullName")
+        .populate("assignedTeam", "name members");
+
+      res.json({ success: true, message: "Complaint validated successfully", data: populatedComplaint });
     } catch (error) {
       console.error("Manager validate error:", error);
       res.status(500).json({ success: false, message: "Failed to validate complaint" });
@@ -1153,7 +1188,12 @@ async assignTechnician(req, res) {
         });
       }
 
-      res.json({ success: true, message: "Complaint rejected", data: complaint });
+      const populatedComplaint = await Complaint.findById(complaint._id)
+        .populate("createdBy", "fullName email phone")
+        .populate("assignedTo", "fullName")
+        .populate("assignedTeam", "name members");
+
+      res.json({ success: true, message: "Complaint rejected", data: populatedComplaint });
     } catch (error) {
       console.error("Manager reject error:", error);
       res.status(500).json({ success: false, message: "Failed to reject complaint" });

@@ -155,7 +155,7 @@ class _NewComplaintScreenState extends ConsumerState<NewComplaintScreen> {
           .timeout(const Duration(seconds: 5));
       if (!mounted) return;
       setState(() {
-        _aiPredictedCategory = prediction['category']?.toString();
+        _aiPredictedCategory = prediction['predicted']?.toString() ?? prediction['category']?.toString();
         final conf = prediction['confidence'];
         _aiCategoryConfidence = conf is int ? conf : (conf is double ? conf.round() : null);
         // Auto-select if no category chosen yet — normalize to uppercase

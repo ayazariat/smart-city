@@ -74,7 +74,6 @@ class TechnicianController {
       const [complaints, total] = await Promise.all([
         Complaint.find(query)
           .populate("createdBy", "fullName email phone")
-          .populate("assignedDepartment", "name")
           .populate("assignedTo", "fullName")
           .populate({
             path: "assignedTeam",
@@ -114,7 +113,6 @@ class TechnicianController {
       const complaint = await Complaint.findById(req.params.id)
         .populate("createdBy", "fullName email phone")
         .populate("assignedTo", "fullName")
-        .populate("assignedDepartment", "name")
         .populate({
           path: "assignedTeam",
           select: "name members",
@@ -254,10 +252,12 @@ class TechnicianController {
         }
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint started successfully",
-        data: complaint
+        data: populatedComplaint
       });
     } catch {
       res.status(500).json({ success: false, message: "Failed to start complaint" });
@@ -419,10 +419,12 @@ class TechnicianController {
         }
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint resolved successfully",
-        data: complaint
+        data: populatedComplaint
       });
     } catch (error) {
       console.error("Technician complete error:", error.message, error.stack);
@@ -503,10 +505,12 @@ class TechnicianController {
         }
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Before photo added successfully",
-        data: complaint
+        data: populatedComplaint
       });
     } catch (error) {
       console.error("Technician add before photo error:", error);
@@ -545,10 +549,12 @@ class TechnicianController {
 
       await complaint.save();
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "After photo added successfully",
-        data: complaint
+        data: populatedComplaint
       });
     } catch (error) {
       console.error("Technician add after photo error:", error);

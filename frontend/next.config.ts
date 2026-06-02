@@ -21,6 +21,16 @@ const nextConfig: NextConfig = {
   },
   // Increase static page generation timeout to avoid "failed to fetch" on slow machines
   staticPageGenerationTimeout: 120,
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+        ],
+      },
+    ];
+  },
   webpack(config, { isServer }) {
     if (!isServer) {
       // Prevent socket.io-client from breaking client-side webpack builds

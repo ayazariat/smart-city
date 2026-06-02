@@ -122,14 +122,15 @@ class AiService {
     double? longitude,
   }) async {
     try {
-      final response = await _apiClient.post('/ai/duplicate/check', {
+      final body = <String, dynamic>{
         'title': title,
         'description': description,
         'category': category,
         'municipality': municipality,
-        'latitude': ?latitude,
-        'longitude': ?longitude,
-      });
+      };
+      if (latitude != null) body['latitude'] = latitude;
+      if (longitude != null) body['longitude'] = longitude;
+      final response = await _apiClient.post('/ai/duplicate/check', body);
       return response?['data'];
     } catch (e) {
       return null;

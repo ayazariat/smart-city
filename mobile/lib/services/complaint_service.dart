@@ -191,7 +191,7 @@ class ComplaintService {
 
   Future<Map<String, dynamic>> predictCategory(String description) async {
     final response = await _apiClient.post('/ai/predict-category', {
-      'description': description,
+      'text': description,
     });
     // Handle {data: {...}} or direct response
     if (response is Map) {

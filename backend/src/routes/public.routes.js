@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const Complaint = require("../models/Complaint");
-const Department = require("../models/Department");
 const { getSlaHours, getSlaHoursByCategory } = require("../utils/slaConfig");
 const { authenticate, optionalAuth } = require("../middleware/auth");
 

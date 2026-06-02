@@ -68,7 +68,7 @@ const translateDepartmentName = (departmentName, language = 'en') => {
 };
 
 // Send account verification email
-const sendMagicLinkEmail = async (to, userId, token, fullName, timeoutMs = 15000) => {
+const sendMagicLinkEmail = async (to, userId, token, fullName) => {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const magicLink = `${frontendUrl}/verify-account?token=${token}&userId=${userId}`;
   const userName = fullName || to.split('@')[0] || "User";
@@ -315,7 +315,7 @@ const emailTemplates = require('./emailTemplates.js');
  * @param {Object} managerUser - Manager who assigned
  * @param {string} assignmentType - 'repair_team' or 'department'
  */
-const sendAssignmentEmails = async (complaint, departmentName, technicianEmails = [], managerUser = {}, assignmentType = 'repair_team') => {
+const sendAssignmentEmails = async (complaint, departmentName, technicianEmails = [], managerUser = {}, assignmentType = 'repair_team', technicianNames = []) => {
   const { FRONTEND_URL = 'http://localhost:3000' } = process.env;
   const municipalityZone = complaint.municipalityName || complaint.location?.municipality || 'your area';
   const submitDate = complaint.createdAt;
@@ -327,9 +327,10 @@ const sendAssignmentEmails = async (complaint, departmentName, technicianEmails 
       const User = require('../models/User');
       const citizen = await User.findById(complaint.createdBy).select('fullName email firstName language').lean();
       const citizenLang = citizen?.language || 'en';
+      const citizenName = citizen?.firstName || citizen?.fullName || 'Citizen';
       const deptNameForCitizen = translateDepartmentName(departmentName, citizenLang);
-      if (citizen?.email && citizen.firstName) {
-        const template = emailTemplates.assignmentCitizenEmail(citizen.firstName, complaint.title, submitDate, deptNameForCitizen, assignmentType);
+      if (citizen?.email) {
+        const template = emailTemplates.assignmentCitizenEmail(citizenName, complaint.title, submitDate, deptNameForCitizen, assignmentType);
         await transporter.sendMail({
           from,
           to: citizen.email,
@@ -341,15 +342,16 @@ const sendAssignmentEmails = async (complaint, departmentName, technicianEmails 
     }
 
     // 2. Technician emails
-    for (const techEmail of technicianEmails) {
-      const template = emailTemplates.assignmentTechnicianEmail('Technician', complaint.title, municipalityZone, deptNameEn, assignmentType);
+    for (let i = 0; i < technicianEmails.length; i++) {
+      const techName = (technicianNames && technicianNames[i]) || 'Technician';
+      const template = emailTemplates.assignmentTechnicianEmail(techName, complaint.title, municipalityZone, deptNameEn, assignmentType);
       await transporter.sendMail({
         from,
-        to: techEmail,
+        to: technicianEmails[i],
         subject: template.subject,
         html: template.html.replace(/\${FRONTEND_URL}/g, FRONTEND_URL)
       });
-      console.log(`[mailer] Assignment tech email (${assignmentType}) → ${techEmail}`);
+      console.log(`[mailer] Assignment tech email (${assignmentType}) → ${technicianEmails[i]}`);
     }
 
     // 3. Manager confirmation
@@ -393,7 +395,7 @@ const sendNotificationEmail = async (type, recipientUser, complaintData = {}, ex
 
     switch (type) {
       case 'complaint_submitted':
-        if (role === 'AGENT') {
+        if (role === 'MUNICIPAL_AGENT') {
           template = emailTemplates.newComplaintAgent(displayName, title, zone, municipalityName);
         }
         break;
@@ -412,6 +414,8 @@ const sendNotificationEmail = async (type, recipientUser, complaintData = {}, ex
           template = emailTemplates.complaintAssignedCitizen(displayName, title, departmentName);
         } else if (role === 'TECHNICIAN') {
           template = emailTemplates.complaintAssignedTechnician(displayName, title, departmentName, zone);
+        } else if (role === 'DEPARTMENT_MANAGER') {
+          template = emailTemplates.assignmentManagerEmail(title, departmentName, new Date(), 'repair_team');
         }
         break;
       case 'assigned_department':
@@ -422,7 +426,7 @@ const sendNotificationEmail = async (type, recipientUser, complaintData = {}, ex
         }
         break;
       case 'priority_changed':
-        if (role === 'AGENT') {
+        if (role === 'MUNICIPAL_AGENT') {
           template = emailTemplates.priorityChangedAgent(displayName, title, extras.newPriority, extras.managerName || 'Manager');
         }
         break;
@@ -442,7 +446,7 @@ const sendNotificationEmail = async (type, recipientUser, complaintData = {}, ex
         }
         break;
       case 'upvoted':
-        if (role === 'AGENT') {
+        if (role === 'MUNICIPAL_AGENT') {
           template = emailTemplates.complaintUpvotedAgent(displayName, title);
         }
         break;

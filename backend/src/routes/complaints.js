@@ -87,7 +87,6 @@ router.get("/archived", authenticate, async (req, res) => {
     const total = await Complaint.countDocuments(query);
     const complaints = await Complaint.find(query)
       .populate('createdBy', 'fullName email')
-      .populate('assignedDepartment', 'name')
       .populate('municipality', 'name')
       .skip((page-1)*limit)
       .limit(parseInt(limit))

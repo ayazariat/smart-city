@@ -10,9 +10,9 @@ AI_SERVICE_PORT = 8000
 MIN_TRAINING_SAMPLES = 20
 
 
-DUPLICATE_THRESHOLD = 0.5
-DUPLICATE_THRESHOLD_REVIEW = 0.5 
-DUPLICATE_THRESHOLD_PROBABLE = 0.5  
+DUPLICATE_THRESHOLD = 0.7
+DUPLICATE_THRESHOLD_REVIEW = 0.7 
+DUPLICATE_THRESHOLD_PROBABLE = 0.7  
 
 
 URGENCY_THRESHOLDS = {
@@ -87,14 +87,14 @@ HIGH_KEYWORDS = [
 ]
 
 MEDIUM_KEYWORDS = [
-    "nid de poule", "lampadaire", "ordures", "dégradé", "cassé",
+    "nid de poule", "lampadaire", "dégradé", "cassé",
     "trottoir abîmé", "bac débordant", "feux de signalisation", "graffiti",
-    "éclairage défaillant", "déchets accumulés",
+    "éclairage défaillant",
     # Arabic
-    "حفرة", "عمود إنارة", "نفايات", "تدهور", "مكسور",
-    "رصيف تالف", "حاوية ممتلئة", "إشارات مرور", "نفايات متراكمة",
+    "حفرة", "عمود إنارة", "تدهور", "مكسور",
+    "رصيف تالف", "حاوية ممتلئة", "إشارات مرور",
     # English
-    "pothole", "streetlight", "garbage", "broken", "damaged",
+    "pothole", "streetlight", "broken", "damaged",
     "cracked pavement", "overflowing bin", "graffiti", "littering"
 ]
 

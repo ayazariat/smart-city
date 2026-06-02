@@ -329,13 +329,13 @@ const notifyResolutionSubmitted = async (io, complaintId, resolutionNotes) => {
   const User = require('../models/User');
 
   const complaint = await Complaint.findById(complaintId)
-    .populate('assignedDepartment', 'id name responsable')
+    .populate('assignedDepartment.id', 'name responsable')
     .lean();
 
-  if (!complaint?.assignedDepartment) return null;
+  if (!complaint?.assignedDepartment?.id) return null;
 
   // Find department manager
-  const departmentManager = await User.findById(complaint.assignedDepartment.responsable).select('_id language').lean();
+  const departmentManager = await User.findById(complaint.assignedDepartment.id.responsable).select('_id language').lean();
   
   if (!departmentManager) return null;
 

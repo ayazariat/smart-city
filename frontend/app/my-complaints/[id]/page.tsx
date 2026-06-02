@@ -790,28 +790,52 @@ export default function MyComplaintDetailPage() {
               )}
             </section>
 
-            {/* Resolution Photos - Show when resolved */}
-            {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
-              <section className="bg-green-50 rounded-xl shadow-sm p-6" aria-labelledby="resolution-photos-title">
-                <h2 id="resolution-photos-title" className="text-lg font-semibold text-green-900 mb-4">
-                  {t("complaintDetail.resolutionPhotos", { defaultValue: "Resolution Photos" })} ({complaint.afterPhotos?.length || 0})
+            {/* Resolution - Show when resolved or closed */}
+            {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (
+              <section className="bg-green-50 rounded-xl shadow-sm p-6" aria-labelledby="resolution-title">
+                <h2 id="resolution-title" className="text-lg font-semibold text-green-900 mb-4">
+                  {complaint.status === "CLOSED" ? t("complaintDetail.resolutionClosed", { defaultValue: "Resolution" }) : t("complaintDetail.resolution", { defaultValue: "Resolution Report" })}
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {complaint.afterPhotos.map((item, index) => (
-                    <div key={index} className="relative aspect-square bg-green-100 rounded-lg overflow-hidden">
-                      <img
-                        src={getPhotoUrl(item.url) || undefined}
-                        alt={t("complaintDetail.resolutionPhotoAlt", { n: index + 1 })}
-                        className="w-full h-full object-cover hover:opacity-90 transition"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          target.parentElement!.innerHTML = '<div class="flex items-center justify-center h-full text-green-400"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>';
-                        }}
-                      />
+                
+                {/* Resolution Notes */}
+                {complaint.resolutionNotes && (
+                  <div className="bg-white rounded-lg p-4 border border-green-200 mb-4">
+                    <p className="text-sm font-semibold text-green-800 mb-2">
+                      {t("complaintDetail.techResolutionNotes", { defaultValue: "Technician's Notes" })}
+                    </p>
+                    <p className="text-slate-700 whitespace-pre-wrap">{complaint.resolutionNotes}</p>
+                    {complaint.resolvedAt && (
+                      <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
+                        {t("complaintDetail.resolvedOn", { defaultValue: "Resolved on" })} {new Date(complaint.resolvedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Resolution Photos */}
+                {complaint.afterPhotos && complaint.afterPhotos.length > 0 && (
+                  <>
+                    <p className="text-sm font-medium text-green-800 mb-3">
+                      {t("complaintDetail.resolutionPhotos", { defaultValue: "Resolution Photos" })} ({complaint.afterPhotos.length})
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {complaint.afterPhotos.map((item, index) => (
+                        <div key={index} className="relative aspect-square bg-green-100 rounded-lg overflow-hidden">
+                          <img
+                            src={getPhotoUrl(item.url) || undefined}
+                            alt={t("complaintDetail.resolutionPhotoAlt", { n: index + 1 })}
+                            className="w-full h-full object-cover hover:opacity-90 transition"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.parentElement!.innerHTML = '<div class="flex items-center justify-center h-full text-green-400"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>';
+                            }}
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </section>
             )}
 

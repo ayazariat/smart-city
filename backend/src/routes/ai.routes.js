@@ -18,10 +18,10 @@ router.post("/predict-category", async (req, res) => {
   } catch (error) {
     console.error("AI predict-category error:", error.message);
     res.status(500).json({
-      predicted: "AUTRE",
+      predicted: "other",
       confidence: 0,
       alternatives: [],
-      reasoning: "Service error, defaulting to AUTRE"
+      reasoning: "Service error, defaulting to other"
     });
   }
 });
@@ -107,7 +107,7 @@ router.get("/duplicate/stats", authenticate, authorize("MUNICIPAL_AGENT", "ADMIN
     const axios = require('axios');
     const response = await axios.get(`${AI_SERVICE_URL}/ai/duplicate/stats`, { timeout: 5000 });
     res.json({ data: response.data });
-  } catch (error) {
+  } catch {
     res.json({
       data: {
         total_checked: 0,
@@ -241,7 +241,7 @@ router.post("/extract-keywords", async (req, res) => {
     const axios = require('axios');
     const response = await axios.post(`${AI_SERVICE_URL}/extract-keywords`, { text }, { timeout: 10000 });
     res.json(response.data);
-  } catch (error) {
+  } catch {
     res.json({
       keywords: [],
       locationKeywords: [],
@@ -261,7 +261,7 @@ router.post("/calculate-sla", async (req, res) => {
       createdAt
     }, { timeout: 10000 });
     res.json(response.data);
-  } catch (error) {
+  } catch {
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + 7);
     res.json({
@@ -282,7 +282,7 @@ router.get("/trend/forecast", async (req, res) => {
       timeout: 10000
     });
     res.json(response.data);
-  } catch (error) {
+  } catch {
     // Generate mock data if AI service is unavailable
     const days = parseInt(period) || 7;
     const baseVolume = Math.floor(Math.random() * 20) + 10;
@@ -311,7 +311,7 @@ router.get("/trend/alerts", async (req, res) => {
     const axios = require('axios');
     const response = await axios.get(`${AI_SERVICE_URL}/ai/trend/alerts`, { timeout: 5000 });
     res.json(response.data);
-  } catch (error) {
+  } catch {
     // Return empty alerts if AI service is unavailable
     res.json({ data: [] });
   }

@@ -1,5 +1,6 @@
 const Complaint = require("../models/Complaint");
 const Department = require("../models/Department");
+const aiService = require("../services/ai.service");
 const User = require("../models/User");
 const AuditLog = require("../models/AuditLog");
 const notificationService = require("../services/notification.service");
@@ -14,17 +15,16 @@ const CITIZEN_ACTIVE_STATUSES = [
   "RESOLVED",
 ];
 
-// Category to department mapping
+// Category to department mapping (lowercase keys to match normalized category)
 const categoryToDepartment = {
-  ROAD: "Roads & Infrastructure",
-
-  LIGHTING: "Public Lighting",
-  WASTE: "Waste Management",
-  WATER: "Water & Sanitation",
-  SAFETY: "Public Safety",
-  PUBLIC_PROPERTY: "Public Property",
-  GREEN_SPACE: "Parks & Green Spaces",
-  OTHER: "General Services",
+  roads: "Roads & Infrastructure",
+  lighting: "Public Lighting",
+  waste: "Waste Management",
+  water: "Water & Sanitation",
+  safety: "Public Safety",
+  property: "Public Property",
+  parks: "Parks & Green Spaces",
+  other: "General Services",
 };
 
 // Municipality to governorate mapping
@@ -53,6 +53,11 @@ const municipalityToGovernorate = {
   "Tozeur": "Tozeur", "Nefta": "Tozeur", "Degache": "Tozeur",
   "Tunis": "Tunis", "Tunis Ville": "Tunis", "Cité El Khadra": "Tunis", "El Ouardia": "Tunis", "El Menzah": "Tunis", "Le Bardo": "Tunis",
   "Zaghouan": "Zaghouan", "Zaghouan Ville": "Zaghouan", "Nadhour": "Zaghouan"
+};
+
+// Normalize category aliases to match Mongoose enum
+const categoryAliases = {
+  'road': 'roads',
 };
 
 const extractKeywords = (text) => {
@@ -84,17 +89,18 @@ class CitizenController {
       if (title.trim().length < 5) return res.status(400).json({ message: "Title must be at least 5 characters" });
       if (description.trim().length < 20) return res.status(400).json({ message: "Description must be at least 20 characters" });
 
-      const validCategories = ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other", "WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER"];
+      const validCategories = ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other", "WASTE", "ROAD", "LIGHTING", "WATER", "SAFETY", "PUBLIC_PROPERTY", "GREEN_SPACE", "OTHER", "PROPERTY", "PARKS"];
+      const normalizedCategory = category ? (categoryAliases[category.toLowerCase()] || category.toLowerCase()) : category;
       if (category && !validCategories.includes(category)) return res.status(400).json({ message: "Invalid category" });
 
       // AI Category Prediction (BL-18)
-      let predictedCategory = category;
+      let predictedCategory = normalizedCategory || category;
       let aiCategoryMessage = null;
       let aiPredictedCategory = null;
       let aiCategoryConfidence = null;
       let categorySource = 'USER';
       
-      if (!category || category === "other" || category === "OTHER") {
+      if (!predictedCategory || predictedCategory === "other") {
         try {
           const axios = require('axios');
           const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
@@ -102,8 +108,8 @@ class CitizenController {
             text: `${title} ${description}`.trim()
           }, { timeout: 5000 });
           if (categoryResult.data?.predicted && validCategories.includes(categoryResult.data.predicted.toLowerCase())) {
-            predictedCategory = categoryResult.data.predicted.toLowerCase();
-            aiPredictedCategory = categoryResult.data.predicted.toLowerCase();
+            predictedCategory = categoryAliases[categoryResult.data.predicted.toLowerCase()] || categoryResult.data.predicted.toLowerCase();
+            aiPredictedCategory = categoryAliases[categoryResult.data.predicted.toLowerCase()] || categoryResult.data.predicted.toLowerCase();
             aiCategoryConfidence = categoryResult.data.confidence || 0;
             categorySource = 'AI';
           } else {
@@ -148,37 +154,31 @@ class CitizenController {
       const department = await Department.findOne({ name: departmentName });
       if (department) assignedDepartment = department._id;
 
-      // AI Urgency Prediction (BL-24)
-      let aiUrgencyPrediction = null;
-      try {
-        const axios = require('axios');
-        const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-        const urgencyResult = await axios.post(`${aiServiceUrl}/ai/urgency/predict`, {
-          title: title, description: description, category: predictedCategory,
-          citizenUrgency: urgency || 'MEDIUM', municipality: complaintMunicipalityName,
-          latitude: geoLocation?.coordinates?.[1], longitude: geoLocation?.coordinates?.[0],
-          confirmationCount: 0, submittedAt: new Date()
-        }, { timeout: 5000 });
-        if (urgencyResult.data?.data) {
-          aiUrgencyPrediction = urgencyResult.data.data.predictedUrgency;
-        }
-      } catch (urgencyError) {
-        console.error('AI Urgency prediction failed:', urgencyError.message);
-      }
-
-      // Calculate priority
-      const priorityResult = calculatePriorityAndSLA({ category: predictedCategory, aiUrgencyPrediction: aiUrgencyPrediction || 'MEDIUM', userUrgency: urgency, confirms: 0, upvotes: 0, locationType: 'NORMAL', createdAt: new Date() });
-      const { priorityScore, urgencyLevel, slaFinal } = priorityResult;
-
-      const keywords = extractKeywords(description);
       const user = await User.findById(req.user.userId).select('municipalityName municipality').lean();
       const complaintMunicipality = location?.municipality || location?.commune || "";
       const complaintMunicipalityName = complaintMunicipality || user?.municipalityName || "";
       const governorate = municipalityToGovernorate[complaintMunicipalityName] || municipalityToGovernorate[complaintMunicipality] || null;
       const normalizedGovernorate = normalizeGovernorate(governorate);
 
+      // AI Urgency Prediction — try Python service, fallback to local rule-based
+      const urgencyResult = await aiService.predictUrgency({
+        title, description: description, category: predictedCategory,
+        citizenUrgency: urgency || 'MEDIUM', municipality: complaintMunicipalityName,
+        latitude: geoLocation?.coordinates?.[1], longitude: geoLocation?.coordinates?.[0],
+        confirmationCount: 0
+      });
+      const aiPredictedUrgencyValue = urgencyResult.predictedUrgency;
+      const aiUrgencyPredictionData = urgencyResult;
+
+      // Calculate priority
+      const priorityResult = calculatePriorityAndSLA({ category: predictedCategory, aiUrgencyPrediction: aiPredictedUrgencyValue, userUrgency: urgency, confirms: 0, upvotes: 0, locationType: 'NORMAL', createdAt: new Date() });
+      const { priorityScore, urgencyLevel: rawUrgencyLevel, slaFinal } = priorityResult;
+      const urgencyLevel = rawUrgencyLevel === 'CRITICAL' ? 'URGENT' : rawUrgencyLevel;
+
+      const keywords = extractKeywords(description);
+
       const complaint = new Complaint({
-        title: title.trim(), description: description.trim(), category: predictedCategory || "OTHER", urgency: urgencyLevel, priorityScore,
+        title: title.trim(), description: description.trim(), category: predictedCategory || "other", urgency: urgencyLevel, priorityScore,
         location: Object.keys(geoLocation).length ? geoLocation : {}, municipalityName: complaintMunicipalityName,
         municipalityNormalized: normalizeMunicipality(complaintMunicipalityName), governorate, governorateNormalized: normalizedGovernorate, media: media || [],
         isAnonymous: !!isAnonymous, ownerName: !isAnonymous ? ownerName : undefined, phone: phone || undefined,
@@ -187,27 +187,10 @@ class CitizenController {
         aiPredictedCategory,
         aiCategoryConfidence,
         categorySource,
+        aiPredictedUrgency: aiPredictedUrgencyValue,
+        aiUrgencyPrediction: aiUrgencyPredictionData,
       });
       await complaint.save();
-
-      // AI Urgency Prediction (non-blocking)
-      try {
-        const axios = require('axios');
-        const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-        const urgencyResult = await axios.post(`${aiServiceUrl}/ai/urgency/predict`, {
-          title: complaint.title, description: complaint.description, category: complaint.category,
-          citizenUrgency: urgency || complaint.urgency, municipality: complaint.municipalityName,
-          latitude: complaint.location?.coordinates?.[1], longitude: complaint.location?.coordinates?.[0],
-          confirmationCount: 0, submittedAt: complaint.createdAt
-        }, { timeout: 5000 });
-        if (urgencyResult.data?.success && urgencyResult.data.data) {
-          complaint.aiUrgencyPrediction = urgencyResult.data.data;
-          complaint.aiPredictedUrgency = urgencyResult.data.data.predictedUrgency;
-          await complaint.save();
-        }
-      } catch (urgencyError) {
-        console.error('AI Urgency prediction failed:', urgencyError.message);
-      }
 
       // AI Duplicate Detection (BL-25)
       let duplicateWarning = null;
@@ -304,7 +287,7 @@ class CitizenController {
       if (category) query.category = category;
 
       const skip = (parseInt(page) - 1) * parseInt(limit);
-      const complaints = await Complaint.find(query).populate("assignedDepartment", "name email").populate("assignedTeam", "name").sort(sort).skip(skip).limit(parseInt(limit));
+      const complaints = await Complaint.find(query).populate("assignedTeam", "name").sort(sort).skip(skip).limit(parseInt(limit));
       const total = await Complaint.countDocuments(query);
 
       res.json({ message: "Complaints retrieved successfully", complaints, pagination: { total, page: parseInt(page), limit: parseInt(limit), pages: Math.ceil(total / parseInt(limit)) } });
@@ -318,7 +301,7 @@ class CitizenController {
   async getComplaintById(req, res) {
     try {
       const complaint = await Complaint.findOne({ _id: req.params.id, createdBy: req.user.userId })
-        .populate("assignedDepartment", "name email phone").populate("assignedTeam", "name members")
+        .populate("assignedTeam", "name members")
         .populate("createdBy", "fullName email phone").populate("municipality", "name governorate")
         .populate("assignedTo", "fullName email").populate("statusHistory.updatedBy", "fullName")
         .populate("duplicateOf", "referenceId title")

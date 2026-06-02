@@ -206,33 +206,36 @@ def normalize_text(text: str) -> str:
     return text
 
 # Try to import transformers for free zero-shot classification
-try:
-    from transformers import pipeline
-    _classifier = None
-    
-    def get_classifier():
-        global _classifier
-        if _classifier is None:
-            try:
-                import torch
-                device = 0 if torch.cuda.is_available() else -1
-                _classifier = pipeline(
-                    "zero-shot-classification",
-                    model="facebook/bart-large-mnli",
-                    device=device
-                )
-            except Exception as e:
-                print(f"Error loading classifier with device: {e}, falling back to CPU")
-                _classifier = pipeline(
-                    "zero-shot-classification",
-                    model="facebook/bart-large-mnli",
-                    device=-1
-                )
-        return _classifier
-    
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
+if os.environ.get("HF_DISABLE") == "true":
     TRANSFORMERS_AVAILABLE = False
+else:
+    try:
+        from transformers import pipeline
+        _classifier = None
+        
+        def get_classifier():
+            global _classifier
+            if _classifier is None:
+                try:
+                    import torch
+                    device = 0 if torch.cuda.is_available() else -1
+                    _classifier = pipeline(
+                        "zero-shot-classification",
+                        model="facebook/bart-large-mnli",
+                        device=device
+                    )
+                except Exception as e:
+                    print(f"Error loading classifier with device: {e}, falling back to CPU")
+                    _classifier = pipeline(
+                        "zero-shot-classification",
+                        model="facebook/bart-large-mnli",
+                        device=-1
+                    )
+            return _classifier
+        
+        TRANSFORMERS_AVAILABLE = True
+    except ImportError:
+        TRANSFORMERS_AVAILABLE = False
 
 # Optional: Anthropic as fallback if key is set
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

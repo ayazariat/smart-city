@@ -386,10 +386,8 @@ export default function NewComplaintPage() {
     return () => clearTimeout(timer);
   }, [title, description, category, categoryManuallySelected]);
 
-  // REMOVED: BL-24 Urgency prediction - User requested removal
-  // Urgency is now set manually by citizen via slider only
 
-  // BL-25: Proactive duplicate check while typing
+
   useEffect(() => {
     // Don't check if user has already overridden duplicate warnings
     if (duplicateOverride) {
@@ -415,7 +413,8 @@ export default function NewComplaintPage() {
           media.map((item) => item.url).filter(Boolean)
         );
         if (result && result.topMatches && result.topMatches.length > 0) {
-          setProactiveDuplicates(result.topMatches.slice(0, 3));
+          const filtered = result.topMatches.filter(m => (m.overallScore || 0) >= 0.7);
+          setProactiveDuplicates(filtered.slice(0, 3));
         } else {
           setProactiveDuplicates([]);
         }

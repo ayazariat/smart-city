@@ -24,17 +24,19 @@ async def _fetch_candidates_from_db(municipality: str, category: str, days_back:
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
         
-        # Build query - search for ALL complaints (not filtered by user or municipality)
-        # This ensures similar complaints are found regardless of who created them or where
+        # Build query - search within same municipality to avoid false positives
+        # across different cities (same category + generic text can trigger false duplicates)
         query = {
             "createdAt": {"$gte": cutoff},
             "status": {"$nin": ["REJECTED", "ARCHIVED"]},
             "isArchived": {"$ne": True},
-            "isDuplicate": {"$ne": True}
+            "isDuplicate": {"$ne": True},
+            "municipalityName": {"$regex": f"^{municipality}$", "$options": "i"}
         }
         
-        # NOTE: Municipality filter removed to search across ALL municipalities
-        # This ensures users see similar complaints from other areas as well
+        # If municipality is empty, fall back to broader search
+        if not municipality or municipality.strip() == "":
+            del query["municipalityName"]
             
         print(f"[DUPLICATE] Query: {query}")
         

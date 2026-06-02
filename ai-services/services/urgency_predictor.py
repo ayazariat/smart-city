@@ -1,8 +1,7 @@
 """
-Urgency Prediction Service (BL-24)
-===================================
+
 Predict urgency level (LOW/MEDIUM/HIGH/CRITICAL) at complaint submission time.
-Uses HuggingFace zero-shot classification + keyword-based fallback + optional Anthropic API.
+Uses HuggingFace zero-shot classification + keyword-based fallback +  Anthropic API.
 """
 
 from typing import Optional, Dict, Any
@@ -20,33 +19,36 @@ except ImportError:
     SKLEARN_AVAILABLE = False
 
 # Try importing transformers for free zero-shot urgency classification
-try:
-    from transformers import pipeline as hf_pipeline
-    _urgency_classifier = None
-
-    def get_urgency_classifier():
-        global _urgency_classifier
-        if _urgency_classifier is None:
-            try:
-                import torch
-                device = 0 if torch.cuda.is_available() else -1
-                _urgency_classifier = hf_pipeline(
-                    "zero-shot-classification",
-                    model="facebook/bart-large-mnli",
-                    device=device
-                )
-            except Exception as e:
-                print(f"Error loading urgency classifier with device: {e}, falling back to CPU")
-                _urgency_classifier = hf_pipeline(
-                    "zero-shot-classification",
-                    model="facebook/bart-large-mnli",
-                    device=-1
-                )
-        return _urgency_classifier
-
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
+if os.environ.get("HF_DISABLE") == "true":
     TRANSFORMERS_AVAILABLE = False
+else:
+    try:
+        from transformers import pipeline as hf_pipeline
+        _urgency_classifier = None
+
+        def get_urgency_classifier():
+            global _urgency_classifier
+            if _urgency_classifier is None:
+                try:
+                    import torch
+                    device = 0 if torch.cuda.is_available() else -1
+                    _urgency_classifier = hf_pipeline(
+                        "zero-shot-classification",
+                        model="facebook/bart-large-mnli",
+                        device=device
+                    )
+                except Exception as e:
+                    print(f"Error loading urgency classifier with device: {e}, falling back to CPU")
+                    _urgency_classifier = hf_pipeline(
+                        "zero-shot-classification",
+                        model="facebook/bart-large-mnli",
+                        device=-1
+                    )
+            return _urgency_classifier
+
+        TRANSFORMERS_AVAILABLE = True
+    except ImportError:
+        TRANSFORMERS_AVAILABLE = False
 
 # Try importing anthropic for cloud-based fallback
 try:
@@ -288,20 +290,38 @@ Urgency:"""
         
         urgency = prediction["predictedUrgency"]
         
-        parts.append(f"{urgency} urgency predicted based on:")
+        citizen_input = breakdown.get("citizenUrgencyInput", "")
+        text_score = breakdown.get("textScore", 0)
+        category_score = breakdown.get("categoryBaseScore", 0)
+        community_score = breakdown.get("communityScore", 0)
         
-        if breakdown.get("citizenUrgencyInput"):
-            parts.append(f"citizen flagged {breakdown['citizenUrgencyInput']}")
+        if text_score >= 0.6:
+            parts.append(f"strong urgency language detected in description")
+        elif text_score >= 0.3:
+            parts.append(f"moderate urgency language detected")
+        
+        if category_score >= 0.6:
+            parts.append(f"category type suggests higher priority")
+        
+        if citizen_input and citizen_input in ("HIGH", "URGENT", "CRITICAL"):
+            parts.append(f"citizen reported as {citizen_input}")
+        
+        if community_score > 0.3:
+            parts.append(f"confirmed by community members")
         
         if keywords:
-            keyword_str = ", ".join(keywords[:3])
-            parts.append(f"keywords detected: {keyword_str}")
+            relevant = [k for k in keywords if k.lower() not in (
+                "ordures", "garbage", "dechets", "salete", "proprete",
+                "nid de poule", "lampadaire", "trottoir", "graffiti"
+            )]
+            if relevant:
+                keyword_str = ", ".join(relevant[:3])
+                parts.append(f"trigger words: {keyword_str}")
         
-        category_score = breakdown.get("categoryBaseScore", 0)
-        if category_score >= 0.6:
-            parts.append(f"{category_score:.0%} category risk")
+        if not parts:
+            parts.append(f"standard priority assessment")
         
-        return " ".join(parts)
+        return f"{urgency}: {'; '.join(parts)}."
     
     def predict(self, title: str, description: str, category: str,
                 citizen_urgency: str, municipality: str,

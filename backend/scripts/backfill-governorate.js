@@ -1,3 +1,4 @@
+/* global db, print, printjson */
 // Backfill governorate field on existing complaints
 // Run: mongosh smart-city backend/scripts/backfill-governorate.js
 

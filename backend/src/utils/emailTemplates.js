@@ -9,7 +9,7 @@ module.exports = {
   assignmentCitizenEmail: (firstName, complaintTitle, submitDate, departmentName, assignmentType = 'repair_team') => {
     const assignPhrase = assignmentType === 'department'
       ? `has been assigned to the department <strong>${departmentName}</strong>`
-      : `has been assigned to the repair team <strong>${departmentName}</strong>`;
+      : `has been assigned to a repair team`;
     const subjectText = assignmentType === 'department'
       ? 'Your complaint has been assigned to a department'
       : 'Your complaint has been assigned to a repair team';
@@ -39,9 +39,9 @@ module.exports = {
   assignmentTechnicianEmail: (firstName, complaintTitle, municipalityZone, departmentName, assignmentType = 'repair_team') => {
     const assignPhrase = assignmentType === 'department'
       ? `has been assigned to your department <strong>(${departmentName})</strong>`
-      : `has been assigned to your repair team <strong>(${departmentName})</strong>`;
+      : `has been assigned to your team`;
     return {
-      subject: `New complaint assigned to your ${assignmentType === 'department' ? 'department' : 'repair team'}`,
+      subject: `New complaint assigned to your ${assignmentType === 'department' ? 'department' : 'team'}`,
       html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; margin-bottom: 20px;">
@@ -66,7 +66,7 @@ module.exports = {
   assignmentManagerEmail: (complaintTitle, departmentName, assignDate, assignmentType = 'repair_team') => {
     const assignPhrase = assignmentType === 'department'
       ? `to the <strong>${departmentName}</strong> department`
-      : `to the <strong>${departmentName}</strong> repair team`;
+      : `to the repair team`;
     return {
       subject: `Assignment confirmed — ${complaintTitle}`,
       html: `
@@ -169,7 +169,7 @@ module.exports = {
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
         <p>Hello <strong>${firstName}</strong>,</p>
-        <p>Your complaint <strong>"${complaintTitle}"</strong> has been assigned to the repair team <strong>${departmentName}</strong>.</p>
+        <p>Your complaint <strong>"${complaintTitle}"</strong> has been assigned to a repair team.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/my-complaints" style="background: #FF9800; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
             Track Progress
@@ -235,7 +235,7 @@ module.exports = {
           <h1 style="color: #2E7D32; margin: 0;">Smart City Tunisia</h1>
         </div>
         <p>Hello <strong>${techName}</strong>,</p>
-        <p>Complaint <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> has been assigned to your repair team <strong>(${departmentName})</strong>.</p>
+        <p>Complaint <strong>"${complaintTitle}"</strong> in <strong>${municipalityZone}</strong> has been assigned to your team.</p>
         <div style="text-align: center; margin: 30px 0;">
           <a href="${FRONTEND_URL}/dashboard" style="background: #FF9800; color: white; padding: 12px 24px; display: inline-block; text-decoration: none; border-radius: 8px; font-weight: bold;">
             Review Assignment

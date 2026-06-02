@@ -5,6 +5,7 @@ const { normalizeMunicipality } = require("../utils/normalize");
 const notificationService = require("../services/notification.service");
 const { calculateSLADeadline } = require("../utils/sla");
 const { SLA_HOURS } = require("../utils/slaConfig");
+const { translateDepartmentName } = require("../utils/mailer");
 
 const ACTIVE_STATUSES = [
   "SUBMITTED",
@@ -89,7 +90,6 @@ class AgentController {
         Complaint.find(query)
           .populate("createdBy", "fullName email")
           .populate("assignedTo", "fullName")
-          .populate("assignedDepartment", "name")
           .populate("municipality", "name governorate")
           .select('location title category status referenceId createdAt municipalityName municipality municipalityNormalized assignedTo assignedDepartment assignedTeam media description urgency priorityScore slaDeadline')
           .sort({ createdAt: -1 })
@@ -150,7 +150,6 @@ class AgentController {
 
       const allComplaints = await Complaint.find({})
         .populate("createdBy", "fullName email phone")
-        .populate("assignedDepartment", "name")
         .sort({ createdAt: -1 });
 
       const complaints = allComplaints.filter(c => {
@@ -214,7 +213,9 @@ class AgentController {
         }
       }
 
-      res.json({ success: true, message: "Complaint validated successfully", data: complaint });
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
+      res.json({ success: true, message: "Complaint validated successfully", data: populatedComplaint });
     } catch (error) {
       console.error("Error validating complaint:", error);
       res.status(500).json({ message: "Failed to validate complaint" });
@@ -290,7 +291,9 @@ class AgentController {
         }
       }
 
-      res.json({ success: true, message: "Complaint rejected", data: complaint });
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
+      res.json({ success: true, message: "Complaint rejected", data: populatedComplaint });
     } catch (error) {
       console.error("Error rejecting complaint:", error);
       res.status(500).json({ message: "Failed to reject complaint" });
@@ -332,18 +335,24 @@ class AgentController {
 
       complaint.reportViewedAt = new Date();
       await complaint.save();
+
+      const populatedComplaint = await Complaint.findById(complaint._id)
+        .populate("createdBy", "fullName email phone")
+        .populate("assignedTo", "fullName")
+        .populate("beforePhotos.takenBy", "fullName")
+        .populate("afterPhotos.takenBy", "fullName");
       
       res.json({ 
         success: true, 
         message: "Resolution report available for review",
         data: {
-          complaint,
+          complaint: populatedComplaint,
           resolutionReport: {
-            technicianName: complaint.assignedTo?.fullName || "Unknown",
-            resolvedAt: complaint.resolvedAt,
-            resolutionNotes: complaint.resolutionNotes,
-            beforePhotos: complaint.beforePhotos || [],
-            afterPhotos: complaint.afterPhotos || [],
+            technicianName: populatedComplaint.assignedTo?.fullName || "Unknown",
+            resolvedAt: populatedComplaint.resolvedAt,
+            resolutionNotes: populatedComplaint.resolutionNotes,
+            beforePhotos: populatedComplaint.beforePhotos || [],
+            afterPhotos: populatedComplaint.afterPhotos || [],
           }
         },
         requiresApproval: true
@@ -408,16 +417,21 @@ class AgentController {
       if (complaint.createdBy) {
         const dept = await Department.findById(departmentId).select('name').lean();
         const deptName = dept?.name || 'a department';
+        const citizen = await User.findById(complaint.createdBy).select('language').lean();
+        const citizenLang = citizen?.language || 'en';
+        const deptNameTranslated = translateDepartmentName(deptName, citizenLang);
         await notificationService.sendNotification(req.app?.get?.('io'), complaint.createdBy.toString(), {
-          type: "assigned",
+          type: "assigned_department",
           title: "Complaint Assigned",
-          message: `Your complaint '${complaint.title}' has been assigned to ${deptName}.`,
+          message: `Your complaint '${complaint.title}' has been assigned to the department (${deptNameTranslated}).`,
           complaintId: complaint._id.toString(),
-          metadata: { departmentName: deptName, departmentId },
+          metadata: { departmentName: deptNameTranslated, departmentId },
         });
       }
 
-      res.json({ success: true, message: "Complaint assigned to department", data: complaint });
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
+      res.json({ success: true, message: "Complaint assigned to department", data: populatedComplaint });
     } catch (error) {
       console.error("Error assigning department:", error);
       res.status(500).json({ message: "Failed to assign department" });
@@ -500,7 +514,9 @@ class AgentController {
         }
       } catch (e) { console.error("Tech notif error:", e.message); }
 
-      res.json({ success: true, message: "Resolution approved and complaint closed", data: savedComplaint });
+      const populatedComplaint = await Complaint.findById(savedComplaint._id).populate("createdBy", "fullName email phone");
+
+      res.json({ success: true, message: "Resolution approved and complaint closed", data: populatedComplaint });
     } catch (error) {
       console.error("Error approving resolution:", error.message);
       res.status(500).json({ success: false, message: "Failed to approve resolution" });
@@ -593,7 +609,9 @@ class AgentController {
         console.error("Error sending manager notification:", notifErr);
       }
 
-      res.json({ success: true, message: "Resolution rejected, complaint returned to IN_PROGRESS", data: complaint });
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
+      res.json({ success: true, message: "Resolution rejected, complaint returned to IN_PROGRESS", data: populatedComplaint });
     } catch (error) {
       console.error("Error rejecting resolution:", error);
       res.status(500).json({ success: false, message: "Failed to reject resolution" });
@@ -631,7 +649,7 @@ class AgentController {
       const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-      const [historicalTotal, activeTotal, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory, resolvedWithRatingCount, csatCount, confirmationCount, totalResolvedForSatisfaction, resolvedWithConfirmation] = await Promise.all([
+      const [historicalTotal, submitted, validated, assigned, inProgress, resolved, closed, rejected, overdue, atRisk, byCategory, resolvedWithRatingCount, csatCount, totalResolvedForSatisfaction, resolvedWithConfirmation] = await Promise.all([
         Complaint.countDocuments(historicalQuery),
         Complaint.countDocuments(activeQuery),
         Complaint.countDocuments({ ...historicalQuery, status: "SUBMITTED" }),

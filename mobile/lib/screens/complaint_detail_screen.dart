@@ -791,36 +791,10 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                   ),
                 ),
               ],
-              if (c.resolutionNotes != null) ...[
+              if (c.status == 'RESOLVED' || c.status == 'CLOSED') ...[
                 const SizedBox(height: 12),
                 _buildSection(
-                  'Technician report',
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFDCFCE7),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFBBF7D0)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green[600]),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            c.resolutionNotes!,
-                            style: TextStyle(color: Colors.green[700]),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              if (c.beforePhotos.isNotEmpty || c.afterPhotos.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildSection(
-                  'Technician proof',
+                  'Resolution Report',
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -837,10 +811,32 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (c.resolutionNotes != null) ...[
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green[600], size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  c.resolutionNotes!,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.green[700],
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (c.beforePhotos.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
                           const Text(
                             'Before',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                           const SizedBox(height: 8),
                           SizedBox(
@@ -859,9 +855,11 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                         ],
                         if (c.afterPhotos.isNotEmpty) ...[
                           const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
                           const Text(
                             'After',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                           const SizedBox(height: 8),
                           SizedBox(
@@ -876,6 +874,24 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                                 return _buildProofImage(url);
                               },
                             ),
+                          ),
+                        ],
+                        if (c.resolvedAt != null) ...[
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Icon(Icons.event, size: 16, color: AppColors.textSecondary),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Resolved on ${_formatDate(c.resolvedAt)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ],
@@ -920,6 +936,70 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
                   ),
                 ),
               ],
+              const SizedBox(height: 12),
+              if (c.aiPredictedUrgency != null || c.aiUrgencyPrediction != null)
+                _buildSection(
+                  'AI Urgency Prediction',
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _getUrgencyColor(c.aiPredictedUrgency).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                c.aiPredictedUrgency ?? 'N/A',
+                                style: TextStyle(
+                                  color: _getUrgencyColor(c.aiPredictedUrgency),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            if (c.aiUrgencyPrediction?['confidenceScore'] != null) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                'Confidence: ${(c.aiUrgencyPrediction!['confidenceScore'] * 100).round()}%',
+                                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (c.aiUrgencyPrediction?['explanation'] != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            c.aiUrgencyPrediction!['explanation'].toString(),
+                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                        ],
+                        if (c.aiUrgencyPrediction?['breakdown'] != null) ...[
+                          const SizedBox(height: 12),
+                          _buildBreakdownBar('Text analysis', c.aiUrgencyPrediction!['breakdown']['textScore'], const Color(0xFF8B5CF6)),
+                          _buildBreakdownBar('Citizen urgency', c.aiUrgencyPrediction!['breakdown']['citizenUrgencyScore'], const Color(0xFFF97316)),
+                          _buildBreakdownBar('Category base', c.aiUrgencyPrediction!['breakdown']['categoryBaseScore'], const Color(0xFF3B82F6)),
+                          _buildBreakdownBar('Community', c.aiUrgencyPrediction!['breakdown']['communityScore'], const Color(0xFF14B8A6)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
               const SizedBox(height: 12),
               _buildSection(
                 'Community',
@@ -1352,6 +1432,42 @@ class _ComplaintDetailScreenState extends ConsumerState<ComplaintDetailScreen> {
             ),
           ),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreakdownBar(String label, dynamic score, Color color) {
+    final double val = (score is num) ? score.toDouble() : 0.0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: val.clamp(0.0, 1.0),
+                backgroundColor: color.withValues(alpha: 0.15),
+                color: color,
+                minHeight: 8,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 36,
+            child: Text(
+              '${(val * 100).round()}%',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+              textAlign: TextAlign.right,
+            ),
+          ),
         ],
       ),
     );

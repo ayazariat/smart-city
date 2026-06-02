@@ -96,7 +96,7 @@ const formatDateTime = (date, locale = 'en') => {
 
   try {
     return d.toLocaleDateString(locale === 'ar' ? 'ar-TN' : locale === 'fr' ? 'fr-TN' : 'en-TN', options);
-  } catch (error) {
+  } catch {
     return d.toLocaleDateString('en-US', options);
   }
 };

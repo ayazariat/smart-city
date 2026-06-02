@@ -36,6 +36,8 @@ class Complaint {
   final Map<String, dynamic>? aiDuplicateCheck;
   final String? duplicateStatus;
   final String? phone;
+  final String? aiPredictedUrgency;
+  final Map<String, dynamic>? aiUrgencyPrediction;
 
   Complaint({
     required this.id,
@@ -75,6 +77,8 @@ class Complaint {
     this.aiDuplicateCheck,
     this.duplicateStatus,
     this.phone,
+    this.aiPredictedUrgency,
+    this.aiUrgencyPrediction,
   });
 
   factory Complaint.fromJson(Map<String, dynamic> json) {
@@ -174,6 +178,12 @@ class Complaint {
               : null,
       duplicateStatus: json['duplicateStatus'],
       phone: json['phone'],
+      aiPredictedUrgency: json['aiPredictedUrgency'],
+      aiUrgencyPrediction: json['aiUrgencyPrediction'] is Map<String, dynamic>
+          ? json['aiUrgencyPrediction'] as Map<String, dynamic>
+          : json['aiUrgencyPrediction'] is Map
+              ? Map<String, dynamic>.from(json['aiUrgencyPrediction'] as Map)
+              : null,
     );
   }
 

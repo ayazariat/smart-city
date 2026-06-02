@@ -1,6 +1,5 @@
 """
-Trend Prediction Service (BL-37)
-==================================
+
 Forecast complaint volumes by category and municipality for the next 7 and 30 days.
 Uses sklearn Ridge regression (free) with seasonal features, falls back to numpy linear regression.
 Runs as a nightly batch job.

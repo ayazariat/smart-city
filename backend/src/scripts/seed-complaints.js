@@ -5,8 +5,6 @@
  */
 require("dotenv").config();
 const mongoose = require("mongoose");
-const path = require("path");
-const fs = require("fs");
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/smart-city";
 
@@ -25,20 +23,6 @@ const SAMPLE_IMAGES = [
 ];
 
 const CATEGORIES = ["waste", "roads", "lighting", "water", "safety", "property", "parks", "other"];
-const STATUSES = ["SUBMITTED", "VALIDATED", "ASSIGNED", "IN_PROGRESS", "RESOLVED"];
-const MUNICIPALITIES = ["Tunis", "Ariana", "Carthage", "Le Bardo"];
-
-const SAMPLE_COMPLAINTS = [
-  { title: "Poubelle débordante rue principale", description: "Benna pleine depuis 3 jours", category: "waste", municipalityName: "Tunis" },
-  { title: "Trottoir endommagé avenue Habib Bourguiba", description: "Dangereux pour piétons", category: "roads", municipalityName: "Tunis" },
-  { title: "Lampadaire cassé croisement rue 1 et 2", description: "Rue sombre la nuit", category: "lighting", municipalityName: "Ariana" },
-  { title: "Fuite d'eau chaussée", description: "Eau stagnante depuis 2 jours", category: "water", municipalityName: "Carthage" },
-  { title: "Bruit excessif chantier nuit", description: "Impossible de dormir", category: "safety", municipalityName: "Le Bardo" },
-  { title: "Banc public cassé parc central", description: "Mobilier urbain dégradé", category: "property", municipalityName: "Tunis" },
-  { title: "Arbre tombé espace vert", description: "Danger pour passants", category: "parks", municipalityName: "Ariana" },
-  { title: "Problème signalisation non classé", description: "Autre problème", category: "other", municipalityName: "Carthage" },
-  // Add more for 30 total...
-];
 
 async function seedComplaints() {
   try {

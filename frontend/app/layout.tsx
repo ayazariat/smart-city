@@ -23,7 +23,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("smartcity-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");var l=localStorage.getItem("smartcity-lang");if(l){document.documentElement.lang=l;if(l==="ar"){document.documentElement.dir="rtl"}}}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem("smartcity-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");var l=localStorage.getItem("smartcity-lang");if(l){document.documentElement.lang=l;if(l==="ar"){document.documentElement.dir="rtl"}}}catch(e){}})();var _ow=console.warn;console.warn=function(){if(arguments[0]&&typeof arguments[0]=="string"&&arguments[0].includes("width(-1) and height(-1) of chart"))return;_ow.apply(console,arguments)};`,
           }}
         />
       </head>

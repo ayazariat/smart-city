@@ -44,6 +44,11 @@ from services.sla_calculator import calculate_sla, SLACalculationRequest
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Warm up AI models at startup to avoid cold-start timeouts."""
+    if os.environ.get("HF_DISABLE") == "true":
+        print("[WARMUP] HuggingFace disabled via HF_DISABLE=true — skipping warm-up (Render low-memory mode)")
+        yield
+        return
+
     print("[WARMUP] Pre-warming AI models...")
     warmup_start = time.time()
 
@@ -96,11 +101,11 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         duration = int((time.time() - start) * 1000)
-        print(f"[AI] {request.method} {request.url.path} → 500 ({duration}ms)")
+        print(f"[AI] {request.method} {request.url.path} -> 500 ({duration}ms)")
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=500, content={"success": False, "message": "Internal error"})
     duration = int((time.time() - start) * 1000)
-    print(f"[AI] {request.method} {request.url.path} → {response.status_code} ({duration}ms)")
+    print(f"[AI] {request.method} {request.url.path} -> {response.status_code} ({duration}ms)")
     return response
 
 

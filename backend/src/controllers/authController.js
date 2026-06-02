@@ -1,5 +1,5 @@
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const PendingUser = require("../models/PendingUser");
@@ -191,7 +191,7 @@ class AuthController {
           verificationLink: `${process.env.FRONTEND_URL || "http://localhost:3000"}/verify-account?token=${magicToken}&userId=${pendingUser._id.toString()}`,
         }),
       });
-    } catch (error) {
+    } catch {
       res.status(500).json({ message: "Erreur serveur lors de l'inscription" });
     }
   }
@@ -252,7 +252,7 @@ class AuthController {
       await PendingUser.deleteOne({ email: normalizedEmail });
 
       res.json({ message: "Account verified successfully! You can now log in." });
-    } catch (error) {
+    } catch {
       res.status(500).json({ message: "Erreur serveur lors de la vérification" });
     }
   }

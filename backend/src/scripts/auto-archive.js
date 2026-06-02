@@ -33,7 +33,6 @@ async function autoArchive() {
     }
 
     // Archive each complaint
-    let archivedCount = 0;
     for (const complaint of complaintsToArchive) {
       try {
         complaint.status = 'ARCHIVED';
@@ -48,13 +47,12 @@ async function autoArchive() {
         });
 
         await complaint.save();
-        archivedCount++;
-      } catch (err) {
+      } catch {
         // Continue with other complaints
       }
     }
     
-  } catch (error) {
+  } catch {
     // Handle error silently
   } finally {
     await mongoose.disconnect();

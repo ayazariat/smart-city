@@ -13,7 +13,7 @@ const Confirmation = require("./src/models/Confirmation");
 mongoose
   .connect("mongodb://127.0.0.1:27017/smartcitydb")
   .then(() => {})
-  .catch((err) => {});
+  .catch(() => {});
 
 async function runTests() {
   try {

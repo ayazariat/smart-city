@@ -28,7 +28,9 @@ import {
   Flag,
   Eye,
   Merge,
+  Info,
   Sparkles,
+  Star,
 } from "lucide-react";
 import { Complaint } from "@/types";
 import { complaintService, processComplaintMedia } from "@/services/complaint.service";
@@ -416,20 +418,38 @@ export default function ComplaintDetailPage() {
       const fetchTechnicians = async () => {
         if (actionModal === "technician" && user?.role === "DEPARTMENT_MANAGER" && complaint) {
           try {
-            const deptId = typeof complaint.assignedDepartment === 'object'
+            const deptId = complaint.assignedDepartment && typeof complaint.assignedDepartment === 'object'
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ? (complaint.assignedDepartment as any)._id || (complaint.assignedDepartment as any).id
+              ? (complaint.assignedDepartment as any)?.id || (complaint.assignedDepartment as any)?._id
               : complaint.assignedDepartment;
             const municipality = complaint.municipalityName ||
               (typeof complaint.municipality === 'object' ? complaint.municipality?.name : null);
-            const techData = await managerService.getTechnicians({
+            console.log("[fetchTechnicians] deptId:", deptId, "municipality:", municipality);
+            let techData = await managerService.getTechnicians({
               departmentId: deptId || undefined,
               municipality: municipality || undefined,
             });
-            if (techData.data) {
+            console.log("[fetchTechnicians] 1st attempt (with dept+municipality):", techData.data?.length, "technicians");
+            // If empty with department+municipality filter, retry without municipality
+            if (!techData.data || techData.data.length === 0) {
+              techData = await managerService.getTechnicians({
+                departmentId: deptId || undefined,
+              });
+              console.log("[fetchTechnicians] 2nd attempt (dept only, no municipality):", techData.data?.length, "technicians");
+            }
+            // If still empty, retry without departmentId too (fallback to manager's own department)
+            if (!techData.data || techData.data.length === 0) {
+              techData = await managerService.getTechnicians();
+              console.log("[fetchTechnicians] 3rd attempt (no filters):", techData.data?.length, "technicians");
+            }
+            if (techData.data && techData.data.length > 0) {
               setTechnicians(techData.data);
+            } else {
+              console.warn("[fetchTechnicians] No technicians found after all retries");
+              setTechnicians([]);
             }
           } catch (error) {
+            console.error("[fetchTechnicians] Error:", error);
             setTechnicians([]);
           }
         }
@@ -1359,86 +1379,123 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
-             {/* AI Urgency Prediction - Only for Manager/Admin before team assignment */}
-             {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && !complaint.assignedTeam && !complaint.assignedTo && !(complaint as any).repairTeamId && (
+             {/* AI Urgency Prediction - Only for Manager/Admin before team assignment and not resolved/closed */}
+             {(user?.role === "DEPARTMENT_MANAGER" || user?.role === "ADMIN") && !complaint.assignedTeam && !complaint.assignedTo && !(complaint as any).repairTeamId && complaint.status !== "RESOLVED" && complaint.status !== "CLOSED" && (
              <section className="bg-gradient-to-br from-violet-50 to-blue-50 rounded-2xl shadow-lg p-3 border border-violet-100">
                <h2 className="text-base font-semibold text-slate-900 mb-3 flex items-center gap-2">
                  <Sparkles className="w-5 h-5 text-violet-600" />
                  {t("aiUrgencyPrediction", "AI Urgency Prediction")}
                </h2>
-               {(() => {
-                 const hasAiData = (complaint as any).aiPredictedUrgency || (complaint as any).aiUrgencyPrediction || (complaint as any).finalUrgencyHuman;
-                 if (!hasAiData) {
-                   return <p className="text-sm text-slate-400 italic">{t("ai.predictionUnavailable", "AI prediction not available for this complaint")}</p>;
-                 }
-                 const pred = complaint.aiUrgencyPrediction;
-                 const predUrgency = pred?.predictedUrgency || (complaint as any).aiPredictedUrgency || (complaint as any).finalUrgencyHuman || "MEDIUM";
-                 const confidence = pred?.confidenceScore ?? 0;
-                 const breakdown = pred?.breakdown;
-                 const explanation = pred?.explanation;
-                 const urgencyColors: Record<string, string> = {
-                   LOW: "bg-green-100 text-green-700", MEDIUM: "bg-amber-100 text-amber-700",
-                   HIGH: "bg-orange-100 text-orange-700", URGENT: "bg-red-100 text-red-700", CRITICAL: "bg-red-100 text-red-700",
-                 };
-                 return (
-                   <div className="space-y-3">
-                     <div className="flex items-center justify-between">
-                       <span className="text-sm text-slate-600 font-medium">Predicted:</span>
-                       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${urgencyColors[predUrgency] || "bg-slate-100 text-slate-600"}`}>
-                         {predUrgency}
-                       </span>
-                     </div>
-                     <div className="flex items-center justify-between text-xs">
-                       <span className="text-slate-500">Confidence:</span>
-                       <span className="font-semibold text-slate-700">{Math.round(confidence * 100)}%</span>
-                     </div>
-                     {breakdown && (
+                {(() => {
+                  const aiPredicted = (complaint as any).aiPredictedUrgency;
+                  const aiPrediction = complaint.aiUrgencyPrediction;
+                  const humanOverride = (complaint as any).finalUrgencyHuman;
+                  const citizenUrgency = complaint.urgency;
+                  const hasAiData = aiPredicted || aiPrediction || humanOverride;
+                  if (!hasAiData && !citizenUrgency) {
+                    return <p className="text-sm text-slate-400 italic">{t("ai.predictionUnavailable", "AI prediction not available for this complaint")}</p>;
+                  }
+                  if (!hasAiData && citizenUrgency) {
+                    const urgencyColors: Record<string, string> = {
+                      LOW: "bg-green-100 text-green-700", MEDIUM: "bg-amber-100 text-amber-700",
+                      HIGH: "bg-orange-100 text-orange-700", URGENT: "bg-red-100 text-red-700", CRITICAL: "bg-red-100 text-red-700",
+                    };
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500">{t("ai.basedOnCitizenInput", "Based on citizen input")}</span>
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${urgencyColors[citizenUrgency] || "bg-slate-100 text-slate-600"}`}>
+                            {citizenUrgency}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 italic">{t("ai.predictionUnavailable", "AI prediction not available for this complaint")}</p>
+                      </div>
+                    );
+                  }
+                  const pred = aiPrediction || humanOverride;
+                  const predUrgency = aiPredicted || humanOverride || citizenUrgency || "MEDIUM";
+                  const confidence = pred?.confidenceScore ?? 0;
+                  const breakdown = pred?.breakdown;
+                  const explanation = pred?.explanation;
+                  const urgencyColors: Record<string, string> = {
+                    LOW: "bg-green-100 text-green-700", MEDIUM: "bg-amber-100 text-amber-700",
+                    HIGH: "bg-orange-100 text-orange-700", URGENT: "bg-red-100 text-red-700", CRITICAL: "bg-red-100 text-red-700",
+                  };
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-600 font-medium">Predicted:</span>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${urgencyColors[predUrgency] || "bg-slate-100 text-slate-600"}`}>
+                          {predUrgency}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 flex items-center gap-1">
+                          Confidence:
+                          <span className="relative group">
+                            <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-800 text-white text-[10px] leading-tight rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none w-56 text-center">
+                              Based on total urgency score out of max 12,<br />
+                              scaled 0.8× + 0.15 base confidence,<br />
+                              capped at 95%.<br />
+                              <span className="text-slate-400">Higher score → higher confidence.</span>
+                            </span>
+                          </span>
+                        </span>
+                        <span className="font-semibold text-slate-700">{Math.round(confidence * 100)}%</span>
+                      </div>
+                      {breakdown && (
                        <div className="space-y-1.5 pt-1 border-t border-violet-100">
                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Factor Breakdown</p>
-                         {breakdown.textScore !== undefined && (
-                           <div className="flex items-center justify-between text-xs">
-                             <span className="text-slate-500">Text analysis:</span>
-                             <div className="flex items-center gap-1.5">
-                               <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                 <div className="h-full bg-violet-500 rounded-full" style={{ width: `${breakdown.textScore * 100}%` }} />
-                               </div>
-                               <span className="font-medium text-slate-700 w-8 text-right">{Math.round(breakdown.textScore * 100)}%</span>
-                             </div>
-                           </div>
-                         )}
-                         {breakdown.citizenUrgencyScore !== undefined && (
-                           <div className="flex items-center justify-between text-xs">
-                             <span className="text-slate-500">Citizen urgency:</span>
-                             <div className="flex items-center gap-1.5">
-                               <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                 <div className="h-full bg-orange-500 rounded-full" style={{ width: `${breakdown.citizenUrgencyScore * 100}%` }} />
-                               </div>
-                               <span className="font-medium text-slate-700 w-8 text-right">{Math.round(breakdown.citizenUrgencyScore * 100)}%</span>
-                             </div>
-                           </div>
-                         )}
-                         {breakdown.categoryBaseScore !== undefined && (
-                           <div className="flex items-center justify-between text-xs">
-                             <span className="text-slate-500">Category base:</span>
-                             <div className="flex items-center gap-1.5">
-                               <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                 <div className="h-full bg-blue-500 rounded-full" style={{ width: `${breakdown.categoryBaseScore * 100}%` }} />
-                               </div>
-                               <span className="font-medium text-slate-700 w-8 text-right">{Math.round(breakdown.categoryBaseScore * 100)}%</span>
-                             </div>
-                           </div>
-                         )}
-                         {breakdown.communityScore !== undefined && (
-                           <div className="flex items-center justify-between text-xs">
-                             <span className="text-slate-500">Community:</span>
-                             <div className="flex items-center gap-1.5">
-                               <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                 <div className="h-full bg-teal-500 rounded-full" style={{ width: `${breakdown.communityScore * 100}%` }} />
-                               </div>
-                               <span className="font-medium text-slate-700 w-8 text-right">{Math.round(breakdown.communityScore * 100)}%</span>
-                             </div>
-                           </div>
-                         )}
+                          {(() => {
+                            const norm = (v) => Math.min(v ?? 0, 1);
+                            return <>
+                          {breakdown.textScore !== undefined && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500">Text analysis:</span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-violet-500 rounded-full" style={{ width: `${norm(breakdown.textScore) * 100}%` }} />
+                                </div>
+                                <span className="font-medium text-slate-700 w-8 text-right">{Math.round(norm(breakdown.textScore) * 100)}%</span>
+                              </div>
+                            </div>
+                          )}
+                          {breakdown.citizenUrgencyScore !== undefined && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500">Citizen urgency:</span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-orange-500 rounded-full" style={{ width: `${norm(breakdown.citizenUrgencyScore) * 100}%` }} />
+                                </div>
+                                <span className="font-medium text-slate-700 w-8 text-right">{Math.round(norm(breakdown.citizenUrgencyScore) * 100)}%</span>
+                              </div>
+                            </div>
+                          )}
+                          {breakdown.categoryBaseScore !== undefined && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500">Category base:</span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${norm(breakdown.categoryBaseScore) * 100}%` }} />
+                                </div>
+                                <span className="font-medium text-slate-700 w-8 text-right">{Math.round(norm(breakdown.categoryBaseScore) * 100)}%</span>
+                              </div>
+                            </div>
+                          )}
+                          {breakdown.communityScore !== undefined && (
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-500">Community:</span>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-teal-500 rounded-full" style={{ width: `${norm(breakdown.communityScore) * 100}%` }} />
+                                </div>
+                                <span className="font-medium text-slate-700 w-8 text-right">{Math.round(norm(breakdown.communityScore) * 100)}%</span>
+                              </div>
+                            </div>
+                          )}
+                          </>;
+                          })()}
                        </div>
                      )}
                      {explanation && (
@@ -1610,8 +1667,8 @@ export default function ComplaintDetailPage() {
               </section>
             )}
 
-            {/* Resolution Report - Shown when RESOLVED or CLOSED */}
-            {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (complaint.resolutionNotes || (complaint.afterPhotos?.length ?? 0) > 0) && (
+            {/* Resolution Report - Unified notes + before/after photos */}
+            {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && (
               <section className={`rounded-2xl shadow-lg p-6 border ${
                 complaint.status === "CLOSED" 
                   ? "bg-green-50 border-green-200" 
@@ -1633,8 +1690,8 @@ export default function ComplaintDetailPage() {
                     </span>
                   )}
                 </h2>
-                
-                {/* Resolution Notes from Technician */}
+
+                {/* Technician Notes + Resolved Date */}
                 {complaint.resolutionNotes && (
                   <div className="bg-white rounded-xl p-4 border border-slate-200 mb-4">
                     <p className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
@@ -1650,35 +1707,61 @@ export default function ComplaintDetailPage() {
                   </div>
                 )}
 
-                {/* Proof Photos (After Work) - Show prominently */}
-                {afterPhotos.length > 0 && (
-                  <div className="bg-white rounded-xl p-4 border border-green-200 mb-4">
-                    <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                      <Camera className="w-4 h-4 text-green-600" />
-                      {t("complaintDetail.afterWorkPhotos")} ({afterPhotos.length})
-                      <span className="text-xs font-normal text-slate-500 ml-2">({t("complaintDetail.proofOfCompletion")})</span>
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {afterPhotos.map((photo, idx: number) => {
-                        const src = getMediaSrc(photo);
-                        return (
-                          <a
-                            key={idx}
-                            href={src}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-green-400 hover:shadow-md transition-all"
-                          >
-                            <img
-                              src={src}
-                              alt={`After work photo ${idx + 1}`}
-                              className="w-full h-28 object-cover"
-                            />
-                          </a>
-                        );
-                      })}
+                {/* Before Work Photos */}
+                {beforePhotos.length > 0 && (
+                  <>
+                    {complaint.resolutionNotes && <hr className="border-slate-200 my-4" />}
+                    <div className="bg-white rounded-xl p-4 border border-blue-200 mb-4">
+                      <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-blue-600" />
+                        {t("complaintDetail.beforeWorkPhotos")} ({beforePhotos.length})
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {beforePhotos.map((photo, idx: number) => {
+                          const src = getMediaSrc(photo);
+                          return (
+                            <a key={idx} href={src} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-blue-400 hover:shadow-md transition-all">
+                              <img src={src} alt={`Before work photo ${idx + 1}`} className="w-full h-28 object-cover" />
+                            </a>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  </>
+                )}
+
+                {/* After / Proof Photos */}
+                {afterPhotos.length > 0 && (
+                  <>
+                    {(complaint.resolutionNotes || beforePhotos.length > 0) && <hr className="border-slate-200 my-4" />}
+                    <div className="bg-white rounded-xl p-4 border border-green-200 mb-4">
+                      <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-green-600" />
+                        {t("complaintDetail.afterWorkPhotos")} ({afterPhotos.length})
+                        <span className="text-xs font-normal text-slate-500 ml-2">({t("complaintDetail.proofOfCompletion")})</span>
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {afterPhotos.map((photo, idx: number) => {
+                          const src = getMediaSrc(photo);
+                          return (
+                            <a
+                              key={idx}
+                              href={src}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-green-400 hover:shadow-md transition-all"
+                            >
+                              <img
+                                src={src}
+                                alt={`After work photo ${idx + 1}`}
+                                className="w-full h-28 object-cover"
+                              />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {/* Approve/Reject Buttons for Manager - Only in Pending Review */}
@@ -1717,26 +1800,46 @@ export default function ComplaintDetailPage() {
                     </button>
                   </div>
                 )}
+              </section>
+            )}
 
-                {/* Before Work Photos - Only for Agent/Admin */}
-                {(user?.role === "MUNICIPAL_AGENT" || user?.role === "ADMIN") && beforePhotos.length > 0 && (
-                  <div className="bg-white rounded-xl p-4 border border-blue-200 mb-4">
-                    <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                      <Camera className="w-4 h-4 text-blue-600" />
-                      {t("complaintDetail.beforeWorkPhotos")} ({beforePhotos.length})
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {beforePhotos.map((photo, idx: number) => {
-                        const src = getMediaSrc(photo);
-                        return (
-                          <a key={idx} href={src} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border-2 border-slate-100 hover:border-blue-400 hover:shadow-md transition-all">
-                            <img src={src} alt={`Before work photo ${idx + 1}`} className="w-full h-28 object-cover" />
-                          </a>
-                        );
-                      })}
-                    </div>
+            {/* Citizen Rating - Show for resolved/closed complaints when citizen left a rating */}
+            {(complaint.status === "RESOLVED" || complaint.status === "CLOSED") && complaint.rating && (
+              <section className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl shadow-lg p-3 border border-purple-200" aria-labelledby="rating-title">
+                <h2 id="rating-title" className="text-base font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                  <Star className="w-5 h-5" />
+                  {t("complaintDetail.citizenRating", "Citizen Rating")}
+                </h2>
+                <div className="text-center p-3 bg-white rounded-xl border border-purple-100">
+                  <div className="flex justify-center gap-1 mb-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`w-5 h-5 ${
+                          star <= (complaint.rating?.score || 0)
+                            ? "text-yellow-400 fill-yellow-400"
+                            : "text-gray-300"
+                        }`}
+                      />
+                    ))}
                   </div>
-                )}
+                  <p className="text-sm font-semibold text-purple-700">
+                    {complaint.rating.score}/5
+                  </p>
+                  {complaint.rating.resolvedCorrectly !== undefined && (
+                    <p className="text-xs text-purple-600 mt-1">
+                      {complaint.rating.resolvedCorrectly
+                        ? t("complaintDetail.resolvedCorrectly", "Resolved correctly")
+                        : t("complaintDetail.notResolvedCorrectly", "Issue not fully resolved")}
+                    </p>
+                  )}
+                  {complaint.rating.comment && (
+                    <p className="text-xs text-purple-600 mt-2 italic">&quot;{complaint.rating.comment}&quot;</p>
+                  )}
+                  <p className="text-[10px] text-purple-500 mt-2">
+                    {new Date(complaint.rating.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
               </section>
             )}
 

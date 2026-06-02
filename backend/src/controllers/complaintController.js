@@ -1,5 +1,6 @@
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
+const { computeLocalUrgencyPrediction } = require("../services/ai.service");
 const Department = require("../models/Department");
 const { getStatus: getSlaStatus } = require("../utils/slaCalculator");
 const { normalizeMunicipality, normalizeGovernorate, getMunicipalityGovernorate, getCanonicalMunicipalityName } = require("../utils/normalize");
@@ -171,7 +172,6 @@ class ComplaintController {
 
       const [complaints, total] = await Promise.all([
         Complaint.find(query)
-          .populate("assignedDepartment", "name categoryKey")
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit),
@@ -206,7 +206,6 @@ class ComplaintController {
       const complaint = await Complaint.findById(id)
         .populate("createdBy", "fullName email phone")
         .populate("assignedTeam", "name members")
-        .populate("assignedDepartment", "name categoryKey")
         .populate("assignedTo", "fullName email")
         .populate("beforePhotos.takenBy", "fullName")
         .populate("afterPhotos.takenBy", "fullName")
@@ -441,6 +440,28 @@ class ComplaintController {
           };
         });
 
+      // Compute local AI urgency prediction for existing complaints without AI data
+      const existingAiPredicted = complaint.aiPredictedUrgency || complaint.aiUrgencyPrediction?.predictedUrgency;
+      let aiPredictedUrgency = existingAiPredicted;
+      let aiUrgencyPrediction = complaint.aiUrgencyPrediction;
+      if (!aiPredictedUrgency && complaint.category) {
+        try {
+          const local = computeLocalUrgencyPrediction({
+            title: complaint.title,
+            description: complaint.description,
+            category: complaint.category,
+            citizenUrgency: complaint.urgency,
+            confirmationCount: complaint.confirmationCount || 0,
+          });
+          if (local && local.predictedUrgency) {
+            aiPredictedUrgency = local.predictedUrgency;
+            aiUrgencyPrediction = local;
+          }
+        } catch {
+          // fallback — keep null
+        }
+      }
+
       const response = {
         _id: complaint._id,
         complaintId: complaint._id.toString(),
@@ -492,18 +513,16 @@ class ComplaintController {
         mergedAt: complaint.mergedAt || null,
         mergedBy: complaint.mergedBy || null,
         mergedComplaints,
-        aiUrgencyPrediction: complaint.aiUrgencyPrediction || null,
-        aiPredictedUrgency:
-          complaint.aiPredictedUrgency ||
-          complaint.aiUrgencyPrediction?.predictedUrgency ||
-          null,
+        aiPredictedUrgency,
+        aiUrgencyPrediction,
         finalUrgencyHuman: complaint.finalUrgencyHuman || null,
         aiDuplicateCheck: complaint.aiDuplicateCheck || null,
-        resolutionNote: complaint.resolutionNotes || null,
+        resolutionNotes: complaint.resolutionNotes || null,
         resolvedAt: complaint.resolvedAt || null,
         closedAt: complaint.closedAt || null,
         createdAt: complaint.createdAt,
         updatedAt: complaint.updatedAt,
+        rating: complaint.rating || null,
       };
 
       res.json({ success: true, data: response });
@@ -905,10 +924,12 @@ class ComplaintController {
         console.error("[updateStatus] Failed to log action:", logError);
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint status updated",
-        data: complaint,
+        data: populatedComplaint,
       });
     } catch (error) {
       console.error("[updateStatus] Error updating complaint status:", error);
@@ -1003,10 +1024,12 @@ class ComplaintController {
 
       logAction(req, "COMPLAINT_ASSIGNED", "Complaint", complaint._id, null, { assignedTo: assignedToId });
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint assigned successfully",
-        data: complaint,
+        data: populatedComplaint,
       });
     } catch (error) {
       console.error("Error assigning complaint:", error);
@@ -1122,10 +1145,12 @@ class ComplaintController {
         }
       }
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Department assigned successfully",
-        data: complaint,
+        data: populatedComplaint,
       });
     } catch (error) {
       console.error("Error assigning department:", error);
@@ -1204,10 +1229,12 @@ class ComplaintController {
       }
       await complaint.save();
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Priority updated successfully",
-        data: complaint,
+        data: populatedComplaint,
       });
     } catch (error) {
       console.error("Error updating priority:", error);
@@ -1232,10 +1259,12 @@ class ComplaintController {
 
       logAction(req, "COMPLAINT_ARCHIVED", "Complaint", complaint._id, { isArchived: false }, { isArchived: true });
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint archived successfully",
-        data: complaint,
+        data: populatedComplaint,
       });
     } catch (error) {
       console.error("Error archiving complaint:", error);
@@ -1260,10 +1289,12 @@ class ComplaintController {
 
       logAction(req, "COMPLAINT_UNARCHIVED", "Complaint", complaint._id, { isArchived: true }, { isArchived: false });
 
+      const populatedComplaint = await Complaint.findById(complaint._id).populate("createdBy", "fullName email phone");
+
       res.json({
         success: true,
         message: "Complaint unarchived successfully",
-        data: complaint,
+        data: populatedComplaint,
       });
     } catch (error) {
       console.error("Error unarchiving complaint:", error);
@@ -1400,12 +1431,23 @@ class ComplaintController {
 
       await complaint.save();
 
-      // Send notification to assigned agent/technician
+      // Send notification to manager and assigned agent/technician
       try {
         const io = req.app?.get?.("io");
         if (io) {
-          // Notify the agent who closed the complaint (closedBy) or assigned agent
-          let notifieeId = complaint.closedBy || complaint.assignedBy;
+          // Notify department manager
+          const deptId = complaint.assignedDepartment?._id?.toString() || complaint.assignedDepartment?.toString();
+          if (deptId) {
+            await notificationService.notifyManagersByDepartment(io, deptId, {
+              type: "complaint_rated",
+              title: "New Citizen Feedback",
+              message: `Citizen rated complaint "${complaint.title}" ${scoreNum}/5 stars`,
+              complaintId: complaint._id,
+              metadata: { score: scoreNum, comment: comment || '' },
+            });
+          }
+          // Notify assigned technician if any
+          let notifieeId = complaint.closedBy || complaint.assignedBy || complaint.assignedTo;
           if (notifieeId) {
             await notificationService.sendNotification(io, notifieeId.toString(), {
               type: "complaint_rated",

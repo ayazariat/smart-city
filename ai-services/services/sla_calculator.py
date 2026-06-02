@@ -1,15 +1,4 @@
-"""
-SLA Calculator Service
-======================
 
-Calculates SLA deadlines based on urgency and category.
-- CRITICAL = 8 hours
-- HIGH = 48 hours
-- MEDIUM = 168 hours (7 days)
-- LOW = 336 hours (14 days)
-
-Returns deadline, status, and remaining hours.
-"""
 
 import json
 from datetime import datetime, timedelta

@@ -1,6 +1,5 @@
 """
-Image Similarity Service for Duplicate Detection
-===============================================
+
 Uses computer vision techniques to detect visually similar complaints.
 Compares images based on visual features to improve duplicate detection accuracy.
 """

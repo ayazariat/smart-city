@@ -238,14 +238,14 @@ class _ManagerDashboardScreenState
                       ),
                     ],
                     const SizedBox(height: 20),
-const Text(
-                          'Signalements récents',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
+                    const Text(
+                      'Signalements récents',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                   ],
                 ),
